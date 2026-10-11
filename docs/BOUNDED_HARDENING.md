@@ -37,7 +37,7 @@ operator scope can reopen that bounded task. No approval of ordinary tools added
 Delivered correctness and operational limits are recorded plainly. No “certified”
 status, new judge, model confidence gate, or correctness-by-budget-expiry claim.
 
-## Current capacity unit: close the envelope
+## Historical capacity unit: close the envelope
 
 Layer1 remaining defects are the actual review findings:
 

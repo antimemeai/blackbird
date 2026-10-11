@@ -128,10 +128,10 @@ Resolving owner registration/restart/recording interaction with CLI/PTY deadline
 is open work; component success does not qualify that activation.
 
 At that implementation bound, the inactive candidate also failed the full gate:
-CLI/PTY deadlines fail and the88-case debug command exceeds120s. Thus automatic
-capture is not established as the cause of the remaining gate failures. Source
-remains staged and uncommitted; full owned lint did not run because the gate stops
-at CTest. Targeted static/component/profile successes are not a full qualification.
+CLI/PTY deadlines failed and the88-case debug command exceeded120s. Automatic
+capture was not established as the cause of those failures. Source was left
+staged and uncommitted; full owned lint did not run because the gate stopped
+at CTest. Targeted static/component/profile successes did not qualify activation.
 No hook bypass, main merge, executable installation or source push occurred then.
 
 Operator resumes delivery and explicitly authorizes main integration. The focused
@@ -142,4 +142,14 @@ fixtures alone, retaining six-way parallelism for other cases and every existing
 assertion/deadline. Restore application startup before retained-state work. The
 actual launcher oracle checks preserved linked startup/ready and reopen/recovery
 events, retained append, complete clean drain and inspection without new capture.
-The full installed source gate and changed launcher Linux profile checks follow.
+The full installed source gate passes all 89 debug cases (116.52s), all 125 actual
+owned C++ translation units and owned Lua formatting/syntax/type/contract checks.
+Three region-terminal optional accesses are guarded directly with has_value(),
+rather than leaving the guard opaque behind enabled(); no suppression or behavior
+change. Six independent native-analysis workers fit the actual host. Two large
+translation units exceeded the generic120s wrapper; clang-tidy now completes the
+whole source analysis rather than truncating it. Small-command and actual test
+watchdogs remain. Launcher capture/reopen/inspection passes Linux debug, release
+and ASan/UBSan. Source commit 56a965c is integrated on master. The complete
+surface census and runtime/performance limits above remain open in nls.2;
+these results qualify the delivered initial hooks, not the entire census.

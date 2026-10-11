@@ -1,6 +1,6 @@
 # Instrumentation: raw emission, recording and transformation
 
-2026-10-11. Raw design approved; first source unit implemented.
+2026-10-11. Raw design approved; first source unit integrated on master.
 
 Blackbird emits raw metric events into the audit log. A separate recorder preserves
 the raw bytes on disk. A tertiary process transforms the preserved records.
@@ -40,6 +40,10 @@ Application capture starts before retained-state creation/recovery and drains on
 clean shutdown. Read-only audit inspection does not create a metric stream.
 The launcher oracle reads preserved records and checks linked startup endpoints,
 ready/recovery outcomes and retained append across actual launch/reopen.
+The installed source gate passes all 89 debug tests, all 125 owned C++ translation
+units and the owned Lua checks. Launcher capture also passes Linux debug, release
+and ASan/UBSan; earlier component/process-failure results and their limits remain
+in the implementation notes.
 
 nls.2 remains open; logical clocks nls.9 and audit completeness nls.10 are separate
 unfinished work. Evals, multiplayer and steering/trajectory implementation remain

@@ -6346,3 +6346,24 @@ Remove that cutoff specifically for full clang-tidy source analysis so large
 translation units run to completion; keep small-command and real-test watchdogs.
 Repeat the installed gate on the final tooling/source tree, with every owned
 translation unit still analyzed and no suppression, skipped check or cache.
+
+## 2026-10-11 — raw source delivered on master
+
+Source commit `56a965c` passes the installed full source gate: 89/89 debug tests
+in 116.52s, all 125 owned C++ translation units, owned Lua formatting/syntax/type diagnostics
+and the native Lua contract probe. No new rule suppression, skipped translation
+unit or acceptance cache. The final two large native analyses complete with the
+clang-tidy-specific wrapper cutoff removed. Earlier scoped Mac/Linux native and
+sanitizer/process-failure results remain in the implementation papers, with limits.
+Launcher raw capture/reopen/read-only inspection passes Linux debug, release and
+ASan/UBSan (context/linux/run-k6jrpnv7). Direct runner output/failure/watchdog
+cases pass. Clean up the discovery fixture left by an earlier aborted gate.
+
+Fast-forward local master from `ea2db26` to `56a965c` under explicit operator direction.
+The first candidate push fails to connect to github.com:443 after 76s; preserve the
+actual network error and retry publication. Record results/scope in text without
+rerunning settled source checks. User art assets and AFK stash stay intact; no
+existing operator executable is replaced. nls.2 remains open for the documented
+remaining surfaces/runtime/performance work; nls.9/nls.10 and eval deferral stand.
+File the independent, cause-undetermined development startup_loading create
+EPERM investigation as arconaut-985. Supported Beads backup is updated.
