@@ -6367,3 +6367,10 @@ existing operator executable is replaced. nls.2 remains open for the documented
 remaining surfaces/runtime/performance work; nls.9/nls.10 and eval deferral stand.
 File the independent, cause-undetermined development startup_loading create
 EPERM investigation as arconaut-985. Supported Beads backup is updated.
+
+Publication completes: origin/raw-instrumentation contains source `56a965c`, and
+origin/master reaches qualification/docs commit `cf5d420`. GitHub's ref API reads
+back that exact main commit. Replace a stalled native HTTPS push with per-command
+HTTP/1.1 and existing gh credential handling; no persistent transport configuration
+change. Record publication and the supported Beads backup in this text-only
+follow-up; settled source checks are not repeated.
