@@ -4,6 +4,7 @@
 #include <functional>
 
 namespace blackbird {
+struct RawProviderOwner;
 // Credentials are deliberately absent from the request/response audit interface.
 struct OpenAiConfig {
   std::string codex_executable = "codex";
@@ -13,6 +14,7 @@ struct OpenAiConfig {
   int timeout_seconds = 180;
   std::function<void(std::string_view)> response_observer;
   std::function<bool()> cancelled;
+  const RawProviderOwner *raw_owner = nullptr;
 };
 class OpenAiLogin {
 public:

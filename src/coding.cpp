@@ -4,6 +4,7 @@
 #include "blackbird/packet.hpp"
 #include "blackbird/process_lifetime.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/raw_provider.hpp"
 #include "blackbird/raw_runtime.hpp"
 #include "stream_capture.hpp"
 extern "C" {
@@ -44,7 +45,8 @@ void emit_provider_fact(std::uint32_t site, std::span<const ByteView> fields,
     }
     const auto admitted = raw_wait_data(bytes);
     if (!admitted.has_value()) {
-      raw_fence(admitted.error());
+      if (admitted.error().code != ErrorCode::interrupted)
+        raw_fence(admitted.error());
       throw admitted.error();
     }
   }
@@ -297,7 +299,13 @@ void validate_protocol(const Value::Array &items) {
 } // namespace
 Value OpenAiCodingProvider::respond(
     const Value &request, const std::function<void(std::string_view)> &capture) {
+  return respond(request, capture, nullptr);
+}
+Value OpenAiCodingProvider::respond(
+    const Value &request, const std::function<void(std::string_view)> &capture,
+    const RawProviderOwner *owner) {
   auto config = config_;
+  config.raw_owner = owner;
   config.response_observer = capture;
   config.cancelled = cancelled;
   auto login = unwrap(codex_login(config));
@@ -1944,7 +1952,8 @@ Value CodingEngine::request(Value options) {
           auto held = raw_claim_control(raw_envelope_size + 3 * sizeof(IdentityBytes) +
                                         sizeof(std::uint64_t));
           if (!held.has_value()) {
-            raw_fence(held.error());
+            if (held.error().code != ErrorCode::interrupted)
+              raw_fence(held.error());
             throw held.error();
           }
           response_credit.emplace(std::move(held).value());
@@ -1972,16 +1981,23 @@ Value CodingEngine::request(Value options) {
         }};
         Value result;
         try {
-          result = provider_.respond(request, [&](std::string_view raw) {
-            poll_commands();
-            capture.append(raw);
-            // Preview follows transport delivery, not diagnostic flush cadence.
-            for (const auto &delta : preview.feed(raw)) {
-              previewed_[delta.item_id] += delta.text;
-              if (display)
-                display(delta.text);
-            }
-          });
+          const RawProviderOwner owner{attempt.bytes(),
+                                       admission.admission.invocation.bytes(),
+                                       generation_.bytes(),
+                                       {raw_lane_epoch(), transport.begin_ordinal()}};
+          result = provider_.respond(
+              request,
+              [&](std::string_view raw) {
+                poll_commands();
+                capture.append(raw);
+                // Preview follows transport delivery, not diagnostic flush cadence.
+                for (const auto &delta : preview.feed(raw)) {
+                  previewed_[delta.item_id] += delta.text;
+                  if (display)
+                    display(delta.text);
+                }
+              },
+              &owner);
         } catch (const Error &error) {
           transport.error(error);
           transport.outcome(RawRegionOutcome::exception);

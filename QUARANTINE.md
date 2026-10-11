@@ -1,5 +1,16 @@
 # Sources and restoration
 
+## Native sampler and Lua boundaries, 2026-10-11
+
+`quarantine/resource-sampler-2026-10-11/` retains primary Linux proc documentation,
+pinned XNU/libproc resource-acquisition source and the intact official Lua5.4.8
+archive matching the installed Lua profile. Only lgc.c/lstate.c/lapi.c/lua.h were
+extracted from Lua; no Git metadata, generated files or adopted dependency.
+[The acquisition report](papers/2026-10-11-resource-sampler-references.md) records
+URLs, SHA-256 identities, restoration commands and the distinction between XNU
+source reference revision and installed kernel. The sampler remains a subplan;
+the Lua study supports the focused authored-event plan attack.
+
 ## Beads native-integration study, 2026-10-07
 
 Matching installed bd0.58.0 source is pinned to

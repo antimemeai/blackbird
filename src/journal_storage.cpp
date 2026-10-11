@@ -161,6 +161,50 @@ NativeJournalDirectory::~NativeJournalDirectory() {
     (void)::close(descriptor_);
   }
 }
+Result<NativeJournalDirectory> NativeJournalDirectory::open_at(int directory,
+                                                               std::string_view name) {
+  if (!valid_component(name))
+    return Result<NativeJournalDirectory>::failure({ErrorCode::invalid_range});
+  try {
+    const std::string component{name};
+    const int descriptor = ::openat(directory, component.c_str(),
+                                    O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (descriptor < 0)
+      return Result<NativeJournalDirectory>::failure(native_error(errno));
+    const auto checked = restricted_descriptor(descriptor, true);
+    if (!checked.has_value()) {
+      (void)::close(descriptor);
+      return Result<NativeJournalDirectory>::failure(checked.error());
+    }
+    return Result<NativeJournalDirectory>::success(NativeJournalDirectory{descriptor});
+  } catch (const std::bad_alloc &) {
+    return Result<NativeJournalDirectory>::failure({ErrorCode::allocation});
+  }
+}
+Result<int> NativeJournalDirectory::open_child_directory(std::string_view name) const {
+  if (!valid_component(name))
+    return Result<int>::failure({ErrorCode::invalid_range});
+  try {
+    const std::string component{name};
+    const int descriptor = ::openat(descriptor_, component.c_str(),
+                                    O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (descriptor < 0)
+      return Result<int>::failure(native_error(errno));
+    struct stat metadata{};
+    if (::fstat(descriptor, &metadata) != 0) {
+      const auto error = errno;
+      (void)::close(descriptor);
+      return Result<int>::failure(native_error(error));
+    }
+    if (!S_ISDIR(metadata.st_mode) || metadata.st_uid != ::geteuid()) {
+      (void)::close(descriptor);
+      return Result<int>::failure({ErrorCode::io, EPERM});
+    }
+    return Result<int>::success(descriptor);
+  } catch (const std::bad_alloc &) {
+    return Result<int>::failure({ErrorCode::allocation});
+  }
+}
 NativeJournalDirectory::NativeJournalDirectory(NativeJournalDirectory &&other) noexcept
     : cleanup_stream_(std::exchange(other.cleanup_stream_, nullptr)),
       cleanup_journal_(std::move(other.cleanup_journal_)),

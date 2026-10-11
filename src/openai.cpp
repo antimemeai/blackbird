@@ -181,6 +181,8 @@ Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh) {
 }
 Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &login,
                                 std::string_view route, const Value *request) {
+  std::optional<RawProviderTrace> trace;
+  std::optional<RawWaitScope> wait_scope;
   try {
     if (login.owned_auth_) {
       ProviderAuthConfig owned;
@@ -189,19 +191,25 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
       ProviderAuth auth{std::move(owned)};
       if (route != "responses")
         throw Error{ErrorCode::unsupported};
-      const auto response =
-          auth.request("openai", route, request ? *request : Value::object({}),
-                       config.timeout_seconds, config.response_observer);
+      const auto response = auth.request(
+          "openai", route, request ? *request : Value::object({}),
+          config.timeout_seconds, config.response_observer, nullptr, config.raw_owner);
       return Result<std::string>::success(response.body);
     }
-    if (config.timeout_seconds <= 0 || config.timeout_seconds > 3600)
+    if (config.timeout_seconds <= 0 || config.timeout_seconds > 3600) {
+      trace.emplace(config.raw_owner, config.timeout_seconds);
       fail(ErrorCode::invalid_range);
+    }
+    const auto deadline = Clock::now() + std::chrono::seconds{config.timeout_seconds};
+    auto control = raw_wait_control();
+    control.deadline = deadline;
+    wait_scope.emplace(control);
+    trace.emplace(config.raw_owner, config.timeout_seconds);
     if (route != "responses" && route != "models?client_version=0.160.0")
       fail(ErrorCode::invalid_range);
-    std::string input =
-        "url = " +
-        config_quote("https://chatgpt.com/backend-api/codex/" + std::string{route}) +
-        "\n";
+    const std::string target_url =
+        "https://chatgpt.com/backend-api/codex/" + std::string{route};
+    std::string input = "url = " + config_quote(target_url) + "\n";
     input +=
         "header = " + config_quote("Authorization: Bearer " + login.access_token_) +
         "\n";
@@ -209,14 +217,18 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
         "header = " + config_quote("ChatGPT-Account-ID: " + login.account_id_) + "\n";
     input += "header = \"Content-Type: application/json\"\nheader = \"originator: "
              "blackbird\"\n";
+    std::string encoded_body;
     if (request != nullptr) {
       auto encoded = dump_json(export_provider_request(*request));
       if (!encoded.has_value())
         throw encoded.error();
       input += "data-binary = " + config_quote(encoded.value()) + "\n";
+      encoded_body = std::move(encoded).value();
     }
+    trace->body(request ? "POST" : "GET", target_url, encoded_body);
     Child child;
     child.deadline_error = {ErrorCode::provider_transport, 28};
+    child.raw_capture(trace->reference());
     child.output_observer = config.response_observer;
     child.cancelled = config.cancelled;
     // --disable is first: do not load curlrc; no redirects, retries or verbose secret
@@ -224,7 +236,6 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
     child.start({config.curl_executable, "--disable", "--silent", "--no-buffer",
                  "--max-time", std::to_string(config.timeout_seconds), "--write-out",
                  "\n%{http_code}", "--config", "-"});
-    const auto deadline = Clock::now() + std::chrono::seconds{config.timeout_seconds};
     child.send(input, deadline);
     child.close_input();
     int curl_exit = 0;
@@ -240,16 +251,31 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
         fail(ErrorCode::corrupt);
       status = status * 10 + output[i] - '0';
     }
+    trace->http(child.raw_reference(), status);
     if (status < 200 || status >= 300)
       fail(ErrorCode::external_unknown, status);
     output.resize(separator);
+    trace->finish(1);
     return Result<std::string>::success(std::move(output));
   } catch (const Error &e) {
-    return Result<std::string>::failure(e);
+    const Error returned = e.code == ErrorCode::interrupted && e.detail == ETIMEDOUT
+                               ? Error{ErrorCode::provider_transport, 28}
+                               : e;
+    if (trace)
+      trace->finish(2, 1, returned);
+    return Result<std::string>::failure(returned);
   } catch (const std::bad_alloc &) {
+    if (trace)
+      trace->finish(3, 1, {ErrorCode::allocation});
     return Result<std::string>::failure({ErrorCode::allocation});
   } catch (const std::length_error &) {
+    if (trace)
+      trace->finish(4, 1, {ErrorCode::capacity});
     return Result<std::string>::failure({ErrorCode::capacity});
+  } catch (...) {
+    if (trace)
+      trace->finish(5, 1);
+    throw;
   }
 }
 std::vector<TextPreview> ResponsePreview::feed(std::string_view bytes) {

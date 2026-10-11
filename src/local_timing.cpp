@@ -53,7 +53,8 @@ void require_data_admission(std::uint64_t bytes) {
   const RestoreErrno restore;
   const auto admitted = raw_wait_data(bytes);
   if (!admitted.has_value()) {
-    raw_fence(admitted.error());
+    if (admitted.error().code != ErrorCode::interrupted)
+      raw_fence(admitted.error());
     throw admitted.error();
   }
 }
@@ -78,7 +79,8 @@ RawRegion::RawRegion(const RawRegionSites &sites, RawRegionOptions options)
   auto held =
       raw_claim_control(end_record_bytes + outcome_record_bytes + error_record_bytes);
   if (!held.has_value()) {
-    raw_fence(held.error());
+    if (held.error().code != ErrorCode::interrupted)
+      raw_fence(held.error());
     throw held.error();
   }
   claim_.emplace(std::move(held).value());

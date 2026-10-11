@@ -72,6 +72,11 @@ private:
 class NativeJournalDirectory final : public JournalDirectory {
 public:
   static Result<NativeJournalDirectory> open(std::string_view path);
+  // Opens one child relative to a caller-held directory. No symlink traversal.
+  static Result<NativeJournalDirectory> open_at(int directory, std::string_view name);
+  // Caller owns the returned read-only directory fd. The child must share the
+  // owner; its mode may be wider inside this already-private directory.
+  Result<int> open_child_directory(std::string_view name) const;
   ~NativeJournalDirectory() override;
   NativeJournalDirectory(const NativeJournalDirectory &) = delete;
   NativeJournalDirectory &operator=(const NativeJournalDirectory &) = delete;

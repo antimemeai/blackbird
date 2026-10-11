@@ -2,11 +2,30 @@
 
 #include "blackbird/raw_channel.hpp"
 
+#include <chrono>
 #include <memory>
 #include <string_view>
 #include <sys/types.h>
 
 namespace blackbird {
+
+// Admission/control only. Borrowed sticky endpoints remain valid throughout
+// the wait; readiness cancels and is never consumed by the waiter.
+struct RawWaitControl {
+  std::array<int, 2> cancellation_fds{-1, -1};
+  std::optional<std::chrono::steady_clock::time_point> deadline;
+};
+RawWaitControl raw_wait_control() noexcept;
+class RawWaitScope {
+public:
+  explicit RawWaitScope(RawWaitControl control);
+  ~RawWaitScope();
+  RawWaitScope(const RawWaitScope &) = delete;
+  RawWaitScope &operator=(const RawWaitScope &) = delete;
+
+private:
+  RawWaitControl previous_;
+};
 
 class RawThreadContext;
 class RawRuntime;
@@ -48,9 +67,9 @@ public:
   ~RawRuntime();
   RawRuntime(const RawRuntime &) = delete;
   RawRuntime &operator=(const RawRuntime &) = delete;
-  Result<RawThreadHandle> prepare_thread();
-  Result<void> recover();
-  Result<RawRuntimeStatus> status();
+  Result<RawThreadHandle> prepare_thread(RawWaitControl control = raw_wait_control());
+  Result<void> recover(RawWaitControl control = raw_wait_control());
+  Result<RawRuntimeStatus> status(RawWaitControl control = raw_wait_control());
 
 private:
   class State;
@@ -62,10 +81,12 @@ private:
 
 bool raw_enabled() noexcept;
 IdentityBytes raw_lane_epoch() noexcept;
-Result<RawControlToken> raw_claim_control(std::uint64_t bytes);
+Result<RawControlToken> raw_claim_control(std::uint64_t bytes,
+                                          RawWaitControl control = raw_wait_control());
 // Safe boundary only, before acquiring a new measurement or entering an owned
 // lock. The sole producer cannot consume the checked capacity concurrently.
-Result<void> raw_wait_data(std::uint64_t bytes);
+Result<void> raw_wait_data(std::uint64_t bytes,
+                           RawWaitControl control = raw_wait_control());
 Result<std::uint64_t> raw_emit(std::uint32_t site, std::span<const ByteView> parts,
                                RawPartition partition = RawPartition::data,
                                RawControlToken *claim = nullptr) noexcept;

@@ -6406,3 +6406,74 @@ remaining owner groups assign each census row1–60 once, and git diff has no
 whitespace errors. Update nls.2 description/acceptance to the approved raw scope
 and mark it in progress; retain historical notes. Supported Beads backup succeeds
 with96 issues/494 events. No full source suite/lint run for this text-only work.
+
+## 2026-10-11 — nls.2 admission, recovery, reader and first provider vertical
+
+Operator's “send it” resumes the approved completion plan without a new campaign
+timer. Own four conceptual units; root handles admission/RPC and the agents own
+metadata recovery, read-only consumption and the first provider/native-child
+vertical. Use six total compiler/analysis workers, separate build directories,
+one code/oracle attack per changed unit and finding-driven fixes/recheck. Evals,
+multiplayer, steering and further trajectories remain deferred.
+
+Admission now accepts borrowed sticky cancellation endpoints and absolute owner
+deadlines. A native token gate serializes supervisor RPCs without trapping a
+canceled waiter behind a mutex. An interrupted request keeps its pending reply;
+the next owner drains it before sending. Replies preserve original Error.detail,
+known supervisor fences stop fresh admission and already-held terminals still
+publish. Retirement uses the same owner control. Direct native tests expose the
+old free-capacity cancellation defect, actual queued RPC/gate/deadline boundaries,
+full data/control space and native ENOSPC. The single admission attack found
+duplicate cancellation descriptors, lost native error detail, known-fence
+admission and nonblocking EINTR handling; all are fixed and directly rechecked.
+
+Metadata recovery retains versioned bootstrap/header and independent registration/
+retirement copies. It distinguishes missing/corrupt copies from native read errors,
+prepays all selected mapping-failure outcomes before acquiring mappings, records
+both actual missing-source failures, and leaves unresolved sources unclosed.
+Validated closure finishes interrupted named-memory cleanup. Symlinked run entries
+cannot redirect acquisition. One attack's failure-credit, symlink and cleanup
+findings are fixed; direct source-to-disk/process-death checks and narrow lint pass.
+
+The separate raw reader discovers runs relative to one owned session directory,
+validates only published segment prefixes and exposes exact raw bytes, origins,
+descriptions and restart cursors. It never opens a writer lease or changes source
+acknowledgements. Its single attack found path-based rediscovery could follow a
+replacement session; held-directory discovery and the real rename/symlink oracle
+fix that. Descriptions remain opaque and support native ABI v1/v2. Current v2 adds
+ssize_t, pid_t, uid_t and short widths for provider/native-child bodies.
+
+Provider/native-child hooks copy the already-produced external request and every
+acquired stdout/stderr chunk before observer, parser, preview or output-limit
+processing. Explicit request/response references link actual provider and child
+incarnations; private authorization child payloads and curl credentials are never
+selected. Prepaid setup/close/reap/terminal paths survive ordinary admission refusal.
+The one attack fixed non-Error observer completion, filled missing runtime fault
+oracles, and established a genuine baseline red at206c106/candidate green. The
+all-holder-death cut now independently checks exact site1404 bytes at P>0,A==0
+before killing. The provider cancellation fixture's paused supervisor demonstrates
+slow RPC cancellation, not a separately proven endpoint-space poll; admission's
+running-supervisor/stopped-recorder fixture covers that distinct boundary. Repair
+the actual native-child setup double-close defect without disguising it as a hook.
+
+All16 affected checks pass on Mac release and ASan/UBSan (24.51s/60.24s), and on
+Linux debug/release/ASan-UBSan (11.80s/9.10s/21.42s), using genuine native profiles.
+Linux capture is context/linux/run-ippo8d02. A prior launcher command named an
+incorrect target and stopped before native compilation; correct the selection,
+do not describe that attempt as a test result. The installed full debug/all-owned
+C++/Lua source gate remains the final source checkpoint step.
+
+Study-only successor subplans cover command ownership, external resource
+acquisition, authored Lua/native events, authorization and native recorder cuts.
+Command settlement needs a retained worker lane with sequential joined-owner
+handoff; failed reap retains explicit custody; drain keeps originals until semantic
+acknowledgement. Sampler acquisitions come from explicit external commands, not
+a new main-process timer. Authored Lua calls return zero values and use immutable
+VM-generation local-site namespaces; finalizer admission retains owner cancellation.
+The recorder-plan attack corrects an assumed F_FULLFSYNC boundary: runtime selects
+SyncStrength::data and actually uses fsync on both hosts. Fairness will use a direct
+hot-source count bound, without a production tour callback. None of these successor
+papers claims an implemented owner or closes the60-row census. Rhizome's current
+C++ findings were read at its actual projects_old/inactive-2026-10-07 location;
+ownership, whole-path byte costs and actual API boundaries transfer, its local
+scope/instructions do not.

@@ -4,6 +4,7 @@
 #include <functional>
 
 namespace blackbird {
+struct RawProviderOwner;
 // Secret-bearing inputs and replies never enter the model/tool/audit interface.
 struct ProviderHttpRequest {
   std::string url, method = "POST", body;
@@ -25,7 +26,8 @@ struct ProviderAuthConfig {
 };
 ProviderHttpResponse
 provider_http(const ProviderHttpRequest &request, const ProviderAuthConfig &config = {},
-              const std::function<void(std::string_view)> &observer = {});
+              const std::function<void(std::string_view)> &observer = {},
+              const RawProviderOwner *raw_owner = nullptr, bool application = false);
 void require_provider_success(int status);
 
 struct OAuthExpected {
@@ -67,7 +69,8 @@ public:
   request(std::string_view provider, std::string_view route, const Value &body,
           int timeout_seconds,
           const std::function<void(std::string_view)> &observer = {},
-          const Value *expected_binding = nullptr);
+          const Value *expected_binding = nullptr,
+          const RawProviderOwner *raw_owner = nullptr);
   std::filesystem::path directory() const;
   const ProviderAuthConfig &config() const { return config_; }
 

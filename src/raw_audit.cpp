@@ -354,6 +354,25 @@ std::uint64_t RawAudit::preserved(const IdentityBytes &lane,
 RawAuditCursor RawAudit::begin() const noexcept {
   return {header_.journal, 0, journal_header_size};
 }
+Result<void> RawAudit::validate_cursor(RawAuditCursor cursor) {
+  if (cursor.journal != header_.journal || cursor.offset < journal_header_size ||
+      cursor.offset > cursor_.offset || cursor.sequence > cursor_.sequence)
+    return Result<void>::failure({ErrorCode::invalid_range});
+  auto current = begin();
+  while (current.offset < cursor.offset) {
+    const auto decoded = frame(current.offset, cursor_.offset);
+    if (!decoded.has_value())
+      return Result<void>::failure(decoded.error());
+    const auto &view = decoded.value();
+    if (current.sequence == UINT64_MAX || view.sequence != current.sequence + 1)
+      return Result<void>::failure({ErrorCode::corrupt});
+    current.sequence = view.sequence;
+    current.offset += view.encoded_size;
+  }
+  if (current != cursor)
+    return Result<void>::failure({ErrorCode::invalid_range});
+  return Result<void>::success();
+}
 Result<std::optional<RawAuditRead>> RawAudit::read(RawAuditCursor cursor,
                                                    MutableByteView output) {
   using Answer = Result<std::optional<RawAuditRead>>;

@@ -23,14 +23,15 @@ std::atomic<bool> watch_status_send{false}, status_sent{false};
 }
 // Real-kernel barrier: the request is queued to a stopped supervisor before it
 // is killed. No timeout or thread-start observation stands in for a pending RPC.
-extern "C" ssize_t send(int endpoint, const void *data, std::size_t size, int) {
-  iovec part{const_cast<void *>(data), size};
+extern "C" ssize_t send(int endpoint, const void *data, std::size_t message_size,
+                        int message_flags) {
+  const auto arguments = std::pair{message_size, message_flags};
+  iovec part{const_cast<void *>(data), arguments.first};
   msghdr message{};
   message.msg_iov = &part;
   message.msg_iovlen = 1;
-  // All fixture requests use flags zero, as does the native setup RPC.
-  const auto result = ::sendmsg(endpoint, &message, 0);
-  if (watch_status_send.load() && result == 1 && size == 1 &&
+  const auto result = ::sendmsg(endpoint, &message, arguments.second);
+  if (watch_status_send.load() && result == 1 && arguments.first == 1 &&
       *static_cast<const std::byte *>(data) == std::byte{0})
     status_sent.store(true);
   return result;

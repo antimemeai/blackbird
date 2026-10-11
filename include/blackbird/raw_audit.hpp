@@ -55,6 +55,9 @@ public:
   // Borrowed bytes refer to caller output; only the flushed prefix is visible.
   Result<std::optional<RawAuditRead>> read(RawAuditCursor cursor,
                                            MutableByteView output);
+  // Positioning once may scan physical frames, including interior commits. It
+  // rejects offsets into payloads even when those bytes resemble a valid frame.
+  Result<void> validate_cursor(RawAuditCursor cursor);
   const std::optional<Error> &recovery_error() const noexcept { return problem_; }
   RawAuditProgress progress() const noexcept { return progress_; }
   const JournalHeader &header() const noexcept { return header_; }

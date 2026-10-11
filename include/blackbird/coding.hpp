@@ -21,6 +21,11 @@ public:
   virtual std::string_view provider_identity() const noexcept { return "unavailable"; }
   virtual Value respond(const Value &request,
                         const std::function<void(std::string_view)> &capture) = 0;
+  virtual Value respond(const Value &request,
+                        const std::function<void(std::string_view)> &capture,
+                        const RawProviderOwner *) {
+    return respond(request, capture);
+  }
 };
 class OpenAiCodingProvider final : public CodingProvider {
 public:
@@ -30,6 +35,8 @@ public:
     return "openai-codex";
   }
   Value respond(const Value &, const std::function<void(std::string_view)> &) override;
+  Value respond(const Value &, const std::function<void(std::string_view)> &,
+                const RawProviderOwner *) override;
 
 private:
   OpenAiConfig config_;

@@ -363,44 +363,91 @@ void require_provider_success(int status) {
 }
 ProviderHttpResponse
 provider_http(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
-              const std::function<void(std::string_view)> &observer) {
-  https_url(r.url);
-  if (r.timeout_seconds < 1 || r.timeout_seconds > 3600 ||
-      r.body.size() > 16 * 1024 * 1024 || (r.method != "GET" && r.method != "POST"))
-    throw Error{ErrorCode::invalid_range};
-  std::string input = "url = " + quote(r.url) + "\nrequest = " + quote(r.method) + "\n";
-  for (const auto &[k, v] : r.headers) {
-    identifier(k);
-    secret(v);
-    input += "header = " + quote(k + ": " + v) + "\n";
+              const std::function<void(std::string_view)> &observer,
+              const RawProviderOwner *raw_owner, bool application) {
+  std::optional<RawProviderTrace> trace;
+  std::optional<RawWaitScope> wait_scope;
+  std::optional<detail::Clock::time_point> initial_deadline;
+  try {
+    if (application && r.timeout_seconds >= 1 && r.timeout_seconds <= 3600) {
+      initial_deadline = detail::Clock::now() + std::chrono::seconds{r.timeout_seconds};
+      auto control = raw_wait_control();
+      control.deadline = initial_deadline;
+      wait_scope.emplace(control);
+    }
+    if (application)
+      trace.emplace(raw_owner, r.timeout_seconds);
+    https_url(r.url);
+    if (r.timeout_seconds < 1 || r.timeout_seconds > 3600 ||
+        r.body.size() > 16 * 1024 * 1024 || (r.method != "GET" && r.method != "POST"))
+      throw Error{ErrorCode::invalid_range};
+    std::string input =
+        "url = " + quote(r.url) + "\nrequest = " + quote(r.method) + "\n";
+    for (const auto &[k, v] : r.headers) {
+      identifier(k);
+      secret(v);
+      input += "header = " + quote(k + ": " + v) + "\n";
+    }
+    if (r.method == "POST")
+      input += "data-binary = " + quote(r.body) + "\n";
+    if (trace)
+      trace->body(r.method, r.url,
+                  r.method == "POST" ? std::string_view{r.body} : std::string_view{});
+    detail::Child child;
+    child.cancelled = c.cancelled;
+    child.deadline_error = {ErrorCode::provider_transport, 28};
+    if (trace)
+      child.raw_capture(trace->reference());
+    child.output_observer = observer;
+    child.start({c.curl_executable, "--disable", "--silent", "--no-buffer", "--proto",
+                 "=https", "--max-time", std::to_string(r.timeout_seconds),
+                 "--write-out", "\n%{http_code}", "--config", "-"});
+    const auto deadline =
+        initial_deadline
+            ? *initial_deadline
+            : detail::Clock::now() + std::chrono::seconds{r.timeout_seconds};
+    child.send(input, deadline);
+    child.close_input();
+    int code = 0;
+    auto output = child.collect(deadline, 16 * 1024 * 1024, &code);
+    if (code != 0)
+      throw Error{ErrorCode::provider_transport, code};
+    const auto split = output.rfind('\n');
+    if (split == std::string::npos || output.size() - split != 4)
+      throw Error{ErrorCode::corrupt};
+    int status = 0;
+    const auto n = std::from_chars(output.data() + split + 1,
+                                   output.data() + output.size(), status);
+    if (n.ec != std::errc{} || n.ptr != output.data() + output.size() || status < 100 ||
+        status > 599)
+      throw Error{ErrorCode::corrupt};
+    if (trace)
+      trace->http(child.raw_reference(), status);
+    output.resize(split);
+    if (trace)
+      trace->finish(1);
+    return {status, std::move(output)};
+  } catch (const Error &error) {
+    const Error returned =
+        error.code == ErrorCode::interrupted && error.detail == ETIMEDOUT
+            ? Error{ErrorCode::provider_transport, 28}
+            : error;
+    if (trace)
+      trace->finish(2, 1, returned);
+    throw returned;
+  } catch (const std::bad_alloc &) {
+    if (trace)
+      trace->finish(3, 1, {ErrorCode::allocation});
+    throw;
+  } catch (const std::length_error &) {
+    if (trace)
+      trace->finish(4, 1, {ErrorCode::capacity});
+    throw;
+  } catch (...) {
+    if (trace)
+      trace->finish(5, 1);
+    throw;
   }
-  if (r.method == "POST")
-    input += "data-binary = " + quote(r.body) + "\n";
-  detail::Child child;
-  child.cancelled = c.cancelled;
-  child.deadline_error = {ErrorCode::provider_transport, 28};
-  child.output_observer = observer;
-  child.start({c.curl_executable, "--disable", "--silent", "--no-buffer", "--proto",
-               "=https", "--max-time", std::to_string(r.timeout_seconds), "--write-out",
-               "\n%{http_code}", "--config", "-"});
-  const auto deadline = detail::Clock::now() + std::chrono::seconds{r.timeout_seconds};
-  child.send(input, deadline);
-  child.close_input();
-  int code = 0;
-  auto output = child.collect(deadline, 16 * 1024 * 1024, &code);
-  if (code != 0)
-    throw Error{ErrorCode::provider_transport, code};
-  const auto split = output.rfind('\n');
-  if (split == std::string::npos || output.size() - split != 4)
-    throw Error{ErrorCode::corrupt};
-  int status = 0;
-  const auto n =
-      std::from_chars(output.data() + split + 1, output.data() + output.size(), status);
-  if (n.ec != std::errc{} || n.ptr != output.data() + output.size() || status < 100 ||
-      status > 599)
-    throw Error{ErrorCode::corrupt};
-  output.resize(split);
-  return {status, std::move(output)};
 }
 ProviderAuth::ProviderAuth(ProviderAuthConfig config) : config_(std::move(config)) {
   if (config_.directory.empty()) {
@@ -717,11 +764,10 @@ Value ProviderAuth::device_poll(std::string_view p, std::string_view a) {
   s.save();
   return Value::object({{"state", Value{"ready"}}});
 }
-ProviderHttpResponse
-ProviderAuth::request(std::string_view p, std::string_view route, const Value &body,
-                      int timeout_seconds,
-                      const std::function<void(std::string_view)> &observer,
-                      const Value *expected_binding) {
+ProviderHttpResponse ProviderAuth::request(
+    std::string_view p, std::string_view route, const Value &body, int timeout_seconds,
+    const std::function<void(std::string_view)> &observer,
+    const Value *expected_binding, const RawProviderOwner *raw_owner) {
   if (route != "responses" && route != "chat/completions" && route != "messages" &&
       route != "models")
     throw Error{ErrorCode::invalid_range};
@@ -837,7 +883,8 @@ ProviderAuth::request(std::string_view p, std::string_view route, const Value &b
   } else
     r.headers.emplace_back("Authorization", "Bearer " + token);
   (void)metadata;
-  auto result = config_.http ? config_.http(r) : provider_http(r, config_, observer);
+  auto result = config_.http ? config_.http(r)
+                             : provider_http(r, config_, observer, raw_owner, true);
   if (config_.http && observer)
     observer(result.body);
   require_provider_success(result.status);
