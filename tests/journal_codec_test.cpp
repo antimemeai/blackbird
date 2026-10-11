@@ -197,6 +197,37 @@ void frames() {
   stream.insert(stream.end(), bytes.begin(), bytes.end());
   CHECK(require(decode_journal_frame(stream, limits)).encoded_size == 35);
 }
+void raw_frames_into() {
+  const JournalLimits limits{64, 256};
+  const std::array<std::byte, 3> payload{std::byte{0}, std::byte{0xff},
+                                         std::byte{0x7f}};
+  std::array<std::byte, 40> output{};
+  output.fill(std::byte{0xa5});
+  CHECK(require(encode_journal_frame_into(output, FrameKind::raw, 1, 1, payload,
+                                          limits)) == 35);
+  CHECK(output[6] == std::byte{4} && output[7] == std::byte{0});
+  for (std::size_t index = 35; index < output.size(); ++index)
+    CHECK(output[index] == std::byte{0xa5});
+  const auto decoded = require(decode_journal_frame(output, limits));
+  CHECK(decoded.kind == FrameKind::raw);
+  CHECK(std::equal(payload.begin(), payload.end(), decoded.payload.begin(),
+                   decoded.payload.end()));
+  const auto before = output;
+  error_is(encode_journal_frame_into(MutableByteView{output}.first(34), FrameKind::raw,
+                                     1, 1, payload, limits),
+           ErrorCode::capacity);
+  CHECK(output == before);
+  error_is(encode_journal_frame_into(output, FrameKind::raw, 0, 1, payload, limits),
+           ErrorCode::invalid_identity);
+  CHECK(output == before);
+  require(encode_journal_frame_into(output, FrameKind::raw, 2, 2,
+                                    ByteView{output}.subspan(32, 3), limits));
+  CHECK(std::equal(payload.begin(), payload.end(), output.begin() + 32));
+  std::copy(payload.begin(), payload.end(), output.begin());
+  require(encode_journal_frame_into(output, FrameKind::raw, 3, 3,
+                                    ByteView{output}.first(3), limits));
+  CHECK(std::equal(payload.begin(), payload.end(), output.begin() + 32));
+}
 } // namespace
 
 int main() {
@@ -205,6 +236,7 @@ int main() {
     checksum_specification();
     headers();
     frames();
+    raw_frames_into();
     std::puts("PASS journal CRC vectors, headers and bounded frame bytes");
     return 0;
   } catch (const std::exception &error) {

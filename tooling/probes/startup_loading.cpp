@@ -2,7 +2,6 @@
 // Private-fixture restoration and actual CodingEngine admission; deterministic
 // local provider only, with known success and no external service or side effect.
 #include "blackbird/coding.hpp"
-#include "blackbird/local_timing.hpp"
 #include <chrono>
 #include <ctime>
 #include <filesystem>
@@ -106,9 +105,6 @@ MemorySample memory_sample() {
   return {};
 }
 int main(int argc, char **argv) {
-#if BLACKBIRD_DEBUG
-  LocalTimingSession timing_session; // explicit per-process opt-in; shutdown flush
-#endif
   if (argc < 3)
     return 2;
   ProbeIO io;
@@ -156,7 +152,6 @@ int main(int argc, char **argv) {
         throw Error{ErrorCode::incomplete};
       h = unwrap(decode_journal_header(bytes));
     }
-    LocalSpan replay_timing{"startup.replay", "tooling/probes/startup_loading.cpp"};
     auto root =
         create ? unwrap(RetainedState::create(std::move(directory), "audit", h, cap))
                : unwrap(RetainedState::open(std::move(directory), "audit", h, cap,
@@ -171,8 +166,6 @@ int main(int argc, char **argv) {
       } custody;
       unwrap(root->reconcile(custody));
     }
-    replay_timing.outcome("success");
-    replay_timing.finish();
     const auto initial_bytes = std::filesystem::file_size(path / "audit");
     const auto initial_facts = root->fact_count();
     std::size_t resident_payload = 0, cold_payload = 0;
@@ -188,11 +181,8 @@ int main(int argc, char **argv) {
     const auto replay_io = io;
     const double replay_cpu_ms =
         1000.0 * static_cast<double>(std::clock()) / CLOCKS_PER_SEC;
-    LocalSpan context_timing{"startup.context", "tooling/probes/startup_loading.cpp"};
     AuditLog log{*root};
     ContextStore context{log};
-    context_timing.outcome("success");
-    context_timing.finish();
     if (create) {
       context.append(
           {Value::object(
@@ -318,14 +308,8 @@ int main(int argc, char **argv) {
         return response;
       }
     } provider{*root, io};
-    LocalSpan admission_timing{"startup.request_admission",
-                               "tooling/probes/startup_loading.cpp"};
     CodingEngine engine{log, context, provider, "deterministic-fixture"};
     engine.turn({"", "return blackbird.request()"});
-    // This native span includes known-success settlement; admitted_ms above
-    // ends earlier, at provider entry. Do not conflate those two boundaries.
-    admission_timing.outcome("success");
-    admission_timing.finish();
     if (!provider.admission)
       throw Error{ErrorCode::corrupt};
     const auto settled = unwrap(root->attempt(provider.admission->attempt));

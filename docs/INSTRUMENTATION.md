@@ -1,6 +1,6 @@
 # Instrumentation: raw emission, recording and transformation
 
-2026-10-10. Proposed design for discussion and approval; product source unchanged.
+2026-10-11. Raw design approved; first source unit implemented.
 
 Blackbird emits raw metric events into the audit log. A separate recorder preserves
 the raw bytes on disk. A tertiary process transforms the preserved records.
@@ -24,9 +24,23 @@ Read the concrete artifacts:
 The [producer-transform proposal](../papers/2026-10-10-instrumentation-producer-transforms-superseded.md)
 is superseded. OTel/Prometheus no longer guide emission. No dependency adopted.
 
-One essential operator contract remains: whether losslessness includes pending
-RAM at host/power failure, requiring a stronger return/acquisition boundary than
-async handoff. No crash-loss allowance is selected. Product implementation awaits
-the explicitly required discussion and approval. nls.2 remains open; logical
-clocks nls.9 and audit completeness nls.10 are separate unfinished work. Evals,
-multiplayer and steering/trajectory implementation remain deferred.
+The operator approved implementation on2026-10-11 and excludes host power loss.
+An emitted record is a fully published source envelope/body. Named memory retains
+published records through process failure until the separate recorder writes and
+synchronizes them; only then may the producer reuse their space. Return does not
+wait for disk. Interrupted acquisition before publication remains unresolved.
+
+The first implementation unit adds channel, raw audit, recorder lifecycle and
+native region hooks at startup, retained append, command admission/worker, terminal
+and provider owner boundaries. See the
+[runtime implementation note](../papers/2026-10-11-raw-runtime-implementation.md).
+Actual adapter wire send/stream hooks and external-process hooks are still open,
+as are the remaining census integrations and full-path performance measurements.
+Application capture starts before retained-state creation/recovery and drains on
+clean shutdown. Read-only audit inspection does not create a metric stream.
+The launcher oracle reads preserved records and checks linked startup endpoints,
+ready/recovery outcomes and retained append across actual launch/reopen.
+
+nls.2 remains open; logical clocks nls.9 and audit completeness nls.10 are separate
+unfinished work. Evals, multiplayer and steering/trajectory implementation remain
+deferred.

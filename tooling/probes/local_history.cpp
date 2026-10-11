@@ -1,6 +1,7 @@
 #include "blackbird/context.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/local_timing.hpp"
+#include "blackbird/raw_runtime.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -10,6 +11,19 @@ template <class T> T id(unsigned char n) {
   IdentityBytes b{};
   b[0] = std::byte{n};
   return unwrap(T::from_bytes(b));
+}
+// Standalone benchmark measurements, separate from emitted raw metric records.
+struct ProbeTick {
+  std::int64_t wall, cpu;
+};
+ProbeTick probe_tick() {
+  const auto reading = raw_local_clock(true);
+  if (reading.monotonic.result != 0 || reading.thread_cpu.result != 0)
+    throw std::runtime_error("benchmark clock failed");
+  const auto scalar = [](const timespec &value) {
+    return static_cast<std::int64_t>(value.tv_sec) * 1000000000LL + value.tv_nsec;
+  };
+  return {scalar(reading.monotonic.value), scalar(reading.thread_cpu.value)};
 }
 int main(int argc, char **argv) {
   if (argc != 5)
@@ -27,6 +41,8 @@ int main(int argc, char **argv) {
                     3,
                     {1024 * 1024, 4 * 1024 * 1024},
                     std::nullopt};
+    std::unique_ptr<RawRuntime> recorder;
+    std::optional<RawThreadBinding> binding;
     auto root =
         unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(
                                          unwrap(NativeJournalDirectory::open(temp))),
@@ -42,22 +58,24 @@ int main(int argc, char **argv) {
     const auto packet = Value::object({{"fixture", Value{std::string(128, 'x')}}});
     for (unsigned i = 0; i < history; ++i)
       log.record(ApplicationChannel::log, packet);
-    auto sink = std::make_unique<LocalTimingSink>();
-    if (enabled)
-      local_timing_sink = sink.get();
+    if (enabled) {
+      recorder = unwrap(RawRuntime::open(temp, h.environment,
+                                         {{1024 * 1024, 64 * 1024, 4096}, 4096}));
+      binding.emplace(unwrap(recorder->prepare_thread()));
+    }
     std::ofstream output(prefix + ".samples.jsonl");
     if (!output)
       throw std::runtime_error("sample output open failed");
-    const auto valid = [](LocalTick a, LocalTick b) {
-      if (!a.valid || !b.valid || b.wall < a.wall || b.cpu < a.cpu)
+    const auto valid = [](ProbeTick a, ProbeTick b) {
+      if (b.wall < a.wall || b.cpu < a.cpu)
         throw std::runtime_error("invalid benchmark clocks");
     };
     const auto initial = root->journal_usage();
     for (unsigned i = 0; i < samples; ++i) {
       const auto before = root->journal_usage();
-      const auto begin = local_tick();
+      const auto begin = probe_tick();
       log.record(ApplicationChannel::log, packet);
-      const auto end = local_tick();
+      const auto end = probe_tick();
       valid(begin, end);
       const auto after = root->journal_usage();
       output << "{\"action\":\"append\",\"history\":" << history
@@ -67,18 +85,21 @@ int main(int argc, char **argv) {
              << ",\"byte_delta\":" << after.prefix.end_offset - before.prefix.end_offset
              << ",\"wall_ns\":" << end.wall - begin.wall
              << ",\"cpu_ns\":" << end.cpu - begin.cpu << "}\n";
-      const auto pbegin = local_tick();
+      const auto pbegin = probe_tick();
       std::size_t bytes;
       {
-        LocalSpan prepare{"fixture.prepare_subset", "ContextStore::items + dump_json"};
+        RawRegion prepare{raw_regions::provider_prepare};
         auto request = Value::object(
             {{"model", Value{"fixture"}}, {"input", Value{context.items()}}});
         bytes = unwrap(dump_json(request)).size();
-        prepare.observe(after.indexed_records, bytes);
-        prepare.linkage(context.head());
-        prepare.outcome("success");
+        prepare.observe({RawObservationKind::request_bytes, after.indexed_records,
+                         bytes, after.prefix.sequence});
+        const auto &revision = context.head();
+        prepare.linkage(
+            {std::as_bytes(std::span{revision.data(), revision.size()}), {}});
+        prepare.outcome(RawRegionOutcome::success);
       }
-      const auto pend = local_tick();
+      const auto pend = probe_tick();
       valid(pbegin, pend);
       output << "{\"action\":\"prepare_subset\",\"history\":" << history
              << ",\"records\":" << after.indexed_records
@@ -88,23 +109,24 @@ int main(int argc, char **argv) {
              << ",\"cpu_ns\":" << pend.cpu - pbegin.cpu << "}\n";
     }
     // Explicit primitive overhead, same clocks and iterations in both modes.
-    const auto b = local_tick();
+    const auto b = probe_tick();
     for (unsigned i = 0; i < 2000; ++i) {
-      LocalSpan span{"primitive", "fixture"};
-      span.outcome("success");
+      RawRegion span{raw_regions::provider_prepare};
+      span.outcome(RawRegionOutcome::success);
     }
-    const auto e = local_tick();
+    const auto e = probe_tick();
     valid(b, e);
     output << "{\"action\":\"primitive_2000\",\"history\":" << history
            << ",\"wall_ns\":" << e.wall - b.wall << ",\"cpu_ns\":" << e.cpu - b.cpu
            << ",\"initial_records\":" << initial.indexed_records << "}\n";
-    local_timing_sink = nullptr;
-    if (enabled && !sink->persist(prefix + ".telemetry.jsonl"))
-      return 4;
     output.close();
     if (!output)
       throw std::runtime_error("sample output write failed");
     root.reset();
+    binding.reset();
+    recorder.reset();
+    if (enabled)
+      std::filesystem::rename(std::filesystem::path{temp} / "raw", prefix + ".raw");
     std::filesystem::remove_all(temp);
     return 0;
   } catch (...) {

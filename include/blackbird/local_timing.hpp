@@ -1,93 +1,146 @@
 #pragma once
-#ifndef BLACKBIRD_DEBUG
-#define BLACKBIRD_DEBUG 0
-#endif
-#if BLACKBIRD_DEBUG
+
+#include "blackbird/raw_channel.hpp"
+
 #include <array>
 #include <cstdint>
-#include <memory>
-#include <mutex>
+#include <optional>
+#include <span>
 #include <string_view>
+#include <time.h>
 
 namespace blackbird {
-struct LocalTick {
-  std::uint64_t wall{}, cpu{};
-  bool valid{};
+
+// These are native clock return fields, never scalar timestamps or durations.
+struct RawClockReading {
+  clockid_t method{};
+  int result{};
+  int error{};
+  timespec value{};
 };
-using LocalClock = LocalTick (*)(bool) noexcept;
-LocalTick local_tick(bool cpu = true) noexcept;
-struct LocalMetric {
-  const char *action{}, *source{}, *outcome{"incomplete"};
-  std::uint64_t start_wall_ns{}, wall_ns{}, cpu_ns{}, history{}, bytes{}, sequence{};
-  bool cpu_measured{true}, clock_valid{}, linkage_truncated{};
-  std::array<char, 96> revision{}, attempt{};
+struct RawClockSample {
+  RawClockReading monotonic;
+  RawClockReading thread_cpu;
+  bool cpu_read{};
 };
-// Main/turn threads may publish concurrently; no file I/O in push. Fixed capacity.
-class LocalTimingSink {
+RawClockSample raw_local_clock(bool cpu) noexcept;
+
+struct RawRegionSites {
+  std::uint32_t begin, end, observation, linkage, outcome;
+  std::string_view name, source;
+};
+namespace raw_regions {
+inline constexpr RawRegionSites startup_initialize{
+    1000, 1001, 1002, 1003, 1004, "startup.initialize", "src/main.cpp:run_session"};
+inline constexpr RawRegionSites startup_restore{
+    1010, 1011, 1012, 1013, 1014, "startup.restore", "src/main.cpp:open"};
+inline constexpr RawRegionSites terminal_first_frame{1020,
+                                                     1021,
+                                                     1022,
+                                                     1023,
+                                                     1024,
+                                                     "startup.terminal-first-frame",
+                                                     "src/terminal.cpp:run"};
+inline constexpr RawRegionSites command_perform{
+    1030, 1031, 1032, 1033, 1034, "command.perform", "src/terminal.cpp:worker"};
+inline constexpr RawRegionSites command_render{
+    1040, 1041, 1042, 1043, 1044, "command.render", "src/terminal.cpp:frame"};
+inline constexpr RawRegionSites command_input_save{
+    1050, 1051, 1052, 1053, 1054, "command.input-save", "src/terminal.cpp:input"};
+inline constexpr RawRegionSites command_admission{
+    1060, 1061, 1062, 1063, 1064, "command.admission", "src/coding.cpp:operation"};
+inline constexpr RawRegionSites provider_prepare{
+    1070, 1071, 1072, 1073, 1074, "provider.prepare", "src/coding.cpp:request"};
+inline constexpr RawRegionSites provider_transport{1080,
+                                                   1081,
+                                                   1082,
+                                                   1083,
+                                                   1084,
+                                                   "provider.transport",
+                                                   "src/coding.cpp:provider.respond"};
+inline constexpr RawRegionSites retained_append{1090,
+                                                1091,
+                                                1092,
+                                                1093,
+                                                1094,
+                                                "retained.append",
+                                                "src/retained_state.cpp:append_impl"};
+inline constexpr std::array definitions{
+    startup_initialize, startup_restore,    terminal_first_frame, command_perform,
+    command_render,     command_input_save, command_admission,    provider_prepare,
+    provider_transport, retained_append};
+} // namespace raw_regions
+
+// Outcomes are owner branch facts. End of scope is never inferred success.
+enum class RawRegionOutcome : std::uint32_t {
+  ready = 1,
+  compact,
+  full_replay,
+  admitted,
+  success,
+  rejected,
+  uncertain,
+  returned,
+  exception,
+  flushed,
+  small_frame,
+  queued,
+  dispatch
+};
+enum class RawObservationKind : std::uint32_t {
+  request_bytes = 1,
+  source_bytes,
+  encoded_event_bytes,
+  journal_state
+};
+struct RawRegionObservation {
+  RawObservationKind kind;
+  std::size_t history{}, bytes{};
+  std::uint64_t sequence{};
+};
+struct RawRegionLinkage {
+  ByteView revision, attempt;
+};
+enum class RawRegionEnd : std::uint8_t { explicit_finish = 1, scope_exit = 2 };
+struct RawRegionOptions {
+  bool cpu = true;
+};
+
+// One execution context owns each region. Its end and one branch-outcome record
+// have prepaid control credit before begin publication. No region migrates threads.
+class RawRegion {
 public:
-  static constexpr std::size_t capacity = 8192;
-  explicit LocalTimingSink(LocalClock clock = local_tick) noexcept : clock_(clock) {}
-  void push(const LocalMetric &metric) noexcept;
-  bool persist(std::string_view path) noexcept;
-  LocalClock clock() const noexcept { return clock_; }
-  std::size_t size() const noexcept { return size_; }
-  std::uint64_t dropped() const noexcept { return dropped_; }
-  const LocalMetric &at(std::size_t i) const noexcept { return records_[i]; }
+  explicit RawRegion(const RawRegionSites &sites, RawRegionOptions options = {});
+  ~RawRegion() { finish(RawRegionEnd::scope_exit); }
+  RawRegion(const RawRegion &) = delete;
+  RawRegion &operator=(const RawRegion &) = delete;
+  RawRegion(RawRegion &&) = delete;
+  RawRegion &operator=(RawRegion &&) = delete;
+  bool enabled() const noexcept { return claim_.has_value(); }
+  std::uint64_t begin_ordinal() const noexcept { return begin_; }
+  void observe(const RawRegionObservation &observation);
+  void linkage(const RawRegionLinkage &linkage);
+  void outcome(RawRegionOutcome outcome) noexcept;
+  void error(Error error) noexcept;
+  void finish(RawRegionEnd reason = RawRegionEnd::explicit_finish) noexcept;
 
 private:
-  std::mutex mutex_;
-  LocalClock clock_;
-  std::array<LocalMetric, capacity> records_{};
-  std::size_t size_{};
-  std::uint64_t dropped_{};
+  const RawRegionSites *sites_;
+  RawRegionOptions options_;
+  std::optional<RawControlClaim> claim_;
+  std::uint64_t begin_ = 0;
+  bool outcome_written_ = false;
+  bool error_written_ = false;
 };
-extern thread_local LocalTimingSink *local_timing_sink;
-class LocalSpan {
-public:
-  LocalSpan(const char *action, const char *source, bool cpu = true) noexcept;
-  ~LocalSpan() { finish(); }
-  LocalSpan(const LocalSpan &) = delete;
-  LocalSpan &operator=(const LocalSpan &) = delete;
-  bool enabled() const noexcept { return sink_ != nullptr; }
-  void observe(std::uint64_t history, std::uint64_t bytes,
-               std::uint64_t sequence = 0) noexcept;
-  void linkage(std::string_view revision, std::string_view attempt = {}) noexcept;
-  void outcome(const char *value) noexcept {
-    if (sink_)
-      metric_.outcome = value;
-  }
-  void finish() noexcept;
 
-private:
-  LocalTimingSink *sink_{};
-  LocalMetric metric_{};
-  LocalTick start_{};
-};
-// Environment opt-in read once at process entry; explicit persistence at shutdown.
-class LocalTimingSession {
-public:
-  LocalTimingSession() noexcept;
-  ~LocalTimingSession();
+// Immutable descriptions registered once by runtime setup. No writer lookup.
+std::span<const RawRegionSites> raw_region_descriptions() noexcept;
 
-private:
-  std::unique_ptr<LocalTimingSink> sink_;
-  const char *path_{};
+struct RawWorkerDispatch {
+  IdentityBytes lane;
+  std::uint64_t ordinal;
 };
+RawWorkerDispatch raw_worker_dispatch();
+void raw_worker_started(const RawWorkerDispatch &dispatch);
+
 } // namespace blackbird
-#else
-#include <cstdint>
-#include <string_view>
-namespace blackbird {
-// Normal builds contain no timing state, clocks, sink, TLS or output path.
-class LocalSpan {
-public:
-  constexpr LocalSpan(const char *, const char *, bool = true) noexcept {}
-  constexpr bool enabled() const noexcept { return false; }
-  constexpr void observe(std::uint64_t, std::uint64_t, std::uint64_t = 0) noexcept {}
-  constexpr void linkage(std::string_view, std::string_view = {}) noexcept {}
-  constexpr void outcome(const char *) noexcept {}
-  constexpr void finish() noexcept {}
-};
-class LocalTimingSession {};
-} // namespace blackbird
-#endif

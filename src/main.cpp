@@ -4,6 +4,7 @@
 #include "blackbird/local_timing.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/raw_runtime.hpp"
 #include "blackbird/sprite.hpp"
 #include "blackbird/station.hpp"
 #include "blackbird/terminal.hpp"
@@ -60,10 +61,6 @@ std::string safe(std::string_view text) {
 int run_session(int argc, char **argv, std::vector<std::string> &next_session,
                 std::vector<std::string> &fallback_session) {
   interrupted.store(false, std::memory_order_relaxed);
-#if BLACKBIRD_DEBUG
-  blackbird::LocalTimingSession local_timing;
-#endif
-  blackbird::LocalSpan startup{"startup.initialize", "src/main.cpp:main"};
   try {
     const char *home = std::getenv("HOME");
     if (home == nullptr)
@@ -213,6 +210,16 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
       throw Error{ErrorCode::io, errno};
     const auto path = session / "audit";
     const JournalCapacity capacity{512ULL * 1024 * 1024, 200000};
+    std::unique_ptr<RawRuntime> instrumentation;
+    std::optional<RawThreadBinding> instrumentation_binding;
+    std::optional<RawRegion> startup;
+    const auto start_instrumentation = [&](EnvironmentId environment) {
+      if (inspect)
+        return;
+      instrumentation = unwrap(RawRuntime::open(session.string(), environment));
+      instrumentation_binding.emplace(unwrap(instrumentation->prepare_thread()));
+      startup.emplace(raw_regions::startup_initialize);
+    };
     std::unique_ptr<RetainedState> root;
     auto directory = std::make_unique<NativeJournalDirectory>(
         unwrap(NativeJournalDirectory::open(session.string())));
@@ -232,6 +239,7 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
                "cannot reopen them. Session files left intact.\n";
         return 1;
       }
+      start_instrumentation(header.environment);
       // Small sessions can rebuild automatically. Large histories require an
       // explicit slow path if their derived state is missing or unsupported.
       constexpr std::uint64_t automatic_replay_bytes = 64ULL * 1024 * 1024;
@@ -239,7 +247,7 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
       if (rebuild_session)
         std::cerr << "Session recovery: full replay allowed (up to 512 MiB / 200000 "
                      "records); uncertain operations will not be retried.\n";
-      LocalSpan restoration{"startup.restore", "src/main.cpp:open"};
+      RawRegion restoration{raw_regions::startup_restore};
       auto opened = RetainedState::open(std::move(directory), "audit", header, capacity,
                                         false, true, replay_limit);
       if (!opened.has_value() && opened.error().code == ErrorCode::unsupported &&
@@ -276,7 +284,8 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
           return 1;
         }
       }
-      restoration.outcome(root->compact_recovery() ? "compact" : "full-replay");
+      restoration.outcome(root->compact_recovery() ? RawRegionOutcome::compact
+                                                   : RawRegionOutcome::full_replay);
     } else {
       std::uint64_t name_space = 0;
       if (getentropy(&name_space, sizeof(name_space)) != 0 || name_space == 0)
@@ -286,6 +295,7 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
                            name_space,
                            {32 * 1024 * 1024, 96 * 1024 * 1024},
                            std::nullopt};
+      start_instrumentation(header.environment);
       root = unwrap(
           RetainedState::create(std::move(directory), "audit", header, capacity));
     }
@@ -863,8 +873,10 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
       if (interrupted.load(std::memory_order_relaxed))
         cancelled.store(true);
     };
-    startup.outcome("ready");
-    startup.finish();
+    if (startup) {
+      startup->outcome(RawRegionOutcome::ready);
+      startup->finish();
+    }
     auto finish_interactive = [&] {
       if (!restart_pending.load())
         return 0;

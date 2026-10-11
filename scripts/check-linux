@@ -24,6 +24,7 @@ def main():
     # Explicit current native unit source scope, excluding history, credentials and captures.
     paths = ["CMakeLists.txt", "include", "src", "tests", "programs", "tooling/probes",
              "assets", "scripts/check-foundation-api", "scripts/check-terminal-pty", "scripts/check-new-session-pty", "scripts/check-participants-pty", "scripts/check-tiny-terminal-pty", "scripts/check-provider-auth", "scripts/check-trajectory", "scripts/check-observations", "scripts/check-tasks-pty", "scripts/check-command-jobs-pty", "scripts/check-command-jobs-station", "scripts/check-rrc", "scripts/arco", "scripts/blackbird", "scripts/terminal-screen-oracle.py", "scripts/native-packet.py"]
+    paths.append("scripts/check-raw-capture")
     lua_archive = ROOT.parent / "quarantine_proj/archives/lua-5.4.8.tar.gz"
     if hashlib.sha256(lua_archive.read_bytes()).hexdigest() != "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae":
         raise RuntimeError("Lua 5.4.8 source archive checksum mismatch")

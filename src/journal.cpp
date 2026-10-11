@@ -36,7 +36,7 @@ bool valid_limits(JournalLimits limits) noexcept {
 }
 bool valid_kind(FrameKind kind) noexcept {
   return kind == FrameKind::source || kind == FrameKind::semantic ||
-         kind == FrameKind::commit;
+         kind == FrameKind::raw || kind == FrameKind::commit;
 }
 Result<void> validate_header(const JournalHeader &header) {
   if (header.issuer_namespace == 0) {
@@ -204,36 +204,57 @@ Result<JournalHeader> decode_journal_header(ByteView bytes) {
   return Result<JournalHeader>::success(decoded);
 }
 
+Result<std::size_t> encode_journal_frame_into(MutableByteView output, FrameKind kind,
+                                              std::uint64_t sequence,
+                                              std::uint64_t batch_first,
+                                              ByteView payload, JournalLimits limits) {
+  if (sequence == 0 || batch_first == 0)
+    return Result<std::size_t>::failure({ErrorCode::invalid_identity});
+  if (batch_first > sequence || !valid_limits(limits))
+    return Result<std::size_t>::failure({ErrorCode::invalid_range});
+  if (!valid_kind(kind))
+    return Result<std::size_t>::failure({ErrorCode::unsupported});
+  if (payload.size() > limits.max_payload ||
+      output.size() < journal_frame_header_size ||
+      payload.size() > output.size() - journal_frame_header_size)
+    return Result<std::size_t>::failure({ErrorCode::capacity});
+  const auto size = journal_frame_header_size + payload.size();
+  const auto bytes = output.first(size);
+  // Move first: input may overlap even the header we are about to replace.
+  if (!payload.empty())
+    std::memmove(bytes.data() + journal_frame_header_size, payload.data(),
+                 payload.size());
+  std::copy(frame_magic.begin(), frame_magic.end(), bytes.begin());
+  put(bytes.subspan(4, 2), 1);
+  put(bytes.subspan(6, 2), static_cast<std::uint16_t>(kind));
+  put(bytes.subspan(8, 8), sequence);
+  put(bytes.subspan(16, 8), batch_first);
+  put(bytes.subspan(24, 4), payload.size());
+  put(bytes.subspan(28, 4), crc32c(ByteView{bytes}.subspan(journal_frame_header_size),
+                                   crc32c(ByteView{bytes}.first(28))));
+  return Result<std::size_t>::success(size);
+}
+
 Result<std::vector<std::byte>>
 encode_journal_frame(FrameKind kind, std::uint64_t sequence, std::uint64_t batch_first,
                      ByteView payload, JournalLimits limits) {
   using Encoded = std::vector<std::byte>;
-  if (sequence == 0 || batch_first == 0) {
+  if (sequence == 0 || batch_first == 0)
     return Result<Encoded>::failure({ErrorCode::invalid_identity});
-  }
-  if (batch_first > sequence || !valid_limits(limits)) {
+  if (batch_first > sequence || !valid_limits(limits))
     return Result<Encoded>::failure({ErrorCode::invalid_range});
-  }
-  if (!valid_kind(kind)) {
+  if (!valid_kind(kind))
     return Result<Encoded>::failure({ErrorCode::unsupported});
-  }
   Encoded output;
   if (payload.size() > limits.max_payload ||
-      payload.size() > output.max_size() - journal_frame_header_size) {
+      payload.size() > output.max_size() - journal_frame_header_size)
     return Result<Encoded>::failure({ErrorCode::capacity});
-  }
   try {
     output.resize(journal_frame_header_size + payload.size());
-    const auto bytes = std::span{output};
-    std::copy(frame_magic.begin(), frame_magic.end(), bytes.begin());
-    put(bytes.subspan(4, 2), 1);
-    put(bytes.subspan(6, 2), static_cast<std::uint16_t>(kind));
-    put(bytes.subspan(8, 8), sequence);
-    put(bytes.subspan(16, 8), batch_first);
-    put(bytes.subspan(24, 4), payload.size());
-    std::copy(payload.begin(), payload.end(),
-              bytes.begin() + journal_frame_header_size);
-    put(bytes.subspan(28, 4), crc32c(payload, crc32c(ByteView{output}.first(28))));
+    const auto encoded =
+        encode_journal_frame_into(output, kind, sequence, batch_first, payload, limits);
+    if (!encoded.has_value())
+      return Result<Encoded>::failure(encoded.error());
     return Result<Encoded>::success(std::move(output));
   } catch (const std::bad_alloc &) {
     return Result<Encoded>::failure({ErrorCode::allocation});
@@ -254,7 +275,7 @@ Result<JournalFrameView> decode_journal_frame(ByteView bytes, JournalLimits limi
     return Result<JournalFrameView>::failure({ErrorCode::unsupported});
   }
   const auto raw_kind = get(bytes.subspan(6, 2));
-  if (raw_kind != 1 && raw_kind != 2 && raw_kind != 65535) {
+  if (raw_kind != 1 && raw_kind != 2 && raw_kind != 4 && raw_kind != 65535) {
     return Result<JournalFrameView>::failure({ErrorCode::unsupported});
   }
   const auto kind = static_cast<FrameKind>(raw_kind);

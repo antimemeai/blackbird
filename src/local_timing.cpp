@@ -1,174 +1,190 @@
 #include "blackbird/local_timing.hpp"
-#include "blackbird/packet.hpp"
-#include <algorithm>
-#include <cerrno>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <fcntl.h>
-#include <new>
-#include <string>
+#include "blackbird/raw_runtime.hpp"
 
-#include <time.h>
-#include <unistd.h>
+#include <algorithm>
+#include <array>
+#include <cerrno>
+#include <exception>
+#include <span>
+
 namespace blackbird {
-thread_local LocalTimingSink *local_timing_sink = nullptr;
-LocalTick local_tick(bool cpu) noexcept {
-  timespec wall{}, thread{};
-  const bool valid = clock_gettime(CLOCK_MONOTONIC, &wall) == 0 &&
-                     (!cpu || clock_gettime(CLOCK_THREAD_CPUTIME_ID, &thread) == 0);
-  const auto ns = [](timespec t) {
-    return static_cast<std::uint64_t>(t.tv_sec) * 1000000000ULL +
-           static_cast<std::uint64_t>(t.tv_nsec);
-  };
-  return {ns(wall), ns(thread), valid};
+namespace {
+struct RestoreErrno {
+  int saved = errno;
+  ~RestoreErrno() { errno = saved; }
+};
+template <class T> ByteView native_bytes(const T &value) noexcept {
+  return std::as_bytes(std::span{&value, std::size_t{1}});
 }
-void LocalTimingSink::push(const LocalMetric &m) noexcept {
-  const std::lock_guard lock{mutex_};
-  if (size_ == capacity) {
-    ++dropped_;
-    return;
+constexpr std::uint64_t clock_body_bytes =
+    2 * (sizeof(clockid_t) + 2 * sizeof(int) + sizeof(time_t) + sizeof(long)) +
+    sizeof(bool);
+constexpr std::uint64_t begin_record_bytes =
+    raw_envelope_size + clock_body_bytes + sizeof(int);
+constexpr std::uint64_t end_record_bytes = raw_envelope_size + sizeof(std::uint64_t) +
+                                           clock_body_bytes + sizeof(int) +
+                                           sizeof(RawRegionEnd);
+constexpr std::uint64_t outcome_record_bytes =
+    raw_envelope_size + sizeof(std::uint64_t) + sizeof(RawRegionOutcome);
+constexpr std::uint64_t error_record_bytes = raw_envelope_size + sizeof(std::uint64_t) +
+                                             sizeof(ErrorCode) + sizeof(std::int64_t);
+auto clock_fields(const RawClockSample &clock) noexcept {
+  return std::array{native_bytes(clock.monotonic.method),
+                    native_bytes(clock.monotonic.result),
+                    native_bytes(clock.monotonic.error),
+                    native_bytes(clock.monotonic.value.tv_sec),
+                    native_bytes(clock.monotonic.value.tv_nsec),
+                    native_bytes(clock.cpu_read),
+                    native_bytes(clock.thread_cpu.method),
+                    native_bytes(clock.thread_cpu.result),
+                    native_bytes(clock.thread_cpu.error),
+                    native_bytes(clock.thread_cpu.value.tv_sec),
+                    native_bytes(clock.thread_cpu.value.tv_nsec)};
+}
+void require_emission(Result<std::uint64_t> emitted) {
+  if (!emitted.has_value())
+    throw emitted.error();
+}
+void terminal_emission(Result<std::uint64_t> emitted) noexcept {
+  if (!emitted.has_value())
+    raw_fence(emitted.error());
+}
+void require_data_admission(std::uint64_t bytes) {
+  const RestoreErrno restore;
+  const auto admitted = raw_wait_data(bytes);
+  if (!admitted.has_value()) {
+    raw_fence(admitted.error());
+    throw admitted.error();
   }
-  records_[size_++] = m;
 }
-bool LocalTimingSink::persist(std::string_view path) noexcept {
-  // Only shutdown does formatting/writes. Never overwrite another run.
-  try {
-    const std::string name{path};
-    const int fd = open(name.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
-    if (fd < 0)
-      return false;
-    struct Descriptor {
-      int value;
-      ~Descriptor() {
-        if (value >= 0)
-          (void)close(value);
-      }
-    } owner{fd};
-    bool ok = true;
-    const auto write_all = [&](const char *data, std::size_t size) {
-      while (size) {
-        const auto n = write(fd, data, size);
-        if (n < 0 && errno == EINTR)
-          continue;
-        if (n <= 0)
-          return false;
-        data += n;
-        size -= static_cast<std::size_t>(n);
-      }
-      return true;
-    };
-    const auto write_packet = [&](const Value &value) {
-      auto encoded = encode_packet_string(value);
-      if (!encoded.has_value())
-        throw encoded.error();
-      const auto packet = std::move(encoded).value();
-      std::array<char, 8> length{};
-      for (unsigned i = 0; i < 8; ++i)
-        length[i] = static_cast<char>(
-            (static_cast<std::uint64_t>(packet.size()) >> (i * 8)) & 255U);
-      return write_all(length.data(), length.size()) &&
-             write_all(packet.data(), packet.size());
-    };
-    ok = write_all("BBMS\1", 5);
-    for (std::size_t i = 0; i < size_ && ok; ++i) {
-      const auto &m = records_[i];
-      ok = write_packet(Value::object(
-          {{"type", Value{"span"}},
-           {"action", Value{m.action}},
-           {"source", Value{m.source}},
-           {"outcome", Value{m.outcome}},
-           {"start_wall_ns", Value{Number{m.start_wall_ns}}},
-           {"wall_ns", Value{Number{m.wall_ns}}},
-           {"thread_cpu_ns", m.cpu_measured ? Value{Number{m.cpu_ns}} : Value{}},
-           {"clock_valid", Value{m.clock_valid}},
-           {"history_records", Value{Number{m.history}}},
-           {"observed_bytes", Value{Number{m.bytes}}},
-           {"sequence", Value{Number{m.sequence}}},
-           {"revision", Value{m.revision.data()}},
-           {"attempt", Value{m.attempt.data()}},
-           {"linkage_truncated", Value{m.linkage_truncated}}}));
+void require_data_admission(std::span<const ByteView> fields) {
+  std::uint64_t bytes = raw_envelope_size;
+  for (const auto field : fields) {
+    if (field.size() > UINT32_MAX - bytes) {
+      raw_fence({ErrorCode::overflow});
+      throw Error{ErrorCode::overflow};
     }
-    ok = write_packet(
-             Value::object({{"type", Value{"final_status"}},
-                            {"buffered", Value{Number{size_}}},
-                            {"dropped", Value{Number{dropped_}}},
-                            {"write_ok", Value{ok}},
-                            {"clock", Value{"CLOCK_MONOTONIC/CLOCK_THREAD_CPUTIME_ID"}},
-                            {"durable", Value{false}}})) &&
-         ok;
-    if (close(fd) != 0)
-      ok = false;
-    owner.value = -1;
-    return ok;
-  } catch (...) {
-    return false;
+    bytes += field.size();
   }
+  require_data_admission(bytes);
 }
-// Labels/gauges follow a fixed documented order; distinct wrappers add no safety here.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-LocalSpan::LocalSpan(const char *action, const char *source, bool cpu) noexcept
-    : sink_(local_timing_sink) {
-  if (!sink_)
+} // namespace
+
+RawRegion::RawRegion(const RawRegionSites &sites, RawRegionOptions options)
+    : sites_(&sites), options_(options) {
+  const RestoreErrno restore;
+  if (!raw_enabled())
     return;
-  metric_.action = action;
-  metric_.source = source;
-  metric_.cpu_measured = cpu;
-  start_ = sink_->clock()(cpu);
-  metric_.start_wall_ns = start_.wall;
-}
-// Labels/gauges follow a fixed documented order; distinct wrappers add no safety here.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-void LocalSpan::observe(std::uint64_t history, std::uint64_t bytes,
-                        std::uint64_t sequence) noexcept {
-  if (!sink_)
-    return;
-  metric_.history = history;
-  metric_.bytes = bytes;
-  metric_.sequence = sequence;
-}
-// Labels/gauges follow a fixed documented order; distinct wrappers add no safety here.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-void LocalSpan::linkage(std::string_view revision, std::string_view attempt) noexcept {
-  if (!sink_)
-    return;
-  const auto copy = [&](auto &to, std::string_view from) {
-    const auto n = std::min(from.size(), to.size() - 1);
-    std::memcpy(to.data(), from.data(), n);
-    to[n] = 0;
-    metric_.linkage_truncated |= n != from.size();
-  };
-  copy(metric_.revision, revision);
-  copy(metric_.attempt, attempt);
-}
-void LocalSpan::finish() noexcept {
-  if (!sink_)
-    return;
-  const auto end = sink_->clock()(metric_.cpu_measured);
-  metric_.clock_valid =
-      start_.valid && end.valid && end.wall >= start_.wall && end.cpu >= start_.cpu;
-  if (metric_.clock_valid) {
-    metric_.wall_ns = end.wall - start_.wall;
-    metric_.cpu_ns = end.cpu - start_.cpu;
+  auto held =
+      raw_claim_control(end_record_bytes + outcome_record_bytes + error_record_bytes);
+  if (!held.has_value()) {
+    raw_fence(held.error());
+    throw held.error();
   }
-  sink_->push(metric_);
-  sink_ = nullptr;
+  claim_.emplace(std::move(held).value());
+  require_data_admission(begin_record_bytes);
+  const auto clock = raw_local_clock(options_.cpu);
+  const auto fields = clock_fields(clock);
+  const auto exceptions = std::uncaught_exceptions();
+  std::array<ByteView, 12> body{};
+  std::copy(fields.begin(), fields.end(), body.begin());
+  body.back() = native_bytes(exceptions);
+  auto emitted = raw_emit(sites_->begin, body, RawPartition::data);
+  if (!emitted.has_value())
+    throw emitted.error();
+  begin_ = emitted.value();
 }
-LocalTimingSession::LocalTimingSession() noexcept
-    : path_(std::getenv("BLACKBIRD_LOCAL_TIMING")) {
-  if (!path_ || !*path_ || local_timing_sink)
+void RawRegion::observe(const RawRegionObservation &observation) {
+  const RestoreErrno restore;
+  if (!enabled())
     return;
-  sink_.reset(new (std::nothrow) LocalTimingSink);
-  if (sink_)
-    local_timing_sink = sink_.get();
-  else
-    std::fputs("local timing: allocation failed\n", stderr);
+  const std::array fields{native_bytes(begin_), native_bytes(observation.kind),
+                          native_bytes(observation.history),
+                          native_bytes(observation.bytes),
+                          native_bytes(observation.sequence)};
+  require_data_admission(fields);
+  require_emission(raw_emit(sites_->observation, fields, RawPartition::data));
 }
-LocalTimingSession::~LocalTimingSession() {
-  if (!sink_)
+void RawRegion::linkage(const RawRegionLinkage &linkage) {
+  const RestoreErrno restore;
+  if (!enabled())
     return;
-  local_timing_sink = nullptr;
-  if (!sink_->persist(path_))
-    std::fputs("local timing: persistence failed (not audit failure)\n", stderr);
+  const auto revision_bytes = linkage.revision.size();
+  const auto attempt_bytes = linkage.attempt.size();
+  const std::array fields{native_bytes(begin_), native_bytes(revision_bytes),
+                          linkage.revision, native_bytes(attempt_bytes),
+                          linkage.attempt};
+  require_data_admission(fields);
+  require_emission(raw_emit(sites_->linkage, fields, RawPartition::data));
+}
+void RawRegion::outcome(RawRegionOutcome outcome) noexcept {
+  const RestoreErrno restore;
+  if (!claim_.has_value())
+    return;
+  if (outcome_written_) {
+    raw_fence({ErrorCode::conflict, sites_->outcome});
+    return;
+  }
+  outcome_written_ = true;
+  const std::array fields{native_bytes(begin_), native_bytes(outcome)};
+  terminal_emission(raw_emit(sites_->outcome, fields, RawPartition::control, &*claim_));
+}
+void RawRegion::error(Error error) noexcept {
+  const RestoreErrno restore;
+  if (!claim_.has_value())
+    return;
+  if (error_written_) {
+    raw_fence({ErrorCode::conflict, 1110});
+    return;
+  }
+  error_written_ = true;
+  const std::array fields{native_bytes(begin_), native_bytes(error.code),
+                          native_bytes(error.detail)};
+  terminal_emission(raw_emit(1110, fields, RawPartition::control, &*claim_));
+}
+void RawRegion::finish(RawRegionEnd reason) noexcept {
+  const RestoreErrno restore;
+  if (!claim_.has_value())
+    return;
+  const auto clock = raw_local_clock(options_.cpu);
+  const auto fields = clock_fields(clock);
+  const auto exceptions = std::uncaught_exceptions();
+  std::array<ByteView, 14> body{};
+  body.front() = native_bytes(begin_);
+  std::copy(fields.begin(), fields.end(), body.begin() + 1);
+  body[12] = native_bytes(exceptions);
+  body.back() = native_bytes(reason);
+  terminal_emission(raw_emit(sites_->end, body, RawPartition::control, &*claim_));
+  claim_.reset();
+}
+std::span<const RawRegionSites> raw_region_descriptions() noexcept {
+  return raw_regions::definitions;
+}
+RawWorkerDispatch raw_worker_dispatch() {
+  const RestoreErrno restore;
+  if (!raw_enabled())
+    return {};
+  require_data_admission(raw_envelope_size + clock_body_bytes);
+  const auto lane = raw_lane_epoch();
+  const auto clock = raw_local_clock(false);
+  const auto fields = clock_fields(clock);
+  auto emitted = raw_emit(1100, fields);
+  if (!emitted.has_value())
+    throw emitted.error();
+  return {lane, emitted.value()};
+}
+void raw_worker_started(const RawWorkerDispatch &dispatch) {
+  const RestoreErrno restore;
+  if (!raw_enabled())
+    return;
+  require_data_admission(raw_envelope_size + sizeof(IdentityBytes) +
+                         sizeof(std::uint64_t) + clock_body_bytes);
+  const auto clock = raw_local_clock(false);
+  const auto fields = clock_fields(clock);
+  std::array<ByteView, 13> body{};
+  body[0] = dispatch.lane;
+  body[1] = native_bytes(dispatch.ordinal);
+  std::copy(fields.begin(), fields.end(), body.begin() + 2);
+  require_emission(raw_emit(1101, body));
 }
 } // namespace blackbird

@@ -1,7 +1,7 @@
 # Raw instrumentation design
 
-2026-10-10. Proposed design for discussion and approval. No product implementation
-is authorized by this document. It supersedes the earlier metric framework.
+2026-10-11. Approved raw design. The operator approved implementation and excludes
+host power loss. This supersedes the earlier metric framework.
 
 Blackbird emits raw metric events into the audit log. A separate recorder writes
 them to disk. A tertiary process transforms the preserved records. Operations
@@ -13,7 +13,7 @@ owner hook -> retained raw byte lane -> separate recorder -> raw audit disk
                                                            -> ops / eval consumers
 ```
 
-## Guarantee and the decision needed
+## Guarantee and acquisition boundary
 
 Every completely published event stays retained until the recorder confirms disk
 preservation. Producer death, recorder death, or both together do not lose it
@@ -27,13 +27,11 @@ observing a fact and publishing it; a host crash before disk acknowledgement can
 lose pending RAM. A pre-effect record makes a missing outcome unresolved, not
 reconstructed. Async handoff cannot make every returned emission durable.
 
-**Approval must settle whether losslessness includes the pre-acknowledgement
-host-crash interval.** This design selects no crash-loss allowance. It specifies
-async publication and an explicit `await_preserved` boundary. Requiring durable
-return means waiting for the recorder's acknowledgement; preserving every fact
-at the instant of acquisition needs a stronger acquisition/storage contract.
-Neither is disguised as zero-cost async emission. Disk sync also cannot protect
-against destruction of every medium or arbitrary media corruption.
+The operator excludes host power loss. Publication is asynchronous with respect
+to disk; emitted records remain in named RAM until recorder synchronization and
+reclaim. Producer code does not wait for per-record disk preservation. Process
+death before complete publication can leave an acquisition unresolved. Neither
+an event nor a successful effect is inferred from a missing terminal record.
 
 ## Grounding and transport choice
 
@@ -257,12 +255,10 @@ Take a finite complete ready prefix and sync immediately, without a batch-fill
 delay or durability timer. Rotate the first lane each tour and take at most one
 bounded ready prefix per lane per tour. Check failure/control partitions first
 but bound their service too, so they cannot starve ordinary sources. One hot lane
-cannot prevent another's terminal preservation. Linux needs file `fsync` and relevant parent-
-directory sync for new names. macOS full preservation needs successful
-`F_FULLFSYNC` and qualified naming durability; no weaker silent fallback.
-Power-loss protection additionally requires qualified powersafe overwrite or
-recorder-side sector isolation. Current frames do not accept arbitrary padding;
-that is a storage decision to resolve before claiming power-loss safety.
+cannot prevent another's terminal preservation. Native file `fsync` and relevant
+parent-directory sync preserve the recorder's prefix before reclaim. The operator
+excludes host power loss; this contract does not require `F_FULLFSYNC`, powersafe
+overwrite qualification, sector isolation, or synchronous producer return.
 
 Keep damaged/uncommitted tails intact. Recovery selects a validated complete
 prefix; it may register a successor segment/predecessor before replaying pending
@@ -314,5 +310,5 @@ by complete invariants: lane lifetime/publication, durable recorder/recovery,
 then one complete product owner at a time. It distinguishes executed research
 probes from future implementation qualification. This draft receives one
 adversarial review and finding-driven recheck within the declared 45-minute
-research/design unit. Discussion and approval precede product code under the
+research/design unit. The operator approved implementation on2026-10-11 under the
 operator's explicit instruction and BLACKBIRD.md.

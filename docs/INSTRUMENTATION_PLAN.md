@@ -1,17 +1,18 @@
 # Raw instrumentation implementation and verification plan
 
-2026-10-10. Proposed sequence, not authorization to change product source.
+2026-10-11. Approved implementation sequence; first source unit in progress.
 Read the [design](INSTRUMENTATION_RAW_DESIGN.md) and
 [raw site/body census](../papers/2026-10-10-raw-instrumentation-surfaces.md).
-The operator explicitly requires discussion and approval before implementation.
+The operator approved implementation and excludes host power loss.
 
 ## Decisions and measured work before source changes
 
-Set the losslessness contract: process-crash retention versus emission-return
-durability through host/power failure. No async queue can silently satisfy the
-latter. Resolve the supported file/device power-loss contract, including naming
-durability and previous-tail overwrite, before making that claim. Unsupported
-full-sync behavior fails visibly, never falls back to a weaker promise.
+The losslessness contract covers published raw events through process and recorder
+failure while the host stays up. Host power loss is outside it. Emission returns
+without waiting for disk; recorder synchronization precedes reclaim. Use native
+`fsync` for this boundary; device cache/power-loss qualification and per-emission
+synchronous durability are not requirements. Unsupported synchronization fails
+visibly, never silently advances reclaim.
 
 Select measured capacities and bounded recorder batch limits from real raw byte
 rates/bursts and a stated stall allowance. These are transport allowances, not
@@ -20,8 +21,8 @@ its hooks. Neither a universal arbitrary buffer nor infinite buffering is a plan
 
 Research probes already executed are documented separately. They are **not**
 qualification of this transport, wakeup protocol, recorder, audit integration or
-product coverage. No product source, full suite, eval campaign or activated
-daemon is part of this design unit.
+product coverage. The primitive experiments do not qualify the product implementation. The approved
+source unit has its own direct checks; eval work remains deferred.
 
 ## Unit1: lane lifetime, publication and wakeup
 
@@ -100,14 +101,9 @@ predecessor selection and successor writes cannot erase or acknowledge it.
 Also kill producers at partial body/full body/before P/after P/notification, and
 both processes while the host stays up. Open acquisitions remain unresolved.
 
-Host/power-crash qualification is separate from SIGKILL. Where the required
-durability contract includes power failure, use a controlled VM/block-device
-fault harness on the Linux host, with an independent acknowledged-record list
-outside the crashed guest. Exercise previous committed tail-sector disturbance,
-directory/catalog ordering and stale cache. No destructive power experiment on
-the operator's laptop. A VM flush model does not prove a real device's firmware;
-record the actual supported storage assumption. If existing framing cannot
-protect it, implement recorder-side isolation rather than claim CRC repairs it.
+Host/power loss is excluded by the operator. Do not add VM/block-device power
+experiments or device-firmware qualification to this work. Process-death tests
+keep the host running and compare published originals with disk/reclaim state.
 
 Tertiary input is only the validated preserved prefix. Halt/kill/slow the consumer
 and compare raw disk bytes/cursors. It must cause no producer callback, filter,

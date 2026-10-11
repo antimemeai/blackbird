@@ -134,7 +134,10 @@ that review authorization does not ask us to execute them with the operator's ac
 Operator2026-10-07 explicitly bounds hardening to TWO layers: remediation tasks
 and fixes; then one recheck and fixes. Never a third assurance layer. Read
 [BOUNDED_HARDENING](docs/BOUNDED_HARDENING.md). Declare defects/direct checks and
-time/resource allowance before work. Do not review reviews, certify rechecks,
+resource use before work. Operator2026-10-11 rejects invented wall-clock cutoffs:
+bound work by concrete defects and the two layers, then finish the authorized
+delivery. Earlier campaign timers are historical, not a universal stopping rule.
+Do not review reviews, certify rechecks,
 reopen settled checks without relevant changes, or reset budgets under new labels.
 At the bound retain unsafe candidate inactive and move to independent useful work.
 Current remaining capacity envelope and deferred scope are in that note.
@@ -176,5 +179,7 @@ filtering, sampling of emitted events, normalization, projection, aggregation,
 histogram, string formatting, compression or programmable metric processing.
 Blackbird owns minimal capture/transport only. Older systems literature and
 reference code precede transport design; OTel/Prometheus do not guide emission.
-Read docs/INSTRUMENTATION.md. Product implementation still awaits discussion and
-approval; instrumentation/eval scope is not expanded by this clarification.
+Read docs/INSTRUMENTATION.md. Operator2026-10-11 approved the raw design and
+implementation and excludes host power loss from its losslessness contract.
+Preserve emitted bytes through process/recorder failure; do not add per-emission
+disk waits or power-loss qualification. Evals remain deferred until discussion.

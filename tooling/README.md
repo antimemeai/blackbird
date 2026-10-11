@@ -27,9 +27,16 @@ scripts/rigor qualify
 
 `check` verifies tool identities, configures/builds the selected profile, runs
 its direct CTest fixture (or the bounded fuzzer), and analyzes actual debug
-translation units plus owned C++/Lua sources. Native analysis uses two workers and
-CTest uses six; individual development commands have a 120-second limit. A failed
-command fails the gate. A missing tool, report, translation unit, header analysis
+translation units plus owned C++/Lua sources. Native analysis uses six workers and
+CTest uses six; deadline-sensitive real UI/CLI fixtures run alone so bulk native
+storage campaigns do not contend with their filesystem/process observations.
+Small development commands have a 120-second limit. Full clang-tidy source
+analysis runs to completion, rather than truncating large translation units.
+CTest owns each
+test's watchdog, using its existing TIMEOUT or a 120-second default; the complete
+suite does not share one test's allowance. No fixture assertion or existing
+deadline is relaxed. A failed command fails the gate. A missing tool, report,
+translation unit, header analysis
 path, mismatched compiler or preset/profile pin is an error. Owned directory
 symlinks are rejected until an explicit source policy is designed; research,
 captures and generated build roots are excluded from owned source enumeration.

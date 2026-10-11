@@ -3,6 +3,7 @@
 #include "blackbird/local_timing.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/process_lifetime.hpp"
+#include "blackbird/raw_runtime.hpp"
 #include "blackbird/sprite.hpp"
 #include "blackbird/task_view.hpp"
 #include "blackbird/tools.hpp"
@@ -1280,7 +1281,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     const std::lock_guard lock{mutex_};
     notification_ = notifications[1];
   }
-  LocalSpan first_frame{"startup.terminal-first-frame", "src/terminal.cpp:chat"};
+  RawRegion first_frame{raw_regions::terminal_first_frame};
   Composer composer;
   std::jthread worker;
   struct StopOnExit {
@@ -1434,6 +1435,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     welcoming = false;
     if (worker.joinable())
       worker.join();
+    auto context = unwrap(raw_prepare_thread());
+    const auto dispatch = raw_worker_dispatch();
     busy = true;
     tool_active = false;
     turn_failed = false;
@@ -1444,38 +1447,36 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     operations.clear();
     scroll = 0;
     activity = "Starting";
-    // Turns are serialized: the previous worker is joined above; engine access
-    // on the UI thread is idle-only. Borrow the process sink for this turn.
-#if BLACKBIRD_DEBUG
-    auto *const timing = local_timing_sink;
-#endif
-    auto dispatch = std::make_unique<LocalSpan>("command.worker-dispatch",
-                                                "src/terminal.cpp:start", false);
-    worker = std::jthread([&,
-#if BLACKBIRD_DEBUG
-                           timing,
-#endif
-                           dispatch = std::move(dispatch), prompt = std::move(prompt)] {
-#if BLACKBIRD_DEBUG
-      local_timing_sink = timing;
-      struct UnbindTiming {
-        ~UnbindTiming() { local_timing_sink = nullptr; }
-      } unbind_timing;
-#endif
-      dispatch->outcome("running");
-      dispatch->finish();
-      LocalSpan command{"command.perform", "src/terminal.cpp:worker"};
+    // Each worker owns a separately registered lane. Transfer facts reference
+    // the UI lane and ordinal; neither producer nor region migrates threads.
+    worker = std::jthread([&, context = std::move(context), dispatch,
+                           prompt = std::move(prompt)]() mutable {
       try {
-        perform(prompt);
-      } catch (const std::exception &e) {
-        post(Kind::failure, {});
-        text(std::string{"\nError: "} + e.what() + "\n");
+        RawThreadBinding binding{std::move(context)};
+        raw_worker_started(dispatch);
+        RawRegion command{raw_regions::command_perform};
+        try {
+          perform(prompt);
+          command.outcome(RawRegionOutcome::returned);
+        } catch (const Error &error) {
+          command.error(error);
+          command.outcome(RawRegionOutcome::exception);
+          post(Kind::failure, {});
+          text("\nTurn failed; inspect the retained audit.\n");
+        } catch (const std::exception &e) {
+          command.outcome(RawRegionOutcome::exception);
+          post(Kind::failure, {});
+          text(std::string{"\nError: "} + e.what() + "\n");
+        } catch (...) {
+          command.outcome(RawRegionOutcome::exception);
+          post(Kind::failure, {});
+          text("\nTurn failed; inspect the retained audit.\n");
+        }
+        command.finish();
       } catch (...) {
         post(Kind::failure, {});
-        text("\nTurn failed; inspect the retained audit.\n");
+        text("\nWorker admission failed; inspect the retained raw audit.\n");
       }
-      command.outcome("returned");
-      command.finish();
       post(Kind::complete, {});
     });
   };
@@ -1518,7 +1519,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     start(std::move(initial));
   while (true) {
     if (output.pending() && output.flush()) {
-      first_frame.outcome("flushed");
+      first_frame.outcome(RawRegionOutcome::flushed);
       first_frame.finish();
       if (pending_grid)
         painter.commit(grid);
@@ -1703,7 +1704,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     if (rows != old_rows || columns != old_columns)
       redraw = true;
     if (redraw && !output.pending()) {
-      LocalSpan render{"command.render", "src/terminal.cpp:frame"};
+      RawRegion render{raw_regions::command_render};
       const bool same_width = old_columns == columns;
       const bool geometry_changed = old_columns != columns || old_rows != rows;
       old_rows = rows;
@@ -1725,11 +1726,11 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         pending_grid = false;
         output.start(small_frame);
         if (output.flush()) {
-          first_frame.outcome("flushed");
+          first_frame.outcome(RawRegionOutcome::flushed);
           first_frame.finish();
         }
         painter.invalidate();
-        render.outcome("small-frame");
+        render.outcome(RawRegionOutcome::small_frame);
         continue;
       }
       const bool show_task_pane =
@@ -1985,12 +1986,13 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         } else
           output.start(packet);
         if (output.flush()) {
-          first_frame.outcome("flushed");
+          first_frame.outcome(RawRegionOutcome::flushed);
           first_frame.finish();
           painter.commit(grid);
         }
       }
-      render.outcome(output.pending() ? "queued" : "flushed");
+      render.outcome(output.pending() ? RawRegionOutcome::queued
+                                      : RawRegionOutcome::flushed);
     }
     std::array<pollfd, 3> inputs{
         {{STDIN_FILENO, POLLIN, 0},
@@ -2017,7 +2019,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       continue;
     }
     char bytes[4096];
-    LocalSpan input{"command.input-save", "src/terminal.cpp:input"};
+    RawRegion input{raw_regions::command_input_save};
     const auto count = read(STDIN_FILENO, bytes, sizeof(bytes));
     if (count < 0) {
       if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
@@ -2251,7 +2253,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         } else {
           if (persist()) {
             saved_last_input = true;
-            input.outcome("dispatch");
+            input.outcome(RawRegionOutcome::dispatch);
             input.finish();
             start(std::move(result.text));
           } else

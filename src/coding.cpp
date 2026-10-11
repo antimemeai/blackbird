@@ -4,6 +4,7 @@
 #include "blackbird/packet.hpp"
 #include "blackbird/process_lifetime.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/raw_runtime.hpp"
 #include "stream_capture.hpp"
 extern "C" {
 #include <lauxlib.h>
@@ -20,6 +21,38 @@ extern "C" {
 
 namespace blackbird {
 namespace {
+template <class T> ByteView raw_native(const T &value) noexcept {
+  return std::as_bytes(std::span{&value, std::size_t{1}});
+}
+ByteView raw_text(std::string_view value) noexcept {
+  return std::as_bytes(std::span{value.data(), value.size()});
+}
+void emit_provider_fact(std::uint32_t site, std::span<const ByteView> fields,
+                        RawControlToken *claim = nullptr) {
+  struct RestoreErrno {
+    int saved = errno;
+    ~RestoreErrno() { errno = saved; }
+  } restore;
+  if (claim == nullptr) {
+    std::uint64_t bytes = raw_envelope_size;
+    for (const auto field : fields) {
+      if (field.size() > UINT32_MAX - bytes) {
+        raw_fence({ErrorCode::overflow});
+        throw Error{ErrorCode::overflow};
+      }
+      bytes += field.size();
+    }
+    const auto admitted = raw_wait_data(bytes);
+    if (!admitted.has_value()) {
+      raw_fence(admitted.error());
+      throw admitted.error();
+    }
+  }
+  const auto emitted =
+      raw_emit(site, fields, claim ? RawPartition::control : RawPartition::data, claim);
+  if (!emitted.has_value())
+    throw emitted.error();
+}
 enum class ValueTag { array, object, number, null };
 char markers[4]; // array, object, exact number, null (registry keys, no string
                  // allocation).
@@ -1326,7 +1359,7 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
     }
     status(description);
   }
-  LocalSpan admission{"command.admission", "src/coding.cpp:operation"};
+  RawRegion admission{raw_regions::command_admission};
   auto &root = log_.root();
   const auto decision = unwrap(root.issue<DecisionId>());
   const auto invocation = unwrap(root.issue<InvocationId>());
@@ -1359,9 +1392,18 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
       RetainedEvent{{}, InvocationEvent{invocation, decision, generation_, bytes}},
       RetainedEvent{{},
                     AttemptAdmissionEvent{attempt, invocation, decision, bytes, true}}};
-  (void)unwrap(root.append(root.cursor(), {}, admitted));
-  admission.linkage(context_.head(), hex_identity(attempt.bytes()));
-  admission.outcome("admitted");
+  admission.linkage({raw_text(context_.head()), attempt.bytes()});
+  try {
+    (void)unwrap(root.append(root.cursor(), {}, admitted));
+  } catch (const Error &error) {
+    admission.error(error);
+    admission.outcome(RawRegionOutcome::rejected);
+    throw;
+  } catch (...) {
+    admission.outcome(RawRegionOutcome::exception);
+    throw;
+  }
+  admission.outcome(RawRegionOutcome::admitted);
   admission.finish();
   struct TaskRun {
     std::function<void(const Value &)> &observer;
@@ -1694,7 +1736,7 @@ void CodingEngine::drain_workflows() {
   }
 }
 Value CodingEngine::request(Value options) {
-  LocalSpan preparation{"provider.prepare", "src/coding.cpp:request"};
+  RawRegion preparation{raw_regions::provider_prepare};
   if (restart_note_)
     throw Error{ErrorCode::busy};
   validate_protocol(context_.items());
@@ -1826,7 +1868,8 @@ Value CodingEngine::request(Value options) {
         "Neither target nor trigger is a token estimate, hard provider limit, or "
         "audit reclamation."};
   }
-  last_request_bytes_ = Value{Number{unwrap(encode_packet_string(request)).size()}};
+  const auto prepared_request = unwrap(encode_packet_string(request));
+  last_request_bytes_ = Value{Number{prepared_request.size()}};
   usage_ = Value{};
   if (diagnostic || display)
     (diagnostic ? diagnostic : display)("\n[request " +
@@ -1834,11 +1877,16 @@ Value CodingEngine::request(Value options) {
                                         " native request bytes]\n");
   const auto origin = context_.head();
   if (preparation.enabled()) {
-    preparation.linkage(origin);
-    preparation.observe(
-        log_.root().cursor().sequence,
-        static_cast<std::uint64_t>(std::stoull(last_request_bytes_.number().text())));
-    preparation.outcome("success");
+    preparation.linkage({raw_text(origin), {}});
+    preparation.observe({RawObservationKind::request_bytes, 0, prepared_request.size(),
+                         log_.root().cursor().sequence});
+    const auto origin_bytes = origin.size();
+    const auto request_bytes = prepared_request.size();
+    const std::array fields{raw_native(origin_bytes), raw_text(origin),
+                            ByteView{generation_.bytes()}, raw_native(request_bytes),
+                            raw_text(prepared_request)};
+    emit_provider_fact(1200, fields);
+    preparation.outcome(RawRegionOutcome::success);
   }
   preparation.finish();
   // One live request group; each failed attempt stays independently recorded.
@@ -1887,11 +1935,28 @@ Value CodingEngine::request(Value options) {
                                {"input_binding", Value{"attempt-invocation-v1"}},
                                {"retry_group", Value{retry_group}},
                                {"ordinal", Value{Number{ordinal}}}})}}));
-        LocalSpan transport{"provider.transport", "src/coding.cpp:provider.respond",
-                            false};
-        if (transport.enabled())
-          transport.linkage(origin, hex_identity(attempt.bytes()));
-        transport.outcome("exception");
+        RawRegion transport{raw_regions::provider_transport, {.cpu = false}};
+        std::optional<RawControlToken> response_credit;
+        if (transport.enabled()) {
+          transport.linkage({raw_text(origin), attempt.bytes()});
+          // Decoded response observation has fixed native identity fields. Its
+          // credit is held before provider acquisition, independent of data full.
+          auto held = raw_claim_control(raw_envelope_size + 3 * sizeof(IdentityBytes) +
+                                        sizeof(std::uint64_t));
+          if (!held.has_value()) {
+            raw_fence(held.error());
+            throw held.error();
+          }
+          response_credit.emplace(std::move(held).value());
+          const auto group_bytes = retry_group.size();
+          const std::array fields{ByteView{attempt.bytes()},
+                                  ByteView{admission.admission.invocation.bytes()},
+                                  ByteView{generation_.bytes()},
+                                  raw_native(ordinal),
+                                  raw_native(group_bytes),
+                                  raw_text(retry_group)};
+          emit_provider_fact(1201, fields);
+        }
         StreamCapture capture{[&](std::string_view block) {
           try {
             log_.original(
@@ -1917,13 +1982,32 @@ Value CodingEngine::request(Value options) {
                 display(delta.text);
             }
           });
-        } catch (...) {
+        } catch (const Error &error) {
+          transport.error(error);
+          transport.outcome(RawRegionOutcome::exception);
+          transport.finish();
+          response_credit.reset();
           // No destructor I/O and no retry if a prior sink write was uncertain.
           capture.flush();
           throw;
+        } catch (...) {
+          transport.outcome(RawRegionOutcome::exception);
+          transport.finish();
+          response_credit.reset();
+          capture.flush();
+          throw;
         }
+        if (response_credit) {
+          const auto begin = transport.begin_ordinal();
+          const std::array fields{ByteView{attempt.bytes()},
+                                  ByteView{admission.admission.invocation.bytes()},
+                                  ByteView{generation_.bytes()}, raw_native(begin)};
+          emit_provider_fact(1202, fields, &*response_credit);
+          response_credit.reset();
+        }
+        transport.outcome(RawRegionOutcome::returned);
+        transport.finish();
         capture.flush();
-        transport.outcome("returned");
         return import_provider_response(std::move(result));
       });
       break;

@@ -25,7 +25,12 @@ struct JournalHeader {
   std::optional<JournalPredecessor> predecessor;
   bool operator==(const JournalHeader &) const = default;
 };
-enum class FrameKind : std::uint16_t { source = 1, semantic = 2, commit = 65535 };
+enum class FrameKind : std::uint16_t {
+  source = 1,
+  semantic = 2,
+  raw = 4,
+  commit = 65535
+};
 struct JournalFrameView {
   FrameKind kind;
   std::uint64_t sequence;
@@ -42,6 +47,10 @@ Result<JournalHeader> decode_journal_header(ByteView bytes);
 Result<std::vector<std::byte>>
 encode_journal_frame(FrameKind kind, std::uint64_t sequence, std::uint64_t batch_first,
                      ByteView payload, JournalLimits limits);
+Result<std::size_t> encode_journal_frame_into(MutableByteView output, FrameKind kind,
+                                              std::uint64_t sequence,
+                                              std::uint64_t batch_first,
+                                              ByteView payload, JournalLimits limits);
 // Returned payload borrows input; the owner must live throughout its use.
 // Decodes one bounded physical frame. Batch/dependency semantics are checked by
 // journal replay before any authoritative publication.

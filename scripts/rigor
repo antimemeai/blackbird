@@ -20,14 +20,14 @@ CPP_UNITS = {".cpp", ".cc", ".cxx", ".C", ".c++", ".cppm", ".ixx"}
 CPP_HEADERS = {".h", ".hpp", ".hh", ".hxx", ".h++", ".inl", ".ipp"}
 
 
-def run(args, *, cwd=ROOT, check=True, env=None):
+def run(args, *, cwd=ROOT, check=True, env=None, timeout=120):
     command = [str(a) for a in args]
     child = subprocess.Popen(command, cwd=cwd, env=env, text=True,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                              start_new_session=True)
     try:
-        output, _ = child.communicate(timeout=120)
-    except (subprocess.TimeoutExpired, KeyboardInterrupt):
+        output, _ = child.communicate(timeout=timeout)
+    except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
         import signal
         os.killpg(child.pid, signal.SIGTERM)
         try:
@@ -35,7 +35,9 @@ def run(args, *, cwd=ROOT, check=True, env=None):
         except subprocess.TimeoutExpired:
             os.killpg(child.pid, signal.SIGKILL)
             child.communicate()
-        raise RuntimeError(f"command interrupted or exceeded 120 s: {args[0]}")
+        reason = (f"exceeded {timeout} s" if isinstance(error, subprocess.TimeoutExpired)
+                  else "interrupted")
+        raise RuntimeError(f"command {reason}: {args[0]}")
     result = subprocess.CompletedProcess(command, child.returncode, output)
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n", flush=True)
@@ -154,12 +156,15 @@ def lint():
                 raise RuntimeError("unexpected dependency report format")
             dependencies_found = set((Path(entry["directory"]) / p).resolve()
                            for p in shlex.split(dependencies.split(":", 1)[1]))
-        run([LLVM / "clang-tidy", "-p", ROOT / "build/debug", entry["file"]])
+        # Source analysis scales with the translation unit and selected checks;
+        # a fixed command timeout must not truncate a real diagnostic pass.
+        run([LLVM / "clang-tidy", "-p", ROOT / "build/debug", entry["file"]],
+            timeout=None)
         return dependencies_found
 
     reached = set()
     errors = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as workers:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as workers:
         pending = [workers.submit(analyze, entry) for entry in units]
         for entry, future in zip(units, pending):
             try:
@@ -197,7 +202,8 @@ def qualify():
     for profile in PROFILES:
         build(profile)
         if profile != "fuzz":
-            run([PROFILE["ctest"]["path"], "--preset", profile])
+            run([PROFILE["ctest"]["path"], "--preset", profile, "--timeout", "120"],
+                timeout=None)
     expect_fault([ROOT / "build/asan/instrumentation_fault", "memory"], "AddressSanitizer")
     expect_fault([ROOT / "build/asan/instrumentation_fault", "undefined"], "signed integer overflow")
     env = dict(os.environ, TSAN_OPTIONS="halt_on_error=1:exitcode=66")
@@ -255,7 +261,10 @@ def main():
             if args.profile == "fuzz":
                 run([ROOT / "build/fuzz/bytes_fuzz", "-runs=1000", "-max_len=4096", "-seed=1"])
             else:
-                run([PROFILE["ctest"]["path"], "--preset", args.profile, "--parallel", "6"])
+                # CTest owns each test's watchdog. A suite is many commands,
+                # not one command that must finish within the same 120 seconds.
+                run([PROFILE["ctest"]["path"], "--preset", args.profile, "--parallel", "6",
+                     "--timeout", "120"], timeout=None)
             if args.profile != "debug":
                 build("debug")
             lint()

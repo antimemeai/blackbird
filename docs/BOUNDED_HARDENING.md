@@ -5,10 +5,15 @@ Layer1: remediation tasks, fix. Layer2: recheck, fix. Never layer3.
 This supersedes older language allowing repeated tribunals or progressively
 broader qualification before a unit can finish. It does not excuse real defects.
 
+Operator2026-10-11 rejects imposing fresh arbitrary campaign timers. Bound work
+by concrete defects and the two layers, and finish the authorized delivery.
+The numerical allowance in the historical capacity unit below applies to that
+unit; it is not a universal stopping rule or permission to abandon current work.
+
 ## The rule in ordinary Arco work
 
 Before hardening, name the concrete defects, affected behavior, useful delivery,
-direct oracles and resource allowance in the existing work note. A short list is
+direct oracles and deliberate resource use in the existing work note. A short list is
 enough; no separate certification ledger. Source/literature inform the fix and its
 oracle, not an additional chain of evidence about evidence.
 

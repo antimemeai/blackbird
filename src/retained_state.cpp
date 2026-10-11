@@ -1165,21 +1165,21 @@ Result<JournalCursor> RetainedState::append(JournalCursor expected,
 Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
                                                  std::span<const ByteView> sources,
                                                  std::span<const RetainedEvent> events,
-                                                 bool diagnostic, bool settlement) {
-  LocalSpan timing{"retained.append", "src/retained_state.cpp:append_impl"};
-  if (timing.enabled()) {
-    std::uint64_t bytes = 0;
-    for (auto source : sources)
-      bytes += source.size();
-    timing.observe(journal_->physical_records().size(), bytes, expected.sequence);
-    timing.outcome("rejected");
-  }
+                                                 bool diagnostic, bool settlement) try {
+  RawRegion timing{raw_regions::retained_append};
+  auto rejected = [&](Error error) {
+    timing.error(error);
+    timing.outcome(RawRegionOutcome::rejected);
+    return Result<JournalCursor>::failure(error);
+  };
+  timing.observe({RawObservationKind::journal_state,
+                  journal_->physical_records().size(), 0, expected.sequence});
   settlement = settlement || maintenance_;
   if (in_transaction_) {
-    return Result<JournalCursor>::failure({ErrorCode::busy});
+    return rejected({ErrorCode::busy});
   }
   if (state() != JournalWriterState::live) {
-    return Result<JournalCursor>::failure({ErrorCode::audit_unavailable});
+    return rejected({ErrorCode::audit_unavailable});
   }
   // Publication failure cannot turn a compact suffix into unlimited resident history.
   // Checkpoint runs before admission; already admitted settlement remains writable.
@@ -1209,7 +1209,7 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
         events.size() > 1024 - tail_count - sources.size() ||
         credit.max_records > 1024 - tail_count - sources.size() - events.size()) {
       maintenance_error_ = Error{ErrorCode::capacity};
-      return Result<JournalCursor>::failure(*maintenance_error_);
+      return rejected(*maintenance_error_);
     }
   }
   const auto current = cursor();
@@ -1217,20 +1217,20 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
                      current.sequence != expected.sequence ||
                      current.end_offset != expected.end_offset;
   if (sources.empty() && events.empty()) {
-    return Result<JournalCursor>::failure({ErrorCode::invalid_range});
+    return rejected({ErrorCode::invalid_range});
   }
   if (journal_->usage().indexed_records > capacity_.max_records)
-    return Result<JournalCursor>::failure({ErrorCode::capacity});
+    return rejected({ErrorCode::capacity});
   const auto remaining = capacity_.max_records - journal_->usage().indexed_records;
   if (sources.size() > remaining || events.size() > remaining - sources.size()) {
-    return Result<JournalCursor>::failure({ErrorCode::capacity});
+    return rejected({ErrorCode::capacity});
   }
   const auto credit = settlement_credit_.value_or(JournalCapacity{0, 0});
   const auto count = sources.size() + events.size(); // Sum already bounded above.
   if (settlement_credit_) {
     if (settlement ? count > credit.max_records
                    : credit.max_records > remaining - count)
-      return Result<JournalCursor>::failure({ErrorCode::capacity});
+      return rejected({ErrorCode::capacity});
   }
   try {
     std::vector<std::vector<std::byte>> encoded;
@@ -1238,8 +1238,10 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
     for (const auto &event : events) {
       auto bytes = encode_retained_event(event, journal_->header().limits.max_payload);
       if (!bytes.has_value()) {
-        return Result<JournalCursor>::failure(bytes.error());
+        return rejected(bytes.error());
       }
+      timing.observe({RawObservationKind::encoded_event_bytes, 0, bytes.value().size(),
+                      expected.sequence});
       encoded.push_back(std::move(bytes).value());
     }
     if (compact_ && saved_ && !settlement && !diagnostic && !checkpoint_running_) {
@@ -1258,7 +1260,7 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
         room = room && charge(event.size()) && charge(journal_frame_header_size);
       if (!room) {
         maintenance_error_ = Error{ErrorCode::capacity};
-        return Result<JournalCursor>::failure(*maintenance_error_);
+        return rejected(*maintenance_error_);
       }
     }
     if (stale) {
@@ -1266,22 +1268,14 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
         const auto captured = retain_rejection(expected, sources, encoded,
                                                {ErrorCode::conflict}, nullptr);
         if (!captured.has_value()) {
-          return Result<JournalCursor>::failure(captured.error());
+          return rejected(captured.error());
         }
       }
-      return Result<JournalCursor>::failure({ErrorCode::conflict});
+      return rejected({ErrorCode::conflict});
     }
     if (sources.size() >= UINT64_MAX - current.sequence ||
         events.size() >= UINT64_MAX - current.sequence - sources.size()) {
-      return Result<JournalCursor>::failure({ErrorCode::overflow});
-    }
-    if (timing.enabled()) {
-      std::uint64_t bytes = 0;
-      for (auto source : sources)
-        bytes += source.size();
-      for (const auto &event : encoded)
-        bytes += event.size();
-      timing.observe(journal_->physical_records().size(), bytes, expected.sequence);
+      return rejected({ErrorCode::overflow});
     }
     auto candidate = committed_;
     auto offset = current.end_offset;
@@ -1298,10 +1292,12 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
       return true;
     };
     for (const auto source : sources) {
+      timing.observe(
+          {RawObservationKind::source_bytes, 0, source.size(), expected.sequence});
       if (!has_room(candidate, 1))
-        return Result<JournalCursor>::failure({ErrorCode::capacity});
+        return rejected({ErrorCode::capacity});
       if (!add_size(source.size())) {
-        return Result<JournalCursor>::failure({ErrorCode::capacity});
+        return rejected({ErrorCode::capacity});
       }
       candidate.sources.push_back({journal_->header().environment, current.journal,
                                    FrameKind::source, sequence++, current.sequence + 1,
@@ -1315,7 +1311,7 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
     const RetainedEvent *conflict = nullptr;
     for (std::size_t index = 0; index < events.size(); ++index) {
       if (!add_size(encoded[index].size())) {
-        return Result<JournalCursor>::failure({ErrorCode::capacity});
+        return rejected({ErrorCode::capacity});
       }
       const auto applied =
           apply(candidate, events[index], {current.journal, sequence++},
@@ -1334,30 +1330,30 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
     }
     if (invalid) {
       if (invalid->code == ErrorCode::capacity)
-        return Result<JournalCursor>::failure(*invalid);
+        return rejected(*invalid);
       if (!diagnostic) {
         const auto retained =
             retain_rejection(expected, sources, encoded, *invalid, conflict);
         if (!retained.has_value()) {
-          return Result<JournalCursor>::failure(retained.error());
+          return rejected(retained.error());
         }
       }
-      return Result<JournalCursor>::failure(*invalid);
+      return rejected(*invalid);
     }
     if (current.end_offset > capacity_.max_file_bytes ||
         batch_bytes > capacity_.max_file_bytes - current.end_offset)
-      return Result<JournalCursor>::failure({ErrorCode::capacity});
+      return rejected({ErrorCode::capacity});
     if (settlement_credit_) {
       const auto bytes_left = capacity_.max_file_bytes - current.end_offset;
       if (settlement ? batch_bytes > credit.max_file_bytes
                      : credit.max_file_bytes > bytes_left - batch_bytes)
-        return Result<JournalCursor>::failure({ErrorCode::capacity});
+        return rejected({ErrorCode::capacity});
     }
     if (!diagnostic) {
       auto proposal = encode_retained_proposal(expected, sources, encoded,
                                                capacity_.max_file_bytes);
       if (!proposal.has_value()) {
-        return Result<JournalCursor>::failure(proposal.error());
+        return rejected(proposal.error());
       }
       const auto length = proposal.value().size();
       pending_proposal_.emplace(
@@ -1371,8 +1367,10 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
     prepared_ = std::move(candidate);
     const auto written = journal_->append(drafts);
     if (!written.has_value()) {
-      timing.outcome(state() == JournalWriterState::poisoned ? "uncertain"
-                                                             : "rejected");
+      timing.error(written.error());
+      timing.outcome(state() == JournalWriterState::poisoned
+                         ? RawRegionOutcome::uncertain
+                         : RawRegionOutcome::rejected);
       if (state() != JournalWriterState::poisoned) {
         prepared_.reset();
         if (!diagnostic) {
@@ -1400,13 +1398,17 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
     if (!diagnostic) {
       pending_proposal_.reset();
     }
-    timing.outcome("success");
+    timing.outcome(RawRegionOutcome::success);
     return written;
   } catch (const Error &error) {
-    return Result<JournalCursor>::failure(error);
+    return rejected(error);
   } catch (const std::bad_alloc &) {
-    return Result<JournalCursor>::failure({ErrorCode::allocation});
+    return rejected({ErrorCode::allocation});
   }
+} catch (const Error &error) {
+  return Result<JournalCursor>::failure(error);
+} catch (const std::bad_alloc &) {
+  return Result<JournalCursor>::failure({ErrorCode::allocation});
 }
 
 Result<void>

@@ -65,9 +65,16 @@ include(CTest)
 find_package(Threads REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_library(blackbird_foundation src/foundation.cpp src/journal.cpp src/journal_storage.cpp src/diagnostics.cpp src/journal_writer.cpp src/journal_checkpoint.cpp src/retained_events.cpp src/retained_state.cpp src/recovery_index.cpp src/saved_state.cpp src/archive_catalog.cpp src/environment_head.cpp src/retained_proposal.cpp src/retained_environment.cpp)
-if(BLACKBIRD_DEBUG)
-  target_sources(blackbird_foundation PRIVATE src/local_timing.cpp)
-endif()
+target_sources(blackbird_foundation PRIVATE src/local_timing.cpp src/raw_clock.cpp src/raw_channel.cpp src/raw_audit.cpp src/raw_runtime.cpp)
+file(GLOB_RECURSE raw_build_sources CONFIGURE_DEPENDS include/blackbird/*.hpp src/*.cpp)
+set(raw_build_input "")
+foreach(raw_source IN LISTS raw_build_sources)
+  file(SHA256 "${raw_source}" raw_source_hash)
+  string(APPEND raw_build_input "${raw_source_hash}")
+endforeach()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${raw_build_sources})
+string(SHA256 raw_build_hash "${raw_build_input}")
+set_source_files_properties(src/raw_runtime.cpp PROPERTIES COMPILE_DEFINITIONS BLACKBIRD_RAW_BUILD_ID="${raw_build_hash}")
 target_include_directories(blackbird_foundation PUBLIC include)
 target_link_libraries(blackbird_foundation PUBLIC blackbird_build)
 target_sources(blackbird_foundation PRIVATE src/value.cpp src/presentation.cpp src/json.cpp src/packet.cpp src/openai.cpp src/provider_auth.cpp src/provider_oauth.cpp)
@@ -299,10 +306,16 @@ target_link_libraries(beads_test PRIVATE blackbird_coding)
 add_test(NAME beads COMMAND beads_test)
 set_tests_properties(beads PROPERTIES TIMEOUT 30 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_executable(local_timing_test tests/local_timing_test.cpp)
+target_link_libraries(local_timing_test PRIVATE blackbird_coding)
+add_test(NAME local_timing COMMAND local_timing_test)
+foreach(raw_unit IN ITEMS raw_clock raw_channel raw_audit raw_runtime)
+  add_executable(${raw_unit}_test tests/${raw_unit}_test.cpp)
+  target_link_libraries(${raw_unit}_test PRIVATE blackbird_foundation Threads::Threads)
+  add_test(NAME ${raw_unit} COMMAND ${raw_unit}_test)
+  set_tests_properties(${raw_unit} PROPERTIES TIMEOUT 30)
+endforeach()
 if(BLACKBIRD_DEBUG)
-  add_executable(local_timing_test tests/local_timing_test.cpp)
-  target_link_libraries(local_timing_test PRIVATE blackbird_foundation)
-  add_test(NAME local_timing COMMAND local_timing_test)
   add_executable(local_history_profile tooling/probes/local_history.cpp)
   target_link_libraries(local_history_profile PRIVATE blackbird_foundation)
 endif()
@@ -435,3 +448,15 @@ set_tests_properties(command_jobs_pty PROPERTIES TIMEOUT 60)
 
 add_test(NAME command_jobs_station COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check-command-jobs-station $<TARGET_FILE:blackbird>)
 set_tests_properties(command_jobs_station PROPERTIES TIMEOUT 30)
+add_test(NAME raw_capture_cli COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-raw-capture $<TARGET_FILE:blackbird>)
+set_tests_properties(raw_capture_cli PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE)
+
+# These real executable fixtures wait for UI/process observations with short
+# semantic deadlines. Keep bulk native storage campaigns from contending with
+# their filesystem synchronization and process scheduling. Other tests retain
+# the selected parallelism; no fixture deadline or assertion is relaxed.
+set_tests_properties(tasks_pty terminal_pty new_session_pty participants_pty
+  tiny_terminal_pty command_jobs_pty provider_auth_cli rrc foundation_api
+  trajectory_cli observations_cli station_driver command_jobs_station
+  PROPERTIES RUN_SERIAL TRUE)
