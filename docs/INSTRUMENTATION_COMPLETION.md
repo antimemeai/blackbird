@@ -90,7 +90,7 @@ terminal/UI; and clocks/acquisition/channel.
 
 ## Current owner work
 
-The next source batch implements partition claims and splits, nonblocking
+The second completion checkpoint is published as `2bda565`. It implements partition claims and splits, nonblocking
 cleanup credit, native recorder failure/fairness cuts, an independent OS
 sampler, live recorder add/retire, command control/output, provider authorization,
 native/Lua authored capture and task ownership. Each has its written subplan and
@@ -107,8 +107,10 @@ AttemptOpen/adapter-receipt/no-child terminal regions paid before admission;
 the body retains its own interruptible admission. Actual postadmission and
 live-child cancellation fixtures check distinct native outcomes and ordinary
 reopen. The late quit path passes unchanged PTY and native checks, Mac release
-and ASan/UBSan; its Linux changed-path recheck and full installed gate are pending.
-Publication remains pending.
+and ASan/UBSan. Its final Linux changed-path checks pass2/2 in debug, release and
+ASan/UBSan (run-h7iaz0wu:12.28/9.50/22.36s). The installed source gate passes
+99/99 debug cases in127.26s, all145 owned C++ translation units and the owned
+Lua checks. The formatting rejection was corrected before that complete gate.
 
 The command unit also removes ordinary registration/retirement's recorder
 restart and history replay. A real512KiB PTY workload and precise recorder-death
