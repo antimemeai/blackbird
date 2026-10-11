@@ -4,6 +4,7 @@
 #include "blackbird/local_timing.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/raw_command.hpp"
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/sprite.hpp"
 #include "blackbird/station.hpp"
@@ -25,8 +26,15 @@ using namespace blackbird;
 namespace {
 std::atomic_bool interrupted{false};
 static_assert(std::atomic_bool::is_always_lock_free);
+volatile std::sig_atomic_t interrupt_endpoint = -1;
 extern "C" void interrupt_handler(int) {
+  const int saved = errno;
   interrupted.store(true, std::memory_order_relaxed);
+  if (interrupt_endpoint >= 0) {
+    const char byte = 1;
+    (void)::write(interrupt_endpoint, &byte, 1);
+  }
+  errno = saved;
 }
 template <class T> T random_id() {
   IdentityBytes bytes{};
@@ -411,6 +419,12 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
         unwrap(context.checkpoint());
     }
     engine.effort(effort);
+    RawCommandWake interrupt_wake;
+    RawWaitScope interrupt_wait{{{interrupt_wake.read_fd(), -1}, {}}};
+    struct InterruptEndpointCleanup {
+      ~InterruptEndpointCleanup() { interrupt_endpoint = -1; }
+    } interrupt_cleanup;
+    interrupt_endpoint = interrupt_wake.write_fd();
     struct sigaction action{};
     action.sa_handler = interrupt_handler;
     sigemptyset(&action.sa_mask);
@@ -514,7 +528,12 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
     };
     publish_workflows(engine.workflows());
     auto perform = [&](std::string_view prompt) {
-      interrupted.store(false, std::memory_order_relaxed);
+      if (!tui) {
+        interrupted.store(false, std::memory_order_relaxed);
+        interrupt_wake.clear();
+        if (interrupted.load(std::memory_order_relaxed))
+          interrupt_wake.notify();
+      }
       try {
         if (prompt == "/help") {
           emit(terminal_help());
@@ -870,8 +889,10 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
         if (one)
           throw;
       }
-      if (interrupted.load(std::memory_order_relaxed))
+      if (interrupted.load(std::memory_order_relaxed)) {
         cancelled.store(true);
+        interrupt_wake.notify();
+      }
     };
     if (startup) {
       startup->outcome(RawRegionOutcome::ready);
@@ -1036,7 +1057,13 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
               participant_retention_failed = true;
             }
           },
-          engine.command_jobs());
+          engine.command_jobs(), interrupt_wake.read_fd(),
+          [&] {
+            interrupted.store(false, std::memory_order_relaxed);
+            interrupt_wake.clear();
+            if (interrupted.load(std::memory_order_relaxed))
+              interrupt_wake.notify();
+          });
       return finish_interactive();
     }
     if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))

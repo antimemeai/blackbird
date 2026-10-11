@@ -3,6 +3,7 @@
 #include "blackbird/local_timing.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/process_lifetime.hpp"
+#include "blackbird/raw_command.hpp"
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/sprite.hpp"
 #include "blackbird/task_view.hpp"
@@ -1227,7 +1228,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                      const std::function<bool()> &exit_requested, std::string initial,
                      std::filesystem::path state_path,
                      const std::function<void()> &idle_work,
-                     std::shared_ptr<CommandJobs> commands) {
+                     std::shared_ptr<CommandJobs> commands, int interrupt_fd,
+                     const std::function<void()> &reset_interrupt) {
   (void)std::setlocale(LC_CTYPE, "");
   TerminalMode mode;
   ChatOutput output;
@@ -1281,13 +1283,23 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     const std::lock_guard lock{mutex_};
     notification_ = notifications[1];
   }
+  RawCommandWake turn_cancel;
+  RawWaitScope ui_wait{{{interrupt_fd, -1}, {}}};
+  auto cancel_turn = [&] {
+    cancelled.store(true);
+    turn_cancel.notify();
+  };
   RawRegion first_frame{raw_regions::terminal_first_frame};
   Composer composer;
   std::jthread worker;
   struct StopOnExit {
     std::atomic_bool &flag;
-    ~StopOnExit() { flag.store(true); }
-  } stop{cancelled};
+    RawCommandWake &wake;
+    ~StopOnExit() {
+      flag.store(true);
+      wake.notify();
+    }
+  } stop{cancelled, turn_cancel};
   std::vector<std::string> queued, recovered;
   if (!state_path.empty()) {
     try {
@@ -1347,7 +1359,22 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   bool foreground_pty = false, child_pasted = false;
   unsigned short child_rows = 0, child_columns = 0;
   std::size_t refused_child_bytes = 0;
+  RawEventRef keyboard_read;
   auto append_child_input = [&](std::string_view bytes) {
+    const auto job_size = foreground_job.size(), epoch_size = foreground_epoch.size(),
+               byte_size = bytes.size();
+    const bool refused = (!child_input.empty() && child_input_job != foreground_job) ||
+                         bytes.size() > 4096 - child_input.size();
+    const std::uint8_t branch = refused ? 2 : 1;
+    (void)raw_command_linked_data(
+        2042, keyboard_read,
+        std::array{detail::raw_native_field(job_size),
+                   detail::raw_string_field(foreground_job),
+                   detail::raw_native_field(epoch_size),
+                   detail::raw_string_field(foreground_epoch),
+                   detail::raw_native_field(byte_size), detail::raw_string_field(bytes),
+                   detail::raw_native_field(branch),
+                   detail::raw_native_field(child_input.size())});
     // Keep admitted/pending bytes with their original job. Excess keyboard
     // bytes are explicitly refused; lifecycle keys must remain readable.
     if ((!child_input.empty() && child_input_job != foreground_job) ||
@@ -1391,10 +1418,23 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   auto flush_child_input = [&] {
     if (child_input.empty())
       return true;
+    auto flush_credit = raw_command_claim(50);
+    const auto job_size = child_input_job.size(), byte_size = child_input.size();
+    const auto flush_request =
+        raw_command_data(2043, std::array{detail::raw_native_field(job_size),
+                                          detail::raw_string_field(child_input_job),
+                                          detail::raw_native_field(byte_size),
+                                          detail::raw_string_field(child_input)});
     const bool accepted =
         command_request(Value::object({{"op", Value{"input"}},
                                        {"job_id", Value{child_input_job}},
                                        {"bytes", Value{child_input}}}));
+    const Error error{};
+    (void)raw_command_linked(2044, flush_request,
+                             std::array{detail::raw_native_field(accepted),
+                                        detail::raw_native_field(error.code),
+                                        detail::raw_native_field(error.detail)},
+                             flush_credit ? &*flush_credit : nullptr);
     if (accepted) {
       child_input.clear();
       child_input_job.clear();
@@ -1435,12 +1475,15 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     welcoming = false;
     if (worker.joinable())
       worker.join();
+    cancelled.store(false);
+    turn_cancel.clear();
+    if (reset_interrupt)
+      reset_interrupt();
     auto context = unwrap(raw_prepare_thread());
     const auto dispatch = raw_worker_dispatch();
     busy = true;
     tool_active = false;
     turn_failed = false;
-    cancelled.store(false);
     started = std::chrono::steady_clock::now();
     transcript.append(ChatKind::user, prompt);
     observed_usage.clear();
@@ -1452,6 +1495,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     worker = std::jthread([&, context = std::move(context), dispatch,
                            prompt = std::move(prompt)]() mutable {
       try {
+        RawWaitScope wait{{{interrupt_fd, turn_cancel.read_fd()}, {}}};
         RawThreadBinding binding{std::move(context)};
         raw_worker_started(dispatch);
         RawRegion command{raw_regions::command_perform};
@@ -1640,7 +1684,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         append_child_input(child_escape);
         child_escape.clear();
       }
-      (void)flush_child_input();
+      // Preserve the existing input batching despite bounded native reads.
+      // Flush a full prefix or when the kernel has no further input ready.
+      child_input_ready.revents = 0;
+      const bool more_input = poll(&child_input_ready, 1, 0) > 0;
+      if (child_input.size() >= 4096 || !more_input)
+        (void)flush_child_input();
       const auto lease = commands->foreground();
       auto job = string_field(lease, "job_id");
       const auto epoch = field(lease, "wait_epoch").number().text();
@@ -2018,9 +2067,35 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         redraw = true;
       continue;
     }
-    char bytes[4096];
+    char bytes[128];
     RawRegion input{raw_regions::command_input_save};
+    std::optional<RawCapacityClaim> keyboard_data;
+    if (raw_enabled())
+      keyboard_data.emplace(unwrap(raw_claim_data(1155081)));
+    auto keyboard_control = raw_command_claim(21950);
+    std::optional<RawCommandBurstScope> keyboard_burst;
+    keyboard_burst.emplace(
+        RawCommandBurstCredits{keyboard_data ? &*keyboard_data : nullptr,
+                               keyboard_control ? &*keyboard_control : nullptr});
+    const auto requested = sizeof(bytes);
+    const int descriptor = STDIN_FILENO;
+    const auto keyboard_request =
+        raw_command_record(2040,
+                           std::array{detail::raw_native_field(descriptor),
+                                      detail::raw_native_field(requested)},
+                           keyboard_control ? &*keyboard_control : nullptr);
     const auto count = read(STDIN_FILENO, bytes, sizeof(bytes));
+    const int read_error = errno;
+    const auto literal =
+        count > 0 ? std::as_bytes(std::span{bytes, static_cast<std::size_t>(count)})
+                  : ByteView{};
+    keyboard_read =
+        raw_command_linked(2041, keyboard_request,
+                           std::array{detail::raw_native_field(count),
+                                      detail::raw_native_field(read_error), literal},
+                           count > 0          ? nullptr
+                           : keyboard_control ? &*keyboard_control
+                                              : nullptr);
     if (count < 0) {
       if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
         continue;
@@ -2028,7 +2103,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     }
     if (count == 0) {
       quitting = true;
-      cancelled.store(true);
+      cancel_turn();
       persist();
       continue;
     }
@@ -2112,7 +2187,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       if (result.action == InputAction::cancel) {
         queued.clear();
         if (busy) {
-          cancelled.store(true);
+          cancel_turn();
           activity = "Stopping";
         }
       }
@@ -2120,7 +2195,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           (result.action == InputAction::submit &&
            (result.text == "/quit" || result.text == "/exit"))) {
         quitting = true;
-        cancelled.store(true);
+        cancel_turn();
       }
       if (result.action == InputAction::submit && !result.text.empty() && !quitting) {
         if (commands && result.text == "/jobs") {
@@ -2138,7 +2213,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           release_command(result.text == "/bg"
                               ? std::string_view{}
                               : std::string_view{result.text}.substr(4));
-        } else if (commands && busy && result.text.starts_with("/fg ")) {
+        } else if (commands && busy && result.text.starts_with("/fg ") &&
+                   !string_field(commands->foreground(), "job_id").empty()) {
           transcript +=
               string_field(commands->foreground(), "job_id") == result.text.substr(4)
                   ? "\nThat command is already foreground.\n"
@@ -2212,7 +2288,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         } else if (result.text == "/cancel") {
           queued.clear();
           if (busy) {
-            cancelled.store(true);
+            cancel_turn();
             activity = "Stopping";
           }
           transcript += busy ? "\nStop requested; pending queue cleared.\n"
@@ -2255,13 +2331,18 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             saved_last_input = true;
             input.outcome(RawRegionOutcome::dispatch);
             input.finish();
+            keyboard_burst.reset();
+            keyboard_data.reset();
+            keyboard_control.reset();
             start(std::move(result.text));
           } else
             composer.draft(std::move(result.text));
         }
       }
     }
-    (void)flush_child_input();
+    pollfd next_input{STDIN_FILENO, POLLIN, 0};
+    if (child_input.size() >= 4096 || poll(&next_input, 1, 0) == 0)
+      (void)flush_child_input();
     report_refused_input();
     // A final-byte submission already saved this exact state before dispatch.
     // Do not serialize/rename/fsync it again; trailing input still gets saved.

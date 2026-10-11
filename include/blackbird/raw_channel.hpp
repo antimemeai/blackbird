@@ -27,7 +27,8 @@ Result<void> raw_drain_notices(int endpoint);
 Result<void> raw_send_notice(int endpoint);
 
 class RawProducer;
-class RawControlClaim;
+class RawCapacityClaim;
+using RawControlClaim = RawCapacityClaim;
 
 // One execution owner publishes; one independently fenced recorder reclaims.
 // Mapping destruction only unmaps. Explicit unlink follows registered closure.
@@ -70,25 +71,28 @@ private:
 
 // Capacity only: no physical cursor reservation, no unpublished hole. A claim
 // must not outlive its producer. It can remain held through asynchronous yields.
-class RawControlClaim {
+class RawCapacityClaim {
 public:
-  ~RawControlClaim();
-  RawControlClaim(const RawControlClaim &) = delete;
-  RawControlClaim &operator=(const RawControlClaim &) = delete;
-  RawControlClaim(RawControlClaim &&other) noexcept;
-  RawControlClaim &operator=(RawControlClaim &&other) noexcept;
+  ~RawCapacityClaim();
+  RawCapacityClaim(const RawCapacityClaim &) = delete;
+  RawCapacityClaim &operator=(const RawCapacityClaim &) = delete;
+  RawCapacityClaim(RawCapacityClaim &&other) noexcept;
+  RawCapacityClaim &operator=(RawCapacityClaim &&other) noexcept;
   std::uint64_t remaining() const noexcept { return remaining_; }
+  // Transfer existing credit; no admission, allocation or aggregate change.
+  Result<RawCapacityClaim> split(std::uint64_t amount);
 
 private:
   friend class RawProducer;
-  RawControlClaim(RawProducer *owner, std::uint64_t bytes)
-      : owner_(owner), remaining_(bytes) {}
+  RawCapacityClaim(RawProducer *owner, RawPartition partition, std::uint64_t bytes)
+      : owner_(owner), remaining_(bytes), partition_(partition) {}
   RawProducer *owner_;
   std::uint64_t remaining_;
+  RawPartition partition_;
 };
 
 // Caller fences a single producer, keeps channel alive, and uses one execution
-// context. reserve/hold_control happen at safe boundaries before owned locks.
+// context. reserve/hold_capacity happen at safe boundaries before owned locks.
 class RawProducer {
 public:
   struct Start {
@@ -102,6 +106,8 @@ public:
   RawProducer(RawProducer &&) = delete;
   RawProducer &operator=(RawProducer &&) = delete;
   Result<std::uint64_t> available(RawPartition partition) const;
+  // Sole-owner reservations/claims cannot be released by waiting for a recorder.
+  Result<std::uint64_t> maximum_grant(RawPartition partition) const;
   // Epoch admission is separate from physical free bytes. Check before
   // acquisition, even when a previous owner region already holds terminals.
   Result<void> admission_ready(RawPartition partition) const;
@@ -109,6 +115,7 @@ public:
   // and held work can finish; owner then drains/closes and registers a new epoch.
   Result<void> reserve(RawPartition partition, std::uint64_t bytes);
   void release_reservation(RawPartition partition) noexcept;
+  Result<RawCapacityClaim> hold_capacity(RawPartition partition, std::uint64_t bytes);
   Result<RawControlClaim> hold_control(std::uint64_t bytes);
   // Only raw byte copies and native envelope fields; no allocation, locking,
   // wait, transform or syscall unless an armed consumer requires a doorbell.
@@ -121,12 +128,12 @@ public:
   void clear_notification_error() noexcept { notice_error_.reset(); }
 
 private:
-  friend class RawControlClaim;
+  friend class RawCapacityClaim;
   RawChannel *channel_;
   int endpoint_;
   std::array<std::uint64_t, 3> published_{};
   std::array<std::uint64_t, 3> reserved_{};
-  std::uint64_t held_control_ = 0;
+  std::array<std::uint64_t, 3> held_{};
   std::uint64_t next_ordinal_;
   std::optional<Error> notice_error_;
 };

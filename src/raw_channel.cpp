@@ -1,4 +1,5 @@
 #include "blackbird/raw_channel.hpp"
+#include "blackbird/process_lifetime.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -143,6 +144,7 @@ Result<void> boundary(const SharedHeader &header, std::size_t index, RawCursors 
 } // namespace
 
 Result<std::array<int, 2>> raw_socket_pair() {
+  const std::lock_guard spawn_lock{detail::process_spawn_mutex};
   std::array<int, 2> endpoints{-1, -1};
   if (::socketpair(AF_UNIX, SOCK_STREAM, 0, endpoints.data()) == -1) {
     return Result<std::array<int, 2>>::failure(native_error());
@@ -444,6 +446,16 @@ RawProducer::RawProducer(RawChannel &channel, Start start)
     }
   }
 }
+Result<std::uint64_t> RawProducer::maximum_grant(RawPartition partition) const {
+  const auto index = partition_index(partition);
+  if (!index.has_value() || channel_->mapping_ == nullptr)
+    return Result<std::uint64_t>::failure({ErrorCode::invalid_range});
+  const auto capacity = channel_->capacities()[index.value()];
+  const auto reserved = reserved_[index.value()], held = held_[index.value()];
+  if (reserved > capacity || held > capacity - reserved)
+    return Result<std::uint64_t>::failure({ErrorCode::corrupt});
+  return Result<std::uint64_t>::success(capacity - reserved - held);
+}
 Result<std::uint64_t> RawProducer::available(RawPartition partition) const {
   const auto index = partition_index(partition);
   const auto cursor = channel_->cursors(partition);
@@ -456,7 +468,7 @@ Result<std::uint64_t> RawProducer::available(RawPartition partition) const {
   }
   const auto capacity = channel_->capacities()[index.value()];
   const auto free = capacity - (cursor.value().published - cursor.value().acknowledged);
-  const auto held = index.value() == 1 ? held_control_ : 0;
+  const auto held = held_[index.value()];
   if (reserved_[index.value()] > free || held > free - reserved_[index.value()]) {
     return Result<std::uint64_t>::failure({ErrorCode::corrupt});
   }
@@ -483,20 +495,26 @@ void RawProducer::release_reservation(RawPartition partition) noexcept {
     reserved_[index.value()] = 0;
   }
 }
+Result<RawCapacityClaim> RawProducer::hold_capacity(RawPartition partition,
+                                                    std::uint64_t bytes) {
+  if (partition != RawPartition::data && partition != RawPartition::control)
+    return Result<RawCapacityClaim>::failure({ErrorCode::invalid_range});
+  const auto admission = admission_ready(partition);
+  if (!admission.has_value())
+    return Result<RawCapacityClaim>::failure(admission.error());
+  const auto free = available(partition);
+  if (!free.has_value())
+    return Result<RawCapacityClaim>::failure(free.error());
+  if (bytes > free.value())
+    return Result<RawCapacityClaim>::failure({ErrorCode::capacity});
+  const auto index = partition_index(partition).value();
+  if (bytes > UINT64_MAX - held_[index])
+    return Result<RawCapacityClaim>::failure({ErrorCode::overflow});
+  held_[index] += bytes;
+  return Result<RawCapacityClaim>::success(RawCapacityClaim{this, partition, bytes});
+}
 Result<RawControlClaim> RawProducer::hold_control(std::uint64_t bytes) {
-  const auto admission = admission_ready(RawPartition::control);
-  if (!admission.has_value()) {
-    return Result<RawControlClaim>::failure(admission.error());
-  }
-  const auto free = available(RawPartition::control);
-  if (!free.has_value()) {
-    return Result<RawControlClaim>::failure(free.error());
-  }
-  if (bytes > free.value()) {
-    return Result<RawControlClaim>::failure({ErrorCode::capacity});
-  }
-  held_control_ += bytes;
-  return Result<RawControlClaim>::success(RawControlClaim{this, bytes});
+  return hold_capacity(RawPartition::control, bytes);
 }
 Result<void> RawProducer::admission_ready(RawPartition partition) const {
   const auto index = partition_index(partition);
@@ -550,11 +568,14 @@ Result<std::uint64_t> RawProducer::emit(std::uint32_t site_id,
     return Result<std::uint64_t>::failure({ErrorCode::overflow});
   }
   if (claim != nullptr) {
-    if (partition != RawPartition::control || claim->owner_ != this) {
+    if (partition != claim->partition_ || claim->owner_ != this) {
       return Result<std::uint64_t>::failure({ErrorCode::conflict});
     }
     if (size > claim->remaining_) {
       return Result<std::uint64_t>::failure({ErrorCode::capacity});
+    }
+    if (size > held_[index.value()]) {
+      return Result<std::uint64_t>::failure({ErrorCode::corrupt});
     }
   } else if (size > reserved_[index.value()]) {
     return Result<std::uint64_t>::failure({ErrorCode::capacity});
@@ -579,7 +600,7 @@ Result<std::uint64_t> RawProducer::emit(std::uint32_t site_id,
   }
   if (claim != nullptr) {
     claim->remaining_ -= size;
-    held_control_ -= size;
+    held_[index.value()] -= size;
   } else {
     reserved_[index.value()] -= size;
   }
@@ -596,22 +617,32 @@ Result<std::uint64_t> RawProducer::emit(std::uint32_t site_id,
   }
   return Result<std::uint64_t>::success(ordinal);
 }
-RawControlClaim::~RawControlClaim() {
+RawCapacityClaim::~RawCapacityClaim() {
   if (owner_ != nullptr) {
-    owner_->held_control_ -= remaining_;
+    owner_->held_[static_cast<std::size_t>(partition_) - 1] -= remaining_;
   }
 }
-RawControlClaim::RawControlClaim(RawControlClaim &&other) noexcept
+RawCapacityClaim::RawCapacityClaim(RawCapacityClaim &&other) noexcept
     : owner_(std::exchange(other.owner_, nullptr)),
-      remaining_(std::exchange(other.remaining_, 0)) {}
-RawControlClaim &RawControlClaim::operator=(RawControlClaim &&other) noexcept {
+      remaining_(std::exchange(other.remaining_, 0)), partition_(other.partition_) {}
+RawCapacityClaim &RawCapacityClaim::operator=(RawCapacityClaim &&other) noexcept {
   if (this != &other) {
     if (owner_ != nullptr) {
-      owner_->held_control_ -= remaining_;
+      owner_->held_[static_cast<std::size_t>(partition_) - 1] -= remaining_;
     }
     owner_ = std::exchange(other.owner_, nullptr);
     remaining_ = std::exchange(other.remaining_, 0);
+    partition_ = other.partition_;
   }
   return *this;
+}
+Result<RawCapacityClaim> RawCapacityClaim::split(std::uint64_t amount) {
+  if (owner_ == nullptr)
+    return Result<RawCapacityClaim>::failure({ErrorCode::conflict});
+  if (amount > remaining_)
+    return Result<RawCapacityClaim>::failure({ErrorCode::capacity});
+  remaining_ -= amount;
+  return Result<RawCapacityClaim>::success(
+      RawCapacityClaim{owner_, partition_, amount});
 }
 } // namespace blackbird

@@ -263,11 +263,11 @@ equations; these constants do not establish another ABI.
 |Setup result|54|One actual native setup/spawn result|
 |Acquisition refusal|50|2001 worker variant: launch Ref,operation:u8,Error; immutable description distinguishes it from caller variant|
 |Worker launch|89|Prepaid before dispatch, no startup data wait|
-|Worker setup/cleanup claim|8*94+3*319+101+102+54+50+89=2105|Finite protected sequence|
+|Worker setup/cleanup claim|8*94+3*319+101+102+54+50+89+57=2162|Finite protected sequence|
 |Owner retry ownership probe|52+64=116|waitid(P_PID,pid,WEXITED\|WNOHANG\|WNOWAIT)|
 |One owner cleanup retry|116+319+101+102=638|Probe, optional one signal_owned, reap, updated custody|
 |Semantic settlement pair|80+50=130|2035/2036, existing32byte job ID|
-|Initial held bundle|2105+638+130+1728=4601|Worker cleanup, first owner shutdown retry, one semantic attempt with nested region allowance|
+|Initial held bundle|2162+638+130+1728=4658|Worker cleanup, first owner shutdown retry, one semantic attempt with nested region allowance|
 
 The ordinary read/write/poll/waitid paths acquire fresh credit per occurrence.
 The final reap site selects the existing complete reap operation and preserves
@@ -424,7 +424,7 @@ Four*432=1728 protected allowance per actual semantic attempt. Source-derived
 unused capacity is intentionally accepted to avoid carrying source/event counts
 through the business append API for instrumentation. The tighter cumulative
 actual-path claim1312 is not selected; fixed per-region capacity is simpler.
-Initial complete Job bundle2105+638+(130+1728)=4601bytes, with ONE protected
+Initial complete Job bundle2162+638+(130+1728)=4658bytes, with ONE protected
 semantic attempt. No arbitrary two-attempt promise or unbounded cancelled retry.
 
 An actual failed semantic attempt retains originals/terminal/debt. A subsequent
@@ -482,3 +482,231 @@ cleanup-before-reap, pending custody and original retention. One targeted
 design/plan attack, direct reds, implementation/greens, then one code/oracle
 attack and findings/recheck. No source writes before parent releases the integrated checkpoint. The
 prepaid nested-region seam above is part of this owner unit, not a settled check.
+
+
+## Implementation boundary and direct findings (command owner)
+
+The implemented worker adds one57-byte CONTROL2029 before its own first
+false-to-true sticky stop transition. The existing product mutex orders that
+transition against caller stop; no worker event is invented for a stop already
+requested by another owner. The finite worker bank is2162 and initial bundle4658.
+Origins are deadline2, bootstrap/output capture refusal3, Error/exception4.
+API stop emits source1 on its actual caller producer. Cancellation/shutdown
+caller request capture uses the dedicated owner producer/credit described below;
+worker-terminal2034 reports the observed stop but does not replace that request.
+
+The raw description is the emitted grammar.2013 is eight length-framed existing
+strings: job, operation, delivery, bytes, signal, then three empty fields.
+Numeric Value formatting at the metric writer was removed; actual resize/epoch
+native fields are emitted at their existing business operation.2045 configure/
+archive return holds75+actual job length before locking, emits actual registry
+limits and distinct success/Error/exception; initial orderly shutdown2045 is covered by the one held75-byte outcome below.
+2033 always contains the status field and a separate validity flag.2037 modes0/1
+contain native u64 offset/requested; mode2 contains no range fields.2038 resident
+contains original read Ref and native selected range; full journal traversal
+contains actual fact/source identities and known source size.
+
+The business pending input coalesces to4096 bytes or flushes when the existing
+nonblocking STDIN readiness probe reports no further input. Both top-of-loop
+and after-read flush sites apply that rule.128-byte native reads alone must not
+turn a512KiB stream into4096 persistent delivery records. Admission includes
+full4096 pending flush bodies and actual input requests (4213 maximum bytes for
+the UI source form), with conservative unused capacity released after the burst.
+
+Engine preservation failure retains an unknown semantic terminal while exact
+unacknowledged chunks remain native debt. Archive and refit still see that debt.
+The native retained-end accessor avoids new read-metric admission inside a held
+semantic cleanup attempt after cancellation. Resident output reading selects
+shared original references under the product mutex, admits outside it, and reads
+only those original ranges; it does not clone history for instrumentation.
+
+Direct first-pass reds: non-destructive drain against checkpoint library failed
+on repeated shared-original ownership; engine root-capacity fixture exposed
+terminal hidden behind pending output; PTY pressure exposed the delivery count
+regression. The real full-lane fixture pauses supervisor/recorder only after
+registration and a gated child launch; a pre-registration pause blocks the
+registration protocol and does not test worker acquisition backpressure.
+
+### Caller lifecycle credit extension (approved; implemented, direct checks pending)
+
+CommandJobs::Impl keeps one separate raw producer handle for actual caller
+lifecycle requests. Prepare it once at the first live registration boundary,
+outside the existing product mutex; registration belongs to the sequential
+CommandJobs owner. This costs one producer mapping (default64MiB DATA+256KiB
+CONTROL+128KiB FAILURE+header address space; only header/actually written pages
+are touched), one shared-memory name until retirement and one retained producer
+socket endpoint. RawChannel closes the shm descriptor immediately after mmap;
+the handle shares existing Runtime state rather than creating another child.
+
+Before inserting each live Job/starting its thread, hold the existing impl mutex,
+bind that dedicated producer and use a new native raw_try_claim_control(57).
+This primitive performs one hold_capacity on CONTROL with the existing local
+and known-runtime fence checks; no RPC, poll, retry or cancellation admission.
+Failure refuses registration before its effect, using the already-held caller
+2001 refusal. The per-Job57-byte token is not borrowed by its worker. The same
+impl mutex serializes every operation on this producer, including token claim,
+emission, release and binding; there is no separate metrics mutex or waiter.
+
+Caller-origin lifecycle paths use that token for the first false-to-true stop
+transition: wait cancellation/source5, capture failure/source6 and orderly
+stop_all/shutdown/source7. They bind the dedicated producer under the existing
+mutex, emit2029 CONTROL before changing stop and notifying its sticky pipe,
+then release any unused token. Explicit control(stop) already writes source1
+on the actual live caller lane; it releases the now-unneeded caller token under
+the same mutex. A worker-origin stop releases the unneeded caller token under
+the mutex; it does not emit on that lane. The worker's final publication releases
+unused caller credit only after setting finished. capture_failed on a finished
+job may still mark semantic capture refused, but does not invent another
+physical stop request or set a new stop flag: no command is running there.
+
+This bounds held requests by actual live jobs (max_live<=64), rather than
+retaining credit on up to256 historical records. Archive/settlement of completed
+jobs has no remaining stop token. A later admitted job obtains a fresh57-byte
+nonblocking claim under the same mutex. If published owner CONTROL has not
+been drained, registration refuses capacity; canceled shutdown is never
+postponed behind credit replenishment. No global bank needs refilling and no
+capacity wait can race cleanup emission on that producer.
+
+2045 shutdown request/return remains separate from per-job stop. Proposed one
+owned75-byte outcome allowance at first owner-lane initialization, held until
+CommandJobs orderly shutdown. Actual shutdown operation3 emits with empty job,
+branch1/Error/actual limits after joins/native retries; persistent native custody
+failure emits branch2 with its actual Error and leaves debt. Repeated shutdown
+calls do not fabricate repeated attempts: the allowance covers this object's
+one initial orderly shutdown; each later explicit native retry is independently
+captured by2022/2023/2020/2021/2032/2033/2034 on its owned job producer. If parent
+wants2045 per repeated shutdown operation, it needs one fresh live-owner claim
+before that operation, not a promise that canceled unbounded calls can emit.
+
+
+Initial command raw first-pass checks after findings: command_raw5.15s includes
+native EIO custody retry, ECHILD no subsequent numeric signal, exact binary/
+17MiB crossing-limit disk originals, canceled1728-region bank and real stopped
+recorder/full-DATA cleanup. command_jobs3.72s, engine3.40s, station31.96s
+(debug bounded table saturation), stationCLI1.41s. Caller producer additions
+require their new direct recheck before these become final-unit results.
+
+The128-byte read boundary also exposed a real UI race: a local Lua marker may
+be visible before its turn-complete notification. A following /fg was rejected
+as busy despite no current foreground lease. The UI now rejects only when a
+real foreground lease is held; otherwise it uses the existing bounded queued
+prompt path and executes after the current local turn. No new queue or timer.
+The pressure script progressed through Ctrl-B and stop; its final quit remains
+an open direct finding until traced and green, not a completed claim.
+
+## Native registration stall: live recorder lifecycle extension
+
+The actual outer PTY pressure cut preserves 512KiB of acquired keyboard input.
+Its per-route originals produce a125,350,854-byte `events.18` among22 segments.
+The next native command launch fails its existing8-second observation boundary.
+Main waits in `prepare_thread`/RPC; the supervisor waits in
+`stop_recorder(SIGUSR1)`/`waitpid`. The recorder sample
+`/tmp/blackbird-command-1-13150.sample` has473/475 samples in
+`RawAudit::open`/`recover`, including137 native `pread` samples plus CRC/frame
+validation. It is doing work, not waiting on a producer mutex. Ordinary lane
+retirement and addition each stop/fork the recorder; `open_audit` begins at
+segment0 each time. A stop signal is checked only after the whole recovery.
+The command registration therefore depends on all prior metric history.
+
+Keep the existing live recorder for ordinary lane additions and retirements.
+Actual recorder death, explicit failure recovery and orphan recovery retain the
+existing full validation scan; this change does not introduce trusted disk-scan
+skipping or synthetic writer cursors.
+
+### Exact ownership and sites
+
+- Add one supervisor/recorder native datagram socket pair, using the existing
+  `control_pair` create/CLOEXEC window. One descriptor remains in each process;
+  the child closes the supervisor end before entering `record`. A restart
+  closes/replaces the previous pair before fork. Reuse the existing fixed80-byte
+  registration and17-byte retirement request grammars and SCM_RIGHTS transfer.
+  There is one outstanding recorder request, owned by the single-threaded
+  supervisor; no application callback, subscriber or new timer is introduced.
+- `record` accepts an optional control descriptor; direct orphan drain has none.
+  Check that descriptor nonblocking at every completed finite lane visit, before
+  the next selected source acquisition, and include it in the existing idle poll.
+  The recorder accepts a control request only after holding one111-byte failure
+  slot. It sends only a successful reply after the whole operation. An operation
+  or reply failure writes its actual native error via8000 and exits70; the
+  supervisor sees native child death, refuses the RPC and retains originals.
+  There is no second fallible error-reply attempt requiring another unpaid slot.
+- Addition: supervisor validates/maps the proposed lane, durably writes both
+  registration copies, and retains the lane/endpoints in its own bounded vector
+  before sending it to the live recorder. Recorder independently validates/maps
+  it, adopts the received endpoint copies, rebuilds its bounded watches, then
+  acknowledges. Application success is returned only after that acknowledgement.
+  A child failure leaves the durable registration and supervisor mapping owned;
+  any automatic restart includes the proposed lane even if the caller's reply is
+  uncertain. No existing audit is reopened on successful addition.
+- Retirement: supervisor verifies all three P/A pairs equal and requests removal.
+  The live recorder independently verifies quiescence and exact audit-preserved
+  ends. It writes the existing independent closure copies and seals its current
+  segment, synchronizing the directory before any permission to unlink. It then
+  derives the next predecessor directly from its current `RawAudit::cursor` and
+  seeds from its current preserved prefixes of all selected lanes, including the
+  retiring lane. It writes/synchronizes the seed, creates/synchronizes a new
+  successor with the existing `RawAudit::open` (a genuinely new file), publishes
+  that cursor, removes the retired collector lane, rebuilds watches, and replies.
+  Supervisor unlinks the known mapping and removes its own lane only after this
+  reply. Seeding the retiring lane also makes a failed/lost success reply safe:
+  a supervisor restart that still owns that lane sees the exact same preserved
+  end, rather than zero. A subsequent retirement seed drops older closed lanes;
+  prefix space is bounded by `(max_lanes + 1) * 3`.
+- Recorder control exchange in supervisor waits on the actual response descriptor
+  and existing SIGCHLD self-pipe. On child notice, use `waitpid(WNOHANG)` for this
+  owned recorder PID; stale notices do not certify death. Death refuses the
+  in-flight request and feeds the existing bounded restart/fence rule. A success
+  reply can race a later death: that only permits existing preserved ownership;
+  the next main supervisor iteration processes the death/restart normally.
+  The isolated supervisor may wait; no product mutex or spawn mutex is held.
+- Closure-before-seal or successor publication failure retains the original
+  mapping; strict orphan recovery still refuses insufficient metadata. Add or
+  retire failures cannot advertise collector adoption, empty source or permission
+  to unlink. Successful retire keeps every original segment immutable. Failure
+  source stages distinguish control acquisition/addition/retirement/success reply
+  while source-acquired remains false for this metadata/control operation.
+
+### Direct red and green oracles
+
+1. Actual runtime prepares, emits, drains and retires a producer, then prepares a
+   second producer. Recorder PID must remain the same across both successful
+   addition and retirement. Existing code changes PID: this is a direct red for
+   the lifecycle defect, independent of machine speed or a larger test timeout.
+   Read disk originals after shutdown: exact bytes and source identities from
+   both producer epochs; successor predecessor/seed remain valid.
+2. Stop the actual recorder, queue an actual prepare RPC, then kill that recorder
+   while the request is pending. The supervisor must notice native child death
+   and complete the caller with refusal or a fully owned recovered success;
+   no unacknowledged success, indefinite reply wait, fabricated source reclamation
+   or loss of the registered original is permitted. Existing recorder-kill/full
+   recovery and metadata interruption oracles remain required direct checks.
+3. The unchanged actual outer PTY cut must retain its keyboard/child byte, process
+   custody, background/foreground, stop and quit oracles. It now exercises the
+   same125MiB history without recovery-sized registration work. Do not increase
+   observation deadlines, reduce input, suppress raw events or skip audit checks.
+
+The genuine PID-stability red failed in0.396s at successful addition on the prior
+source. The live-recorder implementation then passed the same PID/epoch/disk
+oracle, raw_runtime0.73s, raw_metadata0.48s and command_raw3.75s. The unchanged
+outer PTY pressure/background/stop/new-launch/quit cut passed18.09s with the same
+512KiB input and observation deadlines. This is actual behavior evidence, not a
+new timeout or a suppressed event stream.
+
+The actual pending-death cut observes the supervisor's two-descriptor recorder
+request poll through an inherited shared native marker; merely observing the
+caller's response wait was too early to establish that boundary. The precise
+cut exposed native datagram EOF becoming readable before SIGCHLD. The supervisor
+now prioritizes an actual death notice and, on native EOF, removes that closed
+socket from its watch while waiting for the independent child notice. It does
+not poll EOF repeatedly or classify EOF as a malformed live reply. The actual
+API refusal was audit_unavailable with native wait status9. Explicit recovery
+then owns a new recorder; disk read found the exact original acquired while the
+previous recorder was stopped. The complete command raw oracle passed after
+this correction.
+
+The new lifecycle channel costs one descriptor in the supervisor and one in its
+recorder, with one outstanding fixed native message. The successful paths keep
+the same processes and existing raw audit formats. Registration does not read
+old event files. Retirement creates the same seeded segment successor from the
+already-owned audit cursor/prefixes. Real process death still scans and validates
+all predecessor files; tertiary readers remain read-only and unchanged.

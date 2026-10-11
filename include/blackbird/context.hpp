@@ -38,7 +38,8 @@ public:
   void record_boundary(ApplicationRecordId identity, const Value &context_packet,
                        const Value &program_packet);
   std::string original(OriginalCapture capture);
-  void retain_program(std::string_view source, DefinitionGenerationId generation);
+  SourceReference retain_program(std::string_view source,
+                                 DefinitionGenerationId generation);
   Value inspect(const Value &query);
   Value trajectory(const Value &query);
   RetainedState &root() noexcept { return root_; }

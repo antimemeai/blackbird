@@ -5,6 +5,8 @@
 
 namespace blackbird {
 struct RawProviderOwner;
+struct RawAuthParent;
+struct RawEventRef;
 // Secret-bearing inputs and replies never enter the model/tool/audit interface.
 struct ProviderHttpRequest {
   std::string url, method = "POST", body;
@@ -18,6 +20,7 @@ struct ProviderHttpResponse {
 using ProviderHttp = std::function<ProviderHttpResponse(const ProviderHttpRequest &)>;
 struct ProviderAuthConfig {
   std::filesystem::path directory;
+  std::filesystem::path metrics_directory;
   std::string curl_executable = "/usr/bin/curl";
   std::string openssl_executable = "/usr/bin/openssl";
   std::function<bool()> cancelled;
@@ -27,7 +30,8 @@ struct ProviderAuthConfig {
 ProviderHttpResponse
 provider_http(const ProviderHttpRequest &request, const ProviderAuthConfig &config = {},
               const std::function<void(std::string_view)> &observer = {},
-              const RawProviderOwner *raw_owner = nullptr, bool application = false);
+              const RawProviderOwner *raw_owner = nullptr, bool application = false,
+              const RawEventRef *auth_resolution = nullptr);
 void require_provider_success(int status);
 
 struct OAuthExpected {
@@ -45,26 +49,36 @@ public:
   // Metadata only. Does not refresh, probe an account, or expose tokens.
   Value catalog() const;
   Value status() const;
-  bool selected(std::string_view provider) const;
-  void set_key(std::string_view provider, std::string_view account, std::string key);
-  void use(std::string_view provider, std::string_view account);
-  void logout(std::string_view provider, std::string_view account);
+  bool selected(std::string_view provider, const RawAuthParent *parent = nullptr) const;
+  void set_key(std::string_view provider, std::string_view account, std::string key,
+               const RawAuthParent *parent = nullptr);
+  void use(std::string_view provider, std::string_view account,
+           const RawAuthParent *parent = nullptr);
+  void logout(std::string_view provider, std::string_view account,
+              const RawAuthParent *parent = nullptr);
   void add_provider(const std::string &id, std::string base_url,
-                    const std::string &protocol, const std::string &environment);
-  Value descriptor(std::string_view provider) const;
-  Value registration(std::string_view provider, std::string_view account) const;
-  Value binding(std::string_view provider) const;
+                    const std::string &protocol, const std::string &environment,
+                    const RawAuthParent *parent = nullptr);
+  Value descriptor(std::string_view provider,
+                   const RawAuthParent *parent = nullptr) const;
+  Value registration(std::string_view provider, std::string_view account,
+                     const RawAuthParent *parent = nullptr) const;
+  Value binding(std::string_view provider, const RawAuthParent *parent = nullptr) const;
   // One OAuth transaction at a time per account. Returned device data is safe
   // for the operator, not the token/device_code. Poll resumes private state.
-  Value device_begin(std::string_view provider, std::string_view account);
-  Value device_poll(std::string_view provider, std::string_view account);
+  Value device_begin(std::string_view provider, std::string_view account,
+                     const RawAuthParent *parent = nullptr);
+  Value device_poll(std::string_view provider, std::string_view account,
+                    const RawAuthParent *parent = nullptr);
   void browser_login(std::string_view provider, std::string_view account,
                      const std::function<void(std::string_view)> &notice,
-                     const std::function<std::string()> &read_secret);
+                     const std::function<std::string()> &read_secret,
+                     const RawAuthParent *parent = nullptr);
   // Browser flow implemented separately; commits only a complete token record.
   void save_oauth(std::string_view provider, std::string_view account,
                   const Value &tokens, std::string client_id, std::string token_url,
-                  Value metadata = Value::object({}), OAuthExpected expected = {});
+                  Value metadata = Value::object({}), OAuthExpected expected = {},
+                  const RawAuthParent *parent = nullptr);
   ProviderHttpResponse
   request(std::string_view provider, std::string_view route, const Value &body,
           int timeout_seconds,

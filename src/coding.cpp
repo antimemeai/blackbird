@@ -4,6 +4,8 @@
 #include "blackbird/packet.hpp"
 #include "blackbird/process_lifetime.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/raw_authored.hpp"
+#include "blackbird/raw_command.hpp"
 #include "blackbird/raw_provider.hpp"
 #include "blackbird/raw_runtime.hpp"
 #include "stream_capture.hpp"
@@ -314,6 +316,362 @@ Value OpenAiCodingProvider::respond(
 }
 struct CodingEngine::Runtime {
   CodingEngine &engine;
+  struct Trace {
+    RawThreadHandle handle;
+    RawAuthoredOwner owner;
+    std::optional<RawControlToken> setup;
+    RawAuthoredReference installation;
+    explicit Trace(CodingEngine &engine)
+        : handle(raw_current_thread()),
+          owner{engine.generation_.bytes(), {}, raw_enabled(), {}} {}
+    void begin(const std::optional<SourceReference> &source, std::size_t length) {
+      if (!owner.enabled)
+        return;
+      setup.emplace(unwrap(raw_claim_control(175)));
+      const bool available = source.has_value();
+      if (available) {
+        const std::array fields{ByteView{owner.generation},
+                                ByteView{source->journal.bytes()},
+                                raw_native(source->sequence), raw_native(length)};
+        (void)raw_authored_publish(1505, fields);
+        const std::array request{ByteView{owner.generation}, raw_native(available),
+                                 ByteView{source->journal.bytes()},
+                                 raw_native(source->sequence)};
+        owner.vm = raw_authored_publish(1500, request);
+      } else {
+        const std::array request{ByteView{owner.generation}, raw_native(available)};
+        owner.vm = raw_authored_publish(1500, request);
+      }
+    }
+    void allocated(bool created) {
+      const std::uint8_t outcome = created ? 1 : 0;
+      const std::array fields{ByteView{owner.vm.lane}, raw_native(owner.vm.ordinal),
+                              raw_native(outcome)};
+      (void)raw_authored_publish(1501, fields, setup ? &*setup : nullptr);
+    }
+    void installing() {
+      const std::array fields{ByteView{owner.vm.lane}, raw_native(owner.vm.ordinal)};
+      installation = raw_authored_publish(1502, fields, setup ? &*setup : nullptr);
+    }
+    void installed(int lua_status) {
+      const std::array fields{ByteView{installation.lane},
+                              raw_native(installation.ordinal), raw_native(lua_status)};
+      (void)raw_authored_publish(1503, fields, setup ? &*setup : nullptr);
+    }
+    void finish(std::uint8_t branch, std::optional<Error> caught_error = {}) noexcept {
+      if (!setup.has_value() || owner.vm.ordinal == 0) {
+        setup.reset();
+        return;
+      }
+      if (owner.admission_failure.has_value())
+        caught_error = owner.admission_failure;
+      try {
+        if (caught_error.has_value()) {
+          const std::array fields{ByteView{owner.vm.lane}, raw_native(owner.vm.ordinal),
+                                  raw_native(branch), raw_native(caught_error->code),
+                                  raw_native(caught_error->detail)};
+          (void)raw_authored_publish(1504, fields, &*setup);
+        } else {
+          const std::array fields{ByteView{owner.vm.lane}, raw_native(owner.vm.ordinal),
+                                  raw_native(branch)};
+          (void)raw_authored_publish(1504, fields, &*setup);
+        }
+      } catch (const Error &failure) {
+        raw_fence(failure);
+      }
+      setup.reset();
+    }
+  } trace;
+  static_assert(sizeof(lua_Integer) == 8 &&
+                std::numeric_limits<lua_Integer>::is_signed &&
+                std::is_same_v<lua_Number, double> && sizeof(int) == 4);
+  enum class SourceKind : std::uint8_t {
+    root = 1,
+    tool,
+    tool_api,
+    print,
+    module,
+    validation
+  };
+  struct Loaded {
+    int lua_status;
+    RawAuthoredReference reference;
+  };
+  Loaded load(lua_State *L, std::string_view source, const char *name, SourceKind kind,
+              RawControlToken *credit) {
+    if (!trace.owner.enabled)
+      return {luaL_loadbufferx(L, source.data(), source.size(), name, "t"), {}};
+    const auto length = source.size();
+    const std::array requested{ByteView{trace.owner.vm.lane},
+                               raw_native(trace.owner.vm.ordinal), raw_native(kind),
+                               raw_native(length), raw_text(source)};
+    const auto request = raw_authored_publish(1506, requested);
+    const int lua_status = luaL_loadbufferx(L, source.data(), length, name, "t");
+    const bool available = lua_status == LUA_OK;
+    if (available) {
+      const void *function = lua_topointer(L, -1);
+      const std::array fields{ByteView{request.lane}, raw_native(request.ordinal),
+                              raw_native(lua_status), raw_native(available),
+                              raw_native(function)};
+      (void)raw_authored_publish(1507, fields, credit);
+    } else {
+      const std::array fields{ByteView{request.lane}, raw_native(request.ordinal),
+                              raw_native(lua_status), raw_native(available)};
+      (void)raw_authored_publish(1507, fields, credit);
+    }
+    return {lua_status, request};
+  }
+  void acquisition_failed(Error why) noexcept {
+    if (why.code == ErrorCode::interrupted || why.code == ErrorCode::audit_unavailable)
+      trace.owner.admission_failure = why;
+  }
+  std::optional<RawControlToken> claim(std::uint64_t bytes) {
+    if (!trace.owner.enabled)
+      return {};
+    if (trace.owner.admission_failure.has_value())
+      throw *trace.owner.admission_failure;
+    auto result = raw_claim_control(bytes);
+    if (!result.has_value()) {
+      trace.owner.admission_failure = result.error();
+      throw result.error();
+    }
+    return std::move(result).value();
+  }
+  int load_and_call(lua_State *L, std::string_view source, const char *name,
+                    SourceKind kind, int results) {
+    auto credit = claim(161);
+    try {
+      const auto loaded = load(L, source, name, kind, credit ? &*credit : nullptr);
+      if (loaded.lua_status != LUA_OK)
+        return loaded.lua_status;
+      if (!trace.owner.enabled) {
+        failure.reset();
+        return lua_pcall(L, 0, results, 0);
+      }
+      const std::array fields{
+          ByteView{trace.owner.vm.lane}, raw_native(trace.owner.vm.ordinal),
+          ByteView{loaded.reference.lane}, raw_native(loaded.reference.ordinal)};
+      const auto request =
+          raw_authored_publish(1508, fields, credit ? &*credit : nullptr);
+      failure.reset();
+      const int lua_status = lua_pcall(L, 0, results, 0);
+      const std::array returned{ByteView{request.lane}, raw_native(request.ordinal),
+                                raw_native(lua_status)};
+      (void)raw_authored_publish(1509, returned, credit ? &*credit : nullptr);
+      return lua_status;
+    } catch (const Error &why) {
+      acquisition_failed(why);
+      throw;
+    }
+  }
+  int validation_load(std::string_view source, const char *name) {
+    auto credit = claim(53);
+    try {
+      return load(state, source, name, SourceKind::validation,
+                  credit ? &*credit : nullptr)
+          .lua_status;
+    } catch (const Error &why) {
+      acquisition_failed(why);
+      throw;
+    }
+  }
+  inline static char authored_error_tag;
+  static int authored_error_text(lua_State *L) {
+    const auto *why = static_cast<const Error *>(lua_touserdata(L, 1));
+    lua_pushstring(L, error_name(why->code));
+    return 1;
+  }
+  static int authored_raise(lua_State *L, Error why) {
+    auto *stored = static_cast<Error *>(lua_newuserdatauv(L, sizeof(Error), 0));
+    std::construct_at(stored, why);
+    lua_rawgetp(L, LUA_REGISTRYINDEX, &authored_error_tag);
+    lua_setmetatable(L, -2);
+    return lua_error(L);
+  }
+  static std::optional<Error> authored_error(lua_State *L, int index) noexcept {
+    if (lua_type(L, index) != LUA_TUSERDATA || lua_rawlen(L, index) != sizeof(Error))
+      return {};
+    if (lua_getmetatable(L, index) == 0)
+      return {};
+    lua_rawgetp(L, LUA_REGISTRYINDEX, &authored_error_tag);
+    const bool tagged = lua_rawequal(L, -1, -2) != 0;
+    lua_pop(L, 2);
+    if (!tagged)
+      return {};
+    return *static_cast<const Error *>(lua_touserdata(L, index));
+  }
+  static int authored(lua_State *L) {
+    auto *self = static_cast<Runtime *>(lua_touserdata(L, lua_upvalueindex(1)));
+    bool failed = false;
+    Error rejected{ErrorCode::external_unknown};
+    {
+      auto admitted = raw_authored_admit(self->trace.owner);
+      if (!admitted.has_value()) {
+        rejected = admitted.error();
+        failed = true;
+      } else {
+        auto credit = std::move(admitted).value();
+        const int count = lua_gettop(L), site_type = lua_type(L, 1),
+                  value_type = lua_type(L, 2);
+        const bool site_available = lua_isinteger(L, 1) != 0;
+        const lua_Integer site = site_available ? lua_tointeger(L, 1) : 0;
+        try {
+          if (count != 2 || !site_available || site <= 0)
+            throw Error{ErrorCode::invalid_range};
+          if (value_type != LUA_TNUMBER && value_type != LUA_TBOOLEAN &&
+              value_type != LUA_TSTRING)
+            throw Error{ErrorCode::unsupported};
+          if (value_type == LUA_TSTRING) {
+            std::size_t length = 0;
+            const char *bytes = lua_tolstring(L, 2, &length);
+            const std::array fields{ByteView{self->trace.owner.generation},
+                                    ByteView{self->trace.owner.vm.lane},
+                                    raw_native(self->trace.owner.vm.ordinal),
+                                    raw_native(site),
+                                    raw_native(length),
+                                    std::as_bytes(std::span{bytes, length})};
+            if (self->trace.owner.enabled)
+              (void)raw_authored_publish(1513, fields);
+          } else if (value_type == LUA_TBOOLEAN) {
+            const int value = lua_toboolean(L, 2);
+            const std::array fields{ByteView{self->trace.owner.generation},
+                                    ByteView{self->trace.owner.vm.lane},
+                                    raw_native(self->trace.owner.vm.ordinal),
+                                    raw_native(site), raw_native(value)};
+            if (self->trace.owner.enabled)
+              (void)raw_authored_publish(1512, fields);
+          } else if (lua_isinteger(L, 2)) {
+            const lua_Integer value = lua_tointeger(L, 2);
+            const std::array fields{ByteView{self->trace.owner.generation},
+                                    ByteView{self->trace.owner.vm.lane},
+                                    raw_native(self->trace.owner.vm.ordinal),
+                                    raw_native(site), raw_native(value)};
+            if (self->trace.owner.enabled)
+              (void)raw_authored_publish(1510, fields);
+          } else {
+            const lua_Number value = lua_tonumber(L, 2);
+            const std::array fields{ByteView{self->trace.owner.generation},
+                                    ByteView{self->trace.owner.vm.lane},
+                                    raw_native(self->trace.owner.vm.ordinal),
+                                    raw_native(site), raw_native(value)};
+            if (self->trace.owner.enabled)
+              (void)raw_authored_publish(1511, fields);
+          }
+        } catch (const Error &caught_error) {
+          if (credit.has_value()) {
+            try {
+              if (site_available) {
+                const std::array fields{ByteView{self->trace.owner.generation},
+                                        ByteView{self->trace.owner.vm.lane},
+                                        raw_native(self->trace.owner.vm.ordinal),
+                                        raw_native(count),
+                                        raw_native(site_type),
+                                        raw_native(value_type),
+                                        raw_native(site_available),
+                                        raw_native(site),
+                                        raw_native(caught_error.code),
+                                        raw_native(caught_error.detail)};
+                (void)raw_authored_publish(1515, fields, &*credit);
+              } else {
+                const std::array fields{ByteView{self->trace.owner.generation},
+                                        ByteView{self->trace.owner.vm.lane},
+                                        raw_native(self->trace.owner.vm.ordinal),
+                                        raw_native(count),
+                                        raw_native(site_type),
+                                        raw_native(value_type),
+                                        raw_native(site_available),
+                                        raw_native(caught_error.code),
+                                        raw_native(caught_error.detail)};
+                (void)raw_authored_publish(1515, fields, &*credit);
+              }
+            } catch (const Error &ingest) {
+              raw_fence(ingest);
+            }
+          }
+          if (caught_error.code == ErrorCode::interrupted ||
+              caught_error.code == ErrorCode::audit_unavailable)
+            self->trace.owner.admission_failure = caught_error;
+          rejected = caught_error;
+          failed = true;
+        }
+      }
+    }
+    if (failed)
+      return authored_raise(L, rejected);
+    return 0;
+  }
+  static int module_load(lua_State *L) {
+    auto *self = static_cast<Runtime *>(lua_touserdata(L, lua_upvalueindex(1)));
+    luaL_checktype(L, 1, LUA_TSTRING);
+    luaL_checktype(L, 2, LUA_TSTRING);
+    luaL_checktype(L, 3, LUA_TTABLE);
+    int lua_status = LUA_ERRRUN;
+    bool failed = false;
+    Error rejected{ErrorCode::external_unknown};
+    {
+      try {
+        auto credit = self->claim(53);
+        std::size_t length = 0;
+        const char *source = lua_tolstring(L, 1, &length);
+        const char *name = lua_tostring(L, 2);
+        lua_status = self->load(L, {source, length}, name, SourceKind::module,
+                                credit ? &*credit : nullptr)
+                         .lua_status;
+      } catch (const Error &caught_error) {
+        self->acquisition_failed(caught_error);
+        rejected = caught_error;
+        failed = true;
+      }
+    }
+    if (failed)
+      return authored_raise(L, rejected);
+    if (lua_status != LUA_OK) {
+      lua_pushnil(L);
+      lua_insert(L, -2);
+      return 2;
+    }
+    lua_pushvalue(L, 3);
+    (void)lua_setupvalue(L, -2, 1);
+    return 1;
+  }
+  static int module_call(lua_State *L) {
+    auto *self = static_cast<Runtime *>(lua_touserdata(L, lua_upvalueindex(1)));
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+    if (!lua_checkstack(L, 2))
+      return luaL_error(L, "Module call stack exhausted");
+    int lua_status = LUA_ERRRUN;
+    bool failed = false;
+    Error rejected{ErrorCode::external_unknown};
+    {
+      try {
+        auto credit = self->claim(92);
+        const void *function =
+            self->trace.owner.enabled ? lua_topointer(L, 1) : nullptr;
+        const std::array fields{ByteView{self->trace.owner.vm.lane},
+                                raw_native(self->trace.owner.vm.ordinal),
+                                raw_native(function)};
+        const auto request =
+            self->trace.owner.enabled
+                ? raw_authored_publish(1517, fields, credit ? &*credit : nullptr)
+                : RawAuthoredReference{};
+        lua_pushvalue(L, 1);
+        lua_status = lua_pcall(L, 0, 1, 0);
+        const std::array returned{ByteView{request.lane}, raw_native(request.ordinal),
+                                  raw_native(lua_status)};
+        if (self->trace.owner.enabled)
+          (void)raw_authored_publish(1518, returned, credit ? &*credit : nullptr);
+      } catch (const Error &caught_error) {
+        self->acquisition_failed(caught_error);
+        rejected = caught_error;
+        failed = true;
+      }
+    }
+    if (failed)
+      return authored_raise(L, rejected);
+    lua_pushboolean(L, lua_status == LUA_OK);
+    lua_insert(L, -2);
+    return 2;
+  }
   lua_State *state = nullptr;
   Value scratch;
   std::string error;
@@ -327,23 +685,45 @@ struct CodingEngine::Runtime {
     std::memcpy(bridge_error.data(), message, count);
     bridge_error[count] = '\0';
   }
-  explicit Runtime(CodingEngine &e) : engine(e) {
-    state = luaL_newstate();
-    if (state == nullptr)
-      throw Error{ErrorCode::allocation};
-    *static_cast<Runtime **>(lua_getextraspace(state)) = this;
-    lua_sethook(state, interrupt_hook, LUA_MASKCOUNT, 1000);
-    lua_pushcfunction(state, install);
-    lua_pushlightuserdata(state, this);
-    if (lua_pcall(state, 1, 0, 0) != LUA_OK) {
-      lua_close(state);
-      state = nullptr;
-      throw Error{ErrorCode::allocation};
+  explicit Runtime(CodingEngine &e) : engine(e), trace(e) {
+    trace.begin(e.root_source_, e.root_source_length_);
+    try {
+      state = luaL_newstate();
+      trace.allocated(state != nullptr);
+      if (state == nullptr) {
+        trace.finish(2, Error{ErrorCode::allocation});
+        throw Error{ErrorCode::allocation};
+      }
+      *static_cast<Runtime **>(lua_getextraspace(state)) = this;
+      lua_sethook(state, interrupt_hook, LUA_MASKCOUNT, 1000);
+      lua_pushcfunction(state, install);
+      lua_pushlightuserdata(state, this);
+      trace.installing();
+      const int lua_status = lua_pcall(state, 1, 0, 0);
+      trace.installed(lua_status);
+      if (lua_status != LUA_OK) {
+        lua_close(state);
+        state = nullptr;
+        const auto caught_error = failure.value_or(Error{ErrorCode::allocation});
+        trace.finish(3, caught_error);
+        throw caught_error;
+      }
+    } catch (const Error &caught) {
+      if (state != nullptr) {
+        lua_close(state);
+        state = nullptr;
+        trace.finish(1, caught);
+      }
+      throw;
     }
   }
   ~Runtime() {
+    std::optional<RawThreadBinding> retained;
+    if (trace.handle)
+      retained.emplace(trace.handle);
     if (state != nullptr)
       lua_close(state);
+    trace.finish(1);
   }
   enum Op {
     request_op,
@@ -368,6 +748,24 @@ struct CodingEngine::Runtime {
   };
   static int install(lua_State *L) {
     auto *self = static_cast<Runtime *>(lua_touserdata(L, 1));
+    bool failed = false;
+    {
+      try {
+        return install_impl(L);
+      } catch (const Error &error) {
+        self->failed(error, error_name(error.code));
+        failed = true;
+      } catch (const std::bad_alloc &) {
+        self->failed({ErrorCode::allocation}, "allocation");
+        failed = true;
+      }
+    }
+    if (failed)
+      return luaL_error(L, "VM installation failed");
+    return 0;
+  }
+  static int install_impl(lua_State *L) {
+    auto *self = static_cast<Runtime *>(lua_touserdata(L, 1));
     // Host effects go through the owned audit boundary, including module reads.
     const luaL_Reg libraries[] = {{LUA_GNAME, luaopen_base},
                                   {LUA_COLIBNAME, luaopen_coroutine},
@@ -389,6 +787,12 @@ struct CodingEngine::Runtime {
       lua_rawsetp(L, LUA_REGISTRYINDEX, &markers[i]);
     }
     lua_newtable(L);
+    lua_pushliteral(L, "authored native error");
+    lua_setfield(L, -2, "__metatable");
+    lua_pushcfunction(L, authored_error_text);
+    lua_setfield(L, -2, "__tostring");
+    lua_rawsetp(L, LUA_REGISTRYINDEX, &authored_error_tag);
+    lua_newtable(L);
     constexpr const char *names[] = {
         "request", "call",          "context",       "edit",   "originals",
         "restore", "append",        "decode",        "encode", "display",
@@ -400,6 +804,15 @@ struct CodingEngine::Runtime {
       lua_pushcclosure(L, bridge, 2);
       lua_setfield(L, -2, names[i]);
     }
+    lua_pushlightuserdata(L, self);
+    lua_pushcclosure(L, authored, 1);
+    lua_setfield(L, -2, "emit");
+    lua_pushlightuserdata(L, self);
+    lua_pushcclosure(L, module_load, 1);
+    lua_setfield(L, -2, "_module_load");
+    lua_pushlightuserdata(L, self);
+    lua_pushcclosure(L, module_call, 1);
+    lua_setfield(L, -2, "_module_call");
     lua_newtable(L);
     lua_getfield(L, -2, "decode");
     lua_setfield(L, -2, "decode");
@@ -437,25 +850,30 @@ struct CodingEngine::Runtime {
         "function blackbird.tasks.edit(q) return blackbird.call('tasks_edit',q) end "
         "function blackbird.define_tool(d) return blackbird.call('tool_define',"
         "{definition=d}) end "
-        "do local cache,loading={},{}; function blackbird.module(name) "
+        "do local cache,loading={},{}; local load_module,call_module="
+        "blackbird._module_load,blackbird._module_call; "
+        "blackbird._module_load=nil;blackbird._module_call=nil; "
+        "function blackbird.module(name) "
         "if cache[name]~=nil then return cache[name] end "
         "assert(not loading[name], 'cyclic module import: '..name); "
         "local r=blackbird.call('module_source',{name=name}); "
         "assert(r.source, 'module unavailable: '..name); "
         "local env=setmetatable({}, {__index=_G}); "
-        "local fn=assert(load(r.source, '@module:'..name..':'..r.revision, 't', env)); "
-        "loading[name]=true; local ok,value=pcall(fn); loading[name]=nil; "
+        "local fn=assert(load_module(r.source, '@module:'..name..':'..r.revision, "
+        "env)); "
+        "loading[name]=true; local ok,value=call_module(fn); loading[name]=nil; "
         "if not ok then error(value) end; "
         "assert(value~=nil, 'module must return a value'); "
         "cache[name]=value; return value end end";
-    if (luaL_loadstring(L, tool_api) != LUA_OK || lua_pcall(L, 0, 0, 0) != LUA_OK)
+    if (self->load_and_call(L, tool_api, "tool-api", SourceKind::tool_api, 0) != LUA_OK)
       return lua_error(L);
 
     constexpr const char *print_program =
         "function print(...) local v={} for i=1,select('#',...) do "
         "v[i]=tostring(select(i,...)) end "
         "blackbird.display(table.concat(v,'\\t')..'\\n') end";
-    if (luaL_loadstring(L, print_program) != LUA_OK || lua_pcall(L, 0, 0, 0) != LUA_OK)
+    if (self->load_and_call(L, print_program, "print-program", SourceKind::print, 0) !=
+        LUA_OK)
       return lua_error(L);
     return 0;
   }
@@ -587,68 +1005,77 @@ struct CodingEngine::Runtime {
   }
   bool valid_module_source(std::string_view source) {
     const int base = lua_gettop(state);
-    const bool valid = luaL_loadbufferx(state, source.data(), source.size(),
-                                        "arco-module-candidate", "t") == LUA_OK;
-    lua_settop(state, base);
-    return valid;
+    try {
+      const bool valid = validation_load(source, "arco-module-candidate") == LUA_OK;
+      lua_settop(state, base);
+      return valid;
+    } catch (...) {
+      lua_settop(state, base);
+      throw;
+    }
   }
   bool valid_tool_source(std::string_view source) {
     const int base = lua_gettop(state);
     const auto wrapped = "return function(args)\n" + std::string{source} + "\nend";
-    const bool valid = luaL_loadbufferx(state, wrapped.data(), wrapped.size(),
-                                        "arco-tool-definition", "t") == LUA_OK;
-    lua_settop(state, base);
-    return valid;
+    try {
+      const bool valid = validation_load(wrapped, "arco-tool-definition") == LUA_OK;
+      lua_settop(state, base);
+      return valid;
+    } catch (...) {
+      lua_settop(state, base);
+      throw;
+    }
   }
   Value invoke_tool(const Value &definition, const Value &arguments) {
     return eval("local fn = function(args)\n" + string_field(definition, "source") +
                     "\nend\nreturn fn(_native_args)",
-                &arguments);
+                &arguments, SourceKind::tool);
   }
-  Value eval(std::string_view source, const Value *arguments = nullptr) {
+  Value eval(std::string_view source, const Value *arguments = nullptr,
+             SourceKind kind = SourceKind::root) {
     const int base = lua_gettop(state);
-    if (arguments) {
-      if (!lua_checkstack(state, 1024))
-        throw Error{ErrorCode::allocation};
-      lua_getglobal(state, "_native_args");
-      push_value(state, *arguments);
-      lua_setglobal(state, "_native_args");
-    }
+    bool installed_arguments = false;
     auto restore_arguments = [&] {
-      if (arguments) {
+      if (installed_arguments) {
         lua_pushvalue(state, base + 1);
         lua_setglobal(state, "_native_args");
+        installed_arguments = false;
       }
     };
-    if (luaL_loadbufferx(state, source.data(), source.size(), "arco-program", "t") !=
-            LUA_OK ||
-        lua_pcall(state, 0, 1, 0) != LUA_OK) {
-      const char *message = lua_tostring(state, -1);
-      error = message == nullptr ? "Lua error" : message;
-      const auto lost = error.size() > 512 ? error.size() - 512 : 0;
-      error.resize(std::min<std::size_t>(error.size(), 512));
-      RetainedState::MaintenanceScope maintenance{engine.log_.root()};
-      engine.log_.original(
-          {"lua.error", error,
-           Value::object(
-               {{"generation", Value{hex_identity(engine.generation_.bytes())}},
-                {"unretained_bytes", Value{Number{lost}}}})});
-      restore_arguments();
-      lua_settop(state, base);
-      throw failure.value_or(Error{ErrorCode::external_unknown});
-    }
-    if (!lua_checkstack(state, 1024)) {
-      restore_arguments();
-      lua_settop(state, base);
-      throw Error{ErrorCode::allocation};
-    }
-    std::size_t nodes = 0;
     try {
+      if (arguments) {
+        if (!lua_checkstack(state, 1024))
+          throw Error{ErrorCode::allocation};
+        lua_getglobal(state, "_native_args");
+        push_value(state, *arguments);
+        lua_setglobal(state, "_native_args");
+        installed_arguments = true;
+      }
+      if (load_and_call(state, source, "arco-program", kind, 1) != LUA_OK) {
+        const auto native_error = authored_error(state, -1);
+        const char *message = lua_tostring(state, -1);
+        error = native_error.has_value() ? error_name(native_error->code)
+                                         : (message == nullptr ? "Lua error" : message);
+        const auto lost = error.size() > 512 ? error.size() - 512 : 0;
+        error.resize(std::min<std::size_t>(error.size(), 512));
+        RetainedState::MaintenanceScope maintenance{engine.log_.root()};
+        engine.log_.original(
+            {"lua.error", error,
+             Value::object(
+                 {{"generation", Value{hex_identity(engine.generation_.bytes())}},
+                  {"unretained_bytes", Value{Number{lost}}}})});
+        throw native_error.value_or(
+            failure.value_or(Error{ErrorCode::external_unknown}));
+      }
+      if (!lua_checkstack(state, 1024))
+        throw Error{ErrorCode::allocation};
+      std::size_t nodes = 0;
       restore_arguments();
       auto result = read_value(state, -1, {0, &nodes});
       lua_settop(state, base);
       return result;
     } catch (...) {
+      restore_arguments();
       lua_settop(state, base);
       throw;
     }
@@ -1061,19 +1488,35 @@ void CodingEngine::poll_commands() {
       for (auto &event : events) {
         if (event.bytes) {
           if (command_failure_) {
-            unretained_bytes_ += event.bytes->size();
             continue;
           }
+          auto preserve_credit = raw_command_claim(154);
+          const auto id_size = event.job_id.size(), byte_size = event.bytes->size();
+          const auto preserve_request =
+              raw_command_linked(2011, event.original,
+                                 std::array{detail::raw_native_field(id_size),
+                                            detail::raw_string_field(event.job_id),
+                                            detail::raw_native_field(event.offset),
+                                            detail::raw_native_field(byte_size)},
+                                 preserve_credit ? &*preserve_credit : nullptr);
+          const auto semantic_before = log_.root().cursor();
           try {
-            const auto before = command_jobs_->read(Value::object(
-                {{"job_id", Value{event.job_id}}, {"count", Value{Number{0}}}}));
-            if (field(before, "retained_bytes") != Value{Number{event.offset}})
+            if (command_jobs_->retained_end(event.job_id) != event.offset)
               throw Error{ErrorCode::conflict};
             log_.original(
                 {"process.output", *event.bytes,
                  Value::object({{"attempt", Value{event.job_id}},
                                 {"byte_start", Value{Number{event.offset}}}})});
             command_jobs_->retained(event.job_id, event.offset + event.bytes->size());
+            const auto retained_end = event.offset + event.bytes->size();
+            const std::uint8_t branch = 1;
+            const Error error{};
+            (void)raw_command_linked(2012, preserve_request,
+                                     std::array{detail::raw_native_field(retained_end),
+                                                detail::raw_native_field(branch),
+                                                detail::raw_native_field(error.code),
+                                                detail::raw_native_field(error.detail)},
+                                     preserve_credit ? &*preserve_credit : nullptr);
             if (process_output) {
               try {
                 if (string_field(command_jobs_->foreground(), "job_id") == event.job_id)
@@ -1084,6 +1527,20 @@ void CodingEngine::poll_commands() {
               } // Presentation cannot undo successfully retained bytes.
             }
           } catch (const Error &error) {
+            const std::uint8_t branch = 2;
+            const auto retained_end = event.offset;
+            (void)raw_command_linked(2012, preserve_request,
+                                     std::array{detail::raw_native_field(retained_end),
+                                                detail::raw_native_field(branch),
+                                                detail::raw_native_field(error.code),
+                                                detail::raw_native_field(error.detail)},
+                                     preserve_credit ? &*preserve_credit : nullptr);
+            if (error.code == ErrorCode::interrupted &&
+                log_.root().state() == JournalWriterState::live &&
+                log_.root().cursor().journal == semantic_before.journal &&
+                log_.root().cursor().sequence == semantic_before.sequence &&
+                log_.root().cursor().end_offset == semantic_before.end_offset)
+              throw;
             if (diagnostic)
               diagnostic(
                   "command capture failed: " + std::string{error_name(error.code)} +
@@ -1091,11 +1548,21 @@ void CodingEngine::poll_commands() {
             command_failure_ = error;
             capacity_stopped_ = error.code == ErrorCode::capacity;
             command_jobs_->shutdown();
-            unretained_bytes_ += event.bytes->size();
-            const auto registry = command_jobs_->read(Value::object({}));
-            for (const auto &job : field(registry, "jobs").array())
-              if (string_field(job, "state") != "completed")
-                command_jobs_->capture_failed(string_field(job, "job_id"));
+            // The job still owns the unacknowledged exact original. No drop.
+            command_jobs_->capture_failed_all();
+          } catch (...) {
+            const std::uint8_t branch = 3;
+            const Error error{ErrorCode::allocation};
+            const auto retained_end = event.offset;
+            (void)raw_command_linked(2012, preserve_request,
+                                     std::array{detail::raw_native_field(retained_end),
+                                                detail::raw_native_field(branch),
+                                                detail::raw_native_field(error.code),
+                                                detail::raw_native_field(error.detail)},
+                                     preserve_credit ? &*preserve_credit : nullptr);
+            command_jobs_->shutdown();
+            command_jobs_->capture_failed_all();
+            throw error;
           }
           continue;
         }
@@ -1107,10 +1574,8 @@ void CodingEngine::poll_commands() {
               value = Value{false};
           }
         }
-        const auto snapshot = command_jobs_->read(Value::object(
-            {{"job_id", Value{event.job_id}}, {"count", Value{Number{0}}}}));
-        event.result.object().emplace_back("retained_bytes",
-                                           field(snapshot, "retained_bytes"));
+        event.result.object().emplace_back(
+            "retained_bytes", Value{Number{command_jobs_->retained_end(event.job_id)}});
         const auto encoded = unwrap(encode_packet(event.result));
         const auto disposition =
             string_field(event.result, "effect_outcome") == "unknown"
@@ -1119,13 +1584,17 @@ void CodingEngine::poll_commands() {
                     field(event.result, "exit_code") == Value{Number{0}}
                 ? AttemptDisposition::success
                 : AttemptDisposition::failure;
-        (void)unwrap(log_.root().submit_settlement(
-            {{},
-             AttemptObservationEvent{parse_id<OperationAttemptId>(event.job_id),
-                                     AttemptPhase::terminal,
-                                     disposition,
-                                     {encoded.begin(), encoded.end()}}}));
-        command_jobs_->settled(event.job_id, event.result);
+        command_jobs_->settlement(event, [&] {
+          const auto submitted = unwrap(log_.root().submit_settlement(
+              {{},
+               AttemptObservationEvent{parse_id<OperationAttemptId>(event.job_id),
+                                       AttemptPhase::terminal,
+                                       disposition,
+                                       {encoded.begin(), encoded.end()}}}));
+          if (submitted.evidence == RetainedEvidence::uncertain ||
+              submitted.evidence == RetainedEvidence::recovered_pending)
+            throw Error{ErrorCode::audit_unavailable};
+        });
         if (process_output && event.result.find("exit_code") &&
             string_field(command_jobs_->foreground(), "job_id") == event.job_id)
           try {
@@ -1157,6 +1626,8 @@ void CodingEngine::poll_commands() {
     if (settlement_ && !turn_running_ && !operation_depth_ && !command_jobs_->debt())
       settlement_.reset();
   } catch (const Error &error) {
+    if (error.code == ErrorCode::interrupted)
+      throw;
     command_jobs_->stop_all();
     command_failure_ = error;
     if (error.code != ErrorCode::capacity)
@@ -1367,11 +1838,16 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
     }
     status(description);
   }
+  // Pay for open, adapter receipt and a no-child cancellation terminal before
+  // publishing an attempt that must be closed even if the owner stops now.
+  auto exec_settlement_credit =
+      name == "exec" ? raw_command_claim(3 * raw_command_region_credit) : std::nullopt;
   RawRegion admission{raw_regions::command_admission};
   auto &root = log_.root();
   const auto decision = unwrap(root.issue<DecisionId>());
   const auto invocation = unwrap(root.issue<InvocationId>());
   const auto attempt = unwrap(root.issue<OperationAttemptId>());
+  const auto exec_id = name == "exec" ? hex_identity(attempt.bytes()) : std::string{};
   const auto serialized = unwrap(encode_packet_string(input));
   const auto raw = std::as_bytes(std::span{serialized.data(), serialized.size()});
   const ImmutableBytes bytes{raw.begin(), raw.end()};
@@ -1439,27 +1915,70 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
     const std::function<Value(OperationAttemptId)> &fn;
     Value result;
     std::optional<Error> error;
-    explicit Boundary(const std::function<Value(OperationAttemptId)> &f) : fn(f) {}
+    std::optional<RawControlToken> receipt_credit;
+    std::optional<RawRegionPrepaidScope> receipt_scope;
+    bool dispatched = false;
+    Boundary(const std::function<Value(OperationAttemptId)> &f,
+             std::optional<RawControlToken> credit)
+        : fn(f), receipt_credit(std::move(credit)) {}
     Result<void> dispatch(const EffectIntent &intent) override {
+      // The prepaid open append has finished. Native body admission remains
+      // interruptible and never borrows the caller's settlement region bank.
+      receipt_scope.reset();
+      dispatched = true;
       try {
         result = fn(intent.attempt);
-        return Result<void>::success();
       } catch (const Error &e) {
         error = e;
-        return Result<void>::failure(e);
       } catch (const std::bad_alloc &) {
         error = Error{ErrorCode::allocation};
-        return Result<void>::failure(*error);
       } catch (const std::exception &) {
         error = Error{ErrorCode::external_unknown};
-        return Result<void>::failure(*error);
       }
+      // dispatch writes its zero-source, one-event adapter receipt after this
+      // return. Only that bounded append borrows this caller's prepaid bank.
+      if (receipt_credit)
+        receipt_scope.emplace(*receipt_credit);
+      return error ? Result<void>::failure(*error) : Result<void>::success();
     }
-  } boundary{body};
-  const auto report = unwrap(root.dispatch(attempt, boundary));
+  } boundary{body, std::move(exec_settlement_credit)};
+  auto interrupted_terminal = [&](std::string_view message) {
+    std::optional<RawRegionPrepaidScope> terminal_scope;
+    if (boundary.receipt_credit)
+      terminal_scope.emplace(*boundary.receipt_credit);
+    const auto bytes = std::as_bytes(std::span{message.data(), message.size()});
+    (void)unwrap(root.submit_settlement(
+        {{},
+         AttemptObservationEvent{attempt,
+                                 AttemptPhase::terminal,
+                                 AttemptDisposition::unknown,
+                                 {bytes.begin(), bytes.end()}}}));
+  };
+  const auto report = [&] {
+    struct ClearReceiptScope {
+      Boundary &owner;
+      ~ClearReceiptScope() { owner.receipt_scope.reset(); }
+    } clear{boundary};
+    if (boundary.receipt_credit)
+      boundary.receipt_scope.emplace(*boundary.receipt_credit);
+    const auto dispatched = root.dispatch(attempt, boundary);
+    if (!dispatched.has_value() && name == "exec" && !boundary.dispatched &&
+        dispatched.error().code == ErrorCode::interrupted) {
+      interrupted_terminal(
+          "exec interrupted before adapter dispatch; no effect replayed");
+    }
+    return unwrap(dispatched);
+  }();
   unwrap(report.recording);
   if (!report.dispatched)
     throw Error{ErrorCode::conflict};
+  if (name == "exec" && boundary.error &&
+      boundary.error->code == ErrorCode::interrupted &&
+      !command_jobs_->contains(exec_id)) {
+    interrupted_terminal("exec adapter interrupted before command registration; "
+                         "outcome unknown; no replay");
+    throw *boundary.error;
+  }
   Value result =
       boundary.error ? error_value(*boundary.error) : std::move(boundary.result);
   if (name == "program_config" && boundary.error) {
@@ -1509,8 +2028,7 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
                           boundary.error->detail == ETIMEDOUT) ||
                          (name == "exec" && result.find("timed_out") &&
                           field(result, "timed_out") == Value{true});
-  const bool persistent_command =
-      name == "exec" && command_jobs_->contains(hex_identity(attempt.bytes()));
+  const bool persistent_command = name == "exec" && command_jobs_->contains(exec_id);
   if (name == "exec" && !result.find("output_ref")) {
     result.object().emplace_back("output_ref", Value{hex_identity(attempt.bytes())});
     if (timed_out) {
@@ -2229,40 +2747,90 @@ Value CodingEngine::call(std::string name, Value arguments) {
     }
     if (name == "read_process_output") {
       const auto &reference = string_field(arguments, "output_ref");
+      auto read_credit = raw_command_claim(58);
+      const auto reference_size = reference.size();
+      const std::uint8_t mode = 2;
+      const auto request =
+          raw_command_data(2037, std::array{detail::raw_native_field(reference_size),
+                                            detail::raw_string_field(reference),
+                                            detail::raw_native_field(mode)});
       bool known = false;
       std::string raw;
-      for (std::size_t ordinal = 0; ordinal < log_.root().fact_count(); ++ordinal) {
-        const auto fact = unwrap(log_.root().fact(ordinal));
-        const auto *record = std::get_if<ApplicationRecordEvent>(&fact.event.body);
-        if (!record || record->channel != ApplicationChannel::log)
-          continue;
-        const auto packet = unwrap(read_packet(record->payload));
-        const auto &label = string_field(packet, "label");
-        if (label != "operation.result" && label != "process.output")
-          continue;
-        const auto &metadata = field(packet, "metadata");
-        const auto *old_attempt = metadata.find("attempt");
-        if (!old_attempt || old_attempt->string() != reference)
-          continue;
-        if (label == "operation.result") {
-          const auto *op = metadata.find("operation");
-          if (op && op->string() == "exec")
+      try {
+        for (std::size_t ordinal = 0; ordinal < log_.root().fact_count(); ++ordinal) {
+          const auto fact = unwrap(log_.root().fact(ordinal));
+          const auto *record = std::get_if<ApplicationRecordEvent>(&fact.event.body);
+          if (!record || record->channel != ApplicationChannel::log)
+            continue;
+          const auto packet = unwrap(read_packet(record->payload));
+          const auto &label = string_field(packet, "label");
+          if (label != "operation.result" && label != "process.output")
+            continue;
+          const auto &metadata = field(packet, "metadata");
+          const auto *old_attempt = metadata.find("attempt");
+          if (!old_attempt || old_attempt->string() != reference)
+            continue;
+          if (label == "operation.result") {
+            const auto *op = metadata.find("operation");
+            if (op && op->string() == "exec")
+              known = true;
+          }
+          if (label == "process.output") {
             known = true;
-        }
-        if (label == "process.output") {
-          known = true;
-          for (const auto dependency : fact.event.dependencies) {
-            const auto bytes = unwrap(log_.root().source(dependency));
-            raw.append(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+            for (const auto dependency : fact.event.dependencies) {
+              auto source_credit = raw_command_claim(96);
+              const auto bytes = unwrap(log_.root().source(dependency));
+              const auto source_size = bytes.size();
+              (void)raw_command_linked(
+                  2038, request,
+                  std::array{ByteView{fact.record.journal.bytes()},
+                             detail::raw_native_field(fact.record.sequence),
+                             ByteView{dependency.journal.bytes()},
+                             detail::raw_native_field(dependency.sequence),
+                             detail::raw_native_field(source_size)},
+                  source_credit ? &*source_credit : nullptr);
+              raw.append(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+            }
           }
         }
+        if (!known)
+          throw Error{ErrorCode::invalid_range};
+        // Retrieval supports byte ranges only, never file line semantics.
+        if (arguments.find("line_start") || arguments.find("line_end"))
+          throw Error{ErrorCode::invalid_range};
+        auto result = process_output_presentation(raw, arguments);
+        const std::uint8_t branch = 1;
+        const Error error{};
+        const auto source_size = raw.size();
+        (void)raw_command_linked(2039, request,
+                                 std::array{detail::raw_native_field(branch),
+                                            detail::raw_native_field(error.code),
+                                            detail::raw_native_field(error.detail),
+                                            detail::raw_native_field(source_size)},
+                                 read_credit ? &*read_credit : nullptr);
+        return result;
+      } catch (const Error &error) {
+        const std::uint8_t branch = 2;
+        const auto source_size = raw.size();
+        (void)raw_command_linked(2039, request,
+                                 std::array{detail::raw_native_field(branch),
+                                            detail::raw_native_field(error.code),
+                                            detail::raw_native_field(error.detail),
+                                            detail::raw_native_field(source_size)},
+                                 read_credit ? &*read_credit : nullptr);
+        throw;
+      } catch (...) {
+        const std::uint8_t branch = 3;
+        const Error error{ErrorCode::allocation};
+        const auto source_size = raw.size();
+        (void)raw_command_linked(2039, request,
+                                 std::array{detail::raw_native_field(branch),
+                                            detail::raw_native_field(error.code),
+                                            detail::raw_native_field(error.detail),
+                                            detail::raw_native_field(source_size)},
+                                 read_credit ? &*read_credit : nullptr);
+        throw;
       }
-      if (!known)
-        throw Error{ErrorCode::invalid_range};
-      // Retrieval supports byte ranges only, never file line semantics.
-      if (arguments.find("line_start") || arguments.find("line_end"))
-        throw Error{ErrorCode::invalid_range};
-      return process_output_presentation(raw, arguments);
     }
     if (name == "context_repair") {
       if (string_field(arguments, "base") != context_.head() || operation_depth_ != 1 ||
@@ -2681,7 +3249,9 @@ void CodingEngine::turn(TurnInput input) {
   context_.begin_workflow();
   try {
     generation_ = unwrap(log_.root().issue<DefinitionGenerationId>());
-    log_.retain_program(workflow, generation_);
+    root_source_.reset();
+    root_source_ = log_.retain_program(workflow, generation_);
+    root_source_length_ = workflow.size();
     if (!prompt.empty())
       context_.append({Value::object({{"role", Value{"user"}},
                                       {"content", Value{std::string{prompt}}}})},

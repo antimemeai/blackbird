@@ -9,6 +9,7 @@
 
 namespace blackbird {
 namespace {
+thread_local RawControlToken *prepaid_region_bank = nullptr;
 struct RestoreErrno {
   int saved = errno;
   ~RestoreErrno() { errno = saved; }
@@ -71,27 +72,39 @@ void require_data_admission(std::span<const ByteView> fields) {
 }
 } // namespace
 
+RawRegionPrepaidScope::RawRegionPrepaidScope(RawControlToken &bank) noexcept
+    : previous_(prepaid_region_bank) {
+  prepaid_region_bank = &bank;
+}
+RawRegionPrepaidScope::~RawRegionPrepaidScope() { prepaid_region_bank = previous_; }
+
 RawRegion::RawRegion(const RawRegionSites &sites, RawRegionOptions options)
     : sites_(&sites), options_(options) {
   const RestoreErrno restore;
   if (!raw_enabled())
     return;
-  auto held =
-      raw_claim_control(end_record_bytes + outcome_record_bytes + error_record_bytes);
+  prepaid_ = prepaid_region_bank != nullptr &&
+             sites.begin == raw_regions::retained_append.begin;
+  auto held = prepaid_ ? prepaid_region_bank->split(432)
+                       : raw_claim_control(end_record_bytes + outcome_record_bytes +
+                                           error_record_bytes);
   if (!held.has_value()) {
     if (held.error().code != ErrorCode::interrupted)
       raw_fence(held.error());
     throw held.error();
   }
   claim_.emplace(std::move(held).value());
-  require_data_admission(begin_record_bytes);
+  if (!prepaid_)
+    require_data_admission(begin_record_bytes);
   const auto clock = raw_local_clock(options_.cpu);
   const auto fields = clock_fields(clock);
   const auto exceptions = std::uncaught_exceptions();
   std::array<ByteView, 12> body{};
   std::copy(fields.begin(), fields.end(), body.begin());
   body.back() = native_bytes(exceptions);
-  auto emitted = raw_emit(sites_->begin, body, RawPartition::data);
+  auto emitted = raw_emit(sites_->begin, body,
+                          prepaid_ ? RawPartition::control : RawPartition::data,
+                          prepaid_ && claim_ ? &*claim_ : nullptr);
   if (!emitted.has_value())
     throw emitted.error();
   begin_ = emitted.value();
@@ -104,8 +117,11 @@ void RawRegion::observe(const RawRegionObservation &observation) {
                           native_bytes(observation.history),
                           native_bytes(observation.bytes),
                           native_bytes(observation.sequence)};
-  require_data_admission(fields);
-  require_emission(raw_emit(sites_->observation, fields, RawPartition::data));
+  if (!prepaid_)
+    require_data_admission(fields);
+  require_emission(raw_emit(sites_->observation, fields,
+                            prepaid_ ? RawPartition::control : RawPartition::data,
+                            prepaid_ && claim_ ? &*claim_ : nullptr));
 }
 void RawRegion::linkage(const RawRegionLinkage &linkage) {
   const RestoreErrno restore;

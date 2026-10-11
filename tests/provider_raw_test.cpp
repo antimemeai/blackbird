@@ -44,6 +44,9 @@ extern "C" int poll(pollfd *fds, nfds_t count, int timeout) {
   return native_poll(fds, count, timeout);
 }
 namespace {
+// Auth resolution preclaims its source-bounded credential-packet text burst,
+// which exceeds one MiB before any actual request bytes are acquired.
+constexpr RawCapacities owned_provider_capacities{2 * 1024 * 1024, 128 * 1024, 4096};
 void check(bool condition, const char *message) {
   if (!condition)
     throw std::runtime_error{message};
@@ -341,7 +344,55 @@ void compatibility_exception(const std::filesystem::path &directory,
   {
     RawThreadBinding binding{producer, epoch};
     auto login = unwrap(codex_login(config));
-    check(records(channel).empty(), "private authorization response captured");
+    const auto authorization = records(channel);
+    std::uint64_t action = 0;
+    unsigned private_begins = 0, private_returns = 0;
+    std::optional<RawEventRef> pending;
+    const std::array<std::uint8_t, 5> private_operations{1, 1, 2, 3, 2};
+    const std::array<std::uint32_t, 15> private_sites{1600, 1601, 1614, 1617, 1618,
+                                                      1615, 1616, 1615, 1616, 1615,
+                                                      1616, 1617, 1618, 1607, 1608};
+    check(authorization.size() == private_sites.size(),
+          "private authorization operation count changed");
+    std::size_t private_index = 0;
+    for (const auto &record : authorization) {
+      check(record.site == private_sites[private_index++],
+            "private authorization site sequence changed");
+      const std::string literal{reinterpret_cast<const char *>(record.body.data()),
+                                record.body.size()};
+      check(literal.find("raw-test-private-token") == std::string::npos &&
+                literal.find("fixture-account") == std::string::npos,
+            "private authorization payload captured");
+      ByteView body{record.body};
+      if (record.site == 1600) {
+        check(action == 0, "duplicate authorization owner");
+        action = record.ordinal;
+      } else if (record.site == 1615 || record.site == 1617) {
+        check(action != 0 && !pending && private_begins < private_operations.size(),
+              "private authorization request sequence changed");
+        ref(body, epoch, action);
+        check(native<std::uint8_t>(body) == private_operations[private_begins] &&
+                  body.empty(),
+              "private authorization request body changed");
+        pending = RawEventRef{epoch, record.ordinal};
+        ++private_begins;
+      } else if (record.site == 1616 || record.site == 1618) {
+        if (!pending)
+          throw std::runtime_error{"private authorization return lacks request"};
+        ref(body, epoch, action);
+        ref(body, epoch, pending->ordinal);
+        check(native<std::uint8_t>(body) == 1 && body.empty(),
+              "private authorization return body changed");
+        pending.reset();
+        ++private_returns;
+      } else {
+        check(record.site == 1601 || record.site == 1614 || record.site == 1607 ||
+                  record.site == 1608,
+              "private authorization emitted a response body");
+      }
+    }
+    check(action != 0 && private_begins == 5 && private_returns == 5 && !pending,
+          "private authorization metadata missing");
     config.response_observer = [](std::string_view) {
       throw std::runtime_error{"compatibility observer failure"};
     };
@@ -472,8 +523,7 @@ void run(const std::filesystem::path &directory, const std::string &executable,
   epoch[0] = std::byte{7};
   const auto name = "/bbrp" + std::to_string(::getpid());
   (void)RawChannel::unlink(name);
-  auto channel =
-      unwrap(RawChannel::create(name, epoch, {1024 * 1024, 128 * 1024, 4096}));
+  auto channel = unwrap(RawChannel::create(name, epoch, owned_provider_capacities));
   RawProducer producer{channel};
   std::string observed;
   bool failed = false;
@@ -630,8 +680,8 @@ void preserved_originals(const std::filesystem::path &directory,
   std::filesystem::create_directory(session);
   check(::chmod(session.c_str(), 0700) == 0, "private runtime directory");
   {
-    auto runtime = unwrap(RawRuntime::open(session, environment,
-                                           {{1024 * 1024, 128 * 1024, 4096}, 4096}));
+    auto runtime = unwrap(
+        RawRuntime::open(session, environment, {owned_provider_capacities, 4096}));
     auto handle = unwrap(runtime->prepare_thread());
     RawThreadBinding binding{handle};
     const auto returned = auth.request(
@@ -686,7 +736,7 @@ void producer_death(const std::filesystem::path &directory,
   IdentityBytes identity{};
   identity[0] = std::byte{23};
   const auto environment = unwrap(EnvironmentId::from_bytes(identity));
-  const RawRuntimeOptions options{{1024 * 1024, 128 * 1024, 4096}, 4096};
+  const RawRuntimeOptions options{owned_provider_capacities, 4096};
   std::array<int, 2> reports{}, commands{};
   check(::pipe(reports.data()) == 0 && ::pipe(commands.data()) == 0,
         "producer death pipes");

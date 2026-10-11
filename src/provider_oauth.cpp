@@ -1,5 +1,7 @@
 #include "blackbird/json.hpp"
+#include "blackbird/process_lifetime.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/raw_auth.hpp"
 #include "blackbird/tools.hpp"
 #include "native_process.hpp"
 #include <algorithm>
@@ -22,25 +24,90 @@
 namespace blackbird {
 namespace {
 volatile std::sig_atomic_t auth_interrupted = 0;
-extern "C" void auth_signal(int) { auth_interrupted = 1; }
+volatile std::sig_atomic_t auth_signal_writer = -1;
+extern "C" void auth_signal(int) {
+  const int saved = errno;
+  auth_interrupted = 1;
+  const int fd = auth_signal_writer;
+  if (fd >= 0) {
+    const char byte = 1;
+    ssize_t result;
+    do {
+      result = ::write(fd, &byte, 1);
+    } while (result < 0 && errno == EINTR);
+  }
+  errno = saved;
+}
 struct AuthSignals {
   struct sigaction before_int{}, before_term{};
+  std::array<int, 2> pipe{-1, -1};
   AuthSignals() {
-    auth_interrupted = 0;
-    struct sigaction action{};
-    action.sa_handler = auth_signal;
-    sigemptyset(&action.sa_mask);
-    if (::sigaction(SIGINT, &action, &before_int) != 0)
+    sigset_t selected{}, previous{};
+    sigemptyset(&selected);
+    sigaddset(&selected, SIGINT);
+    sigaddset(&selected, SIGTERM);
+    if (::sigprocmask(SIG_BLOCK, &selected, &previous) != 0)
       throw Error{ErrorCode::io, errno};
-    if (::sigaction(SIGTERM, &action, &before_term) != 0) {
+    bool installed = false;
+    try {
+      {
+        const std::lock_guard lock{detail::process_spawn_mutex};
+        if (::pipe(pipe.data()) != 0)
+          throw Error{ErrorCode::io, errno};
+        for (const int fd : pipe) {
+          if (::fcntl(fd, F_SETFD, FD_CLOEXEC) != 0)
+            throw Error{ErrorCode::io, errno};
+          const int flags = ::fcntl(fd, F_GETFL);
+          if (flags < 0 || ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0)
+            throw Error{ErrorCode::io, errno};
+        }
+      }
+      auth_interrupted = 0;
+      auth_signal_writer = pipe[1];
+      struct sigaction action{};
+      action.sa_handler = auth_signal;
+      action.sa_mask = selected;
+      if (::sigaction(SIGINT, &action, &before_int) != 0)
+        throw Error{ErrorCode::io, errno};
+      installed = true;
+      if (::sigaction(SIGTERM, &action, &before_term) != 0)
+        throw Error{ErrorCode::io, errno};
+    } catch (...) {
+      if (installed)
+        (void)::sigaction(SIGINT, &before_int, nullptr);
+      auth_signal_writer = -1;
+      for (int fd : pipe)
+        if (fd >= 0)
+          (void)::close(fd);
+      (void)::sigprocmask(SIG_SETMASK, &previous, nullptr);
+      throw;
+    }
+    if (::sigprocmask(SIG_SETMASK, &previous, nullptr) != 0) {
+      const int error = errno;
       (void)::sigaction(SIGINT, &before_int, nullptr);
-      throw Error{ErrorCode::io, errno};
+      (void)::sigaction(SIGTERM, &before_term, nullptr);
+      auth_signal_writer = -1;
+      for (int fd : pipe)
+        (void)::close(fd);
+      throw Error{ErrorCode::io, error};
     }
   }
   ~AuthSignals() {
+    const int saved = errno;
+    sigset_t selected{}, previous{};
+    sigemptyset(&selected);
+    sigaddset(&selected, SIGINT);
+    sigaddset(&selected, SIGTERM);
+    (void)::sigprocmask(SIG_BLOCK, &selected, &previous);
     (void)::sigaction(SIGINT, &before_int, nullptr);
     (void)::sigaction(SIGTERM, &before_term, nullptr);
+    auth_signal_writer = -1;
+    for (int fd : pipe)
+      (void)::close(fd);
+    (void)::sigprocmask(SIG_SETMASK, &previous, nullptr);
+    errno = saved;
   }
+  RawWaitControl control() const noexcept { return {{pipe[0], -1}, {}}; }
 };
 std::string text(const Value &v, std::string_view k, std::string fallback = {}) {
   const auto *p = v.find(k);
@@ -157,9 +224,46 @@ std::map<std::string, std::string> query(std::string_view s) {
   }
   return out;
 }
-ProviderHttpResponse http(const ProviderAuthConfig &c, const ProviderHttpRequest &r) {
-  return c.http ? c.http(r) : provider_http(r, c);
+ProviderHttpResponse http(const ProviderAuthConfig &c, const ProviderHttpRequest &r,
+                          RawAuthTrace &trace, std::uint8_t operation) {
+  RawAuthExchange exchange{trace, {1609, 1610}};
+  try {
+    exchange.start(operation);
+    auto result = c.http ? c.http(r) : provider_http(r, c);
+    exchange.returned(&result.status);
+    return result;
+  } catch (const Error &error) {
+    exchange.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    exchange.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    exchange.finish(4);
+    throw;
+  } catch (...) {
+    exchange.finish(5);
+    throw;
+  }
 }
+template <class Operation>
+auto auth_callback(RawAuthTrace &trace, std::uint8_t operation, Operation &&body) {
+  trace.callback(operation, 1);
+  try {
+    if constexpr (std::is_void_v<std::invoke_result_t<Operation>>) {
+      body();
+      trace.callback(operation, 2);
+    } else {
+      auto result = body();
+      trace.callback(operation, 2);
+      return result;
+    }
+  } catch (...) {
+    trace.callback(operation, 3);
+    throw;
+  }
+}
+
 std::string process(const ProviderAuthConfig &c, std::vector<std::string> args,
                     std::string_view input, int *exit = nullptr) {
   detail::Child child;
@@ -250,12 +354,16 @@ struct Socket {
 };
 class Callback {
 public:
-  Socket listener{::socket(AF_INET, SOCK_STREAM, 0)};
+  Socket listener{-1};
   std::string uri;
   Callback() {
-    if (listener.fd < 0)
-      throw Error{ErrorCode::io, errno};
-    (void)::fcntl(listener.fd, F_SETFD, FD_CLOEXEC);
+    {
+      const std::lock_guard spawn_lock{detail::process_spawn_mutex};
+      listener.fd = ::socket(AF_INET, SOCK_STREAM, 0);
+      if (listener.fd < 0 || ::fcntl(listener.fd, F_SETFD, FD_CLOEXEC) < 0 ||
+          ::fcntl(listener.fd, F_SETFL, O_NONBLOCK) < 0)
+        throw Error{ErrorCode::io, errno};
+    }
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -283,11 +391,16 @@ public:
         throw Error{ErrorCode::io, errno};
       if (!ready)
         continue;
-      Socket client{::accept(listener.fd, nullptr, nullptr)};
+      Socket client{-1};
+      {
+        const std::lock_guard spawn_lock{detail::process_spawn_mutex};
+        client.fd = ::accept(listener.fd, nullptr, nullptr);
+        if (client.fd >= 0 && (::fcntl(client.fd, F_SETFD, FD_CLOEXEC) < 0 ||
+                               ::fcntl(client.fd, F_SETFL, O_NONBLOCK) < 0))
+          throw Error{ErrorCode::io, errno};
+      }
       if (client.fd < 0)
         continue;
-      (void)::fcntl(client.fd, F_SETFD, FD_CLOEXEC);
-      (void)::fcntl(client.fd, F_SETFL, O_NONBLOCK);
       std::string request;
       const auto read_until =
           std::min(until, detail::Clock::now() + std::chrono::seconds{3});
@@ -464,161 +577,230 @@ Value auth_validate_openai_identity(OpenAIIdentity identity, const Value &jwks,
 }
 void ProviderAuth::browser_login(std::string_view p, std::string_view account,
                                  const std::function<void(std::string_view)> &notice,
-                                 const std::function<std::string()> &read_secret) {
-  const auto d = descriptor(p);
-  if (text(d, "login") != "browser" || !notice || !read_secret)
-    throw Error{ErrorCode::unsupported};
-  const auto registration = this->registration(p, account);
-  const auto expected = number(registration, "revision");
-  const auto verifier = secure_nonce(), state = secure_nonce(), nonce = secure_nonce();
-  auto client = p == "openai" ? text(registration, "client_id", text(d, "client_id"))
-                              : text(d, "client_id");
-  const bool new_registration = client == "dynamic_agent_client";
-  std::string callback, authorize;
-  std::unique_ptr<Callback> server;
-  if (p == "openai") {
-    server = std::make_unique<Callback>();
-    callback = server->uri;
-    authorize = "https://auth.openai.com/api/accounts/authorize";
-  } else {
-    callback = "https://platform.claude.com/oauth/code/callback";
-    authorize = "https://claude.ai/oauth/authorize";
-  }
-  std::string url = authorize + "?response_type=code&client_id=" + form(client) +
-                    "&redirect_uri=" + form(callback) +
-                    "&scope=" + form(text(d, "scope")) + "&state=" + form(state) +
-                    "&code_challenge_method=S256&code_challenge=" +
-                    auth_pkce_challenge(verifier, config_);
-  Value metadata = Value::object({});
-  if (p == "openai") {
-    // Stable host identity is separate from account credentials; no provider cache.
-    std::filesystem::create_directories(directory().parent_path());
-    const auto hostfile = directory().parent_path() / "auth-host-id";
-    int fd = ::open(hostfile.c_str(), O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600);
-    if (fd < 0)
-      throw Error{ErrorCode::io, errno};
-    struct Close {
-      int fd;
-      ~Close() { (void)::close(fd); }
-    } close{fd};
-    struct stat st{};
-    if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_uid != ::geteuid() ||
-        (st.st_mode & 0077) != 0 || st.st_nlink != 1)
-      throw Error{ErrorCode::conflict};
-    if (::flock(fd, LOCK_EX) != 0)
-      throw Error{ErrorCode::io, errno};
-    std::string host;
-    char bytes[128];
-    const auto got = ::read(fd, bytes, sizeof(bytes));
-    if (got < 0)
-      throw Error{ErrorCode::io, errno};
-    if (got > 0)
-      host.assign(bytes, static_cast<std::size_t>(got));
-    else {
-      host = secure_nonce();
-      if (::write(fd, host.data(), host.size()) != static_cast<ssize_t>(host.size()) ||
-          ::fsync(fd) != 0)
-        throw Error{ErrorCode::io, errno};
-    }
-    if (host.size() != 43 ||
-        host.find_first_not_of(
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_") !=
-            std::string::npos)
-      throw Error{ErrorCode::corrupt};
-    if (::flock(fd, LOCK_UN) != 0)
-      throw Error{ErrorCode::io, errno};
-    url += (new_registration ? "&agent_name_hint=Blackbird&ext_agent_host_id="
-                             : "&ext_agent_host_id=") +
-           form(host) + "&nonce=" + form(nonce) +
-           "&resource=https%3A%2F%2Fapi.openai.com%2Fv1";
-    metadata.object().emplace_back("host_id", Value{host});
-  }
-  notice("Open this sign-in URL in your browser:\n" + url + "\n");
-  std::map<std::string, std::string> values;
-  if (server)
-    values = server->wait(config_, state);
-  else {
-    notice("Paste the returned code#state (input hidden): ");
-    const auto input = read_secret();
-    const auto at = input.find('#');
-    if (at != std::string::npos) {
-      values["code"] = input.substr(0, at);
-      values["state"] = input.substr(at + 1);
+                                 const std::function<std::string()> &read_secret,
+                                 const RawAuthParent *parent) {
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::browser_login, {p, account}, parent}};
+  try {
+    trace.start();
+    const auto child = trace.child();
+    const auto d = descriptor(p, &child);
+    if (text(d, "login") != "browser" || !notice || !read_secret)
+      throw Error{ErrorCode::unsupported};
+    const auto registration = this->registration(p, account, &child);
+    trace.stage(RawAuthField::browser_revision);
+    const auto expected = number(registration, "revision");
+    trace.scalar(RawAuthField::browser_revision, expected);
+    const auto verifier = secure_nonce(), state = secure_nonce(),
+               nonce = secure_nonce();
+    auto client = p == "openai" ? text(registration, "client_id", text(d, "client_id"))
+                                : text(d, "client_id");
+    const bool new_registration = client == "dynamic_agent_client";
+    std::string callback, authorize;
+    std::unique_ptr<Callback> server;
+    if (p == "openai") {
+      server = std::make_unique<Callback>();
+      callback = server->uri;
+      authorize = "https://auth.openai.com/api/accounts/authorize";
     } else {
-      const auto q = input.find('?');
-      values = query(q == std::string::npos ? std::string_view{input}
-                                            : std::string_view{input}.substr(q + 1));
+      callback = "https://platform.claude.com/oauth/code/callback";
+      authorize = "https://claude.ai/oauth/authorize";
     }
-  }
-  if (values["state"] != state || !values["error"].empty() || values["code"].empty())
-    throw Error{ErrorCode::provider_auth};
-  if (p == "openai") {
-    const auto returned = values["client_id"];
-    if (new_registration) {
-      client = returned;
-      if (client.empty() || client == "dynamic_agent_client" || client.size() > 256 ||
-          client.find_first_not_of(
+    std::string challenge;
+    RawAuthExchange pkce{trace, {1615, 1616}};
+    try {
+      pkce.start(4);
+      challenge = auth_pkce_challenge(verifier, config_);
+      pkce.returned();
+    } catch (const Error &error) {
+      pkce.finish(2, &error);
+      throw;
+    } catch (const std::bad_alloc &) {
+      pkce.finish(3);
+      throw;
+    } catch (const std::length_error &) {
+      pkce.finish(4);
+      throw;
+    } catch (...) {
+      pkce.finish(5);
+      throw;
+    }
+    std::string url = authorize + "?response_type=code&client_id=" + form(client) +
+                      "&redirect_uri=" + form(callback) +
+                      "&scope=" + form(text(d, "scope")) + "&state=" + form(state) +
+                      "&code_challenge_method=S256&code_challenge=" + challenge;
+    Value metadata = Value::object({});
+    if (p == "openai") {
+      // Stable host identity is separate from account credentials; no provider cache.
+      std::filesystem::create_directories(directory().parent_path());
+      const auto hostfile = directory().parent_path() / "auth-host-id";
+      int fd =
+          ::open(hostfile.c_str(), O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600);
+      if (fd < 0)
+        throw Error{ErrorCode::io, errno};
+      struct Close {
+        int fd;
+        ~Close() { (void)::close(fd); }
+      } close{fd};
+      struct stat st{};
+      if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_uid != ::geteuid() ||
+          (st.st_mode & 0077) != 0 || st.st_nlink != 1)
+        throw Error{ErrorCode::conflict};
+      if (::flock(fd, LOCK_EX) != 0)
+        throw Error{ErrorCode::io, errno};
+      std::string host;
+      char bytes[128];
+      const auto got = ::read(fd, bytes, sizeof(bytes));
+      if (got < 0)
+        throw Error{ErrorCode::io, errno};
+      if (got > 0)
+        host.assign(bytes, static_cast<std::size_t>(got));
+      else {
+        host = secure_nonce();
+        if (::write(fd, host.data(), host.size()) !=
+                static_cast<ssize_t>(host.size()) ||
+            ::fsync(fd) != 0)
+          throw Error{ErrorCode::io, errno};
+      }
+      if (host.size() != 43 ||
+          host.find_first_not_of(
               "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_") !=
               std::string::npos)
+        throw Error{ErrorCode::corrupt};
+      if (::flock(fd, LOCK_UN) != 0)
+        throw Error{ErrorCode::io, errno};
+      url += (new_registration ? "&agent_name_hint=Blackbird&ext_agent_host_id="
+                               : "&ext_agent_host_id=") +
+             form(host) + "&nonce=" + form(nonce) +
+             "&resource=https%3A%2F%2Fapi.openai.com%2Fv1";
+      metadata.object().emplace_back("host_id", Value{host});
+    }
+    auth_callback(trace, 1, [&] {
+      notice("Open this sign-in URL in your browser:\n" + url + "\n");
+    });
+    std::map<std::string, std::string> values;
+    if (server)
+      values = auth_callback(trace, 2, [&] { return server->wait(config_, state); });
+    else {
+      auth_callback(trace, 3,
+                    [&] { notice("Paste the returned code#state (input hidden): "); });
+      const auto input = auth_callback(trace, 4, [&] { return read_secret(); });
+      const auto at = input.find('#');
+      if (at != std::string::npos) {
+        values["code"] = input.substr(0, at);
+        values["state"] = input.substr(at + 1);
+      } else {
+        const auto q = input.find('?');
+        values = query(q == std::string::npos ? std::string_view{input}
+                                              : std::string_view{input}.substr(q + 1));
+      }
+    }
+    if (values["state"] != state || !values["error"].empty() || values["code"].empty())
+      throw Error{ErrorCode::provider_auth};
+    if (p == "openai") {
+      const auto returned = values["client_id"];
+      if (new_registration) {
+        client = returned;
+        if (client.empty() || client == "dynamic_agent_client" || client.size() > 256 ||
+            client.find_first_not_of(
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_") !=
+                std::string::npos)
+          throw Error{ErrorCode::provider_auth};
+      } else if (!returned.empty() && returned != client)
         throw Error{ErrorCode::provider_auth};
-    } else if (!returned.empty() && returned != client)
-      throw Error{ErrorCode::provider_auth};
+    }
+    ProviderHttpRequest r{text(d, "token_url"),
+                          "POST",
+                          "grant_type=authorization_code&client_id=" + form(client) +
+                              "&code=" + form(values["code"]) + "&code_verifier=" +
+                              form(verifier) + "&redirect_uri=" + form(callback),
+                          {{"Content-Type", "application/x-www-form-urlencoded"}},
+                          30};
+    if (p == "openai")
+      r.body += "&resource=https%3A%2F%2Fapi.openai.com%2Fv1";
+    if (p == "anthropic") {
+      r.headers = {{"Content-Type", "application/json"}};
+      r.body =
+          unwrap(dump_json(Value::object({{"grant_type", Value{"authorization_code"}},
+                                          {"client_id", Value{client}},
+                                          {"code", Value{values["code"]}},
+                                          {"state", Value{state}},
+                                          {"redirect_uri", Value{callback}},
+                                          {"code_verifier", Value{verifier}}})));
+    }
+    auto reply = http(config_, r, trace, 4);
+    require_provider_success(reply.status);
+    auto tokens = unwrap(parse_json(reply.body));
+    if (p == "openai") {
+      const auto keys =
+          http(config_,
+               ProviderHttpRequest{
+                   "https://auth.openai.com/.well-known/jwks.json", "GET", "", {}, 30},
+               trace, 5);
+      require_provider_success(keys.status);
+      trace.stage(RawAuthField::browser_clock);
+      const auto clock = config_.now
+                             ? config_.now()
+                             : std::chrono::duration_cast<std::chrono::seconds>(
+                                   std::chrono::system_clock::now().time_since_epoch())
+                                   .count();
+      trace.scalar(RawAuthField::browser_clock, clock);
+      RawAuthExchange jwt{trace, {1615, 1616}};
+      Value claims;
+      try {
+        jwt.start(5);
+        claims = auth_validate_openai_identity(
+            {.token = text(tokens, "id_token"), .client = client, .nonce = nonce},
+            unwrap(parse_json(keys.body)), clock, config_);
+        jwt.returned();
+      } catch (const Error &error) {
+        jwt.finish(2, &error);
+        throw;
+      } catch (const std::bad_alloc &) {
+        jwt.finish(3);
+        throw;
+      } catch (const std::length_error &) {
+        jwt.finish(4);
+        throw;
+      } catch (...) {
+        jwt.finish(5);
+        throw;
+      }
+      if (const auto *old = registration.find("metadata");
+          old && !text(*old, "sub").empty() && text(*old, "sub") != text(claims, "sub"))
+        throw Error{ErrorCode::provider_auth};
+      const auto scope = " " + text(tokens, "scope") + " ";
+      if (scope.find(" chatgpt.tokens.use.direct ") == std::string::npos ||
+          scope.find(" resource.invoke ") == std::string::npos)
+        throw Error{ErrorCode::provider_auth};
+      for (const auto k : {"sub", "email"})
+        if (const auto *v = claims.find(k))
+          metadata.object().emplace_back(k, *v);
+      metadata.object().emplace_back("id_token", Value{text(tokens, "id_token")});
+    }
+    save_oauth(p, account, tokens, client, text(d, "token_url"), std::move(metadata),
+               {.account_revision = expected}, &child);
+    auth_callback(trace, 5, [&] {
+      notice("Sign-in saved. Blackbird owns this account's credentials.\n");
+    });
+    trace.stage(109);
+    trace.finish(1);
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
   }
-  ProviderHttpRequest r{text(d, "token_url"),
-                        "POST",
-                        "grant_type=authorization_code&client_id=" + form(client) +
-                            "&code=" + form(values["code"]) + "&code_verifier=" +
-                            form(verifier) + "&redirect_uri=" + form(callback),
-                        {{"Content-Type", "application/x-www-form-urlencoded"}},
-                        30};
-  if (p == "openai")
-    r.body += "&resource=https%3A%2F%2Fapi.openai.com%2Fv1";
-  if (p == "anthropic") {
-    r.headers = {{"Content-Type", "application/json"}};
-    r.body =
-        unwrap(dump_json(Value::object({{"grant_type", Value{"authorization_code"}},
-                                        {"client_id", Value{client}},
-                                        {"code", Value{values["code"]}},
-                                        {"state", Value{state}},
-                                        {"redirect_uri", Value{callback}},
-                                        {"code_verifier", Value{verifier}}})));
-  }
-  auto reply = http(config_, r);
-  require_provider_success(reply.status);
-  auto tokens = unwrap(parse_json(reply.body));
-  if (p == "openai") {
-    const auto keys =
-        http(config_,
-             ProviderHttpRequest{
-                 "https://auth.openai.com/.well-known/jwks.json", "GET", "", {}, 30});
-    require_provider_success(keys.status);
-    const auto clock = config_.now
-                           ? config_.now()
-                           : std::chrono::duration_cast<std::chrono::seconds>(
-                                 std::chrono::system_clock::now().time_since_epoch())
-                                 .count();
-    const auto claims = auth_validate_openai_identity(
-        {.token = text(tokens, "id_token"), .client = client, .nonce = nonce},
-        unwrap(parse_json(keys.body)), clock, config_);
-    if (const auto *old = registration.find("metadata");
-        old && !text(*old, "sub").empty() && text(*old, "sub") != text(claims, "sub"))
-      throw Error{ErrorCode::provider_auth};
-    const auto scope = " " + text(tokens, "scope") + " ";
-    if (scope.find(" chatgpt.tokens.use.direct ") == std::string::npos ||
-        scope.find(" resource.invoke ") == std::string::npos)
-      throw Error{ErrorCode::provider_auth};
-    for (const auto k : {"sub", "email"})
-      if (const auto *v = claims.find(k))
-        metadata.object().emplace_back(k, *v);
-    metadata.object().emplace_back("id_token", Value{text(tokens, "id_token")});
-  }
-  save_oauth(p, account, tokens, client, text(d, "token_url"), std::move(metadata),
-             {.account_revision = expected});
-  notice("Sign-in saved. Blackbird owns this account's credentials.\n");
 }
+
 int provider_auth_cli(int argc, char **argv) {
   try {
-    AuthSignals signals;
     ProviderAuthConfig config;
     config.cancelled = [] { return auth_interrupted != 0; };
     ProviderAuth auth{config};
@@ -631,54 +813,114 @@ int provider_auth_cli(int argc, char **argv) {
                 << '\n';
       return 0;
     }
-    if (action == "add-provider" && argc == 6) {
-      auth.add_provider(argv[2], argv[3], argv[4], argv[5]);
-      return 0;
+    AuthSignals signals;
+    auto environment = unwrap(RawAuthEnvironment::open(auth.config()));
+    std::unique_ptr<RawRuntime> runtime;
+    RawThreadHandle handle;
+    {
+      RawWaitScope setup{signals.control()};
+      const auto runtime_directory = environment->runtime_directory();
+      environment->verify_runtime_directory(runtime_directory);
+      runtime = unwrap(RawRuntime::open(runtime_directory, environment->identity()));
+      environment->verify_runtime_directory(runtime_directory);
+      handle = unwrap(runtime->prepare_thread());
     }
-    if (argc < 3 || argc > 4)
-      throw Error{ErrorCode::invalid_range};
-    const std::string_view provider = argv[2],
-                           account = argc == 4 ? argv[3] : "default";
-    if (action == "key") {
-      auth.set_key(provider, account,
-                   input_secret("API key (input hidden; never use a chat command): "));
-    } else if (action == "use")
-      auth.use(provider, account);
-    else if (action == "logout") {
-      auth.logout(provider, account);
-      std::cerr << "Local credentials removed; remote revocation is not implemented.\n";
-    } else if (action == "login") {
-      if (text(auth.descriptor(provider), "login") == "device") {
-        const auto begin = auth.device_begin(provider, account);
-        std::cerr << "Open "
-                  << text(begin, "verification_uri_complete",
-                          text(begin, "verification_uri"))
-                  << "\nCode: " << text(begin, "user_code") << '\n';
-        const auto until = detail::Clock::now() + std::chrono::minutes{30};
-        for (;;) {
-          const auto state = auth.device_poll(provider, account);
-          const auto phase = text(state, "state");
-          if (phase == "ready")
-            break;
-          if (phase != "pending")
-            throw Error{ErrorCode::provider_auth};
-          const auto seconds = number(state, "wait_seconds");
-          if (detail::Clock::now() + std::chrono::seconds{seconds} > until)
-            throw Error{ErrorCode::io, ETIMEDOUT};
-          const auto next = detail::Clock::now() + std::chrono::seconds{seconds};
-          while (detail::Clock::now() < next) {
-            if (auth_interrupted)
-              throw Error{ErrorCode::interrupted};
-            std::this_thread::sleep_for(std::chrono::milliseconds{50});
-          }
+    RawThreadBinding binding{handle};
+    RawWaitScope business{signals.control()};
+    constexpr std::string_view purpose = "provider-auth";
+    auto purpose_credit = unwrap(
+        raw_claim_control(raw_envelope_size + sizeof(std::size_t) + purpose.size()));
+    const auto purpose_size = purpose.size();
+    const std::array purpose_fields{detail::raw_native_field(purpose_size),
+                                    detail::raw_string_field(purpose)};
+    (void)unwrap(
+        raw_emit(1619, purpose_fields, RawPartition::control, &purpose_credit));
+    const RawAuthLabels labels{
+        argc > 2 ? std::string_view{argv[2]} : std::string_view{},
+        argc > 3 && action != "add-provider" ? std::string_view{argv[3]}
+                                             : std::string_view{}};
+    RawAuthTrace command{RawAuthEntry{RawAuthAction::command, labels, nullptr, nullptr,
+                                      false, false, action == "key"}};
+    try {
+      command.start();
+      // A CLI command links child actions but does not hold their unbounded bank.
+      const RawAuthParent parent{command.reference(), nullptr, nullptr};
+      if (action == "add-provider" && argc == 6) {
+        auth.add_provider(argv[2], argv[3], argv[4], argv[5], &parent);
+        command.stage(109);
+        command.finish(1);
+        return 0;
+      }
+      if (argc < 3 || argc > 4)
+        throw Error{ErrorCode::invalid_range};
+      const std::string_view provider = argv[2],
+                             account = argc == 4 ? argv[3] : "default";
+      if (action == "key") {
+        std::string prompted_key;
+        command.callback(1, 1);
+        try {
+          auto key = input_secret("API key (input hidden; never use a chat command): ");
+          command.callback(1, 2);
+          prompted_key = std::move(key);
+        } catch (...) {
+          command.callback(1, 3);
+          throw;
         }
-        std::cerr << "Sign-in saved.\n";
+        auth.set_key(provider, account, std::move(prompted_key), &parent);
+      } else if (action == "use")
+        auth.use(provider, account, &parent);
+      else if (action == "logout") {
+        auth.logout(provider, account, &parent);
+        std::cerr
+            << "Local credentials removed; remote revocation is not implemented.\n";
+      } else if (action == "login") {
+        if (text(auth.descriptor(provider, &parent), "login") == "device") {
+          const auto begin = auth.device_begin(provider, account, &parent);
+          std::cerr << "Open "
+                    << text(begin, "verification_uri_complete",
+                            text(begin, "verification_uri"))
+                    << "\nCode: " << text(begin, "user_code") << '\n';
+          const auto until = detail::Clock::now() + std::chrono::minutes{30};
+          for (;;) {
+            const auto state = auth.device_poll(provider, account, &parent);
+            const auto phase = text(state, "state");
+            if (phase == "ready")
+              break;
+            if (phase != "pending")
+              throw Error{ErrorCode::provider_auth};
+            const auto seconds = number(state, "wait_seconds");
+            if (detail::Clock::now() + std::chrono::seconds{seconds} > until)
+              throw Error{ErrorCode::io, ETIMEDOUT};
+            const auto next = detail::Clock::now() + std::chrono::seconds{seconds};
+            while (detail::Clock::now() < next) {
+              if (auth_interrupted)
+                throw Error{ErrorCode::interrupted};
+              std::this_thread::sleep_for(std::chrono::milliseconds{50});
+            }
+          }
+          std::cerr << "Sign-in saved.\n";
+        } else
+          auth.browser_login(
+              provider, account,
+              [](std::string_view s) { std::cerr << s << std::flush; },
+              [] { return input_secret(); }, &parent);
       } else
-        auth.browser_login(
-            provider, account, [](std::string_view s) { std::cerr << s << std::flush; },
-            [] { return input_secret(); });
-    } else
-      throw Error{ErrorCode::invalid_range};
+        throw Error{ErrorCode::invalid_range};
+      command.stage(109);
+      command.finish(1);
+    } catch (const Error &error) {
+      command.finish(2, &error);
+      throw;
+    } catch (const std::bad_alloc &) {
+      command.finish(3);
+      throw;
+    } catch (const std::length_error &) {
+      command.finish(4);
+      throw;
+    } catch (...) {
+      command.finish(5);
+      throw;
+    }
     return 0;
   } catch (const Error &e) {
     std::cerr

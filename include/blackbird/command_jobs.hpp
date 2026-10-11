@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/raw_command.hpp"
 #include "blackbird/value.hpp"
 #include <functional>
 #include <memory>
@@ -16,6 +17,7 @@ struct JobEvent {
   std::shared_ptr<const std::string> bytes;
   std::size_t offset = 0;
   Value result;
+  RawEventRef original;
 };
 // One process/collector owner per job. Only the engine drains into retained state.
 // Thread-safe request/read are the UI mailbox and projection, not engine access.
@@ -34,7 +36,11 @@ public:
   std::vector<Value> requests();
   std::vector<JobEvent> drain();
   void retained(const std::string &id, std::size_t end);
+  std::size_t retained_end(const std::string &id) const;
   void capture_failed(const std::string &id);
+  void capture_failed_all();
+  // Joins before binding the retained worker producer for one semantic attempt.
+  void settlement(const JobEvent &event, const std::function<void()> &append);
   void settled(const std::string &id, const Value &result);
   bool contains(const std::string &id) const;
   bool active() const;

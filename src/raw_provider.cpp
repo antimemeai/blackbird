@@ -57,13 +57,17 @@ constexpr std::uint64_t read_bytes = raw_envelope_size + ref_bytes + 1 +
                                      sizeof(int);
 } // namespace
 
-RawProviderTrace::RawProviderTrace(const RawProviderOwner *owner, int timeout_seconds) {
+RawProviderTrace::RawProviderTrace(const RawProviderOwner *owner, int timeout_seconds,
+                                   const RawEventRef *auth_resolution) {
   const ErrnoGuard guard;
   if (!raw_enabled())
     return;
   terminal_.emplace(claim(raw_envelope_size + ref_bytes + 2 + sizeof(ErrorCode) +
                           sizeof(std::int64_t) + raw_envelope_size + 2 * ref_bytes +
                           sizeof(int)));
+  std::optional<RawControlToken> link;
+  if (auth_resolution && auth_resolution->ordinal)
+    link.emplace(claim(raw_envelope_size + 2 * ref_bytes));
   const auto present = static_cast<std::uint8_t>(owner != nullptr);
   std::array<ByteView, 8> fields{};
   fields[0] = raw_native_field(present);
@@ -77,6 +81,12 @@ RawProviderTrace::RawProviderTrace(const RawProviderOwner *owner, int timeout_se
   }
   fields[count++] = raw_native_field(timeout_seconds);
   request_ = {raw_lane_epoch(), data(1300, std::span{fields}.first(count))};
+  if (link) {
+    const std::array linked{
+        ByteView{auth_resolution->lane}, raw_native_field(auth_resolution->ordinal),
+        ByteView{request_.lane}, raw_native_field(request_.ordinal)};
+    immediate(1612, linked, &*link);
+  }
 }
 RawProviderTrace::~RawProviderTrace() { finish(6); }
 void RawProviderTrace::body(std::string_view method, std::string_view url,

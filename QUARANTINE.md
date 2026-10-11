@@ -718,3 +718,21 @@ Archives remain intact; extracted references contain no nested Git metadata or
 filesystem detritus. Nothing acquired was built, executed with operator accounts,
 or selected as a dependency. The isolated probes are owned research code,
 preserved with raw measurements in [their report](papers/2026-10-10-raw-emission-probes.md).
+
+## Native storage lock and close study, 2026-10-11
+
+`quarantine/native-storage-2026-10-11/` preserves original Linux6.12 `fs/locks.c`
+and XNU `bsd/kern/kern_descrip.c` source files. Exact pinned URLs, byte lengths
+and SHA-256 hashes are in the
+[acquisition manifest](papers/2026-10-11-native-storage-acquisitions.json).
+The Linux man-pages6.19 `close.2` reference is in the existing recorder acquisition.
+These are read-only references; no code was built or adopted.
+
+Restore the two files without changing their contents:
+
+```sh
+mkdir -p quarantine/native-storage-2026-10-11
+curl -fL https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/locks.c -o quarantine/native-storage-2026-10-11/linux-v6.12-locks.c
+curl -fL https://raw.githubusercontent.com/apple-oss-distributions/xnu/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_descrip.c -o quarantine/native-storage-2026-10-11/xnu-kern_descrip.c
+shasum -a 256 quarantine/native-storage-2026-10-11/*.c
+```

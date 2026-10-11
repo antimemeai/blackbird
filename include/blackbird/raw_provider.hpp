@@ -19,7 +19,8 @@ struct RawProviderOwner {
 
 class RawProviderTrace {
 public:
-  RawProviderTrace(const RawProviderOwner *owner, int timeout_seconds);
+  RawProviderTrace(const RawProviderOwner *owner, int timeout_seconds,
+                   const RawEventRef *auth_resolution = nullptr);
   ~RawProviderTrace();
   RawProviderTrace(const RawProviderTrace &) = delete;
   RawProviderTrace &operator=(const RawProviderTrace &) = delete;

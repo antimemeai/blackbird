@@ -1,6 +1,7 @@
 #include "blackbird/command_jobs.hpp"
 #include "blackbird/foundation.hpp"
 #include "blackbird/json.hpp"
+#include "blackbird/local_timing.hpp"
 #include "blackbird/process_lifetime.hpp"
 #include "blackbird/tools.hpp"
 #include <algorithm>
@@ -14,6 +15,7 @@
 #include <fcntl.h>
 #include <map>
 #include <mutex>
+#include <new>
 #include <poll.h>
 #include <pthread.h>
 #include <signal.h>
@@ -27,6 +29,8 @@
 extern char **environ;
 namespace blackbird {
 namespace {
+using detail::raw_native_field;
+using detail::raw_string_field;
 using Clock = std::chrono::steady_clock;
 constexpr std::size_t pending_limit = 1024 * 1024;
 constexpr std::size_t output_limit = 16 * 1024 * 1024;
@@ -140,14 +144,32 @@ void put(Value &v, std::string key, Value item) {
 }
 struct Fd {
   int value = -1;
+  RawEventRef *launch = nullptr;
+  std::optional<RawControlToken> *credit = nullptr;
+  std::uint8_t channel = 0;
   Fd() = default;
   explicit Fd(int descriptor) : value(descriptor) {}
   ~Fd() { close(); }
   Fd(const Fd &) = delete;
   Fd &operator=(const Fd &) = delete;
   void close() noexcept {
-    if (value >= 0)
-      (void)::close(std::exchange(value, -1));
+    if (value >= 0) {
+      const int fd = std::exchange(value, -1);
+      const std::uint8_t reason = 1;
+      RawEventRef request;
+      auto *held = credit && *credit ? &**credit : nullptr;
+      if (launch)
+        request = raw_command_linked(2030, *launch,
+                                     std::array{raw_native_field(channel),
+                                                raw_native_field(fd),
+                                                raw_native_field(reason)},
+                                     held);
+      const int result = ::close(fd), error = errno;
+      if (launch)
+        (void)raw_command_linked(
+            2031, request,
+            std::array{raw_native_field(result), raw_native_field(error)}, held);
+    }
   }
 };
 void pipe_fds(Fd &reader, Fd &writer) {
@@ -201,6 +223,65 @@ Launch parse_launch(const Value &arguments) {
     throw Error{ErrorCode::invalid_range};
   return out;
 }
+class ControlTrace {
+public:
+  explicit ControlTrace(const Value &arguments) {
+    if (!raw_enabled())
+      return;
+    credit_ = raw_command_claim(60);
+    // Existing request strings are copied, never encoded as Value.
+    auto text = [&](std::string_view key) -> std::string_view {
+      const auto *value = arguments.find(key);
+      if (!value)
+        return {};
+      if (std::holds_alternative<std::string>(value->value()))
+        return value->string();
+      return {};
+    };
+    const auto job = text("job_id"), operation = text("op"),
+               delivery = text("request_id");
+    const auto job_size = job.size(), operation_size = operation.size(),
+               delivery_size = delivery.size();
+    const auto bytes = text("bytes"), signal = text("signal");
+    // Numeric requests are captured at their existing business-native parse sites.
+    const std::string_view rows{}, columns{}, epoch{};
+    const auto byte_size = bytes.size(), signal_size = signal.size(),
+               rows_size = rows.size(), columns_size = columns.size(),
+               epoch_size = epoch.size();
+    request_ = raw_command_data(
+        2013, std::array{raw_native_field(job_size), raw_string_field(job),
+                         raw_native_field(operation_size), raw_string_field(operation),
+                         raw_native_field(delivery_size), raw_string_field(delivery),
+                         raw_native_field(byte_size), raw_string_field(bytes),
+                         raw_native_field(signal_size), raw_string_field(signal),
+                         raw_native_field(rows_size), raw_string_field(rows),
+                         raw_native_field(columns_size), raw_string_field(columns),
+                         raw_native_field(epoch_size), raw_string_field(epoch)});
+  }
+  RawEventRef reference() const noexcept { return request_; }
+  ~ControlTrace() {
+    if (!finished_)
+      finish(5, 0, false, false, {ErrorCode::audit_unavailable});
+  }
+  void finish(std::uint8_t branch, std::size_t written, bool done, bool failed,
+              Error error = {}) noexcept {
+    if (finished_)
+      return;
+    finished_ = true;
+    if (credit_)
+      (void)raw_command_linked(
+          2014, request_,
+          std::array{raw_native_field(branch), raw_native_field(written),
+                     raw_native_field(done), raw_native_field(failed),
+                     raw_native_field(error.code), raw_native_field(error.detail)},
+          &*credit_);
+  }
+
+private:
+  RawEventRef request_;
+  std::optional<RawControlToken> credit_;
+  bool finished_ = false;
+};
 } // namespace
 struct CommandJobs::Impl {
   struct Delivery {
@@ -213,11 +294,26 @@ struct CommandJobs::Impl {
   struct Chunk {
     std::size_t offset;
     std::shared_ptr<const std::string> bytes;
+    RawEventRef original;
+  };
+  enum class Custody : std::uint8_t {
+    not_launched,
+    owned,
+    reaped,
+    unavailable,
+    pending
   };
   struct Job {
     std::string id;
     Launch launch;
     std::jthread worker;
+    RawThreadHandle raw_context;
+    std::optional<RawControlToken> worker_credit, retry_credit, semantic_credit,
+        caller_stop_credit;
+    RawEventRef request, launch_ref, terminal_ref;
+    std::optional<RawCommandWake> stop_wake;
+    Custody custody = Custody::not_launched;
+    bool counted = false;
     pid_t pid = -1;
     bool ready = false, stopped = false, leader_exited = false;
     bool output_closed = false, finished = false, terminal_sent = false;
@@ -226,7 +322,7 @@ struct CommandJobs::Impl {
     std::size_t input_bytes = 0, input_history_bytes = 0;
     int exit_code = 0, signal = 0, failure = 0;
     std::string termination = "unobserved";
-    bool capture_complete = true;
+    bool capture_complete = true, capture_refused = false;
     std::deque<Chunk> pending, tail;
     std::map<std::string, Delivery> deliveries;
     std::deque<std::string> input, signals;
@@ -238,8 +334,32 @@ struct CommandJobs::Impl {
   };
   mutable std::mutex mutex;
   std::condition_variable condition;
+  RawThreadHandle cleanup_context;
+  std::optional<RawControlToken> shutdown_credit;
   std::map<std::string, std::shared_ptr<Job>> jobs;
-  std::deque<Value> mailbox;
+  // Every access to cleanup producer/claims is serialized by mutex.
+  void caller_stop(Job &job, std::uint8_t source) noexcept {
+    if (!job.stop && !job.finished) {
+      if (cleanup_context && job.caller_stop_credit) {
+        RawThreadBinding owner{cleanup_context};
+        const auto length = job.id.size();
+        (void)raw_command_record(2029,
+                                 std::array{raw_native_field(length),
+                                            raw_string_field(job.id),
+                                            raw_native_field(source)},
+                                 &*job.caller_stop_credit);
+      }
+      job.stop = true;
+    }
+    job.caller_stop_credit.reset();
+    if (job.stop_wake)
+      job.stop_wake->notify();
+  }
+  struct Mailbox {
+    Value value;
+    RawEventRef source;
+  };
+  std::deque<Mailbox> mailbox;
   std::string waiting;
   std::uint64_t epoch = 0, request_counter = 0;
   bool text_input = false;
@@ -253,7 +373,9 @@ struct CommandJobs::Impl {
   std::size_t debt_locked() const {
     return static_cast<std::size_t>(
         std::count_if(jobs.begin(), jobs.end(), [](const auto &entry) {
-          return !entry.second->terminal_retained;
+          return !entry.second->terminal_retained || !entry.second->pending.empty() ||
+                 entry.second->custody == Custody::pending ||
+                 entry.second->custody == Custody::owned;
         }));
   }
   struct View {
@@ -275,7 +397,10 @@ struct CommandJobs::Impl {
                        {"launches", Value{Number{1}}},
                        {"received_bytes", Value{Number{j.received}}},
                        {"retained_bytes", Value{Number{j.retained}}},
-                       {"sealed", Value{j.terminal_retained && j.capture_complete}},
+                       {"sealed", Value{j.terminal_retained && j.capture_complete &&
+                                        j.custody == Custody::reaped}},
+                       {"native_custody_pending", Value{j.custody == Custody::pending ||
+                                                        j.custody == Custody::owned}},
                        {"leader_exited", Value{j.leader_exited}},
                        {"output_closed", Value{j.output_closed}}});
     if (j.pid > 0)
@@ -309,32 +434,94 @@ struct CommandJobs::Impl {
   void run(const std::shared_ptr<Job> &job) noexcept;
 };
 void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
+  RawThreadBinding raw_binding{job->raw_context};
+  RawWaitScope raw_wait{
+      {{job->stop_wake ? job->stop_wake->read_fd() : -1, -1}, job->deadline}};
   sigset_t blocked;
   sigemptyset(&blocked);
   sigaddset(&blocked, SIGWINCH);
   (void)::pthread_sigmask(SIG_BLOCK, &blocked, nullptr);
   Fd input_read, input_write, output_read, output_write, boot_read, boot_write;
   pid_t pid = -1;
-  bool group_ready = false, counted = false, reaped = false;
+  bool group_ready = false, reaped = false;
   bool channel_closed = false;
   const auto deadline = job->deadline;
   std::optional<Clock::time_point> stopping;
-  bool killed = false;
-  std::array<unsigned char, sizeof(int) + 2> bootstrap{};
+  bool killed = false, spawn_written = false;
+  std::uint8_t setup_stage = 0;
+  std::array<unsigned char, sizeof(int) + 3> bootstrap{};
   std::size_t bootstrap_size = 0;
-  auto signal_owned = [&](int number) {
+  auto *held = job->worker_credit ? &*job->worker_credit : nullptr;
+  // Called with mutex held. A sticky stop has at most one false->true transition.
+  auto worker_stop = [&](std::uint8_t source) {
+    if (!job->stop) {
+      const auto length = job->id.size();
+      (void)raw_command_record(2029,
+                               std::array{raw_native_field(length),
+                                          raw_string_field(job->id),
+                                          raw_native_field(source)},
+                               held);
+      job->stop = true;
+      job->caller_stop_credit.reset();
+    }
+  };
+  auto signal_owned = [&](int number, RawControlToken *credit,
+                          std::string_view delivery = {}) {
     if (pid <= 0 || reaped)
       return;
-    if (!group_ready || ::kill(-pid, number) != 0 || ::getpgid(pid) != pid)
-      (void)::kill(pid, number);
+    const auto length = delivery.size();
+    auto operation = [&](std::uint8_t method, pid_t target) {
+      const auto request = raw_command_linked(
+          2020, job->launch_ref,
+          std::array{raw_native_field(length), raw_string_field(delivery),
+                     raw_native_field(target), raw_native_field(number),
+                     raw_native_field(method)},
+          credit);
+      const int result =
+          method == 3 ? static_cast<int>(::getpgid(target)) : ::kill(target, number);
+      const int error = errno;
+      if (method == 3) {
+        const auto group = static_cast<pid_t>(result);
+        (void)raw_command_linked(2021, request,
+                                 std::array{raw_native_field(result),
+                                            raw_native_field(error),
+                                            raw_native_field(group)},
+                                 credit);
+      } else {
+        (void)raw_command_linked(
+            2021, request,
+            std::array{raw_native_field(result), raw_native_field(error)}, credit);
+      }
+      return result;
+    };
+    if (!group_ready || operation(1, -pid) != 0 || operation(3, pid) != pid)
+      (void)operation(2, pid);
   };
   try {
+    const auto launch_id_size = job->id.size();
+    const auto lifetime = job->launch.lifetime.count();
+    job->launch_ref = raw_command_linked(
+        2002, job->request,
+        std::array{raw_native_field(launch_id_size), raw_string_field(job->id),
+                   raw_native_field(job->launch.pty), raw_native_field(lifetime)},
+        held);
+    std::uint8_t channel = 0;
+    for (auto *fd : {&input_read, &input_write, &output_read, &output_write, &boot_read,
+                     &boot_write}) {
+      fd->launch = &job->launch_ref;
+      fd->credit = &job->worker_credit;
+      fd->channel = channel++;
+    }
     std::vector<std::string> arguments = job->launch.argv;
     {
       const std::lock_guard spawn_lock{detail::process_spawn_mutex};
+      setup_stage = 1;
       std::string slave;
       if (job->launch.pty) {
         Fd master{::posix_openpt(O_RDWR | O_NOCTTY)};
+        master.launch = &job->launch_ref;
+        master.credit = &job->worker_credit;
+        master.channel = 6;
         if (master.value < 0 || ::grantpt(master.value) != 0 ||
             ::unlockpt(master.value) != 0)
           throw Error{ErrorCode::io, errno};
@@ -410,11 +597,27 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
       for (auto &argument : arguments)
         argv.push_back(argument.data());
       argv.push_back(nullptr);
-      check(::posix_spawnp(&pid, argv.front(), &actions, &attributes, argv.data(),
-                           environ));
+      setup_stage = 2;
+      rc = ::posix_spawnp(&pid, argv.front(), &actions, &attributes, argv.data(),
+                          environ);
+      const int spawn_error = errno;
+      const std::uint8_t stage = setup_stage;
+      spawn_written = true;
+      const bool spawned_group = !job->launch.pty && rc == 0;
+      (void)raw_command_linked(2003, job->launch_ref,
+                               std::array{raw_native_field(stage), raw_native_field(rc),
+                                          raw_native_field(spawn_error),
+                                          raw_native_field(pid),
+                                          raw_native_field(spawned_group)},
+                               held);
+      check(rc);
       group_ready = !job->launch.pty;
       ++detail::owned_children;
-      counted = true;
+      {
+        const std::lock_guard lock{mutex};
+        job->counted = true;
+        job->custody = Custody::owned;
+      }
       detail::uncontained_exec.store(true);
       input_read.close();
       output_write.close();
@@ -435,25 +638,45 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
       {
         const std::lock_guard lock{mutex};
         if (Clock::now() >= deadline) {
-          job->stop = true;
+          worker_stop(2);
           job->timed_out = true;
+          if (job->stop_wake)
+            job->stop_wake->notify();
         }
         stop = job->stop;
         exited = job->leader_exited;
-        available = pending_limit - job->pending_bytes;
+        available = pending_limit - std::min(pending_limit, job->pending_bytes);
       }
       if (stop && !stopping) {
         stopping = Clock::now();
-        signal_owned(SIGTERM);
+        signal_owned(SIGTERM, held);
       }
       if (stopping && !killed &&
           Clock::now() - *stopping >= std::chrono::milliseconds{200}) {
-        signal_owned(SIGKILL);
+        signal_owned(SIGKILL, held);
         killed = true;
       }
       if (boot_read.value >= 0) {
-        const auto n = ::read(boot_read.value, bootstrap.data() + bootstrap_size,
-                              bootstrap.size() - bootstrap_size);
+        auto read_credit = raw_command_claim(104);
+        raw_command_data_credit(105);
+        const auto requested = bootstrap.size() - bootstrap_size;
+        const auto request = raw_command_linked(
+            2004, job->launch_ref,
+            std::array{raw_native_field(boot_read.value), raw_native_field(requested)},
+            read_credit ? &*read_credit : nullptr);
+        const auto n =
+            ::read(boot_read.value, bootstrap.data() + bootstrap_size, requested);
+        const int read_error = errno;
+        const auto literal =
+            n > 0 ? std::as_bytes(std::span{bootstrap.data() + bootstrap_size,
+                                            static_cast<std::size_t>(n)})
+                  : ByteView{};
+        (void)raw_command_linked(
+            2005, request,
+            std::array{raw_native_field(n), raw_native_field(read_error), literal},
+            n > 0         ? nullptr
+            : read_credit ? &*read_credit
+                          : nullptr);
         if (n > 0)
           bootstrap_size += static_cast<std::size_t>(n);
         else if (n == 0) {
@@ -466,6 +689,12 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
           if (group_ready)
             throw Error{ErrorCode::io, EPROTO};
           group_ready = true;
+          const std::uint8_t native_stage = 0;
+          const int failure = 0;
+          (void)raw_command_linked(2006, job->launch_ref,
+                                   std::array{raw_native_field(group_ready),
+                                              raw_native_field(native_stage),
+                                              raw_native_field(failure)});
           --bootstrap_size;
           std::memmove(bootstrap.data(), bootstrap.data() + 1, bootstrap_size);
           const std::lock_guard lock{mutex};
@@ -475,23 +704,41 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
         if (bootstrap_size) {
           if (bootstrap[0] != 2)
             throw Error{ErrorCode::io, EPROTO};
-          if (bootstrap_size >= sizeof(int) + 1) {
+          if (bootstrap_size >= sizeof(int) + 2) {
             int failure = EIO;
-            std::memcpy(&failure, bootstrap.data() + 1, sizeof(failure));
+            const auto native_stage = bootstrap[1];
+            std::memcpy(&failure, bootstrap.data() + 2, sizeof(failure));
+            (void)raw_command_linked(2006, job->launch_ref,
+                                     std::array{raw_native_field(group_ready),
+                                                raw_native_field(native_stage),
+                                                raw_native_field(failure)});
             const std::lock_guard lock{mutex};
             job->failure = failure > 0 ? failure : EPROTO;
-            job->stop = true;
+            worker_stop(3);
             boot_read.close();
           }
         }
       }
 
+      auto control_credit = raw_command_claim(1055);
+      auto *control_held = control_credit ? &*control_credit : nullptr;
       {
         const std::lock_guard lock{mutex};
         if (group_ready && job->launch.pty && job->resize_pending) {
           winsize size{job->rows, job->columns, 0, 0};
-          if (::ioctl(output_read.value, TIOCSWINSZ, &size) != 0)
-            job->failure = errno;
+          const std::size_t delivery_size = 0;
+          const auto request = raw_command_linked(
+              2018, job->launch_ref,
+              std::array{raw_native_field(delivery_size), ByteView{},
+                         raw_native_field(output_read.value),
+                         raw_native_field(size.ws_row), raw_native_field(size.ws_col)},
+              control_held);
+          const int rc = ::ioctl(output_read.value, TIOCSWINSZ, &size), error = errno;
+          (void)raw_command_linked(
+              2019, request, std::array{raw_native_field(rc), raw_native_field(error)},
+              control_held);
+          if (rc != 0)
+            job->failure = error;
           job->resize_pending = false;
         }
         if (!job->signals.empty()) {
@@ -504,7 +751,7 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
                                                    : SIGKILL;
           delivery.failed = job->leader_exited;
           if (!delivery.failed)
-            signal_owned(number);
+            signal_owned(number, control_held, job->signals.front());
           delivery.done = true;
           job->signals.pop_front();
         }
@@ -513,9 +760,23 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
           const auto op = string_field(delivery.request, "op");
           if (op == "input" && group_ready) {
             const auto remaining = delivery.bytes().size() - delivery.written;
+            const auto &delivery_id = job->input.front();
+            const auto delivery_size = delivery_id.size();
+            const auto request =
+                raw_command_linked(2016, job->launch_ref,
+                                   std::array{raw_native_field(delivery_size),
+                                              raw_string_field(delivery_id),
+                                              raw_native_field(input_write.value),
+                                              raw_native_field(delivery.written),
+                                              raw_native_field(remaining)},
+                                   control_held);
             const auto n =
                 ::write(input_write.value, delivery.bytes().data() + delivery.written,
                         remaining);
+            const int error = errno;
+            (void)raw_command_linked(
+                2017, request, std::array{raw_native_field(n), raw_native_field(error)},
+                control_held);
             if (n > 0) {
               const auto size = static_cast<std::size_t>(n);
               delivery.written += size;
@@ -531,7 +792,22 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
                 static_cast<unsigned short>(integer(delivery.request, "rows", 24)),
                 static_cast<unsigned short>(integer(delivery.request, "columns", 80)),
                 0, 0};
-            delivery.failed = ::ioctl(output_read.value, TIOCSWINSZ, &size) != 0;
+            const auto &delivery_id = job->input.front();
+            const auto delivery_size = delivery_id.size();
+            const auto request =
+                raw_command_linked(2018, job->launch_ref,
+                                   std::array{raw_native_field(delivery_size),
+                                              raw_string_field(delivery_id),
+                                              raw_native_field(output_read.value),
+                                              raw_native_field(size.ws_row),
+                                              raw_native_field(size.ws_col)},
+                                   control_held);
+            const int rc = ::ioctl(output_read.value, TIOCSWINSZ, &size), error = errno;
+            (void)raw_command_linked(
+                2019, request,
+                std::array{raw_native_field(rc), raw_native_field(error)},
+                control_held);
+            delivery.failed = rc != 0;
             delivery.done = true;
           }
           if (delivery.done)
@@ -541,7 +817,26 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
 
       if (!channel_closed && available >= 8192) {
         char bytes[8192];
+        auto read_credit = raw_command_claim(112);
+        raw_command_data_credit(8244 + 114);
+        const std::size_t requested = sizeof(bytes);
+        const auto offset = job->received;
+        const auto request = raw_command_linked(
+            2007, job->launch_ref,
+            std::array{raw_native_field(output_read.value), raw_native_field(offset),
+                       raw_native_field(requested)},
+            read_credit ? &*read_credit : nullptr);
         const auto n = ::read(output_read.value, bytes, sizeof(bytes));
+        const int error = errno;
+        const auto literal =
+            n > 0 ? std::as_bytes(std::span{bytes, static_cast<std::size_t>(n)})
+                  : ByteView{};
+        const auto original = raw_command_linked(
+            2008, request,
+            std::array{raw_native_field(n), raw_native_field(error), literal},
+            n > 0         ? nullptr
+            : read_credit ? &*read_credit
+                          : nullptr);
         if (n > 0) {
           auto chunk =
               std::make_shared<const std::string>(bytes, static_cast<std::size_t>(n));
@@ -549,9 +844,10 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
           if (chunk->size() > output_limit - std::min(output_limit, job->received)) {
             job->capture_complete = false;
             job->failure = EFBIG;
-            job->stop = true;
-          } else {
-            const Chunk entry{job->received, std::move(chunk)};
+            worker_stop(3);
+          }
+          {
+            const Chunk entry{job->received, std::move(chunk), original};
             job->received += entry.bytes->size();
             job->pending_bytes += entry.bytes->size();
             job->tail_bytes += entry.bytes->size();
@@ -561,7 +857,26 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
               job->tail_bytes -= job->tail.front().bytes->size();
               job->tail.pop_front();
             }
+            const auto id_size = job->id.size();
+            const std::uint8_t branch = job->failure == EFBIG ? 2 : 1;
+            const Error error_fields =
+                job->failure == EFBIG ? Error{ErrorCode::capacity, EFBIG} : Error{};
+            (void)raw_command_linked(
+                2009, original,
+                std::array{raw_native_field(id_size), raw_string_field(job->id),
+                           raw_native_field(entry.offset),
+                           raw_native_field(job->pending_bytes),
+                           raw_native_field(job->tail_bytes), raw_native_field(branch),
+                           raw_native_field(error_fields.code),
+                           raw_native_field(error_fields.detail)});
             condition.notify_all();
+          }
+          if (job->failure == EFBIG) {
+            channel_closed = true;
+            output_read.close();
+            job->output_closed = true;
+            if (job->stop_wake)
+              job->stop_wake->notify();
           }
         } else if (n == 0 ||
                    (n < 0 && errno == EIO && job->launch.pty && group_ready)) {
@@ -574,10 +889,34 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
           throw Error{ErrorCode::io, errno};
         }
       }
+      auto observe_wait = [&](siginfo_t &observed, int options) {
+        auto credit = raw_command_claim(116);
+        const auto type = P_PID;
+        const auto selector = static_cast<id_t>(pid);
+        const auto request = raw_command_linked(2022, job->launch_ref,
+                                                std::array{raw_native_field(type),
+                                                           raw_native_field(selector),
+                                                           raw_native_field(options)},
+                                                credit ? &*credit : nullptr);
+        const int result = ::waitid(type, selector, &observed, options), error = errno;
+        (void)raw_command_linked(2023, request,
+                                 std::array{raw_native_field(result),
+                                            raw_native_field(error),
+                                            raw_native_field(observed.si_pid),
+                                            raw_native_field(observed.si_uid),
+                                            raw_native_field(observed.si_code),
+                                            raw_native_field(observed.si_status)},
+                                 credit ? &*credit : nullptr);
+        if (result < 0 && error == ECHILD) {
+          reaped = true;
+          const std::lock_guard lock{mutex};
+          job->custody = Custody::unavailable;
+        }
+        return result;
+      };
       if (!exited) {
         siginfo_t observed{};
-        const int rc = ::waitid(P_PID, static_cast<id_t>(pid), &observed,
-                                WEXITED | WNOHANG | WNOWAIT);
+        const int rc = observe_wait(observed, WEXITED | WNOHANG | WNOWAIT);
         if (rc < 0 && errno != EINTR)
           throw Error{ErrorCode::io, errno};
         if (rc == 0 && observed.si_pid == pid &&
@@ -592,8 +931,7 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
           exited = true;
         } else {
           siginfo_t state{};
-          if (::waitid(P_PID, static_cast<id_t>(pid), &state,
-                       WSTOPPED | WCONTINUED | WNOHANG) == 0 &&
+          if (observe_wait(state, WSTOPPED | WCONTINUED | WNOHANG) == 0 &&
               state.si_pid != 0 &&
               (state.si_code == CLD_STOPPED || state.si_code == CLD_CONTINUED)) {
             const std::lock_guard lock{mutex};
@@ -614,30 +952,106 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
         break;
       pollfd descriptors[2]{{available >= 8192 ? output_read.value : -1, POLLIN, 0},
                             {boot_read.value, POLLIN, 0}};
-      (void)::poll(descriptors, 2, 10);
+      auto poll_credit = raw_command_claim(108);
+      const int timeout = 10;
+      const auto request =
+          raw_command_linked(2046, job->launch_ref,
+                             std::array{raw_native_field(descriptors[0].fd),
+                                        raw_native_field(descriptors[0].events),
+                                        raw_native_field(descriptors[1].fd),
+                                        raw_native_field(descriptors[1].events),
+                                        raw_native_field(timeout)},
+                             poll_credit ? &*poll_credit : nullptr);
+      const int result = ::poll(descriptors, 2, timeout), error = errno;
+      (void)raw_command_linked(2047, request,
+                               std::array{raw_native_field(result),
+                                          raw_native_field(error),
+                                          raw_native_field(descriptors[0].revents),
+                                          raw_native_field(descriptors[1].revents)},
+                               poll_credit ? &*poll_credit : nullptr);
     }
-    signal_owned(SIGKILL);
-    while (::waitpid(pid, nullptr, 0) < 0 && errno == EINTR) {
-    }
-    reaped = true;
   } catch (const Error &error) {
+    if (!spawn_written) {
+      const int result = -1, native_error = static_cast<int>(error.detail);
+      (void)raw_command_linked(
+          2003, job->launch_ref,
+          std::array{raw_native_field(setup_stage), raw_native_field(result),
+                     raw_native_field(native_error), raw_native_field(pid),
+                     raw_native_field(group_ready)},
+          held);
+      spawn_written = true;
+    }
+    const std::uint8_t operation = 1;
+    (void)raw_command_linked(2001, job->launch_ref,
+                             std::array{raw_native_field(operation),
+                                        raw_native_field(error.code),
+                                        raw_native_field(error.detail)},
+                             held);
     const std::lock_guard lock{mutex};
+    if (error.code == ErrorCode::interrupted) {
+      worker_stop(error.detail == ETIMEDOUT ? 2 : 4);
+      if (error.detail == ETIMEDOUT)
+        job->timed_out = true;
+    }
+    worker_stop(4);
     job->failure = static_cast<int>(error.detail ? error.detail : EIO);
     job->capture_complete = false;
   } catch (...) {
     const std::lock_guard lock{mutex};
+    worker_stop(4);
     job->failure = ENOMEM;
     job->capture_complete = false;
   }
   if (pid > 0 && !reaped) {
-    signal_owned(SIGKILL);
+    signal_owned(SIGKILL, held);
+    const int options = 0;
+    const auto request = raw_command_linked(
+        2032, job->launch_ref,
+        std::array{raw_native_field(pid), raw_native_field(options)}, held);
     int status = 0;
-    while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    pid_t result;
+    do {
+      result = ::waitpid(pid, &status, options);
+    } while (result < 0 && errno == EINTR);
+    const int error = errno;
+    const bool valid = result == pid;
+    (void)raw_command_linked(
+        2033, request,
+        std::array{raw_native_field(result), raw_native_field(error),
+                   raw_native_field(valid), raw_native_field(status)},
+        held);
+    reaped = valid;
+    const std::lock_guard lock{mutex};
+    job->custody = valid                           ? Custody::reaped
+                   : result < 0 && error == ECHILD ? Custody::unavailable
+                                                   : Custody::pending;
+    if (!valid) {
+      job->failure = error;
+      job->capture_complete = false;
     }
   }
-  if (counted)
-    --detail::owned_children;
+  {
+    const std::lock_guard lock{mutex};
+    if (job->counted && job->custody != Custody::pending) {
+      --detail::owned_children;
+      job->counted = false;
+    }
+  }
+  for (auto *fd : {&input_read, &input_write, &output_read, &output_write, &boot_read,
+                   &boot_write})
+    fd->close();
   const std::lock_guard lock{mutex};
+  const auto id_size = job->id.size();
+  job->terminal_ref = raw_command_linked(
+      2034, job->launch_ref,
+      std::array{
+          raw_native_field(id_size), raw_string_field(job->id), raw_native_field(pid),
+          raw_native_field(job->received), raw_native_field(job->failure),
+          raw_native_field(job->capture_complete), raw_native_field(job->timed_out),
+          raw_native_field(job->stop), raw_native_field(job->leader_exited),
+          raw_native_field(job->output_closed), raw_native_field(job->custody)},
+      held);
+  job->pid = pid;
   for (auto &[id, delivery] : job->deliveries) {
     (void)id;
     if (!delivery.done) {
@@ -646,273 +1060,604 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
     }
   }
   job->finished = true;
+  job->caller_stop_credit.reset();
   condition.notify_all();
 }
 CommandJobs::CommandJobs() : impl_(std::make_unique<Impl>()) {}
-CommandJobs::~CommandJobs() { shutdown(); }
+CommandJobs::~CommandJobs() {
+  shutdown();
+  for (const auto &[id, job] : impl_->jobs) {
+    (void)id;
+    if (job->custody == Impl::Custody::pending) {
+      RawThreadBinding binding{job->raw_context};
+      raw_fence({ErrorCode::audit_unavailable, job->failure});
+    }
+  }
+}
 void CommandJobs::start(const std::string &id, const Value &arguments) {
-  auto launch = parse_launch(arguments);
-  if (id.size() != 32 || id.find_first_not_of("0123456789abcdef") != std::string::npos)
-    throw Error{ErrorCode::invalid_range};
-  auto job = std::make_shared<Impl::Job>();
-  job->id = id;
-  job->launch = std::move(launch);
-  job->deadline = Clock::now() + job->launch.lifetime;
-  sigset_t previous, blocked;
-  sigemptyset(&blocked);
-  sigaddset(&blocked, SIGWINCH);
-  const int mask_error = ::pthread_sigmask(SIG_BLOCK, &blocked, &previous);
-  if (mask_error)
-    throw Error{ErrorCode::io, mask_error};
-  struct RestoreMask {
-    sigset_t previous;
-    ~RestoreMask() { (void)::pthread_sigmask(SIG_SETMASK, &previous, nullptr); }
-  } restore{previous};
-  const std::lock_guard lock{impl_->mutex};
-  if (impl_->jobs.contains(id))
-    throw Error{ErrorCode::conflict};
-  if (impl_->jobs.size() >= impl_->max_records ||
-      impl_->debt_locked() >= impl_->max_live)
-    throw Error{ErrorCode::capacity};
-  impl_->jobs.emplace(id, job);
+  const auto id_size = id.size();
+  const std::uint8_t operation = 1, owner_present = 0;
+  auto admission_credit = raw_command_claim(66);
+  const auto request = raw_command_data(
+      2000, std::array{raw_native_field(id_size), raw_string_field(id),
+                       raw_native_field(operation), raw_native_field(owner_present)});
+  // Surplus preparation must retire after any product lock has unwound.
+  RawThreadHandle cleanup_candidate;
   try {
-    job->worker = std::jthread([state = impl_.get(), job] { state->run(job); });
+    auto launch = parse_launch(arguments);
+    if (id.size() != 32 ||
+        id.find_first_not_of("0123456789abcdef") != std::string::npos)
+      throw Error{ErrorCode::invalid_range};
+    auto job = std::make_shared<Impl::Job>();
+    job->id = id;
+    job->launch = std::move(launch);
+    job->deadline = Clock::now() + job->launch.lifetime;
+    job->request = request;
+    bool prepare_cleanup = false;
+    {
+      const std::lock_guard lock{impl_->mutex};
+      prepare_cleanup = !impl_->cleanup_context && raw_enabled();
+    }
+    if (prepare_cleanup)
+      cleanup_candidate = unwrap(raw_prepare_thread());
+    job->raw_context = unwrap(raw_prepare_thread());
+    if (job->raw_context) {
+      job->stop_wake.emplace();
+      RawThreadBinding binding{job->raw_context};
+      auto bank = raw_command_claim(raw_command_initial_credit);
+      if (!bank)
+        throw Error{ErrorCode::audit_unavailable};
+      job->worker_credit.emplace(unwrap(bank->split(raw_command_worker_credit)));
+      job->retry_credit.emplace(unwrap(bank->split(raw_command_retry_credit)));
+      job->semantic_credit.emplace(unwrap(bank->split(raw_command_semantic_credit)));
+    }
+    sigset_t previous, blocked;
+    sigemptyset(&blocked);
+    sigaddset(&blocked, SIGWINCH);
+    const int mask_error = ::pthread_sigmask(SIG_BLOCK, &blocked, &previous);
+    if (mask_error)
+      throw Error{ErrorCode::io, mask_error};
+    struct RestoreMask {
+      sigset_t previous;
+      ~RestoreMask() { (void)::pthread_sigmask(SIG_SETMASK, &previous, nullptr); }
+    } restore{previous};
+    const std::lock_guard lock{impl_->mutex};
+    if (impl_->jobs.contains(id))
+      throw Error{ErrorCode::conflict};
+    if (impl_->jobs.size() >= impl_->max_records ||
+        impl_->debt_locked() >= impl_->max_live)
+      throw Error{ErrorCode::capacity};
+    struct PendingOwnerCredit {
+      Impl::Job &job;
+      bool committed = false;
+      ~PendingOwnerCredit() {
+        if (!committed)
+          job.caller_stop_credit.reset();
+      }
+    } pending_owner{*job};
+    if (!impl_->cleanup_context && cleanup_candidate) {
+      RawThreadBinding owner{cleanup_candidate};
+      auto credit = unwrap(raw_try_claim_control(75));
+      impl_->cleanup_context = std::move(cleanup_candidate);
+      impl_->shutdown_credit.emplace(std::move(credit));
+    }
+    if (impl_->cleanup_context) {
+      RawThreadBinding owner{impl_->cleanup_context};
+      job->caller_stop_credit.emplace(unwrap(raw_try_claim_control(57)));
+    }
+    impl_->jobs.emplace(id, job);
+    try {
+      job->worker = std::jthread([state = impl_.get(), job] { state->run(job); });
+    } catch (...) {
+      impl_->jobs.erase(id);
+      throw;
+    }
+    pending_owner.committed = true;
+    const std::uint8_t branch = 1;
+    const Error error{};
+    (void)raw_command_linked(
+        2001, job->request,
+        std::array{raw_native_field(branch), raw_native_field(error.code),
+                   raw_native_field(error.detail), raw_native_field(impl_->max_live),
+                   raw_native_field(impl_->max_records)},
+        admission_credit ? &*admission_credit : nullptr);
+  } catch (const Error &error) {
+    const std::lock_guard refusal_lock{impl_->mutex};
+    const std::uint8_t branch = 2;
+    (void)raw_command_linked(
+        2001, request,
+        std::array{raw_native_field(branch), raw_native_field(error.code),
+                   raw_native_field(error.detail), raw_native_field(impl_->max_live),
+                   raw_native_field(impl_->max_records)},
+        admission_credit ? &*admission_credit : nullptr);
+    throw;
   } catch (...) {
-    impl_->jobs.erase(id);
+    const std::lock_guard refusal_lock{impl_->mutex};
+    const std::uint8_t branch = 3;
+    const Error error{ErrorCode::allocation};
+    (void)raw_command_linked(
+        2001, request,
+        std::array{raw_native_field(branch), raw_native_field(error.code),
+                   raw_native_field(error.detail), raw_native_field(impl_->max_live),
+                   raw_native_field(impl_->max_records)},
+        admission_credit ? &*admission_credit : nullptr);
     throw;
   }
 }
 Value CommandJobs::wait(const std::string &id, JobWaitOptions options,
                         const std::function<void()> &tick,
                         const std::function<bool()> &cancelled) {
+  auto wait_credit = raw_command_claim(110);
+  const auto id_size = id.size();
+  const bool yield_present = options.yield_ms.has_value();
+  const auto yield_ms = options.yield_ms.value_or(0);
+  std::array<ByteView, 6> fields{raw_native_field(id_size),
+                                 raw_string_field(id),
+                                 raw_native_field(yield_present),
+                                 raw_native_field(yield_ms),
+                                 raw_native_field(options.max_output),
+                                 raw_native_field(options.stop_on_cancel)};
+  if (!yield_present) {
+    fields[3] = fields[4];
+    fields[4] = fields[5];
+  }
+  const auto request =
+      raw_command_data(2024, std::span{fields}.first(yield_present ? 6 : 5));
   std::uint64_t epoch = 0;
-  {
+  bool finished = false;
+  auto finish = [&](const Impl::Job *job, std::uint8_t branch, Error error = {}) {
+    if (finished)
+      return;
+    finished = true;
+    const bool terminal_retained = job && job->terminal_retained;
+    const bool leader_exited = job && job->leader_exited;
+    const bool output_closed = job && job->output_closed;
+    (void)raw_command_linked(
+        2026, request,
+        std::array{raw_native_field(epoch), raw_native_field(branch),
+                   raw_native_field(error.code), raw_native_field(error.detail),
+                   raw_native_field(terminal_retained), raw_native_field(leader_exited),
+                   raw_native_field(output_closed)},
+        wait_credit ? &*wait_credit : nullptr);
+  };
+  auto failure = [&](std::uint8_t branch, Error error) {
     const std::lock_guard lock{impl_->mutex};
-    auto &job = impl_->find(id);
-    if (!impl_->waiting.empty())
-      throw Error{ErrorCode::busy};
-    impl_->waiting = id;
-    epoch = ++impl_->epoch;
-    impl_->text_input = job.launch.pty;
-  }
-  struct Release {
-    Impl &state;
-    ~Release() {
-      const std::lock_guard lock{state.mutex};
-      state.waiting.clear();
-      state.text_input = false;
-    }
-  } release{*impl_};
-  const auto deadline =
-      options.yield_ms ? Clock::now() + std::chrono::milliseconds{*options.yield_ms}
-                       : Clock::time_point::max();
-  while (true) {
-    tick();
-    if (cancelled()) {
-      if (options.stop_on_cancel) {
-        std::shared_ptr<Impl::Job> stopped;
-        {
-          const std::lock_guard lock{impl_->mutex};
-          stopped = impl_->jobs.at(id);
-          stopped->stop = true;
-        }
-        if (stopped->worker.joinable())
-          stopped->worker.join();
-        // Cleanup progresses independently of capture backpressure; now retain
-        // that command's actual terminal before propagating turn cancellation.
-        for (unsigned pass = 0; pass < 4; ++pass)
-          tick();
-      }
-      throw Error{ErrorCode::interrupted};
-    }
-    std::unique_lock lock{impl_->mutex};
-    auto &job = impl_->find(id);
-    if (job.terminal_retained || job.release_epoch == epoch || Clock::now() >= deadline)
-      return impl_->snapshot(job, {options.max_output, 0, true});
-    impl_->condition.wait_for(lock, std::chrono::milliseconds{10});
-  }
-}
-Value CommandJobs::read(const Value &arguments) const {
-  const std::lock_guard lock{impl_->mutex};
-  const auto id =
-      arguments.find("job_id") ? string_field(arguments, "job_id") : std::string{};
-  if (!id.empty()) {
-    if (integer(arguments, "count", 65536) > 65536 ||
-        integer(arguments, "offset", 0) > impl_->find(id).retained)
-      throw Error{ErrorCode::invalid_range};
-    return impl_->snapshot(
-        impl_->find(id),
-        {static_cast<std::size_t>(
-             std::min<std::uint64_t>(65536, integer(arguments, "count", 65536))),
-         static_cast<std::size_t>(integer(arguments, "offset", 0)), true});
-  }
-  Value::Array rows;
-  for (const auto &[key, job] : impl_->jobs) {
-    (void)key;
-    rows.push_back(impl_->snapshot(*job, {}));
-  }
-  return Value::object({{"jobs", Value{std::move(rows)}},
-                        {"live", Value{Number{impl_->debt_locked()}}},
-                        {"max_live", Value{Number{impl_->max_live}}},
-                        {"max_records", Value{Number{impl_->max_records}}}});
-}
-Value CommandJobs::control(const Value &arguments) {
-  validate_control(arguments, false);
-  const auto op = string_field(arguments, "op");
-  if (op == "read")
-    return read(arguments);
-  std::unique_lock lock{impl_->mutex};
-  if (op == "configure") {
-    if (impl_->debt_locked())
-      throw Error{ErrorCode::busy};
-    const auto live = integer(arguments, "max_live", impl_->max_live);
-    const auto records = integer(arguments, "max_records", impl_->max_records);
-    if (live < 1 || live > 64 || records < live || records > 256 ||
-        records < impl_->jobs.size())
-      throw Error{ErrorCode::invalid_range};
-    impl_->max_live = static_cast<std::size_t>(live);
-    impl_->max_records = static_cast<std::size_t>(records);
-    return Value::object({{"configured", Value{true}}});
-  }
-  const auto id = string_field(arguments, "job_id");
-  auto &job = impl_->find(id);
-  if (op == "archive") {
-    if (!job.terminal_retained || impl_->waiting == id ||
-        std::any_of(
-            impl_->mailbox.begin(), impl_->mailbox.end(),
-            [&](const Value &entry) { return string_field(entry, "job_id") == id; }))
-      throw Error{ErrorCode::busy};
-    auto retained = impl_->jobs.at(id);
-    impl_->jobs.erase(id);
-    lock.unlock();
-    if (retained->worker.joinable())
-      retained->worker.join();
-    return Value::object({{"archived", Value{true}}, {"job_id", Value{id}}});
-  }
-  if (op == "background") {
-    const auto requested = integer(arguments, "wait_epoch", impl_->epoch);
-    const bool released = impl_->waiting == id && requested == impl_->epoch;
-    if (released)
-      job.release_epoch = requested;
-    impl_->condition.notify_all();
-    return Value::object({{"job_id", Value{id}}, {"released", Value{released}}});
-  }
-  if (op == "stop") {
-    job.stop = true;
-    impl_->condition.notify_all();
-    return Value::object({{"job_id", Value{id}}, {"stop_requested", Value{true}}});
-  }
-  const auto request = string_field(arguments, "request_id");
-  if (request.empty() || request.size() > 128)
-    throw Error{ErrorCode::invalid_range};
-  if (const auto existing = job.deliveries.find(request);
-      existing != job.deliveries.end()) {
-    if (!same_request(existing->second.request, arguments))
-      throw Error{ErrorCode::conflict};
-    const auto &delivery = existing->second;
-    return Value::object({{"job_id", Value{id}},
-                          {"request_id", Value{request}},
-                          {"written_bytes", Value{Number{delivery.written}}},
-                          {"status", Value{delivery.failed ? "partial_or_unknown"
-                                           : delivery.done ? "delivered"
-                                                           : "queued"}},
-                          {"duplicate", Value{true}}});
-  }
-  if (job.finished || job.deliveries.size() >= 4096)
-    throw Error{job.finished ? ErrorCode::busy : ErrorCode::capacity};
-  Impl::Delivery delivery{arguments, 0, false, false};
-  if (op == "input") {
-    if (!job.launch.pty)
-      throw Error{ErrorCode::unsupported};
-    if (delivery.bytes().size() > input_limit - job.input_bytes ||
-        delivery.bytes().size() > output_limit - job.input_history_bytes)
-      throw Error{ErrorCode::capacity};
-    delivery.done = delivery.bytes().empty();
-  } else if (op == "resize") {
-    const auto rows = integer(arguments, "rows", 24);
-    const auto columns = integer(arguments, "columns", 80);
-    if (!job.launch.pty || rows < 1 || columns < 1 || rows > 512 || columns > 512)
-      throw Error{ErrorCode::invalid_range};
-
-  } else if (op == "signal") {
-    const auto name = string_field(arguments, "signal");
-    const int number = name == "stop"        ? SIGSTOP
-                       : name == "continue"  ? SIGCONT
-                       : name == "interrupt" ? SIGINT
-                       : name == "terminate" ? SIGTERM
-                       : name == "kill"      ? SIGKILL
-                                             : 0;
-    if (!number || job.pid <= 0 || job.leader_exited)
-      throw Error{ErrorCode::busy};
-
-  } else {
-    throw Error{ErrorCode::unsupported};
-  }
-  const bool done = delivery.done;
-  auto [inserted, fresh] = job.deliveries.emplace(request, std::move(delivery));
-  (void)fresh;
+    const auto found = impl_->jobs.find(id);
+    finish(found == impl_->jobs.end() ? nullptr : found->second.get(), branch, error);
+  };
   try {
-    if (!done) {
-      if (op == "signal")
-        job.signals.push_back(request);
-      else
-        job.input.push_back(request);
+    {
+      const std::lock_guard lock{impl_->mutex};
+      auto &job = impl_->find(id);
+      if (!impl_->waiting.empty())
+        throw Error{ErrorCode::busy};
+      impl_->waiting = id;
+      epoch = ++impl_->epoch;
+      impl_->text_input = job.launch.pty;
+      (void)raw_command_linked(
+          2025, request,
+          std::array{raw_native_field(epoch), raw_native_field(job.launch.pty)},
+          wait_credit ? &*wait_credit : nullptr);
     }
+    struct Release {
+      Impl &state;
+      ~Release() {
+        const std::lock_guard lock{state.mutex};
+        state.waiting.clear();
+        state.text_input = false;
+      }
+    } release{*impl_};
+    const auto deadline =
+        options.yield_ms ? Clock::now() + std::chrono::milliseconds{*options.yield_ms}
+                         : Clock::time_point::max();
+    while (true) {
+      tick();
+      if (cancelled()) {
+        if (options.stop_on_cancel) {
+          std::shared_ptr<Impl::Job> stopped;
+          {
+            const std::lock_guard lock{impl_->mutex};
+            stopped = impl_->jobs.at(id);
+            impl_->caller_stop(*stopped, 5);
+          }
+          if (stopped->worker.joinable())
+            stopped->worker.join();
+          // Cleanup progresses independently of capture backpressure; now retain
+          // that command's actual terminal before propagating turn cancellation.
+          for (unsigned pass = 0; pass < 4; ++pass)
+            tick();
+        }
+        throw Error{ErrorCode::interrupted};
+      }
+      std::unique_lock lock{impl_->mutex};
+      auto &job = impl_->find(id);
+      if (job.terminal_retained || job.release_epoch == epoch ||
+          Clock::now() >= deadline) {
+        auto result = impl_->snapshot(job, {options.max_output, 0, true});
+        finish(&job, job.terminal_retained ? 1 : job.release_epoch == epoch ? 2 : 3);
+        return result;
+      }
+      impl_->condition.wait_for(lock, std::chrono::milliseconds{10});
+    }
+  } catch (const Error &error) {
+    failure(error.code == ErrorCode::interrupted ? 4 : 5, error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    failure(6, {ErrorCode::allocation});
+    throw;
   } catch (...) {
-    job.deliveries.erase(inserted);
+    failure(6, {ErrorCode::external_unknown});
     throw;
   }
-  if (op == "input") {
-    job.input_bytes += inserted->second.bytes().size();
-    job.input_history_bytes += inserted->second.bytes().size();
+}
+
+Value CommandJobs::read(const Value &arguments) const {
+  auto credit = raw_command_claim(58);
+  const auto id =
+      arguments.find("job_id") ? string_field(arguments, "job_id") : std::string{};
+  const auto requested = integer(arguments, "count", 65536),
+             offset = integer(arguments, "offset", 0);
+  const auto id_size = id.size();
+  const std::uint8_t mode = id.empty() ? 0 : 1;
+  const auto request = raw_command_data(
+      2037, std::array{raw_native_field(id_size), raw_string_field(id),
+                       raw_native_field(mode), raw_native_field(offset),
+                       raw_native_field(requested)});
+  std::size_t retained_size = 0;
+  auto finish = [&](std::uint8_t branch, Error error = {}) {
+    (void)raw_command_linked(
+        2039, request,
+        std::array{raw_native_field(branch), raw_native_field(error.code),
+                   raw_native_field(error.detail), raw_native_field(retained_size)},
+        credit ? &*credit : nullptr);
+  };
+  try {
+    if (id.empty()) {
+      const std::lock_guard lock{impl_->mutex};
+      Value::Array rows;
+      for (const auto &[key, job] : impl_->jobs) {
+        (void)key;
+        rows.push_back(impl_->snapshot(*job, {}));
+      }
+      auto result = Value::object({{"jobs", Value{std::move(rows)}},
+                                   {"live", Value{Number{impl_->debt_locked()}}},
+                                   {"max_live", Value{Number{impl_->max_live}}},
+                                   {"max_records", Value{Number{impl_->max_records}}}});
+      finish(1);
+      return result;
+    }
+    struct Selected {
+      std::shared_ptr<const std::string> bytes;
+      RawEventRef original;
+      std::size_t chunk_offset, at, length;
+    };
+    std::vector<Selected> selected;
+    Value result;
+    std::size_t begin = 0;
+    {
+      const std::lock_guard lock{impl_->mutex};
+      const auto &job = impl_->find(id);
+      if (requested > 65536 || offset > job.retained)
+        throw Error{ErrorCode::invalid_range};
+      result = impl_->snapshot(job, {});
+      retained_size = job.retained;
+      const auto first = job.tail.empty() ? job.retained : job.tail.front().offset;
+      begin = std::min(job.retained, std::max(static_cast<std::size_t>(offset), first));
+      std::size_t selected_bytes = 0;
+      for (const auto &chunk : job.tail) {
+        const auto end = std::min(chunk.offset + chunk.bytes->size(), job.retained);
+        if (end <= begin || selected_bytes >= requested)
+          continue;
+        const auto at = std::max(chunk.offset, begin);
+        const auto length =
+            std::min(end - at, static_cast<std::size_t>(requested) - selected_bytes);
+        selected.push_back({chunk.bytes, chunk.original, chunk.offset, at, length});
+        selected_bytes += length;
+      }
+    }
+    // The same shared originals are read outside the product lock. No history copy.
+    std::string bytes;
+    for (const auto &source : selected) {
+      (void)raw_command_linked_data(
+          2038, request,
+          std::array{ByteView{source.original.lane},
+                     raw_native_field(source.original.ordinal),
+                     raw_native_field(source.at), raw_native_field(source.length)});
+      bytes.append(*source.bytes, source.at - source.chunk_offset, source.length);
+    }
+    const auto shown = process_output_presentation(bytes, Value::object({}));
+    put(result, "output", field(shown, "output"));
+    put(result, "returned_bytes", Value{Number{bytes.size()}});
+    put(result, "omitted_bytes", Value{Number{retained_size - bytes.size()}});
+    put(result, "byte_start", Value{Number{begin}});
+    put(result, "next_offset", Value{Number{begin + bytes.size()}});
+    put(result, "omitted_prefix_bytes",
+        Value{Number{begin - std::min(static_cast<std::size_t>(offset), begin)}});
+    finish(1);
+    return result;
+  } catch (const Error &error) {
+    finish(2, error);
+    throw;
+  } catch (...) {
+    finish(3, {ErrorCode::allocation});
+    throw;
   }
-  impl_->condition.notify_all();
-  return Value::object({{"job_id", Value{id}},
-                        {"request_id", Value{request}},
-                        {"status", Value{done ? "delivered" : "queued"}},
-                        {"written_bytes", Value{Number{0}}},
-                        {"duplicate", Value{false}}});
+}
+Value CommandJobs::control(const Value &arguments) {
+  ControlTrace trace{arguments};
+  auto owner_text = [&](std::string_view key) -> std::string_view {
+    const auto *value = arguments.find(key);
+    return value && std::holds_alternative<std::string>(value->value())
+               ? std::string_view{value->string()}
+               : std::string_view{};
+  };
+  const auto operation = owner_text("op"), owner_job = owner_text("job_id");
+  std::optional<RawControlToken> ownership_credit;
+  if (operation == "configure" || operation == "archive")
+    ownership_credit = raw_command_claim(75 + owner_job.size());
+  const std::uint8_t owner_operation = operation == "configure" ? 1 : 2;
+  bool ownership_finished = false;
+  auto ownership = [&](std::uint8_t branch, Error error = {}) {
+    if (!ownership_credit || ownership_finished)
+      return;
+    ownership_finished = true;
+    const auto length = owner_job.size();
+    const std::lock_guard owner_lock{impl_->mutex};
+    (void)raw_command_linked(
+        2045, trace.reference(),
+        std::array{raw_native_field(length), raw_string_field(owner_job),
+                   raw_native_field(owner_operation), raw_native_field(branch),
+                   raw_native_field(error.code), raw_native_field(error.detail),
+                   raw_native_field(impl_->max_live),
+                   raw_native_field(impl_->max_records)},
+        &*ownership_credit);
+  };
+  try {
+    validate_control(arguments, false);
+    const auto op = string_field(arguments, "op");
+    if (op == "read") {
+      auto result = read(arguments);
+      trace.finish(1, 0, true, false);
+      return result;
+    }
+    if (op == "stop")
+      raw_command_data_credit(57);
+    std::optional<RawControlToken> background_credit;
+    if (op == "background") {
+      background_credit = raw_command_claim(58);
+      raw_command_data_credit(64);
+    }
+    std::unique_lock lock{impl_->mutex};
+    if (op == "configure") {
+      if (impl_->debt_locked())
+        throw Error{ErrorCode::busy};
+      const auto live = integer(arguments, "max_live", impl_->max_live);
+      const auto records = integer(arguments, "max_records", impl_->max_records);
+      if (live < 1 || live > 64 || records < live || records > 256 ||
+          records < impl_->jobs.size())
+        throw Error{ErrorCode::invalid_range};
+      impl_->max_live = static_cast<std::size_t>(live);
+      impl_->max_records = static_cast<std::size_t>(records);
+      lock.unlock();
+      ownership(1);
+      auto result = Value::object({{"configured", Value{true}}});
+      trace.finish(1, 0, true, false);
+      return result;
+    }
+    const auto id = string_field(arguments, "job_id");
+    auto &job = impl_->find(id);
+    if (op == "archive") {
+      if (!job.terminal_retained || !job.pending.empty() ||
+          job.custody == Impl::Custody::pending ||
+          job.custody == Impl::Custody::owned || impl_->waiting == id ||
+          std::any_of(impl_->mailbox.begin(), impl_->mailbox.end(),
+                      [&](const Impl::Mailbox &entry) {
+                        return string_field(entry.value, "job_id") == id;
+                      }))
+        throw Error{ErrorCode::busy};
+      auto retained = impl_->jobs.at(id);
+      impl_->jobs.erase(id);
+      lock.unlock();
+      if (retained->worker.joinable())
+        retained->worker.join();
+      ownership(1);
+      auto result = Value::object({{"archived", Value{true}}, {"job_id", Value{id}}});
+      trace.finish(1, 0, true, false);
+      return result;
+    }
+    if (op == "background") {
+      const auto requested = integer(arguments, "wait_epoch", impl_->epoch);
+      const auto id_size = id.size();
+      const auto background_request = raw_command_record(
+          2027, std::array{raw_native_field(id_size), raw_string_field(id),
+                           raw_native_field(requested)});
+      const bool released = impl_->waiting == id && requested == impl_->epoch;
+      if (released)
+        job.release_epoch = requested;
+      impl_->condition.notify_all();
+      const Error error{};
+      (void)raw_command_linked(
+          2028, background_request,
+          std::array{raw_native_field(impl_->epoch), raw_native_field(released),
+                     raw_native_field(error.code), raw_native_field(error.detail)},
+          background_credit ? &*background_credit : nullptr);
+      auto result =
+          Value::object({{"job_id", Value{id}}, {"released", Value{released}}});
+      trace.finish(1, 0, released, false);
+      return result;
+    }
+    if (op == "stop") {
+      const auto id_size = id.size();
+      const std::uint8_t source = 1;
+      (void)raw_command_record(2029, std::array{raw_native_field(id_size),
+                                                raw_string_field(id),
+                                                raw_native_field(source)});
+      job.stop = true;
+      job.caller_stop_credit.reset();
+      if (job.stop_wake)
+        job.stop_wake->notify();
+      impl_->condition.notify_all();
+      auto result =
+          Value::object({{"job_id", Value{id}}, {"stop_requested", Value{true}}});
+      trace.finish(1, 0, true, false);
+      return result;
+    }
+    const auto request = string_field(arguments, "request_id");
+    if (request.empty() || request.size() > 128)
+      throw Error{ErrorCode::invalid_range};
+    if (const auto existing = job.deliveries.find(request);
+        existing != job.deliveries.end()) {
+      if (!same_request(existing->second.request, arguments))
+        throw Error{ErrorCode::conflict};
+      const auto &delivery = existing->second;
+      auto result =
+          Value::object({{"job_id", Value{id}},
+                         {"request_id", Value{request}},
+                         {"written_bytes", Value{Number{delivery.written}}},
+                         {"status", Value{delivery.failed ? "partial_or_unknown"
+                                          : delivery.done ? "delivered"
+                                                          : "queued"}},
+                         {"duplicate", Value{true}}});
+      trace.finish(2, delivery.written, delivery.done, delivery.failed);
+      return result;
+    }
+    if (job.finished || job.deliveries.size() >= 4096)
+      throw Error{job.finished ? ErrorCode::busy : ErrorCode::capacity};
+    Impl::Delivery delivery{arguments, 0, false, false};
+    if (op == "input") {
+      if (!job.launch.pty)
+        throw Error{ErrorCode::unsupported};
+      if (delivery.bytes().size() > input_limit - job.input_bytes ||
+          delivery.bytes().size() > output_limit - job.input_history_bytes)
+        throw Error{ErrorCode::capacity};
+      delivery.done = delivery.bytes().empty();
+    } else if (op == "resize") {
+      const auto rows = integer(arguments, "rows", 24);
+      const auto columns = integer(arguments, "columns", 80);
+      if (!job.launch.pty || rows < 1 || columns < 1 || rows > 512 || columns > 512)
+        throw Error{ErrorCode::invalid_range};
+
+    } else if (op == "signal") {
+      const auto name = string_field(arguments, "signal");
+      const int number = name == "stop"        ? SIGSTOP
+                         : name == "continue"  ? SIGCONT
+                         : name == "interrupt" ? SIGINT
+                         : name == "terminate" ? SIGTERM
+                         : name == "kill"      ? SIGKILL
+                                               : 0;
+      if (!number || job.pid <= 0 || job.leader_exited)
+        throw Error{ErrorCode::busy};
+
+    } else {
+      throw Error{ErrorCode::unsupported};
+    }
+    const bool done = delivery.done;
+    auto [inserted, fresh] = job.deliveries.emplace(request, std::move(delivery));
+    (void)fresh;
+    try {
+      if (!done) {
+        if (op == "signal")
+          job.signals.push_back(request);
+        else
+          job.input.push_back(request);
+      }
+    } catch (...) {
+      job.deliveries.erase(inserted);
+      throw;
+    }
+    if (op == "input") {
+      job.input_bytes += inserted->second.bytes().size();
+      job.input_history_bytes += inserted->second.bytes().size();
+    }
+    impl_->condition.notify_all();
+    auto result = Value::object({{"job_id", Value{id}},
+                                 {"request_id", Value{request}},
+                                 {"status", Value{done ? "delivered" : "queued"}},
+                                 {"written_bytes", Value{Number{0}}},
+                                 {"duplicate", Value{false}}});
+    trace.finish(1, 0, done, false);
+    return result;
+  } catch (const Error &error) {
+    ownership(2, error);
+    trace.finish(3, 0, false, true, error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    ownership(3, {ErrorCode::allocation});
+    trace.finish(4, 0, false, true, {ErrorCode::allocation});
+    throw;
+  } catch (...) {
+    ownership(3, {ErrorCode::external_unknown});
+    trace.finish(4, 0, false, true, {ErrorCode::external_unknown});
+    throw;
+  }
 }
 void CommandJobs::request(Value arguments) {
-  validate_control(arguments, true);
-  const std::lock_guard lock{impl_->mutex};
-  const auto op = string_field(arguments, "op");
-  const bool urgent = op == "background" || op == "stop";
-  if (impl_->mailbox.size() >= (urgent ? 64U : 60U))
-    throw Error{ErrorCode::capacity};
-  auto id =
-      arguments.find("job_id") ? string_field(arguments, "job_id") : std::string{};
-  if (id.empty()) {
-    id = impl_->waiting;
-    if (id.empty())
-      throw Error{ErrorCode::busy};
-    put(arguments, "job_id", Value{id});
+  ControlTrace trace{arguments};
+  try {
+    validate_control(arguments, true);
+    raw_command_data_credit(145);
+    const std::lock_guard lock{impl_->mutex};
+    const auto op = string_field(arguments, "op");
+    const bool urgent = op == "background" || op == "stop";
+    if (impl_->mailbox.size() >= (urgent ? 64U : 60U))
+      throw Error{ErrorCode::capacity};
+    auto id =
+        arguments.find("job_id") ? string_field(arguments, "job_id") : std::string{};
+    if (id.empty()) {
+      id = impl_->waiting;
+      if (id.empty())
+        throw Error{ErrorCode::busy};
+      put(arguments, "job_id", Value{id});
+    }
+    const auto &job = impl_->find(id);
+    if (string_field(arguments, "op") == "input" &&
+        (!job.launch.pty || string_field(arguments, "bytes").size() > input_limit))
+      throw Error{ErrorCode::invalid_range};
+    if (!arguments.find("request_id"))
+      put(arguments, "request_id",
+          Value{id + ":ui:" + std::to_string(++impl_->request_counter)});
+    if (string_field(arguments, "op") == "background" && !arguments.find("wait_epoch"))
+      put(arguments, "wait_epoch", Value{Number{impl_->epoch}});
+    const auto &delivery = string_field(arguments, "request_id");
+    const auto id_size = id.size(), delivery_size = delivery.size();
+    const std::uint8_t branch = 1;
+    const auto source = raw_command_linked(
+        2015, trace.reference(),
+        std::array{raw_native_field(id_size), raw_string_field(id),
+                   raw_native_field(delivery_size), raw_string_field(delivery),
+                   raw_native_field(branch)});
+    impl_->mailbox.push_back({std::move(arguments), source});
+    impl_->condition.notify_all();
+    trace.finish(1, 0, false, false);
+  } catch (const Error &error) {
+    trace.finish(3, 0, false, true, error);
+    throw;
+  } catch (...) {
+    trace.finish(4, 0, false, true, {ErrorCode::allocation});
+    throw;
   }
-  const auto &job = impl_->find(id);
-  if (string_field(arguments, "op") == "input" &&
-      (!job.launch.pty || string_field(arguments, "bytes").size() > input_limit))
-    throw Error{ErrorCode::invalid_range};
-  if (!arguments.find("request_id"))
-    put(arguments, "request_id",
-        Value{id + ":ui:" + std::to_string(++impl_->request_counter)});
-  if (string_field(arguments, "op") == "background" && !arguments.find("wait_epoch"))
-    put(arguments, "wait_epoch", Value{Number{impl_->epoch}});
-  impl_->mailbox.push_back(std::move(arguments));
-  impl_->condition.notify_all();
 }
 std::vector<Value> CommandJobs::requests() {
+  std::size_t mailbox_count;
+  {
+    const std::lock_guard lock{impl_->mutex};
+    mailbox_count = impl_->mailbox.size();
+  }
+  raw_command_data_credit(mailbox_count * 145);
   const std::lock_guard lock{impl_->mutex};
   std::vector<Value> out;
   std::map<std::string, std::size_t> selected_bytes;
   std::map<std::string, std::size_t> selected_controls;
-  for (auto entry = impl_->mailbox.begin(); entry != impl_->mailbox.end();) {
-    const auto id = string_field(*entry, "job_id");
+  std::size_t visited = 0;
+  for (auto entry = impl_->mailbox.begin();
+       entry != impl_->mailbox.end() && visited++ < mailbox_count;) {
+    const auto id = string_field(entry->value, "job_id");
     auto &job = impl_->find(id);
-    const auto op = string_field(*entry, "op");
+    const auto op = string_field(entry->value, "op");
     const bool control = op == "input" || op == "resize" || op == "signal";
-    const auto bytes = op == "input" ? string_field(*entry, "bytes").size() : 0;
+    const auto bytes = op == "input" ? string_field(entry->value, "bytes").size() : 0;
     const bool duplicate =
-        control && job.deliveries.contains(string_field(*entry, "request_id"));
+        control && job.deliveries.contains(string_field(entry->value, "request_id"));
     if (!job.finished && control && !duplicate &&
         (job.deliveries.size() + selected_controls[id] >= 4096 ||
          bytes > input_limit - job.input_bytes - selected_bytes[id] ||
@@ -924,24 +1669,47 @@ std::vector<Value> CommandJobs::requests() {
       selected_bytes[id] += bytes;
       ++selected_controls[id];
     }
-    out.push_back(std::move(*entry));
+    const auto &delivery = string_field(entry->value, "request_id");
+    const auto id_size = id.size(), delivery_size = delivery.size();
+    const std::uint8_t branch = 2;
+    (void)raw_command_linked(2015, entry->source,
+                             std::array{raw_native_field(id_size), raw_string_field(id),
+                                        raw_native_field(delivery_size),
+                                        raw_string_field(delivery),
+                                        raw_native_field(branch)});
+    out.push_back(std::move(entry->value));
     entry = impl_->mailbox.erase(entry);
   }
   return out;
 }
 std::vector<JobEvent> CommandJobs::drain() {
+  std::map<std::string, std::size_t> selected;
+  std::size_t selected_count = 0;
+  {
+    const std::lock_guard lock{impl_->mutex};
+    for (const auto &[id, job] : impl_->jobs) {
+      selected[id] = std::min<std::size_t>(64, job->pending.size());
+      selected_count += selected[id];
+    }
+  }
+  raw_command_data_credit(selected_count * 96);
   const std::lock_guard lock{impl_->mutex};
   std::vector<JobEvent> out;
   for (const auto &[id, job] : impl_->jobs) {
     std::size_t count = 0;
-    while (!job->pending.empty() && count++ < 64) {
-      auto entry = std::move(job->pending.front());
-      job->pending.pop_front();
-      job->pending_bytes -= entry.bytes->size();
-      out.push_back({id, std::move(entry.bytes), entry.offset, Value{}});
+    for (const auto &entry : job->pending) {
+      if (count++ == selected[id])
+        break;
+      const auto id_size = id.size();
+      (void)raw_command_linked(2010, entry.original,
+                               std::array{raw_native_field(id_size),
+                                          raw_string_field(id),
+                                          raw_native_field(entry.offset),
+                                          raw_native_field(job->pending_bytes)});
+      out.push_back({id, entry.bytes, entry.offset, Value{}, entry.original});
     }
-    if (job->finished && job->pending.empty() && !job->terminal_sent) {
-      job->terminal_sent = true;
+    if (job->finished && (job->pending.empty() || job->capture_refused) &&
+        !job->terminal_retained) {
       auto result = Value::object(
           {{"job_id", Value{id}},
            {"output_ref", Value{id}},
@@ -963,7 +1731,11 @@ std::vector<JobEvent> CommandJobs::drain() {
         put(result, "error_detail",
             Value{Number{job->timed_out ? ETIMEDOUT : job->failure}});
       }
-      out.push_back({id, {}, job->received, std::move(result)});
+      if (!job->terminal_sent) {
+        job->terminal = std::move(result);
+        job->terminal_sent = true;
+      }
+      out.push_back({id, {}, job->received, job->terminal, job->terminal_ref});
     }
   }
   impl_->condition.notify_all();
@@ -974,18 +1746,110 @@ void CommandJobs::retained(const std::string &id, std::size_t end) {
   auto &job = impl_->find(id);
   if (end < job.retained || end > job.received)
     throw Error{ErrorCode::conflict};
+  std::size_t acknowledged = job.retained;
+  for (const auto &chunk : job.pending) {
+    if (acknowledged == end)
+      break;
+    if (chunk.offset != acknowledged || chunk.bytes->size() > end - acknowledged)
+      throw Error{ErrorCode::conflict};
+    acknowledged += chunk.bytes->size();
+  }
+  if (acknowledged != end)
+    throw Error{ErrorCode::conflict};
+  while (!job.pending.empty() && job.pending.front().offset < end) {
+    job.pending_bytes -= job.pending.front().bytes->size();
+    job.pending.pop_front();
+  }
   job.retained = end;
+  impl_->condition.notify_all();
+}
+std::size_t CommandJobs::retained_end(const std::string &id) const {
+  const std::lock_guard lock{impl_->mutex};
+  return impl_->find(id).retained;
+}
+void CommandJobs::capture_failed_all() {
+  const std::lock_guard lock{impl_->mutex};
+  for (auto &[id, job] : impl_->jobs) {
+    (void)id;
+    if (!job->terminal_retained) {
+      job->capture_complete = false;
+      job->capture_refused = true;
+      impl_->caller_stop(*job, 6);
+    }
+  }
+  impl_->condition.notify_all();
 }
 void CommandJobs::capture_failed(const std::string &id) {
   const std::lock_guard lock{impl_->mutex};
   auto &job = impl_->find(id);
   job.capture_complete = false;
-  job.stop = true;
+  job.capture_refused = true;
+  impl_->caller_stop(job, 6);
   impl_->condition.notify_all();
+}
+void CommandJobs::settlement(const JobEvent &event,
+                             const std::function<void()> &append) {
+  std::shared_ptr<Impl::Job> job;
+  {
+    const std::lock_guard lock{impl_->mutex};
+    job = impl_->jobs.at(event.job_id);
+    if (!job->finished || (!job->pending.empty() && !job->capture_refused) ||
+        job->terminal_retained)
+      throw Error{ErrorCode::busy};
+  }
+  if (job->worker.joinable())
+    job->worker.join();
+  RawThreadBinding binding{job->raw_context};
+  auto credit = std::move(job->semantic_credit);
+  job->semantic_credit.reset();
+  if (!credit && raw_enabled())
+    credit = raw_command_claim(raw_command_semantic_credit);
+  std::optional<RawControlToken> regions;
+  if (credit)
+    regions.emplace(unwrap(credit->split(raw_command_region_credit)));
+  std::optional<RawRegionPrepaidScope> scope;
+  if (regions)
+    scope.emplace(*regions);
+  const auto id_size = event.job_id.size();
+  const auto request = raw_command_linked(
+      2035, event.original,
+      std::array{raw_native_field(id_size), raw_string_field(event.job_id)},
+      credit ? &*credit : nullptr);
+  std::uint8_t branch = 1;
+  Error error{};
+  try {
+    append();
+    settled(event.job_id, event.result);
+  } catch (const Error &failure) {
+    branch = 2;
+    error = failure;
+    (void)raw_command_linked(2036, request,
+                             std::array{raw_native_field(branch),
+                                        raw_native_field(error.code),
+                                        raw_native_field(error.detail)},
+                             credit ? &*credit : nullptr);
+    throw;
+  } catch (...) {
+    branch = 3;
+    error = {ErrorCode::allocation};
+    (void)raw_command_linked(2036, request,
+                             std::array{raw_native_field(branch),
+                                        raw_native_field(error.code),
+                                        raw_native_field(error.detail)},
+                             credit ? &*credit : nullptr);
+    throw;
+  }
+  (void)raw_command_linked(2036, request,
+                           std::array{raw_native_field(branch),
+                                      raw_native_field(error.code),
+                                      raw_native_field(error.detail)},
+                           credit ? &*credit : nullptr);
 }
 void CommandJobs::settled(const std::string &id, const Value &result) {
   const std::lock_guard lock{impl_->mutex};
   auto &job = impl_->find(id);
+  if (!job.finished)
+    throw Error{ErrorCode::busy};
   job.terminal = result;
   job.terminal_retained = true;
   impl_->condition.notify_all();
@@ -1009,18 +1873,150 @@ void CommandJobs::stop_all() noexcept {
   const std::lock_guard lock{impl_->mutex};
   for (auto &[id, job] : impl_->jobs) {
     (void)id;
-    if (!job->finished)
-      job->stop = true;
+    if (!job->finished) {
+      impl_->caller_stop(*job, 7);
+    }
   }
   impl_->condition.notify_all();
 }
 void CommandJobs::shutdown() noexcept {
   stop_all();
-  // Only the owning thread starts/archives/shuts down; workers never alter registry.
+  Error shutdown_error{};
+  // Registry mutation belongs to this owner; worker completion is followed by join.
   for (const auto &[id, job] : impl_->jobs) {
     (void)id;
     if (job->worker.joinable())
       job->worker.join();
+    if (job->custody != Impl::Custody::pending)
+      continue;
+    RawThreadBinding binding{job->raw_context};
+    try {
+      auto credit = std::move(job->retry_credit);
+      job->retry_credit.reset();
+      if (!credit && raw_enabled())
+        credit = raw_command_claim(raw_command_retry_credit);
+      auto *held = credit ? &*credit : nullptr;
+      const auto type = P_PID;
+      const auto selector = static_cast<id_t>(job->pid);
+      const int options = WEXITED | WNOHANG | WNOWAIT;
+      siginfo_t observed{};
+      const auto probe = raw_command_linked(2022, job->launch_ref,
+                                            std::array{raw_native_field(type),
+                                                       raw_native_field(selector),
+                                                       raw_native_field(options)},
+                                            held);
+      const int result = ::waitid(type, selector, &observed, options), error = errno;
+      (void)raw_command_linked(
+          2023, probe,
+          std::array{
+              raw_native_field(result), raw_native_field(error),
+              raw_native_field(observed.si_pid), raw_native_field(observed.si_uid),
+              raw_native_field(observed.si_code), raw_native_field(observed.si_status)},
+          held);
+      if (result == 0) {
+        const int number = SIGKILL;
+        const std::size_t delivery_size = 0;
+        auto native_signal = [&](std::uint8_t method, pid_t target) {
+          const auto request = raw_command_linked(
+              2020, job->launch_ref,
+              std::array{raw_native_field(delivery_size), ByteView{},
+                         raw_native_field(target), raw_native_field(number),
+                         raw_native_field(method)},
+              held);
+          const int rc = method == 3 ? static_cast<int>(::getpgid(target))
+                                     : ::kill(target, number);
+          const int signal_error = errno;
+          if (method == 3) {
+            const auto group = static_cast<pid_t>(rc);
+            (void)raw_command_linked(2021, request,
+                                     std::array{raw_native_field(rc),
+                                                raw_native_field(signal_error),
+                                                raw_native_field(group)},
+                                     held);
+          } else
+            (void)raw_command_linked(
+                2021, request,
+                std::array{raw_native_field(rc), raw_native_field(signal_error)}, held);
+          return rc;
+        };
+        if (!job->ready || native_signal(1, -job->pid) != 0 ||
+            native_signal(3, job->pid) != job->pid)
+          (void)native_signal(2, job->pid);
+        const int reap_options = 0;
+        const auto request = raw_command_linked(
+            2032, job->launch_ref,
+            std::array{raw_native_field(job->pid), raw_native_field(reap_options)},
+            held);
+        int status = 0;
+        pid_t reaped;
+        do {
+          reaped = ::waitpid(job->pid, &status, reap_options);
+        } while (reaped < 0 && errno == EINTR);
+        const int reap_error = errno;
+        const bool valid = reaped == job->pid;
+        (void)raw_command_linked(
+            2033, request,
+            std::array{raw_native_field(reaped), raw_native_field(reap_error),
+                       raw_native_field(valid), raw_native_field(status)},
+            held);
+        const std::lock_guard lock{impl_->mutex};
+        if (valid)
+          job->custody = Impl::Custody::reaped;
+        else if (reaped < 0 && reap_error == ECHILD)
+          job->custody = Impl::Custody::unavailable;
+        else
+          job->failure = reap_error;
+      } else {
+        const std::lock_guard lock{impl_->mutex};
+        if (error == ECHILD)
+          job->custody = Impl::Custody::unavailable;
+        else
+          job->failure = error;
+      }
+      const std::lock_guard lock{impl_->mutex};
+      if (job->counted && job->custody != Impl::Custody::pending) {
+        --detail::owned_children;
+        job->counted = false;
+      }
+      const auto id_size = job->id.size();
+      job->terminal_ref = raw_command_linked(
+          2034, job->launch_ref,
+          std::array{
+              raw_native_field(id_size), raw_string_field(job->id),
+              raw_native_field(job->pid), raw_native_field(job->received),
+              raw_native_field(job->failure), raw_native_field(job->capture_complete),
+              raw_native_field(job->timed_out), raw_native_field(job->stop),
+              raw_native_field(job->leader_exited),
+              raw_native_field(job->output_closed), raw_native_field(job->custody)},
+          held);
+      if (job->custody == Impl::Custody::pending && shutdown_error.code == ErrorCode{})
+        shutdown_error = {ErrorCode::io, job->failure};
+    } catch (const Error &error) {
+      if (shutdown_error.code == ErrorCode{})
+        shutdown_error = error;
+      if (error.code != ErrorCode::interrupted)
+        raw_fence(error);
+    } catch (...) {
+      if (shutdown_error.code == ErrorCode{})
+        shutdown_error = {ErrorCode::allocation};
+      raw_fence({ErrorCode::allocation});
+    }
+  }
+  const std::lock_guard lock{impl_->mutex};
+  if (impl_->cleanup_context && impl_->shutdown_credit) {
+    RawThreadBinding owner{impl_->cleanup_context};
+    const std::size_t empty = 0;
+    const std::uint8_t operation = 3;
+    const std::uint8_t branch = shutdown_error.code == ErrorCode{} ? 1 : 2;
+    (void)raw_command_linked(
+        2045, {},
+        std::array{raw_native_field(empty), raw_native_field(operation),
+                   raw_native_field(branch), raw_native_field(shutdown_error.code),
+                   raw_native_field(shutdown_error.detail),
+                   raw_native_field(impl_->max_live),
+                   raw_native_field(impl_->max_records)},
+        &*impl_->shutdown_credit);
+    impl_->shutdown_credit.reset();
   }
 }
 } // namespace blackbird

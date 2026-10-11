@@ -1,5 +1,6 @@
 #pragma once
 #include "blackbird/context.hpp"
+#include "blackbird/raw_tasks.hpp"
 #include <array>
 #include <deque>
 #include <set>
@@ -22,13 +23,14 @@ public:
     std::uint64_t revision = 0, next = 1;
     std::string title, bead;
     Value packet, result;
+    std::optional<RawEventRef> raw_prepare;
   };
-  Prepared prepare(const Value &request) const;
-  void commit(Prepared prepared);
-  void replay(const Value &packet);
-  void restore(const Value &snapshot);
-  Value snapshot() const;
-  Value read(const Value &query = Value::object({})) const;
+  Prepared prepare(const Value &request, RawTaskOrigin origin = {}) const;
+  void commit(Prepared &&prepared, RawTaskOrigin origin = {});
+  void replay(const Value &packet, RawTaskOrigin origin = {});
+  void restore(const Value &snapshot, RawTaskOrigin origin = {});
+  Value snapshot(RawTaskOrigin origin = {}) const;
+  Value read(const Value &query = Value::object({}), RawTaskOrigin origin = {}) const;
   const Value *item(std::string_view id) const;
   std::uint64_t revision() const noexcept { return revision_; }
   bool empty() const noexcept { return items_.empty(); }
@@ -48,10 +50,10 @@ private:
 class TaskStore {
 public:
   explicit TaskStore(AuditLog &log);
-  Value read(const Value &query = Value::object({})) const {
-    return state_.read(query);
+  Value read(const Value &query = Value::object({}), RawTaskOrigin origin = {}) const {
+    return state_.read(query, origin);
   }
-  Value edit(const Value &request);
+  Value edit(const Value &request, RawTaskOrigin origin = {});
   Value operator_command(std::string_view command);
   Value snapshot() const { return state_.snapshot(); }
   const TaskState &state() const noexcept { return state_; }

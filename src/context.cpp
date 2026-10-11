@@ -84,8 +84,8 @@ void AuditLog::record_boundary(ApplicationRecordId identity,
                                            unwrap(encode_packet(program_packet))}}};
   (void)unwrap(root_.append(root_.cursor(), {}, events));
 }
-void AuditLog::retain_program(std::string_view source,
-                              DefinitionGenerationId generation) {
+SourceReference AuditLog::retain_program(std::string_view source,
+                                         DefinitionGenerationId generation) {
   const auto original = issue();
   const auto activation = issue();
   const auto cursor = root_.cursor();
@@ -106,6 +106,7 @@ void AuditLog::retain_program(std::string_view source,
                     ApplicationRecordEvent{activation, ApplicationChannel::program,
                                            unwrap(encode_packet(effective))}}};
   (void)unwrap(root_.append(cursor, std::span{&raw, 1}, events));
+  return {cursor.journal, cursor.sequence + 1};
 }
 std::string AuditLog::original(OriginalCapture capture) {
   const auto label = capture.label;

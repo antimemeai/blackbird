@@ -120,3 +120,48 @@ fix exposed defects, run direct greens and one code/oracle attack with its
 finding-driven recheck under the existing two-layer limit. The root owns aggregate
 source/profile gates. This note does not yet authorize auth source or claim auth
 burst sizes are finished.
+
+## Implementation qualification, 2026-10-11
+
+The preimplementation direct tests refused to compile against the checkpoint API:
+`hold_capacity`, `raw_claim_data` and `split` did not exist. Those are missing-API
+reds, not executed behavioral reds. The exact diagnostics are retained in
+`context/partition-claim-red.log`; an ordinary target build first encountered a
+concurrent command lane already calling the absent split, so the two owning test
+translation units were then compiled directly with their qualified compile
+commands and `-fsyntax-only`. Both exited 1 before claim source was changed. No
+hook was disabled and no fake implementation supplied for that run.
+
+The candidate has one 24-byte native pointer/remaining/partition claim, one
+`held_[3]` aggregate and one shared runtime admission loop. Existing control
+names are aliases/forwarders. Failure reservation, shared mapping and disk ABI
+are unchanged. The direct registered-data fixture captures the actual producer
+endpoint from its registration's SCM_RIGHTS, forwards native sendmsg/poll, and
+identifies the exact POLLIN space wait by that descriptor. A supervisor RPC or
+gate wait cannot satisfy the cut. With Rec stopped and Sup running it requires
+that cut for deadline, cancellation and eventual grant; actual native source
+pipe FIONREAD remains 48 until the grant. Previously held data/control originals
+publish after refusal; after Rec resumes one native read acquires the 48 bytes.
+
+The root's single code/oracle attack found that same-owner held/reserved bytes
+made some nested requests impossible even when P==A. Before fixing it, the new
+actual runtime oracle with 96 bytes held in a 128-byte lane and a 64-byte request returned interrupted/ETIMEDOUT
+for data claim, control claim and raw_wait_data (Mac native code 13/detail 60),
+where capacity refusal was required. The genuine behavioral red is retained in
+`context/partition-claim-limit-red.log`. Added maximum_grant computed directly
+from checked capacity-reserved-held fields; both runtime paths refuse above it
+before parking, without any ack-derived estimate or extra ledger. The direct
+oracle checks unchanged all-partition P=A=0, 96-byte held claims and subsequent ordinals 1/2.
+
+The same attack required removing new analyzer suppressions from deliberately
+moved-from/invalid-enum oracles. None remains. Actual optional ownership wrappers
+stay engaged after their contained claims move; the tests then verify the inert
+contained tokens through split/refusal and remaining(). Unknown fixed uint32_t
+enum values are constructed from native bytes. The preserved direct oracles
+compile and pass without suppressions. Recheck raw_admission passed 0.55 seconds
+and raw_channel passed 0.50 seconds (1.06 seconds total) after those corrections.
+Final clang-tidy of raw_channel.cpp, raw_runtime.cpp and the two owning test
+units passed with exit 0 and no diagnostics. The actual qualified ARM64 test
+object's DWARF reports RawCapacityClaim byte size 0x18 (24), retained in
+context/partition-claim-size.log. Relevant diff whitespace checks passed.
+No full source/profile gate was repeated by this owner; the root owns it.

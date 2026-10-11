@@ -511,8 +511,9 @@ void provider_owner_records(Provider::Mode mode) {
   AuditLog log{*root};
   ContextStore context{log};
   Provider provider{mode};
-  CodingEngine engine{log, context, provider, "test"};
+  // Runtime retains the borrowed producer until its VM closes after turn return.
   Lane lane{{1024 * 1024, 1024 * 1024, 4096}};
+  CodingEngine engine{log, context, provider, "test"};
   bool failed = false;
   {
     RawThreadBinding binding{lane.producer, lane.epoch};

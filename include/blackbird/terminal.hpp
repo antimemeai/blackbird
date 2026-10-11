@@ -110,7 +110,8 @@ public:
            const std::function<bool()> &exit_requested = {}, std::string initial = {},
            std::filesystem::path state_path = {},
            const std::function<void()> &idle_work = {},
-           std::shared_ptr<CommandJobs> commands = {});
+           std::shared_ptr<CommandJobs> commands = {}, int interrupt_fd = -1,
+           const std::function<void()> &reset_interrupt = {});
 
 private:
   enum class Kind {

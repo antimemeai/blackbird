@@ -6486,3 +6486,309 @@ adds none. Publication succeeds to origin/master,206c106..3561c72. User art and
 AFK stash remain untouched, and no installed operator executable is replaced.
 Record the result and stable successor plans with text checks only; do not rerun
 the settled source gate for that documentation. nls.2 remains in progress.
+
+### 2026-10-11 — owned data/control capacity claims and split (implementation)
+
+Under the reviewed partition-claim subplan and root release, added direct data,
+split, move, mismatch, exact-byte, overflow and real space-admission oracles
+before changing the claim source. The checkpoint refused those test units at the
+absent hold_capacity/raw_claim_data/split API: recorded missing-API reds, without
+claiming an executed behavioral baseline. Generalized the existing control
+claim to one RawCapacityClaim/held_[3] mechanism, retained control aliases/API,
+and shared the cancel/deadline wait loop between data/control. Split transfers
+prepaid capacity without new admission or aggregate change. No epoch field,
+second ledger, callback, body copy during wait, format change or failure-token
+path. New real-runtime test observes the exact registered producer space fd,
+with Rec stopped/Sup running, and checks that its literal source pipe is unread
+until capacity grant. Initial narrow static diagnostics were only the deliberate
+moved-from/unknown fixed-enum test inputs; local suppressions state their exact
+purpose. Focused build/tests and root's single code/oracle attack follow.
+
+Continue the approved completion after checkpoint0e9bd19. Release independently
+owned capacity partition/split, command custody/settlement, and external sampler
+units with one worker each; root uses at most three compiler workers. Integrate
+new command/sampler targets and immutable runtime descriptions when their sources
+exist. Evals and main-process acquisition timers remain excluded.
+
+Implement the reviewed native recorder qualification fixture: actual pwritev
+short write19/EIO, actual selected fsync error/success, actual published rename
+success before acknowledgement, retained source/failure bytes, two full producer
+owners, and6144-record hot/cold source-count fairness. Native next symbols resolve
+before fork; shared test state selects the actual event inode and publication
+path. No production seam or policy change. First actual partial/sync-error runs
+retain exact expected originals and failure8000 bodies with the single103-byte
+failure slot in configured111. The first successful-sync death run exposes a
+fixture race: open_audit can reclaim the recovered source before repaired cursor
+publication. Wait for the actual published prefix as well as A; do not treat A
+alone as reader visibility and do not change the runtime. Correct fixture native
+frame magic/recorder lane capacities by reading the source. Focused formatting
+and tidy pass after replacing easily-swapped expected-body parameters with
+compile-time widths/sites. Full focused run and ONE code/oracle attack follow;
+these source changes are not yet a qualified checkpoint.
+
+### 2026-10-11 — partition claim attack fixes and recorder code/oracle attack
+
+Root's one primitive attack rejected the new analyzer suppressions; removed all
+of them and retained moved-from/unknown fixed-enum refusal tests using actual
+optional token ownership and native enum-byte construction. Its substantive
+finding reproduced three actual interrupted/ETIMEDOUT responses for impossible
+same-owner data claim, control claim and data wait (96 bytes held in a 128-byte lane and a 64-byte request,
+P=A). Recorded the genuine behavioral red before changing source, then added a
+checked native capacity-reserved-held maximum grant to both wait paths. No ack
+snapshot, extra ledger or body acquisition. Focused post-fix raw_admission and
+raw_channel recheck passed in 1.06 seconds; final narrow static pass follows.
+
+Completed the recorder unit's authorized ONE source code/oracle attack and saved
+papers/2026-10-11-raw-recorder-cuts-code-review.md. Two findings: failed parent
+assertions can leave its stopped supervisor/parked recorder alive, and death-cut
+reader checks omit the DATA partition in the actual origin. No recorder source
+edits or duplicate dynamic run. Native I/O/body/cut, single-slot append/sync
+refusal, actual STREAM waits and the 4096-hot-record fairness bound were checked
+against the owning runtime/audit/native source and qualified within that scope.
+
+Partition claim final narrow clang-tidy passed for both source units and both
+tests, exit0/no diagnostics. Actual qualified ARM64 test-object DWARF reports
+RawCapacityClaim byte size0x18 (24 bytes), retained in context/partition-claim-size.log.
+Relevant diff whitespace checks passed. Builds/source held for root integration;
+no commits or duplicate full source/profile gate by this owner.
+
+Root fixed both recorder code/oracle findings in the same unit: a private actual
+supervisor/descendant process group enables assertion/abort cleanup without
+unrelated PIDs, child parking writers close, interrupted parking exits, and the
+death-cut origin assertions now include DATA/start0. Focused recorder recheck
+passes0.92s and its final static pass has no diagnostics. No second panel.
+
+Added setup-only raw_current_thread TLS binding-handle access and direct native
+joined-owner transfer fixture for the reviewed authored lifetime: one retained
+existing lane, nested binding restoration, held16-byte END survives worker join
+and publication from the later owner, exact persisted lane/ordinals/partitions.
+The baseline header genuinely fails on the absent API; a separate public
+CodingEngine probe genuinely fails on the absent Lua blackbird.emit API. This
+native support is not Lua emission completion. Native fixture green0.33s;
+focused optional-access diagnostics fixed with explicit branch before access,
+without suppression. Corrected the authored layout note's earlier module draft
+and source-binding sum to match the final reviewed boundary.
+
+2026-10-11: Provider/auth owner finished the concrete census35/46 study subplan:
+sizeof-based finite per-action control credits and joint packet-bounded protected
+DATA, explicit nested split ownership, save errors after rename, durable native
+40-byte standalone environment/header with exclusive publication, separate metrics
+setting/default and sticky signal pipe/scope lifetime. No Number.text hook,
+private payload capture, source edits or compiler work. Sent for root's one plan
+attack. Also completed the requested one task-owner plan attack, saved in
+papers/2026-10-11-task-owner-raw-plan-review.md: actual discarded AuditLog hex
+format can throw after retained acceptance before task commit; restore/replay
+post-effect site/finite credit routes need explicit completion. Confirmed the
+source-grounded16MiB+48 prepared-source DATA allowance; no extra encoding or
+metrics traversal. Root owns resolutions/releases and integrated gates.
+
+2026-10-11 — Continued nls.2 with the existing six-worker limit. Linux
+run-py1fnxih passes raw_recorder_cuts/raw_sampler/raw_admission/raw_channel in
+debug, release and ASan. The sampler fixture originally compared DATA and
+CONTROL records in recorder order; it now compares the selected producer's
+original ordinals. No writer or recorder transform changed. The later
+raw_try_claim_control extension is not covered by that Linux snapshot: its
+native canceled/full/fenced admission fixture passes macOS debug in0.65s.
+
+The ONE task-owner plan attack found the discarded post-append ID-formatting
+allocation and missing direct restore publication detail. Resolved the plan with
+the existing void AuditLog record overload, explicit native16-byte identity,
+492-byte post-BEGIN edit bank, parented221-byte commit sub-bank, and native
+restore/replay boundaries. Actual baseline allocation cut identifies the real
+hex_identity stack frame:40-byte allocation refused after retained acceptance,
+revision0 and callbacks0 (context/tasks-postappend-allocation-red.log). A separate
+real RawRuntime edit/read/operator baseline fails on absent task1700 request
+(context/tasks-surface-red.log). Task source is now in implementation under that
+reviewed plan; neither red is a candidate-hook disable or fabricated outcome.
+
+Task candidate direct green0.77s: omitted discarded identity formatting,
+retained append followed by revision1/callback1; actual pwrite EIO leaves
+revision0/callback0/cursor unchanged; successful native full sync followed by
+sticky cancellation and filled unheld CONTROL still commits revision1 and emits
+held publication/state/callback/terminal events. The first full-space fixture
+omitted RawProducer's required reservation before its filler emit and threw
+inside the native sync wrapper; corrected that oracle, with no production fix
+for the nonexistent post-sync failure. All three task source/test TUs pass narrow
+clang-tidy without diagnostics. Sent the green candidate for its ONE code/oracle
+attack. Authored ONE attack's source/VM/END oracle finding is corrected and its
+direct fixture passes1.90s with clean test-TU static checks; no source change or
+new review panel.
+
+2026-10-11 provider authorization capture source checkpoint: preserved actual
+set_key missing1600 baseline red and standalone missing-environment red before
+hooks. Implemented reviewed native action/terminal and protected finite banks,
+revision/save/private-operation boundaries, browser/Codex ownership and actual
+application linkage, standalone immutable EnvironmentId/root checks and sticky
+native signal scope. Native Mac probe disproved /dev/fd subpaths; root authorized
+F_GETPATH plus before/after native root identity checks, recorded in the subplan.
+Focused native fixture and existing auth/OAuth/Codex business checks pass, with
+original bytes/error fields, process-native full DATA cancellation, secret
+exclusion, native environment races/failures and launcher signal/read-only
+behavior. Narrow lint finishing; root's one code/oracle attack remains next.
+
+2026-10-11 provider/auth ONE code/oracle attack resolved: complete native scalar
+lane identities and full private action/request references now checked, with
+exact success/status, original io/ECONNRESET and unknown-exception bodies; Codex
+file/RPC pairs compare literal native bodies and actual begin ordinals. Exactly
+one return per begun operation is enforced by the direct fixture. Affected raw
+fixture passes after -j1 debug rebuild; helper/fixture narrow clang-tidy and
+format/diff checks pass. No source hook defect was asserted and no additional
+review panel was opened. Source/build lane is idle; root owns integration.
+
+2026-10-11 task ONE code/oracle attack found a second accepted-state allocation:
+Prepared passed by value moves its deque; selected Linux libstdc++13 allocates
+64bytes in that move. Genuine supported-Linux red (run-4wwx647k) leaves accepted
+append at revision0/callback0. Commit now consumes Prepared&&. The direct cut
+rejects every allocation after the task append until state publication; Mac
+passes with revision1/callback1 and no allocation. Exact prepare/read/snapshot
+bodies, per-owner state publications and live/replay parent references replace
+the insufficient count checks. Final Mac direct fixture passes0.54s; profile
+recheck is running. No second review panel.
+
+2026-10-11 command/live-recorder ONE attack resolves two findings: API terminal
+success follows returned Value construction and cannot be spent twice; actual
+PTY request/read/write, partial native errors, resize/signal, owner release and
+refusal bodies are now checked with full native descriptors/references and
+producer ordinals. Genuine result-allocation red is retained. The five direct
+checks pass31.49s including real PTY18.96s and station1.34s; final command-only
+recheck and four changed-TU static checks pass. Live add/retire uses native
+descriptor handoff instead of restarting and scanning the recorder's history.
+
+2026-10-11 next-owner study: ContextStore must hold failed-turn finish/view/stop
+append outcomes before effects and retain actual Original provenance rather
+than derive locators from presentation IDs. Provider and participant owners
+are agreeing one pre-acquisition original-transfer contract; borrowed views
+cannot preserve originals after a capture refusal. Context and turn drafts
+explicitly list remaining banks/integrations and do not release source. Physical
+storage/indexing, remaining program/session owners and workload measurements
+remain open. The read-only Rhizome C++ representation watch reinforces native
+domain/ownership distinctions and analysis limits; no dependency is adopted.
+
+2026-10-11 integration qualification: all10 new/affected Mac release checks pass
+9.22s and ASan/UBSan checks pass39.30s. First final Linux attempt failed at the
+authored fixture's static-Lua duplicate symbols; owning target now uses actual
+GNU --wrap/__real calls on Linux, retaining Darwin RTLD_NEXT. Focused Mac and
+owning static checks pass. Supported Linux three-profile recheck and installed
+source gate are pending. Evals, logical clocks and broader audit completeness
+remain separate; no claim of completing the60-row instrumentation census.
+
+2026-10-11 provider exchange-owner study/subplan: enumerated request assembly,
+retry, owned/compatible HTTP, decode/preview/presentation, acceptance and colleague
+prepare/transport boundaries, their actual native identities and finite held
+credits. Provider and participant plans share one pre-acquisition native storage
+lease and exact raw Ref/range handoff; ordinary Child keeps its stack buffer,
+participant mode fills its already staged storage directly, and codec mode adopts
+the ONE existing encoded string without a spare maximum-sized body. Shared-seam
+skim corrected participant RawPartition width to the actual u32. Root's ONE
+provider plan attack is underway; its partial-fill-without-commit finding needs
+explicit unknown-used extent preservation before source release. No adapter source,
+compiler, new dependency, timer or extra review panel was introduced.
+
+2026-10-11 provider ONE plan attack resolved its partial-write-before-commit
+finding: on exception or normal missing commit, source guard publishes the same
+initialized native extent with unknown-used qualification and no invented used
+length. Exact-used commit offset58 and unknown-used snapshot offset50 share
+one16MiB+58 protected grant. Participant owns the actual snapshot/ref as
+unresolved semantic debt in its bounded emergency node, stops acquisition and
+does not parse or Retain it as a complete response. Private HTTP payload capture
+stays inactive; native read and codec original offsets remain61/49. Direct
+oracles now include a literal fill/throw without commit. Source remains held
+for root's completed-owner checkpoint; document/link checks only.
+
+
+2026-10-11 completed-owner profile qualification: all10 affected Mac release
+cases pass9.22s and ASan/UBSan39.30s. Linux debug7/7 and release7/7 pass
+(`run-0glg6ury`); ASan catches actual task/command fixture mismatched new/sized
+delete on libstdc++. Add matching scalar/array sized deletes forwarding to the
+existing free, leaving sanitizers enabled. Affected Mac pair passes9.92s and
+Linux pair passes10.63s (`run-eqymfxgq`), joining the five passing ASan owners.
+Task native direct passes0.93s/static clean; command native direct5.95s/static
+clean. Authored fixture uses actual Linux static-Lua --wrap calls, not duplicate
+replacement symbols. Format-only include ordering corrected in raw_channel and
+raw_runtime. Full installed source gate and source checkpoint are next; no
+completed-census or evaluator claim.
+
+2026-10-11 source-gate auth/provider qualification findings: real auth CLI
+exits conflict/ENOTDIR before prompt because older tempfile fixture passes Mac
+/var alias to nonfollow setup; provider raw direct returns capacity:0 because
+its1MiB lane is smaller than reviewed resolve_owned1048576+126+P burst. Plan
+canonicalizes only fixture root and grants2MiB only auth-request fixture lanes,
+keeping production nonfollow/bounds and actual native-only full-lane cuts.
+Existing direct oracles supply red/fix/green within the existing owner finding
+layer; provider-adapter source remains held.
+
+2026-10-11 assigned source-gate provider findings resolved: fixture-only native
+path canonicalization restores actual key prompt/echo/cancellation CLI check
+(0.58s), scoped2MiB auth-request lane permits reviewed source-bounded grant.
+Compatibility fixture now checks actual15private auth sites/five full native
+action/request pairs instead of obsolete empty-audit assertion, still rejects
+credential payloads. Provider original/cleanup/actual-unacknowledged death
+fixture passes0.57s after -j1 rebuild. Changed-fixture narrow static/format/diff
+and CLI Python syntax checks pass; production source/new adapter unit untouched.
+Owner lane is source/build idle; root owns integrated qualification.
+
+
+2026-10-11 installed full source gate rejects four of99 actual debug cases:
+terminal_pty cancellation becomes audit_unavailable, local_timing segfaults,
+provider_auth_cli misses key prompt, provider_raw refuses capacity. No checkpoint
+commit/push or skipped assertions. Native macOS crash stack identifies the
+local_timing fixture's borrowed mapping destroyed before retained VM close;
+move Lane before engine. Existing exact same fixture passes; narrow static clean
+and affected ASan passes1.75s. Auth owner diagnoses canonical macOS fixture root
+and reviewed auth source grant larger than its old1MiB fixture; command owner
+diagnoses mandatory AdapterReceiptEvent fresh raw admission after cancellation.
+The latter needs caller prepayment, not a recorder/cancellation bypass. Owners
+repair these concrete source-gate findings within the same finding-driven layer.
+
+2026-10-11 ONE Context and participant plan attacks complete. Context requires
+separate actual pending-settlement and actual program-boundary acceptance flags;
+accepted rejection alone cannot activate a program, and postacceptance history
+pin failure cannot undo native activation. Participant first-stop wake must
+remain sticky even when write returns EINTR, and mandatory owner cleanup must
+be prepaid before live Run publication; worker-only credit is insufficient.
+Concrete plans retain no-extra-codec/no-guess-parent acquisition contracts. Root
+turn plan now completes protocol/policy/task activity banks and adds two actual
+placeholder request/return pairs:1346+9198=10544. Source remains held for those
+new units; current gate qualification findings come first.
+
+2026-10-11 participant ONE plan-attack findings resolved in its subplan: the
+first stopper atomically takes the sole write endpoint, attempts one native wake
+and always closes it once, preserving actual EINTR/EAGAIN and close results.
+Native Linux/XNU plain-pipe close paths were read; no retry, timer or dependency.
+Mandatory cleanup holds715 bytes per Run on its retained setup-owner lane before
+live publication, stops/joins every unjoined worker and reports pending semantic
+debt without fresh admission, Retain or Save. Worker bank5288, stop265 and other
+whole-owner maxima are recomputed; eventual write close is counted only once.
+Direct cuts cover stopped recorder, interrupted wake, competing stop/full pipe
+and sticky cancelled owner with all unheld CONTROL full. Only this plan/journal
+changed; source remains held for the completed-owner checkpoint.
+
+2026-10-11 turn-owner ONE whole-plan attack (compiler-free) found proposal
+child1907 uses still-effective restored revision, so fixed82 DATA is invalid;
+prepay checked50+actual effective revision before pending transfer. Native1908
+validation/observation need method-specific acquired fields and partial parsing
+on refusal, avoiding invented input/triggered or proposed/effective hybrids.
+Existing119/318 CONTROL can remain conservative. Required integration names
+separate actual program-boundary/pending-settlement acceptance from the known
+Context finding. Reviewed root1346+Context9198, protocol99 and task349/late132
+producer/node lifetimes against actual source. Report saved; no source/tests,
+new timer/dependency or extra review panel.
+
+2026-10-11 same participant wake finding: parent identified that a stopped
+pre-exec child can retain a pipe writer despite CLOEXEC. Supersede the pipe-close
+fallback with AF_UNIX/SOCK_STREAM shutdown(SHUT_WR), followed by one owned close,
+with no wake write. Read actual Linux unix_shutdown/unix_poll and XNU
+uipc_shutdown/unp_shutdown/socket shutdown paths: shared socket receive-shutdown
+survives fork aliases. A native Darwin study observed readable EOF with the
+inheriting child still SIGSTOPed; this is method study, not participant green.
+Shutdown request/return48+48 replaces wake105; worker5279, owner706, stop256,
+all-stop8192, drain8408, Save8312 and start10706 are written with the actual
+fork/nonexec/held-credit oracle. Document/diff checks only; source remains held.
+
+2026-10-11 — Root qualification continuation: the first receipt repair passes all five selected Linux debug/release/ASan cases (run-1uwlsfuv:13.23/9.88/24.94s). Mac release/ASan reveal a distinct late ordinary quit/reopen failure; the command owner preserves the actual unfinished attempt/raw records, creates a deterministic postadmission stop red, and reserves5184 caller CONTROL before accepted admission for Open/receipt/no-child terminal regions. Actual Boundary entry and registry-before-worker ordering distinguish no body from dispatched interruption with unknown outcome. Latest native fixture and unchanged PTY pass; production changed-path Mac release2/2:13.63s and ASan2/2:29.81s. Linux final changed-path check and full installed source gate remain pending. Provider/participant/Context/turn ONE plan findings are resolved in their whole subplans and disposition papers; source remains held until this checkpoint. No second review panel, evaluator or installed executable activation.
+
+2026-10-11 — Physical-storage study reads NativeJournalFile/Directory, framed read/write/retry/append, native shared-file reader ownership, and selected Linux6.12/XNU lock/close sources alongside the existing raw ktrace study and acquired Linux man-pages6.19 close reference. Exact kernel sources and hashes are preserved under ignored quarantine/native-storage-2026-10-11. Physical capture must explicitly exclude recorder/bootstrap/reader storage; global TLS instrumentation would recurse. Unlimited interrupted unlock/write retries and shared reader fd lifetime require an honest finite cleanup/lane ownership plan before source. No native storage source, retry policy or extra instrumentation executor is adopted by this study.
+
+2026-10-11 — Final changed-command production qualification passes Linux debug/release/ASan2/2 in run-h7iaz0wu. Root preserves final profile results and resolved plan dispositions, updates nls.2 and runs supported bd backup. Command owner confirms all source/static/docs idle; only ignored next wake-owner plan study proceeds during the installed full source gate. Completed owner batch is being staged excluding operator art and AFK stash. Full gate retry, commit and publication remain pending until actual success.
+
+2026-10-11 — Installed gate retry passes99/99 debug127.68s but rejects three clang-format positions in the final coding/command fixture edit before static analysis. Root applies the qualified LLVM23 formatter to those two files and checks every owned C++ source/header formatting. No semantic source or profile change; the mandatory complete installed gate is retried after staging these formatting fixes. The gate was not bypassed and no code attack/review was repeated.

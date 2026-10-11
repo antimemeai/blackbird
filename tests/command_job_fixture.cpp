@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
       write_all("SECOND:" + second + "\n");
       return first == "hello" && second == "end" ? 0 : 83;
     }
-    if (mode == "raw-input") {
+    if (mode == "raw-input" || mode == "gated-raw-input") {
       struct termios settings{};
       if (::tcgetattr(STDIN_FILENO, &settings) != 0)
         throw std::runtime_error("fixture raw tty unavailable");
@@ -149,6 +149,10 @@ int main(int argc, char **argv) {
         throw std::runtime_error("fixture raw tty configuration refused");
       write_all("READY\n");
       save(root / "ready", "raw tty ready");
+      if (mode == "gated-raw-input") {
+        gate(root / "read-input");
+        record_winsize(root / "resized");
+      }
       std::string received(65536, '\0');
       std::size_t offset = 0;
       while (offset < received.size()) {
@@ -165,6 +169,18 @@ int main(int argc, char **argv) {
       write_all("DONE\n");
       return 0;
     }
+    if (mode == "binary") {
+      write_all(std::string_view{"A\0B\xff\xe2\x82\xac\n", 8});
+      return 7;
+    }
+    if (mode == "limit-cross") {
+      std::array<char, 8192> block{};
+      block.fill('Q');
+      for (std::size_t n = 0; n < 2048; ++n)
+        write_all(std::string_view{block.data(), block.size()});
+      write_all(std::string_view{"X\0Y\xff", 4});
+      return 0;
+    }
     if (mode == "exit143")
       return 143;
     if (mode == "gate" || mode == "deadline") {
@@ -174,8 +190,10 @@ int main(int argc, char **argv) {
       write_all("DONE\n");
       return 0;
     }
-    if (mode == "flood") {
+    if (mode == "flood" || mode == "gated-flood") {
       save(root / "ready", "flood starting");
+      if (mode == "gated-flood")
+        gate(root / "start");
       std::array<char, 8192> block{};
       block.fill('F');
       for (std::size_t n = 0; n < 1024; ++n) {

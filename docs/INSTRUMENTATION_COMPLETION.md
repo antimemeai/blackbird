@@ -88,6 +88,50 @@ System A–I are representation/codec/bridge; physical storage; retention/recove
 file/native child; command lifecycle; command flow/control; workers/queues;
 terminal/UI; and clocks/acquisition/channel.
 
+## Current owner work
+
+The next source batch implements partition claims and splits, nonblocking
+cleanup credit, native recorder failure/fairness cuts, an independent OS
+sampler, live recorder add/retire, command control/output, provider authorization,
+native/Lua authored capture and task ownership. Each has its written subplan and
+one completed code/oracle attack. Finding-driven fixes include command terminals
+after returned-value construction, full command/authored/auth/task reference and
+native-field oracles, and removal of the task commit's post-append deque move
+allocation on Linux. All10 affected Mac release and ASan/UBSan cases pass. Linux debug/release
+pass all seven selected owner cases; ASan passes those same owners after the
+actual static-Lua wrapping and sized-delete fixture corrections. The installed
+source gate then rejects four of99 debug cases. The borrowed timing-lane lifetime,
+canonical private auth fixture path, auth source capacity and selected native
+provider metadata oracle are corrected. Cancellation now uses caller-held
+AttemptOpen/adapter-receipt/no-child terminal regions paid before admission;
+the body retains its own interruptible admission. Actual postadmission and
+live-child cancellation fixtures check distinct native outcomes and ordinary
+reopen. The late quit path passes unchanged PTY and native checks, Mac release
+and ASan/UBSan; its Linux changed-path recheck and full installed gate are pending.
+Publication remains pending.
+
+The command unit also removes ordinary registration/retirement's recorder
+restart and history replay. A real512KiB PTY workload and precise recorder-death
+cut exercise the native descriptor handoff, held outcomes and recovery path.
+Death recovery still reads preserved history; live add/retire does not.
+
+The next whole-owner plans have completed their one plan attacks and resolved
+the findings: [provider exchange](../papers/2026-10-11-provider-adapter-raw-subplan.md),
+[participants](../papers/2026-10-11-participant-owner-raw-subplan.md),
+[ContextStore](../papers/2026-10-11-context-owner-raw-subplan.md), and
+[turn ownership](../papers/2026-10-11-turn-owner-raw-subplan.md).
+Provider and participant sources share a pre-acquisition owned buffer contract;
+an uncommitted callback failure preserves the initialized extent with unknown
+used length. Participant cancellation uses a native socket shutdown and706
+preheld owner-cleanup bytes per Run. Context and turn plans distinguish actual
+context settlement from actual program acceptance before native activation.
+These plans require genuine red, implementation, green and one code/oracle
+attack; their source has not been implemented by this checkpoint.
+Physical storage/retained indexing, remaining program/workflow/bridge owners,
+session/UI and actual workload sizing remain open. Task hooks cover30–31;
+authored/VM hooks and authorization hooks cover their stated subplans only.
+No completed subset closes the60-row census.
+
 ## Shared defects and boundaries
 
 The participant capture limit, post-effect result refusal and provider original

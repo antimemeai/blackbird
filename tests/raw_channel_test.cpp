@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <cerrno>
+#include <cstring>
 #include <exception>
 #include <iostream>
 #include <poll.h>
@@ -242,6 +243,196 @@ void control_credit_and_partitions() {
   check(!exhausted.emit(1, {}).has_value(), "ordinal wrapped");
 }
 
+// This is a real nested emitter, with independently specified envelope bytes.
+RawCapacityClaim transfer_claim(RawCapacityClaim &source) { return std::move(source); }
+RawPartition native_partition(std::uint32_t value) {
+  RawPartition partition{};
+  static_assert(sizeof(partition) == sizeof(value));
+  std::memcpy(&partition, &value, sizeof(value));
+  return partition;
+}
+
+void data_claim_reentrancy() {
+  NamedLane lane{{128, 64, 64}};
+  auto channel = lane.create();
+  RawProducer producer{channel};
+  auto snapshot = take(producer.hold_capacity(RawPartition::data, 96));
+  check(take(producer.available(RawPartition::data)) == 32, "data claim not protected");
+  check(take(producer.available(RawPartition::control)) == 64,
+        "data claim consumed control capacity");
+  const auto nested = body({16, 41});
+  check(publish(producer, 510, nested) == 1, "nested ordinary emission failed");
+  check(take(producer.available(RawPartition::data)) == 0,
+        "nested ordinary emission stole or duplicated claim");
+  take(producer.reserve(RawPartition::failure, 32));
+  producer.release_reservation(RawPartition::data);
+  check(take(producer.available(RawPartition::data)) == 0,
+        "ordinary release cleared held data claim");
+  const auto original = body({80, 52});
+  const std::array<ByteView, 1> parts{original};
+  check(take(producer.emit(511, parts, RawPartition::data, &snapshot)) == 2,
+        "preclaimed data did not publish after nested emission");
+  auto bytes = expected(510, nested, 1);
+  const auto final = expected(511, original, 2);
+  bytes.insert(bytes.end(), final.begin(), final.end());
+  check(take(channel.read(RawPartition::data, 0, 128)).bytes == bytes,
+        "nested/claimed originals or ordinals changed");
+  check(snapshot.remaining() == 0 &&
+            take(producer.available(RawPartition::failure)) == 32,
+        "claim consumption changed failure reserve");
+}
+
+void partition_claim_accounting_and_split() {
+  NamedLane lane{{128, 128, 64}}, other_lane{{128, 128, 64}};
+  auto channel = lane.create(), other_channel = other_lane.create();
+  RawProducer producer{channel}, other{other_channel};
+  for (const auto size : {std::uint64_t{129}, UINT64_MAX}) {
+    const auto too_large = producer.hold_capacity(RawPartition::data, size);
+    check(!too_large.has_value() && too_large.error().code == ErrorCode::capacity &&
+              take(producer.available(RawPartition::data)) == 128 &&
+              take(channel.cursors(RawPartition::data)).published == 0,
+          "oversized claim changed capacity or publication");
+  }
+  std::optional<RawCapacityClaim> parent{
+      take(producer.hold_capacity(RawPartition::data, 96))};
+  {
+    auto additional = take(producer.hold_capacity(RawPartition::data, 16));
+    take(producer.reserve(RawPartition::data, 16));
+    check(take(producer.available(RawPartition::data)) == 0,
+          "multiple claims and ordinary reservation exceeded capacity");
+    producer.release_reservation(RawPartition::data);
+    check(take(producer.available(RawPartition::data)) == 16 &&
+              additional.remaining() == 16,
+          "ordinary release discarded another claim");
+  }
+  std::optional<RawCapacityClaim> child{take(parent->split(32))};
+  check(parent->remaining() == 64 && child->remaining() == 32 &&
+            take(producer.available(RawPartition::data)) == 32,
+        "split admitted new bytes or lost admitted bytes");
+  const auto oversplit = parent->split(65);
+  check(!oversplit.has_value() && oversplit.error().code == ErrorCode::capacity &&
+            parent->remaining() == 64 &&
+            take(producer.available(RawPartition::data)) == 32,
+        "oversplit mutated aggregate capacity");
+  auto zero = take(parent->split(0));
+  check(zero.remaining() == 0 && parent->remaining() == 64,
+        "zero split changed capacity");
+  auto moved = transfer_claim(*child);
+  // Deliberately exercise the documented moved-from refusal.
+  const auto inert = child->split(0);
+  check(!inert.has_value() && inert.error().code == ErrorCode::conflict,
+        "moved-from split accepted");
+  const auto original = body({16, 63});
+  const std::array<ByteView, 1> parts{original};
+  const auto owner_mismatch = other.emit(512, parts, RawPartition::data, &moved);
+  const auto partition_mismatch =
+      producer.emit(512, parts, RawPartition::control, &moved);
+  const auto moved_emit = producer.emit(512, parts, RawPartition::data, &*child);
+  check(!owner_mismatch.has_value() &&
+            owner_mismatch.error().code == ErrorCode::conflict &&
+            !partition_mismatch.has_value() &&
+            partition_mismatch.error().code == ErrorCode::conflict &&
+            !moved_emit.has_value() && moved_emit.error().code == ErrorCode::conflict,
+        "owner/partition/inert claim mismatch did not refuse");
+  check(moved.remaining() == 32 &&
+            take(channel.cursors(RawPartition::data)).published == 0 &&
+            take(other_channel.cursors(RawPartition::data)).published == 0 &&
+            take(channel.cursors(RawPartition::control)).published == 0,
+        "claim mismatch changed bytes or capacity");
+  check(take(producer.emit(512, parts, RawPartition::data, &moved)) == 1,
+        "split child literal could not publish");
+  check(take(channel.read(RawPartition::data, 0, 128)).bytes ==
+            expected(512, original, 1),
+        "split child literal changed");
+  {
+    auto replacement = take(other.hold_control(48));
+    replacement = transfer_claim(*parent);
+    check(take(other.available(RawPartition::control)) == 128 &&
+              replacement.remaining() == 64,
+          "cross-owner/partition move assignment leaked destination credit");
+    check(parent->remaining() == 0, "move assignment left source live");
+  }
+  check(take(producer.available(RawPartition::data)) == 96,
+        "parent destruction released wrong split bytes");
+  for (bool child_first : {false, true}) {
+    std::optional<RawCapacityClaim> first{
+        take(producer.hold_capacity(RawPartition::data, 80))};
+    std::optional<RawCapacityClaim> second{take(first->split(32))};
+    if (child_first) {
+      second.reset();
+      check(take(producer.available(RawPartition::data)) == 48,
+            "child destruction changed parent credit");
+      first.reset();
+    } else {
+      first.reset();
+      check(take(producer.available(RawPartition::data)) == 64,
+            "parent destruction changed child credit");
+      second.reset();
+    }
+    check(take(producer.available(RawPartition::data)) == 96,
+          "split destruction leaked capacity");
+  }
+  auto full = take(producer.hold_capacity(RawPartition::data, 96));
+  for (const auto size : {std::uint64_t{1}, UINT64_MAX}) {
+    const auto refused = producer.hold_capacity(RawPartition::data, size);
+    check(!refused.has_value() && refused.error().code == ErrorCode::capacity &&
+              full.remaining() == 96 &&
+              take(producer.available(RawPartition::data)) == 0,
+          "excess aggregate claim admitted or wrapped");
+  }
+  // Invalid native partition values intentionally attack the public validator.
+  // RawPartition has a fixed uint32_t underlying type, including these values.
+  for (const auto part :
+       {RawPartition::failure, native_partition(0), native_partition(255)}) {
+    const auto invalid = producer.hold_capacity(part, 16);
+    check(!invalid.has_value() && invalid.error().code == ErrorCode::invalid_range,
+          "invalid/failure partition claim admitted");
+  }
+  auto control = take(producer.hold_control(80));
+  take(producer.reserve(RawPartition::control, 48));
+  check(take(producer.available(RawPartition::control)) == 0 &&
+            take(producer.available(RawPartition::data)) == 0,
+        "protected/ordinary totals or partition independence wrong");
+  producer.release_reservation(RawPartition::control);
+  check(take(producer.available(RawPartition::control)) == 48 &&
+            control.remaining() == 80,
+        "ordinary release discarded claim");
+}
+
+void split_independent_publication() {
+  for (bool child_first : {false, true}) {
+    NamedLane lane{{128, 64, 64}};
+    auto channel = lane.create();
+    RawProducer producer{channel};
+    auto parent = take(producer.hold_capacity(RawPartition::data, 96));
+    auto child = take(parent.split(32));
+    const auto parent_body = body({48, 71}), child_body = body({16, 72});
+    const std::array<ByteView, 1> parent_parts{parent_body}, child_parts{child_body};
+    std::vector<std::byte> bytes;
+    if (child_first) {
+      check(take(producer.emit(515, child_parts, RawPartition::data, &child)) == 1,
+            "child first ordinal changed");
+      check(take(producer.emit(514, parent_parts, RawPartition::data, &parent)) == 2,
+            "parent after child could not publish");
+      bytes = expected(515, child_body, 1);
+      const auto next = expected(514, parent_body, 2);
+      bytes.insert(bytes.end(), next.begin(), next.end());
+    } else {
+      check(take(producer.emit(514, parent_parts, RawPartition::data, &parent)) == 1,
+            "parent first ordinal changed");
+      check(take(producer.emit(515, child_parts, RawPartition::data, &child)) == 2,
+            "child after parent could not publish");
+      bytes = expected(514, parent_body, 1);
+      const auto next = expected(515, child_body, 2);
+      bytes.insert(bytes.end(), next.begin(), next.end());
+    }
+    check(parent.remaining() == 0 && child.remaining() == 0 &&
+              take(producer.available(RawPartition::data)) == 32 &&
+              take(channel.read(RawPartition::data, 0, 128)).bytes == bytes,
+          "split literals/aggregate changed across independent publication");
+  }
+}
+
 void epoch_closing_preserves_held_credit() {
   NamedLane lane{{64, 64, 64}};
   auto channel = lane.create();
@@ -250,6 +441,7 @@ void epoch_closing_preserves_held_credit() {
   constexpr auto initial_ordinal = UINT64_MAX - 12;
   RawProducer producer{channel, RawProducer::Start{-1, initial_ordinal}};
   auto terminal = take(producer.hold_control(32));
+  auto data_terminal = take(producer.hold_capacity(RawPartition::data, 16));
   take(producer.reserve(RawPartition::data, 16));
   check(take(producer.emit(401, {})) == initial_ordinal, "near-boundary ordinal wrong");
   const auto refused = producer.reserve(RawPartition::data, 16);
@@ -258,6 +450,9 @@ void epoch_closing_preserves_held_credit() {
   const auto refused_claim = producer.hold_control(16);
   check(!refused_claim.has_value() && refused_claim.error().code == ErrorCode::overflow,
         "new terminal claim admitted inside epoch-closing margin");
+  const auto refused_data = producer.hold_capacity(RawPartition::data, 16);
+  check(!refused_data.has_value() && refused_data.error().code == ErrorCode::overflow,
+        "new data claim admitted inside epoch-closing margin");
   check(terminal.remaining() == 32, "closing admission consumed existing held credit");
   check(take(producer.emit(402, {}, RawPartition::control, &terminal)) ==
             initial_ordinal + 1,
@@ -265,10 +460,15 @@ void epoch_closing_preserves_held_credit() {
   check(take(producer.emit(403, {}, RawPartition::control, &terminal)) ==
             initial_ordinal + 2,
         "closing admission refused second prepaid terminal");
+  check(take(producer.emit(404, {}, RawPartition::data, &data_terminal)) ==
+            initial_ordinal + 3,
+        "closing refused held data burst");
   const auto ordinary = take(channel.read(RawPartition::data, 0, 64));
   const auto terminals = take(channel.read(RawPartition::control, 0, 64));
-  check(ordinary.bytes == expected(401, {}, initial_ordinal),
-        "closing changed raw ordinary");
+  auto expected_data = expected(401, {}, initial_ordinal);
+  const auto held_data = expected(404, {}, initial_ordinal + 3);
+  expected_data.insert(expected_data.end(), held_data.begin(), held_data.end());
+  check(ordinary.bytes == expected_data, "closing changed raw ordinary/held data");
   auto combined = expected(402, {}, initial_ordinal + 1);
   const auto final = expected(403, {}, initial_ordinal + 2);
   combined.insert(combined.end(), final.begin(), final.end());
@@ -488,6 +688,9 @@ int main() {
   try {
     capacity_and_exact_bytes();
     control_credit_and_partitions();
+    data_claim_reentrancy();
+    partition_claim_accounting_and_split();
+    split_independent_publication();
     epoch_closing_preserves_held_credit();
     wake_directions_and_failures();
     process_death_retention();

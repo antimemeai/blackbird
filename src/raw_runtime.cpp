@@ -1,7 +1,13 @@
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/local_timing.hpp"
+#include "blackbird/process_lifetime.hpp"
 #include "blackbird/raw_audit.hpp"
+#include "blackbird/raw_auth.hpp"
+#include "blackbird/raw_authored.hpp"
+#include "blackbird/raw_command.hpp"
 #include "blackbird/raw_provider.hpp"
+#include "blackbird/raw_sampler.hpp"
+#include "blackbird/raw_tasks.hpp"
 
 #include <algorithm>
 #include <array>
@@ -428,6 +434,11 @@ void write_descriptions(const std::string &path) {
                     "source_acquired;stage1=append,2=open_recover,3=source_read,4="
                     "reclaim;8001 emitter ingest failure=ErrorCode code,i64 detail");
   write_description(file.value, raw_provider_description());
+  write_description(file.value, raw_command_description());
+  write_description(file.value, raw_sampler_description());
+  write_description(file.value, raw_authored_description());
+  write_description(file.value, raw_auth_description());
+  write_description(file.value, raw_tasks_description());
   for (unsigned code = 0; code <= static_cast<unsigned>(ErrorCode::provider_rate_limit);
        ++code) {
     const auto value = static_cast<ErrorCode>(code);
@@ -437,6 +448,7 @@ void write_descriptions(const std::string &path) {
   sync_file(file.value);
 }
 std::array<int, 2> make_pipe() {
+  const std::lock_guard spawn_lock{detail::process_spawn_mutex};
   std::array<int, 2> output{};
   if (::pipe(output.data()) != 0)
     throw Error{ErrorCode::io, errno};
@@ -451,6 +463,7 @@ std::array<int, 2> make_pipe() {
   return output;
 }
 std::array<int, 2> control_pair() {
+  const std::lock_guard spawn_lock{detail::process_spawn_mutex};
   std::array<int, 2> output{};
   if (::socketpair(AF_UNIX, SOCK_DGRAM, 0, output.data()) != 0)
     throw Error{ErrorCode::io, errno};
@@ -696,7 +709,7 @@ std::unique_ptr<RawAudit> open_audit(NativeJournalDirectory &directory,
   }
 }
 int record(const std::string &path, JournalHeader header,
-           std::vector<RecorderLane> &lanes, bool drain) {
+           std::vector<RecorderLane> &lanes, bool drain, int control = -1) {
   recorder_stop = drain ? 2 : 0;
   struct sigaction action{};
   action.sa_handler = recorder_signal;
@@ -740,70 +753,204 @@ int record(const std::string &path, JournalHeader header,
     // Recovery may reclaim an already synced batch without another append.
     // Publish that preserved cursor even when every source is already drained.
     publish_cursor(path, segment, audit->cursor());
-    release_failure();
     std::vector<pollfd> watches;
-    watches.reserve(lanes.size());
-    for (const auto &lane : lanes)
-      watches.push_back({lane.recorder_endpoint.value, POLLIN, 0});
+    watches.reserve(max_lanes + 1);
+    const auto rebuild_watches = [&] {
+      watches.clear();
+      if (control >= 0)
+        watches.push_back({control, POLLIN, 0});
+      for (const auto &lane : lanes)
+        watches.push_back({lane.recorder_endpoint.value, POLLIN, 0});
+    };
+    rebuild_watches();
+    release_failure();
+    const auto lifecycle = [&]() {
+      if (control < 0)
+        return false;
+      source = {audit->header().journal.bytes(), {}, RawPartition::data, 0, 0, false};
+      stage = 5;
+      progress = {};
+      admit_failure();
+      pollfd watch{control, POLLIN, 0};
+      int ready;
+      do {
+        ready = ::poll(&watch, 1, 0);
+      } while (ready < 0 && errno == EINTR);
+      if (ready < 0)
+        throw Error{ErrorCode::io, errno};
+      if (ready == 0) {
+        release_failure();
+        return false;
+      }
+      if ((watch.revents & POLLIN) == 0)
+        throw Error{ErrorCode::io, EPIPE};
+      auto message = receive_control(control);
+      if (message.count == static_cast<ssize_t>(registration_size)) {
+        stage = 6;
+        const auto registration = decode_registration(message.body);
+        source.lane = registration.epoch;
+        if (registration.closed || lanes.size() == max_lanes ||
+            lanes.capacity() < max_lanes || message.endpoints[0].value < 0 ||
+            message.endpoints[1].value < 0 ||
+            std::any_of(
+                lanes.begin(), lanes.end(),
+                [&](const auto &lane) {
+                  return lane.registration.epoch == registration.epoch;
+                }))
+          throw Error{ErrorCode::conflict};
+        auto channel = take(RawChannel::open(registration.name.data(),
+                                             registration.epoch, registration.sizes));
+        // The failure producer borrows front.channel: capacity was reserved in
+        // the supervisor before fork, and ordinary lifecycle never moves front.
+        lanes.push_back({registration, std::move(channel),
+                         std::move(message.endpoints[0]),
+                         std::move(message.endpoints[1])});
+      } else if (message.count == 17 && message.body[0] == std::byte{2}) {
+        stage = 7;
+        IdentityBytes epoch{};
+        std::memcpy(epoch.data(), message.body.data() + 1, epoch.size());
+        source.lane = epoch;
+        const auto found =
+            std::find_if(lanes.begin(), lanes.end(), [&](const auto &lane) {
+              return lane.registration.epoch == epoch;
+            });
+        if (found == lanes.end() || found == lanes.begin())
+          throw Error{ErrorCode::invalid_identity};
+        for (auto partition :
+             {RawPartition::data, RawPartition::control, RawPartition::failure}) {
+          const auto current = take(found->channel.cursors(partition));
+          if (current.published != current.acknowledged ||
+              current.acknowledged != audit->preserved(epoch, partition))
+            throw Error{ErrorCode::busy};
+        }
+        if (segment == UINT64_MAX)
+          throw Error{ErrorCode::overflow};
+        const auto next_name = "events." + std::to_string(segment + 1);
+        const auto existing = directory.open_existing(next_name, FileAccess::read_only);
+        if (existing.has_value())
+          throw Error{ErrorCode::conflict};
+        if (existing.error() != Error{ErrorCode::io, ENOENT})
+          throw existing.error();
+        auto closure = found->registration;
+        closure.closed = true;
+        register_lane(path, closure);
+        write_atomic(path, "sealed." + std::to_string(segment), {}, true);
+        take(directory.synchronize_directory(SyncStrength::data));
+        std::vector<RawOrigin> inherited;
+        inherited.reserve(lanes.size() * 3);
+        // Include the retiring lane until the successful reply authorizes the
+        // supervisor to unlink it. A lost reply can restart with that lane.
+        for (const auto &lane : lanes)
+          for (auto partition :
+               {RawPartition::data, RawPartition::control, RawPartition::failure}) {
+            const auto end = audit->preserved(lane.registration.epoch, partition);
+            if (end != 0)
+              inherited.push_back({lane.registration.epoch, partition, end});
+          }
+        const auto prior = audit->cursor();
+        IdentityBytes next{};
+        if (::getentropy(next.data(), next.size()) != 0)
+          throw Error{ErrorCode::io, errno};
+        const JournalHeader successor{
+            header.environment, take(AuditStreamId::from_bytes(next)),
+            header.issuer_namespace, header.limits,
+            JournalPredecessor{prior.journal, prior.sequence, prior.offset}};
+        write_seed(path, segment + 1, inherited);
+        take(directory.synchronize_directory(SyncStrength::data));
+        auto next_audit =
+            take(RawAudit::open(directory, next_name, successor, (max_lanes + 1) * 3,
+                                SyncStrength::data, inherited));
+        ++segment;
+        audit = std::move(next_audit);
+        source.journal = audit->header().journal.bytes();
+        publish_cursor(path, segment, audit->cursor());
+        lanes.erase(found);
+      } else {
+        throw Error{ErrorCode::corrupt};
+      }
+      rebuild_watches();
+      stage = 8;
+      const std::byte accepted{1};
+      ssize_t replied;
+      do {
+        replied = ::send(control, &accepted, sizeof(accepted), 0);
+      } while (replied < 0 && errno == EINTR);
+      if (replied != static_cast<ssize_t>(sizeof(accepted)))
+        throw Error{ErrorCode::io, replied < 0 ? errno : 0};
+      release_failure();
+      return true;
+    };
     std::size_t first_lane = 0;
     for (;;) {
       bool pending = false;
+      bool changed = false;
       for (std::size_t visited = 0; visited < lanes.size(); ++visited) {
-        auto &lane = lanes[(first_lane + visited) % lanes.size()];
-        // A finite snapshot per context bounds each tour. Failure and control
-        // are visited before data, with at most one batch per partition.
-        for (auto partition :
-             {RawPartition::failure, RawPartition::control, RawPartition::data}) {
-          const auto current = take(lane.channel.cursors(partition));
-          if (current.published == current.acknowledged)
-            continue;
-          pending = true;
-          source = {audit->header().journal.bytes(),
-                    lane.registration.epoch,
-                    partition,
-                    current.acknowledged,
-                    current.published,
-                    true};
-          stage = 3;
-          progress = {};
-          admit_failure();
-          auto reading = lane.channel.read(partition, current.acknowledged, 256 * 1024);
-          if (!reading.has_value() && reading.error().code == ErrorCode::capacity)
-            reading = lane.channel.read(partition, current.acknowledged,
-                                        header.limits.max_payload - raw_origin_size);
-          auto read = take(std::move(reading));
-          std::array<RawAuditRecord, 2048> records{};
-          std::size_t record_count = 0;
-          std::size_t offset = 0;
-          while (offset < read.bytes.size() && record_count < records.size()) {
-            std::uint32_t length = 0;
-            std::memcpy(&length, read.bytes.data() + offset, sizeof(length));
-            if (length < raw_envelope_size || length > read.bytes.size() - offset)
-              throw Error{ErrorCode::corrupt};
-            records[record_count++] = {
-                {lane.registration.epoch, partition, read.start + offset},
-                ByteView{read.bytes}.subspan(offset, length)};
-            offset += length;
+        {
+          auto &lane = lanes[(first_lane + visited) % lanes.size()];
+          // A finite snapshot per context bounds each tour. Failure and control
+          // are visited before data, with at most one batch per partition.
+          for (auto partition :
+               {RawPartition::failure, RawPartition::control, RawPartition::data}) {
+            const auto current = take(lane.channel.cursors(partition));
+            if (current.published == current.acknowledged)
+              continue;
+            pending = true;
+            source = {audit->header().journal.bytes(),
+                      lane.registration.epoch,
+                      partition,
+                      current.acknowledged,
+                      current.published,
+                      true};
+            stage = 3;
+            progress = {};
+            admit_failure();
+            auto reading =
+                lane.channel.read(partition, current.acknowledged, 256 * 1024);
+            if (!reading.has_value() && reading.error().code == ErrorCode::capacity)
+              reading = lane.channel.read(partition, current.acknowledged,
+                                          header.limits.max_payload - raw_origin_size);
+            auto read = take(std::move(reading));
+            std::array<RawAuditRecord, 2048> records{};
+            std::size_t record_count = 0;
+            std::size_t offset = 0;
+            while (offset < read.bytes.size() && record_count < records.size()) {
+              std::uint32_t length = 0;
+              std::memcpy(&length, read.bytes.data() + offset, sizeof(length));
+              if (length < raw_envelope_size || length > read.bytes.size() - offset)
+                throw Error{ErrorCode::corrupt};
+              records[record_count++] = {
+                  {lane.registration.epoch, partition, read.start + offset},
+                  ByteView{read.bytes}.subspan(offset, length)};
+              offset += length;
+            }
+            source.end = read.start + offset;
+            stage = 1;
+            auto appended = audit->append(std::span{records}.first(record_count));
+            if (!appended.has_value()) {
+              failure(failure_producer, appended.error(), audit->progress(), stage,
+                      source);
+              held = false;
+              return 70;
+            }
+            stage = 4;
+            progress = audit->progress();
+            publish_cursor(path, segment, audit->cursor());
+            take(lane.channel.acknowledge(partition, source.end,
+                                          lane.recorder_endpoint.value));
+            release_failure();
           }
-          source.end = read.start + offset;
-          stage = 1;
-          auto appended = audit->append(std::span{records}.first(record_count));
-          if (!appended.has_value()) {
-            failure(failure_producer, appended.error(), audit->progress(), stage,
-                    source);
-            held = false;
-            return 70;
-          }
-          stage = 4;
-          progress = audit->progress();
-          publish_cursor(path, segment, audit->cursor());
-          take(lane.channel.acknowledge(partition, source.end,
-                                        lane.recorder_endpoint.value));
-          release_failure();
         }
         if (recorder_stop == 1)
           return 0;
+        // The current lane reference and borrowed read spans have ceased use.
+        if (lifecycle()) {
+          first_lane %= lanes.size();
+          changed = true;
+          break;
+        }
       }
+      if (changed)
+        continue;
       if (recorder_stop == 2 && !pending)
         return 0;
       first_lane = (first_lane + 1) % lanes.size();
@@ -858,11 +1005,14 @@ int record(const std::string &path, JournalHeader header,
   }
 }
 struct SupervisorEndpoints {
-  int control, life, notification, death;
+  int control, life, notification, death, notification_read;
 };
 pid_t start_recorder(const std::string &path, JournalHeader header,
                      std::vector<RecorderLane> &lanes, SupervisorEndpoints endpoints,
-                     bool drain = false) {
+                     Descriptor &recorder_control, bool drain = false) {
+  recorder_control = Descriptor{};
+  const auto pair = control_pair();
+  Descriptor parent_control{pair[0]}, child_control{pair[1]};
   sigset_t signals;
   sigemptyset(&signals);
   sigaddset(&signals, SIGUSR1);
@@ -873,14 +1023,17 @@ pid_t start_recorder(const std::string &path, JournalHeader header,
   if (child < 0)
     throw Error{ErrorCode::io, errno};
   if (child == 0) {
+    ::close(parent_control.value);
     ::close(endpoints.control);
     ::close(endpoints.life);
     ::close(endpoints.notification);
     ::close(endpoints.death);
+    ::close(endpoints.notification_read);
     child_notice = -1;
     ::signal(SIGCHLD, SIG_DFL);
-    ::_exit(record(path, header, lanes, drain));
+    ::_exit(record(path, header, lanes, drain, child_control.value));
   }
+  recorder_control = std::move(parent_control);
   return child;
 }
 void stop_recorder(pid_t child, int signal) {
@@ -940,10 +1093,90 @@ int supervise(const std::string &path, JournalHeader header,
     if (::sigaction(SIGCHLD, &action, nullptr) != 0)
       throw Error{ErrorCode::io, errno};
     const SupervisorEndpoints endpoints{control.value, life.value, notice_write.value,
-                                        death.value};
-    pid_t recorder = start_recorder(path, header, lanes, endpoints);
+                                        death.value, notice_read.value};
+    Descriptor recorder_control;
+    pid_t recorder = start_recorder(path, header, lanes, endpoints, recorder_control);
     bool fenced = false;
     bool recovery_used = false;
+    const auto recorder_died = [&](int status) {
+      recorder = 0;
+      if (WIFEXITED(status) && WEXITSTATUS(status) == 70 && recovery_used) {
+        fenced = true;
+        for (auto &lane : lanes)
+          (void)raw_send_notice(lane.recorder_endpoint.value);
+      } else {
+        recovery_used = WIFEXITED(status) && WEXITSTATUS(status) == 70;
+        recorder = start_recorder(path, header, lanes, endpoints, recorder_control);
+      }
+    };
+    const auto recorder_request = [&](const Registration *registration,
+                                      const std::array<int, 2> &transferred,
+                                      const IdentityBytes &retiring) {
+      if (recorder <= 0 || fenced)
+        throw Error{ErrorCode::audit_unavailable};
+      if (registration) {
+        send_registration(recorder_control.value, *registration, transferred);
+      } else {
+        std::array<std::byte, 17> request{};
+        request[0] = std::byte{2};
+        std::memcpy(request.data() + 1, retiring.data(), retiring.size());
+        ssize_t sent;
+        do {
+          sent = ::send(recorder_control.value, request.data(), request.size(), 0);
+        } while (sent < 0 && errno == EINTR);
+        if (sent != static_cast<ssize_t>(request.size()))
+          throw Error{ErrorCode::io, sent < 0 ? errno : 0};
+      }
+      std::array<pollfd, 2> waiting{
+          {{recorder_control.value, POLLIN, 0}, {notice_read.value, POLLIN, 0}}};
+      for (;;) {
+        if (::poll(waiting.data(), static_cast<nfds_t>(waiting.size()), -1) < 0) {
+          if (errno == EINTR)
+            continue;
+          throw Error{ErrorCode::io, errno};
+        }
+        if (waiting[1].revents != 0) {
+          std::array<char, 64> discard{};
+          while (::read(notice_read.value, discard.data(), discard.size()) > 0) {
+          }
+          int status = 0;
+          pid_t dead;
+          do {
+            dead = ::waitpid(recorder, &status, WNOHANG);
+          } while (dead < 0 && errno == EINTR);
+          if (dead == recorder) {
+            recorder_died(status);
+            throw Error{ErrorCode::audit_unavailable, status};
+          }
+          if (dead < 0)
+            throw Error{ErrorCode::io, errno};
+        }
+        if ((waiting[0].revents & POLLNVAL) != 0)
+          throw Error{ErrorCode::io, EBADF};
+        if ((waiting[0].revents & POLLIN) != 0) {
+          std::array<std::byte, 2> accepted{};
+          ssize_t received;
+          do {
+            received =
+                ::recv(recorder_control.value, accepted.data(), accepted.size(), 0);
+          } while (received < 0 && errno == EINTR);
+          if (received == 0 ||
+              (received < 0 && (errno == EPIPE || errno == ECONNRESET))) {
+            // Peer closure can precede SIGCHLD. Wait for the independent child
+            // notice once; EOF is not a malformed reply or a new poll loop.
+            waiting[0].fd = -1;
+            continue;
+          }
+          if (received < 0)
+            throw Error{ErrorCode::io, errno};
+          if (received != 1 || accepted[0] != std::byte{1})
+            throw Error{ErrorCode::corrupt};
+          return;
+        }
+        if ((waiting[0].revents & (POLLHUP | POLLERR)) != 0)
+          waiting[0].fd = -1;
+      }
+    };
     std::array<pollfd, 3> watches{{{control.value, POLLIN, 0},
                                    {life.value, POLLIN | POLLHUP, 0},
                                    {notice_read.value, POLLIN, 0}}};
@@ -960,22 +1193,16 @@ int supervise(const std::string &path, JournalHeader header,
         int status = 0;
         const auto dead = ::waitpid(recorder, &status, WNOHANG);
         if (dead == recorder) {
-          recorder = 0;
-          if (WIFEXITED(status) && WEXITSTATUS(status) == 70 && recovery_used) {
-            fenced = true;
-            for (auto &lane : lanes)
-              (void)raw_send_notice(lane.recorder_endpoint.value);
-          } else {
-            recovery_used = WIFEXITED(status) && WEXITSTATUS(status) == 70;
-            recorder = start_recorder(path, header, lanes, endpoints);
-          }
+          recorder_died(status);
         }
       }
       if (watches[1].revents != 0) {
         if (recorder > 0)
           stop_recorder(recorder, SIGTERM);
         else if (!fenced)
-          stop_recorder(start_recorder(path, header, lanes, endpoints, true), SIGTERM);
+          stop_recorder(
+              start_recorder(path, header, lanes, endpoints, recorder_control, true),
+              SIGTERM);
         bool complete = true;
         for (auto &lane : lanes)
           for (auto partition :
@@ -1015,7 +1242,8 @@ int supervise(const std::string &path, JournalHeader header,
               lanes.insert(lanes.begin(), std::move(recovery_lane));
               recovery_used = true;
               fenced = false;
-              recorder = start_recorder(path, header, lanes, endpoints);
+              recorder =
+                  start_recorder(path, header, lanes, endpoints, recorder_control);
             }
           } else if (message.count == 17 && message.body[0] == std::byte{2}) {
             IdentityBytes epoch{};
@@ -1032,22 +1260,9 @@ int supervise(const std::string &path, JournalHeader header,
               if (current.published != current.acknowledged)
                 throw Error{ErrorCode::busy};
             }
-            if (recorder > 0)
-              stop_recorder(recorder, SIGUSR1);
-            recorder = 0;
-            auto closure = found->registration;
-            closure.closed = true;
-            register_lane(path, closure);
-            std::uint64_t segment = 0;
-            while (std::filesystem::exists(std::filesystem::path{path} /
-                                           ("events." + std::to_string(segment + 1))))
-              ++segment;
-            write_atomic(path, "sealed." + std::to_string(segment), {}, true);
-            auto directory = take(NativeJournalDirectory::open(path));
-            take(directory.synchronize_directory(SyncStrength::data));
-            take(RawChannel::unlink(closure.name.data()));
+            recorder_request(nullptr, {}, epoch);
+            take(RawChannel::unlink(found->registration.name.data()));
             lanes.erase(found);
-            recorder = start_recorder(path, header, lanes, endpoints);
           } else if (message.count == static_cast<ssize_t>(registration_size)) {
             if (fenced || lanes.size() == max_lanes)
               throw Error{ErrorCode::capacity};
@@ -1056,14 +1271,14 @@ int supervise(const std::string &path, JournalHeader header,
               throw Error{ErrorCode::corrupt};
             auto channel = take(RawChannel::open(
                 registration.name.data(), registration.epoch, registration.sizes));
-            if (recorder > 0)
-              stop_recorder(recorder, SIGUSR1);
-            recorder = 0;
             register_lane(path, registration);
             lanes.push_back({registration, std::move(channel),
                              std::move(message.endpoints[0]),
                              std::move(message.endpoints[1])});
-            recorder = start_recorder(path, header, lanes, endpoints);
+            const auto &added = lanes.back();
+            recorder_request(
+                &added.registration,
+                {added.producer_endpoint.value, added.recorder_endpoint.value}, {});
           } else
             throw Error{ErrorCode::corrupt};
           reply(control.value, {recorder, fenced});
@@ -1248,6 +1463,7 @@ void recover_orphans(const std::filesystem::path &base, std::uint64_t failure_by
   }
 }
 thread_local RawThreadContext *bound_context = nullptr;
+thread_local RawThreadHandle *bound_handle = nullptr;
 thread_local RawWaitControl bound_wait_control{};
 } // namespace
 
@@ -1622,59 +1838,86 @@ Result<RawThreadHandle> raw_prepare_thread() {
   return runtime.prepare_thread();
 }
 RawThreadBinding::RawThreadBinding(RawThreadHandle context)
-    : context_(std::move(context)), previous_(bound_context) {
+    : context_(std::move(context)), previous_(bound_context),
+      previous_handle_(bound_handle) {
   bound_context = context_.get();
+  bound_handle = &context_;
 }
 RawThreadBinding::RawThreadBinding(RawProducer &producer, IdentityBytes epoch)
     : RawThreadBinding(std::make_shared<RawThreadContext>(producer, epoch)) {}
-RawThreadBinding::~RawThreadBinding() { bound_context = previous_; }
+RawThreadBinding::~RawThreadBinding() {
+  bound_context = previous_;
+  bound_handle = previous_handle_;
+}
+RawThreadHandle raw_current_thread() noexcept {
+  return bound_handle == nullptr ? RawThreadHandle{} : *bound_handle;
+}
 bool raw_enabled() noexcept { return bound_context != nullptr; }
 IdentityBytes raw_lane_epoch() noexcept {
   return bound_context == nullptr ? IdentityBytes{} : bound_context->epoch_;
 }
-Result<RawControlToken> raw_claim_control(std::uint64_t amount,
-                                          RawWaitControl control) {
+namespace {
+Result<RawCapacityClaim> claim_capacity(std::uint64_t amount, RawPartition partition,
+                                        RawWaitControl control) {
   if (bound_context == nullptr || bound_context->fenced_)
-    return Result<RawControlToken>::failure({ErrorCode::audit_unavailable});
+    return Result<RawCapacityClaim>::failure({ErrorCode::audit_unavailable});
   try {
     for (;;) {
       check_wait_control(control);
       if (bound_context->state_ &&
           bound_context->state_->known_fenced_.load(std::memory_order_acquire))
-        return Result<RawControlToken>::failure({ErrorCode::audit_unavailable});
-      auto held = bound_context->producer_->hold_control(amount);
+        return Result<RawCapacityClaim>::failure({ErrorCode::audit_unavailable});
+      const auto maximum = bound_context->producer_->maximum_grant(partition);
+      if (!maximum.has_value())
+        return Result<RawCapacityClaim>::failure(maximum.error());
+      if (amount > maximum.value())
+        return Result<RawCapacityClaim>::failure({ErrorCode::capacity});
+      auto held = bound_context->producer_->hold_capacity(partition, amount);
       if (held.has_value() || held.error().code != ErrorCode::capacity ||
           !bound_context->state_)
         return held;
-      if (amount > bound_context->channel_->capacities()[1])
-        return held;
       const auto drained = raw_drain_notices(bound_context->endpoint_.value);
       if (!drained.has_value())
-        return Result<RawControlToken>::failure(drained.error());
+        return Result<RawCapacityClaim>::failure(drained.error());
       const auto armed = bound_context->channel_->arm_space();
       if (!armed.has_value())
-        return Result<RawControlToken>::failure(armed.error());
-      held = bound_context->producer_->hold_control(amount);
+        return Result<RawCapacityClaim>::failure(armed.error());
+      held = bound_context->producer_->hold_capacity(partition, amount);
       if (held.has_value() || held.error().code != ErrorCode::capacity)
         return held;
       try {
         const auto status =
             bound_context->state_->exchange(std::nullopt, {}, false, {}, control);
         if (status.fenced)
-          return Result<RawControlToken>::failure({ErrorCode::audit_unavailable});
+          return Result<RawCapacityClaim>::failure({ErrorCode::audit_unavailable});
       } catch (const Error &error) {
-        return Result<RawControlToken>::failure(error);
+        return Result<RawCapacityClaim>::failure(error);
       }
       std::array<pollfd, 2> watches{
           {{bound_context->endpoint_.value, POLLIN, 0},
            {bound_context->state_->death_.value, POLLIN | POLLHUP, 0}}};
       wait_ready(watches, control);
       if (watches[1].revents != 0)
-        return Result<RawControlToken>::failure({ErrorCode::audit_unavailable});
+        return Result<RawCapacityClaim>::failure({ErrorCode::audit_unavailable});
     }
   } catch (const Error &error) {
-    return Result<RawControlToken>::failure(error);
+    return Result<RawCapacityClaim>::failure(error);
   }
+}
+} // namespace
+Result<RawControlToken> raw_claim_control(std::uint64_t amount,
+                                          RawWaitControl control) {
+  return claim_capacity(amount, RawPartition::control, control);
+}
+Result<RawControlToken> raw_try_claim_control(std::uint64_t amount) noexcept {
+  if (bound_context == nullptr || bound_context->fenced_ ||
+      (bound_context->state_ &&
+       bound_context->state_->known_fenced_.load(std::memory_order_acquire)))
+    return Result<RawControlToken>::failure({ErrorCode::audit_unavailable});
+  return bound_context->producer_->hold_capacity(RawPartition::control, amount);
+}
+Result<RawCapacityClaim> raw_claim_data(std::uint64_t amount, RawWaitControl control) {
+  return claim_capacity(amount, RawPartition::data, control);
 }
 Result<void> raw_wait_data(std::uint64_t amount, RawWaitControl control) {
   if (bound_context == nullptr)
@@ -1691,12 +1934,17 @@ Result<void> raw_wait_data(std::uint64_t amount, RawWaitControl control) {
       if (context.state_ &&
           context.state_->known_fenced_.load(std::memory_order_acquire))
         return Result<void>::failure({ErrorCode::audit_unavailable});
+      const auto maximum = context.producer_->maximum_grant(RawPartition::data);
+      if (!maximum.has_value())
+        return Result<void>::failure(maximum.error());
+      if (amount > maximum.value())
+        return Result<void>::failure({ErrorCode::capacity});
       const auto free = context.producer_->available(RawPartition::data);
       if (!free.has_value())
         return Result<void>::failure(free.error());
       if (free.value() >= amount)
         return Result<void>::success();
-      if (!context.state_ || amount > context.channel_->capacities()[0])
+      if (!context.state_)
         return Result<void>::failure({ErrorCode::capacity});
       const auto drained = raw_drain_notices(context.endpoint_.value);
       if (!drained.has_value())

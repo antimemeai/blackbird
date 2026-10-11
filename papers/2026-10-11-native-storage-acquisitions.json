@@ -1,0 +1,15 @@
+[
+  {
+    "file": "linux-v6.12-locks.c",
+    "url": "https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/locks.c",
+    "sha256": "1e3fb10f9d131dfefd39dd57d638786e94ed8d0773ac709d0011ec41af9c96f0",
+    "bytes": 80567
+  },
+  {
+    "file": "xnu-kern_descrip.c",
+    "url": "https://raw.githubusercontent.com/apple-oss-distributions/xnu/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_descrip.c",
+    "sha256": "480cfed4e987be874bd71fb6933c254adf9fb1f36de8496dee8f351b18da13b1",
+    "bytes": 147011,
+    "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea"
+  }
+]

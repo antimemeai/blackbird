@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/raw_provider.hpp"
 #include "blackbird/value.hpp"
 #include <filesystem>
 #include <functional>
@@ -24,8 +25,13 @@ public:
   OpenAiLogin &operator=(const OpenAiLogin &) = delete;
 
 private:
-  OpenAiLogin(std::string token, std::string account)
-      : access_token_(std::move(token)), account_id_(std::move(account)) {}
+  struct Credentials {
+    std::string token, account;
+  };
+  explicit OpenAiLogin(Credentials credentials)
+      : access_token_(std::move(credentials.token)),
+        account_id_(std::move(credentials.account)) {}
+  RawEventRef resolution_;
   std::string access_token_, account_id_;
   bool owned_auth_ = false;
   friend Result<OpenAiLogin> codex_login(const OpenAiConfig &, bool);

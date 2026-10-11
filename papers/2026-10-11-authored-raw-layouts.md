@@ -1,6 +1,8 @@
 # Authored event layouts and Lua load ownership
 
-Concrete continuation of the reviewed authored subplan. Source has not started.
+Concrete continuation of the reviewed authored subplan. The setup-only current
+handle accessor, native helpers, Lua emission and selected load/execution hooks
+are implemented; the direct fixture qualifies their actual native boundaries.
 The namespace is an immutable VM definition generation, not a dynamic closure
 identity. Ops/evals interpret these bodies only after preservation.
 
@@ -18,7 +20,7 @@ boolean representation merely to share a body.
 |1504 VM end|VM R, native u8 end branch, optional ErrorCode/i64 detail; held before allocation and published after actual lua_close or failed allocation|
 |1505 source binding|G, actual retained root SourceReference,size_t source length; after successful root retention|
 |1506 source load request|VM R,native u8 source kind,size_t length,exact existing source bytes; before system luaL_loadbufferx/loadstring or module-source return|
-|1507 source load return|load R,int Lua status for actual C API load; module-source return has its own returned-to-Lua tag and never invents a load status|
+|1507 source load return|load R,int actual Lua status,bool function available,[actual void* from lua_topointer on a successfully loaded function]|
 |1508 execution request|VM R,load R; before the actual protected pcall|
 |1509 execution return|execution R,int actual pcall status|
 |1510 authored signed integer|G,VM R,lua_Integer local site,lua_Integer value (qualified signed64)|
@@ -27,7 +29,13 @@ boolean representation merely to share a body.
 |1513 authored bytes|G,VM R,lua_Integer local site,size_t length,exact borrowed bytes|
 |1514 authored native boolean|G,VM R,i64 local site,native bool value|
 |1515 admitted refusal|G,VM R,int argument count,int site type,int value type,bool integer site available,[actual i64 site when available],ErrorCode,i64 detail|
-|1516–1599|Reserved; no invented emission|
+|1517 module execution request|VM R,actual void* loaded function; before its protected pcall|
+|1518 module execution return|execution request R,int actual protected status|
+|1516 native refusal|G,VM R,i64 local site,u8 native API kind(1 signed/2 real/3 bool/4 bytes),ErrorCode,i64 detail|
+|1519–1599|Reserved; no invented emission|
+
+Native rejection1516 is74 bytes and fits the86-byte common claim; its kind names
+the actual typed API, without invented Lua argument types.
 
 Native signed64/double/byte APIs use the corresponding exact scalar/string
 layouts; native bool has a distinct body. Native helpers accept an explicit
@@ -51,12 +59,11 @@ emissions. No claim is handed across concurrent producers.
 
 Actual system-provided source paths are root `Runtime::eval`, tool wrappers
 already produced by `invoke_tool`, installation tool_api/print_program literals,
-and `CodingEngine::module_source`'s existing source return. Each is captured once
-before that selected load/return boundary. Validation-only loads are a distinct
+and `CodingEngine::module_source`'s existing source at its selected native load.
+Each is captured once before that selected load boundary. Validation-only loads are a distinct
 source-kind branch; no execution success is inferred from syntax success. The
-module path is a source return into the installed Lua loader;1517 will be needed
-if a distinct module load-result surface is included. Do not rewrite the loader
-or wrap Lua's generic load solely to pretend closure attribution is complete.
+module helper captures its two private native closures once, as detailed below.
+Do not wrap Lua's generic load or claim arbitrary closure attribution.
 
 Change retain_program to return the SourceReference it already places on its
 retained event, after the append succeeds. Store it on CodingEngine for the
@@ -99,3 +106,74 @@ Before implementation, compute setup/load/refusal widths with sizeof, guard the
 qualified Lua integer/number ABI, choose the complete module-load versus return
 coverage boundary, and write literal independent disk-body oracles. This note
 does not claim those unfinished choices or direct checks complete.
+
+## Final module boundary and byte allowances
+
+Use two private native closures captured once by the installed module helper:
+load existing source/name/environment through luaL_loadbufferx and its existing
+_ENV setup, and protect the already loaded function through lua_pcall. Remove the
+temporary fields from blackbird after capturing those closures into the helper;
+leave Lua's general load/pcall alone. This observes selected system module loads
+without a per-function registry, extra wrapper on each loaded function, or
+claiming attribution for arbitrary Lua-created closures. Preserve the helper's
+existing loading/cache/error and first-result behavior.
+
+For selected load return1507 emit load R,int actual status,bool function available,
+and, on success, the actual void* returned by lua_topointer on that loaded
+function. This is an unchanged native acquisition, not a formatted identifier.
+The per-VM native description records sizeof(void*). Module execution uses1517
+request VM R,void* actual loaded function and1518 return request R,int actual
+protected status. These fields join a selected load to its real function without
+keeping a writer dictionary or storing a lossy signed ordinal in Lua. VM identity
+bounds the pointer's meaning; it is not a cross-VM or cross-process address claim.
+Other selected load/execution pairs retain their actual native load-reference
+linkage. Existing module_source semantic retention is unchanged; raw load copies
+its existing source once, rather than adding a second metric source-return copy.
+
+On the qualified64-bit profiles: admitted refusal max86 bytes, scalar signed/
+real72, Lua bool(int)68, native bool65, bytes72+actual length. VM allocation request
+is33 without root reference or57 with it. Prepaid setup/END is175 = allocation
+return41 +installation request40 +installation return44 +END maximum50. Each
+selected native load reserves its maximum53-byte return before acquiring source;
+load request is49+actual source length. Root/tool evaluation additionally prepays
+execution request64 and return44 before code can emit. Validation-only loads
+reserve53 only and never emit an execution success. Selected module execution
+request is48 (E16+VM24+pointer8), return44. Claims release unused variants.
+Root source binding is64 fixed bytes (E16+G16+SourceReference24+size_t8).
+Copying root source again here would duplicate load capture; the actual root
+bytes are captured at1506.
+The earlier1505 draft's raw length has no raw byte tail. SourceReference itself
+is journal16+sequenceu64. Checked framing/arithmetic precedes every acquisition.
+
+Implement setup-only raw_current_thread() by a TLS pointer to the actual current
+binding handle and restore that pointer in nested binding teardown. Retaining it
+costs one shared ownership increment at VM setup. No extra weak pointer/context
+allocation, per-emission increment, epoch copy or persistent borrowed cancellation
+FD accompanies the VM. Retained handle is declared before credits so credits die
+first. Destructor temporarily binds that handle only when one was captured.
+Absent raw capture does not hide Lua argument validation or change its zero-result
+success contract. Guard lua_Integer signed64, lua_Number double, native bool1 and
+pointer width in source; immutable descriptions precede activation.
+
+Direct reds/greens cover missing Lua API, scalar bit patterns/NUL/high bytes,
+strict types/arity/site refusal, rejected source retention before VM allocation,
+root/tool/module originals before selected execution, immutable generation under
+joined-thread replacement, and real full-lane finalizer cancellation independent
+of Lua debug hooks. The existing one authored plan attack governs this continuation;
+no second transport/design panel or eval campaign is added.
+
+## Native Lua error object and capture policy
+
+The new authored API raises a private native Error userdata only after all
+claims have been destroyed. The selected protected-call boundary recognizes
+the actual userdata/metatable. A caught refusal does not set the business
+capacity-stopped flag or leave a stale native Error on Runtime; deliberate
+rethrow preserves the same object. A later distinct Lua error stays distinct.
+No borrowed string pointer, per-error dictionary, or generic pcall wrapper is
+used. Its fixed __tostring is an ordinary error presentation surface, independent
+of raw metric validation and copying. Existing bridge error policy is unchanged.
+
+A VM's setup capture policy is immutable with its generation and handle. A VM
+created without raw capture cannot publish a fake zero VM reference when a later
+execution owner binds a raw producer. Strict authored argument validation and
+zero-result success still apply without capture.

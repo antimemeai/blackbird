@@ -106,6 +106,19 @@ struct RawRegionOptions {
   bool cpu = true;
 };
 
+// A joined command worker lends its fixed settlement bank only to retained_append.
+// Nested scopes restore the previous selection. No claim or wait occurs here.
+class RawRegionPrepaidScope {
+public:
+  explicit RawRegionPrepaidScope(RawControlClaim &bank) noexcept;
+  ~RawRegionPrepaidScope();
+  RawRegionPrepaidScope(const RawRegionPrepaidScope &) = delete;
+  RawRegionPrepaidScope &operator=(const RawRegionPrepaidScope &) = delete;
+
+private:
+  RawControlClaim *previous_;
+};
+
 // One execution context owns each region. Its end and one branch-outcome record
 // have prepaid control credit before begin publication. No region migrates threads.
 class RawRegion {
@@ -131,6 +144,7 @@ private:
   std::uint64_t begin_ = 0;
   bool outcome_written_ = false;
   bool error_written_ = false;
+  bool prepaid_ = false;
 };
 
 // Immutable descriptions registered once by runtime setup. No writer lookup.

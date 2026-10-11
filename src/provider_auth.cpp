@@ -1,6 +1,7 @@
 #include "blackbird/provider_auth.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/packet.hpp"
+#include "blackbird/raw_auth.hpp"
 #include "blackbird/tools.hpp"
 #include "native_process.hpp"
 #include <algorithm>
@@ -203,41 +204,66 @@ public:
         return &v;
     return nullptr;
   }
-  void save() {
-    auto bytes = unwrap(encode_packet_string(data));
-    if (bytes.size() > store_limit)
-      throw Error{ErrorCode::capacity};
-    std::array<unsigned char, 16> random{};
-    if (::getentropy(random.data(), random.size()) != 0)
-      throw Error{ErrorCode::io, errno};
-    std::string name = ".credentials-";
-    constexpr char hex[] = "0123456789abcdef";
-    for (auto c : random) {
-      name += hex[c >> 4U];
-      name += hex[c & 15U];
-    }
-    Fd file{::openat(dir.value, name.c_str(),
-                     O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600)};
-    if (file.value < 0)
-      throw Error{ErrorCode::io, errno};
+  void save(RawAuthTrace *action = nullptr) {
+    RawAuthSave capture{action};
     try {
-      std::size_t done = 0;
-      while (done < bytes.size()) {
-        const auto n = ::write(file.value, bytes.data() + done, bytes.size() - done);
-        if (n < 0 && errno == EINTR)
-          continue;
-        if (n <= 0)
-          throw Error{ErrorCode::io, errno};
-        done += static_cast<std::size_t>(n);
+      capture.start();
+      auto bytes = unwrap(encode_packet_string(data));
+      capture.stage(1);
+      if (bytes.size() > store_limit)
+        throw Error{ErrorCode::capacity};
+      capture.stage(2);
+      std::array<unsigned char, 16> random{};
+      if (::getentropy(random.data(), random.size()) != 0)
+        throw Error{ErrorCode::io, errno};
+      capture.stage(3);
+      std::string name = ".credentials-";
+      constexpr char hex[] = "0123456789abcdef";
+      for (auto c : random) {
+        name += hex[c >> 4U];
+        name += hex[c & 15U];
       }
-      if (::fsync(file.value) != 0)
+      Fd file{::openat(dir.value, name.c_str(),
+                       O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600)};
+      if (file.value < 0)
         throw Error{ErrorCode::io, errno};
-      if (::renameat(dir.value, name.c_str(), dir.value, "credentials.bbm") != 0)
-        throw Error{ErrorCode::io, errno};
-      if (::fsync(dir.value) != 0)
-        throw Error{ErrorCode::io, errno};
+      capture.stage(4);
+      try {
+        std::size_t done = 0;
+        while (done < bytes.size()) {
+          const auto n = ::write(file.value, bytes.data() + done, bytes.size() - done);
+          if (n < 0 && errno == EINTR)
+            continue;
+          if (n <= 0)
+            throw Error{ErrorCode::io, errno};
+          done += static_cast<std::size_t>(n);
+        }
+        capture.stage(5);
+        if (::fsync(file.value) != 0)
+          throw Error{ErrorCode::io, errno};
+        capture.stage(6);
+        if (::renameat(dir.value, name.c_str(), dir.value, "credentials.bbm") != 0)
+          throw Error{ErrorCode::io, errno};
+        capture.stage(7);
+        if (::fsync(dir.value) != 0)
+          throw Error{ErrorCode::io, errno};
+      } catch (...) {
+        (void)::unlinkat(dir.value, name.c_str(), 0);
+        throw;
+      }
+      capture.stage(8);
+      capture.finish(1);
+    } catch (const Error &error) {
+      capture.finish(2, &error);
+      throw;
+    } catch (const std::bad_alloc &) {
+      capture.finish(3);
+      throw;
+    } catch (const std::length_error &) {
+      capture.finish(4);
+      throw;
     } catch (...) {
-      (void)::unlinkat(dir.value, name.c_str(), 0);
+      capture.finish(5);
       throw;
     }
   }
@@ -300,11 +326,31 @@ Value descriptor(Store &s, std::string_view id) {
     throw Error{ErrorCode::unsupported};
   return *p;
 }
-ProviderHttpResponse http(const ProviderAuthConfig &c, const ProviderHttpRequest &r) {
-  return c.http ? c.http(r) : provider_http(r, c);
+ProviderHttpResponse http(const ProviderAuthConfig &c, const ProviderHttpRequest &r,
+                          RawAuthTrace &action, std::uint8_t operation) {
+  RawAuthExchange exchange{action, {1609, 1610}};
+  try {
+    exchange.start(operation);
+    auto result = c.http ? c.http(r) : provider_http(r, c);
+    exchange.returned(&result.status);
+    return result;
+  } catch (const Error &error) {
+    exchange.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    exchange.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    exchange.finish(4);
+    throw;
+  } catch (...) {
+    exchange.finish(5);
+    throw;
+  }
 }
 Value token_record(const Value &tokens, std::int64_t clock,
-                   std::string_view prior_refresh = {}) {
+                   std::string_view prior_refresh = {},
+                   RawAuthTrace *action = nullptr) {
   const auto access = str(tokens, "access_token"),
              refresh = str(tokens, "refresh_token", std::string{prior_refresh});
   secret(access);
@@ -312,34 +358,54 @@ Value token_record(const Value &tokens, std::int64_t clock,
   if (str(tokens, "token_type", "Bearer") != "Bearer" &&
       str(tokens, "token_type") != "bearer")
     throw Error{ErrorCode::corrupt};
+  if (action)
+    action->stage(RawAuthField::token_expiry);
   const auto expiry = number(tokens, "expires_in");
+  if (action)
+    action->scalar(RawAuthField::token_expiry, expiry);
   if (expiry <= 0 || expiry > 31 * 86400)
     throw Error{ErrorCode::corrupt};
+  if (action)
+    action->stage(RawAuthField::token_expires_at);
+  const auto expires_at = clock + expiry;
+  if (action)
+    action->scalar(RawAuthField::token_expires_at, expires_at);
   return Value::object({{"kind", Value{"oauth"}},
                         {"access", Value{access}},
                         {"refresh", Value{refresh}},
-                        {"expires_at", integer(clock + expiry)},
+                        {"expires_at", integer(expires_at)},
                         {"scope", Value{str(tokens, "scope")}},
                         {"state", Value{"ready"}}});
 }
 void save_account(Store &s, std::string_view provider, std::string_view account,
-                  Value value) {
+                  Value value, RawAuthTrace *action = nullptr) {
   identifier(provider);
   identifier(account);
   put(value, "provider", Value{std::string{provider}});
   put(value, "account", Value{std::string{account}});
   if (auto *p = s.account(provider, account)) {
-    put(value, "revision", integer(number(*p, "revision") + 1));
+    if (action)
+      action->stage(RawAuthField::account_revision);
+    const auto revision = number(*p, "revision") + 1;
+    if (action)
+      action->scalar(RawAuthField::account_revision, revision);
+    put(value, "revision", integer(revision));
     *p = std::move(value);
   } else {
     if (s.field("accounts").array().size() >= 128)
       throw Error{ErrorCode::capacity};
+    if (action)
+      action->scalar(RawAuthField::account_revision, 1);
     put(value, "revision", integer(1));
     s.field("accounts").array().push_back(std::move(value));
   }
   put(s.field("active"), provider, Value{std::string{account}});
-  put(s.field("selection_revision"), provider,
-      integer(number(s.field("selection_revision"), provider) + 1));
+  if (action)
+    action->stage(RawAuthField::selection_revision);
+  const auto selection = number(s.field("selection_revision"), provider) + 1;
+  if (action)
+    action->scalar(RawAuthField::selection_revision, selection);
+  put(s.field("selection_revision"), provider, integer(selection));
 }
 std::vector<std::pair<std::string, std::string>>
 oauth_headers(std::string_view provider) {
@@ -364,7 +430,8 @@ void require_provider_success(int status) {
 ProviderHttpResponse
 provider_http(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
               const std::function<void(std::string_view)> &observer,
-              const RawProviderOwner *raw_owner, bool application) {
+              const RawProviderOwner *raw_owner, bool application,
+              const RawEventRef *auth_resolution) {
   std::optional<RawProviderTrace> trace;
   std::optional<RawWaitScope> wait_scope;
   std::optional<detail::Clock::time_point> initial_deadline;
@@ -376,7 +443,7 @@ provider_http(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
       wait_scope.emplace(control);
     }
     if (application)
-      trace.emplace(raw_owner, r.timeout_seconds);
+      trace.emplace(raw_owner, r.timeout_seconds, auth_resolution);
     https_url(r.url);
     if (r.timeout_seconds < 1 || r.timeout_seconds > 3600 ||
         r.body.size() > 16 * 1024 * 1024 || (r.method != "GET" && r.method != "POST"))
@@ -462,406 +529,873 @@ ProviderAuth::ProviderAuth(ProviderAuthConfig config) : config_(std::move(config
   }
 }
 std::filesystem::path ProviderAuth::directory() const { return config_.directory; }
-Value ProviderAuth::descriptor(std::string_view p) const {
-  Store s{config_, false};
-  return blackbird::descriptor(s, p);
+Value ProviderAuth::descriptor(std::string_view p, const RawAuthParent *parent) const {
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::descriptor, {p, {}}, parent, nullptr}};
+  try {
+    trace.start();
+
+    Store s{config_, false};
+    auto result = blackbird::descriptor(s, p);
+    trace.stage(109);
+    trace.finish(1);
+    return result;
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
+  }
 }
 Value ProviderAuth::catalog() const {
-  Store s{config_, false};
-  Value::Array out;
-  for (const auto id :
-       {"kimi", "mimo", "openai", "anthropic", "grok", "moonshot", "openrouter"})
-    out.push_back(builtin(id));
-  for (const auto &[k, v] : s.field("providers").object()) {
-    (void)k;
-    out.push_back(v);
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::catalog, {{}, {}}, nullptr, nullptr}};
+  try {
+    trace.start();
+
+    Store s{config_, false};
+    Value::Array out;
+    for (const auto id :
+         {"kimi", "mimo", "openai", "anthropic", "grok", "moonshot", "openrouter"})
+      out.push_back(builtin(id));
+    for (const auto &[k, v] : s.field("providers").object()) {
+      (void)k;
+      out.push_back(v);
+    }
+    auto result = Value::object({{"providers", Value{std::move(out)}}});
+    trace.stage(109);
+    trace.finish(1);
+    return result;
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
   }
-  return Value::object({{"providers", Value{std::move(out)}}});
 }
 Value ProviderAuth::status() const {
-  Store s{config_, false};
-  Value::Array out;
-  for (const auto &a : s.field("accounts").array()) {
-    auto state = str(a, "state", "ready");
-    if (state == "ready" && str(a, "kind") == "oauth" &&
-        number(a, "expires_at") <= now(config_))
-      state = "expired";
-    out.push_back(Value::object(
-        {{"provider", Value{str(a, "provider")}},
-         {"account", Value{str(a, "account")}},
-         {"kind", Value{str(a, "kind")}},
-         {"state", Value{state}},
-         {"expires_at", a.find("expires_at") ? *a.find("expires_at") : Value{}},
-         {"active",
-          Value{str(s.field("active"), str(a, "provider")) == str(a, "account")}}}));
-  }
-  return Value::object(
-      {{"accounts", Value{std::move(out)}},
-       {"environment",
-        Value{"available only without an owned selection; not probed"}}});
-}
-Value ProviderAuth::registration(std::string_view p, std::string_view a) const {
-  identifier(p);
-  identifier(a);
-  Store s{config_, false};
-  auto *v = s.account(p, a);
-  Value out = Value::object(
-      {{"revision", integer(v ? number(*v, "revision") : -1)},
-       {"selection_revision", integer(number(s.field("selection_revision"), p))}});
-  if (v) {
-    for (const auto k : {"client_id", "metadata"})
-      if (const auto *x = v->find(k))
-        put(out, k, *x);
-    if (auto *x = out.find("metadata")) {
-      auto m = *x;
-      std::erase_if(m.object(), [](const auto &kv) { return kv.first == "id_token"; });
-      put(out, "metadata", std::move(m));
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::status, {{}, {}}, nullptr, nullptr}};
+  try {
+    trace.start();
+
+    Store s{config_, false};
+    Value::Array out;
+    for (const auto &a : s.field("accounts").array()) {
+      auto state = str(a, "state", "ready");
+      if (state == "ready" && str(a, "kind") == "oauth" &&
+          number(a, "expires_at") <= now(config_))
+        state = "expired";
+      out.push_back(Value::object(
+          {{"provider", Value{str(a, "provider")}},
+           {"account", Value{str(a, "account")}},
+           {"kind", Value{str(a, "kind")}},
+           {"state", Value{state}},
+           {"expires_at", a.find("expires_at") ? *a.find("expires_at") : Value{}},
+           {"active",
+            Value{str(s.field("active"), str(a, "provider")) == str(a, "account")}}}));
     }
+    auto result = Value::object(
+        {{"accounts", Value{std::move(out)}},
+         {"environment",
+          Value{"available only without an owned selection; not probed"}}});
+    trace.stage(109);
+    trace.finish(1);
+    return result;
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
   }
-  return out;
 }
-Value ProviderAuth::binding(std::string_view p) const {
-  Store s{config_, false};
-  const auto d = blackbird::descriptor(s, p);
-  const auto active = str(s.field("active"), p);
-  const auto *a = s.account(p, active);
-  return Value::object({{"provider", Value{std::string{p}}},
-                        {"account", Value{active}},
-                        {"revision", integer(a ? number(*a, "revision") : -1)},
-                        {"kind", Value{a                ? str(*a, "kind")
-                                       : active.empty() ? "environment"
-                                                        : "logged_out"}},
-                        {"base_url", Value{str(d, "base_url")}},
-                        {"protocol", Value{str(d, "protocol")}}});
-}
-bool ProviderAuth::selected(std::string_view p) const {
-  Store s{config_, false};
-  return !str(s.field("active"), p).empty();
-}
-void ProviderAuth::set_key(std::string_view p, std::string_view a, std::string key) {
-  secret(key);
-  Store s{config_, true};
-  (void)blackbird::descriptor(s, p);
-  save_account(s, p, a,
-               Value::object({{"kind", Value{"api_key"}},
-                              {"access", Value{std::move(key)}},
-                              {"state", Value{"ready"}}}));
-  s.save();
-}
-void ProviderAuth::use(std::string_view p, std::string_view a) {
-  identifier(p);
-  identifier(a);
-  Store s{config_, true};
-  if (!s.account(p, a))
-    throw Error{ErrorCode::invalid_range};
-  put(s.field("active"), p, Value{std::string{a}});
-  put(s.field("selection_revision"), p,
-      integer(number(s.field("selection_revision"), p) + 1));
-  s.save();
-}
-void ProviderAuth::logout(std::string_view p, std::string_view a) {
-  identifier(p);
-  identifier(a);
-  Store s{config_, true};
-  if (!s.account(p, a)) {
-    if (s.field("accounts").array().size() >= 128)
-      throw Error{ErrorCode::capacity};
-    s.field("accounts")
-        .array()
-        .push_back(Value::object({{"provider", Value{std::string{p}}},
-                                  {"account", Value{std::string{a}}},
-                                  {"kind", Value{"none"}},
-                                  {"state", Value{"logged_out"}},
-                                  {"revision", integer(0)}}));
-  }
-  if (auto *record = s.account(p, a)) {
-    put(*record, "access", Value{});
-    put(*record, "refresh", Value{});
-    put(*record, "state", Value{"logged_out"});
-    put(*record, "revision", integer(number(*record, "revision") + 1));
-    if (auto *metadata = record->find("metadata")) {
-      auto cleaned = *metadata;
-      std::erase_if(cleaned.object(),
-                    [](const auto &v) { return v.first == "id_token"; });
-      put(*record, "metadata", std::move(cleaned));
+Value ProviderAuth::registration(std::string_view p, std::string_view a,
+                                 const RawAuthParent *parent) const {
+  RawAuthTrace trace{
+      RawAuthEntry{RawAuthAction::registration, {p, a}, parent, nullptr}};
+  try {
+    trace.start();
+
+    identifier(p);
+    identifier(a);
+    Store s{config_, false};
+    auto *v = s.account(p, a);
+    trace.stage(RawAuthField::registration_revision);
+    const auto revision = v ? number(*v, "revision") : -1;
+    trace.scalar(RawAuthField::registration_revision, revision);
+    trace.stage(RawAuthField::registration_selection);
+    const auto selection = number(s.field("selection_revision"), p);
+    trace.scalar(RawAuthField::registration_selection, selection);
+    Value out = Value::object(
+        {{"revision", integer(revision)}, {"selection_revision", integer(selection)}});
+    if (v) {
+      for (const auto k : {"client_id", "metadata"})
+        if (const auto *x = v->find(k))
+          put(out, k, *x);
+      if (auto *x = out.find("metadata")) {
+        auto m = *x;
+        std::erase_if(m.object(),
+                      [](const auto &kv) { return kv.first == "id_token"; });
+        put(out, "metadata", std::move(m));
+      }
     }
+    trace.stage(109);
+    trace.finish(1);
+    return out;
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
   }
-  auto &pending = s.field("pending").array();
-  std::erase_if(pending, [&](const Value &v) {
-    return str(v, "provider") == p && str(v, "account") == a;
-  });
-  put(s.field("selection_revision"), p,
-      integer(number(s.field("selection_revision"), p) + 1));
-  // Keep the selected account label. Its logged_out state prevents fallback;
-  // a magic account label could accidentally select another stored account.
-  s.save();
+}
+Value ProviderAuth::binding(std::string_view p, const RawAuthParent *parent) const {
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::binding, {p, {}}, parent, nullptr}};
+  try {
+    trace.start();
+
+    Store s{config_, false};
+    const auto d = blackbird::descriptor(s, p);
+    const auto active = str(s.field("active"), p);
+    const auto *a = s.account(p, active);
+    trace.stage(RawAuthField::binding_revision);
+    const auto revision = a ? number(*a, "revision") : -1;
+    trace.scalar(RawAuthField::binding_revision, revision);
+    const auto kind = a                ? str(*a, "kind")
+                      : active.empty() ? "environment"
+                                       : "logged_out";
+    const auto base = str(d, "base_url"), protocol = str(d, "protocol");
+    trace.binding_strings(
+        std::array<std::string_view, 5>{p, active, kind, base, protocol});
+    auto result = Value::object({{"provider", Value{std::string{p}}},
+                                 {"account", Value{active}},
+                                 {"revision", integer(revision)},
+                                 {"kind", Value{kind}},
+                                 {"base_url", Value{base}},
+                                 {"protocol", Value{protocol}}});
+    trace.stage(109);
+    trace.finish(1);
+    return result;
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
+  }
+}
+bool ProviderAuth::selected(std::string_view p, const RawAuthParent *parent) const {
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::selected, {p, {}}, parent, nullptr}};
+  try {
+    trace.start();
+
+    Store s{config_, false};
+    auto result = !str(s.field("active"), p).empty();
+    trace.boolean(1, result);
+    trace.stage(109);
+    trace.finish(1);
+    return result;
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
+  }
+}
+void ProviderAuth::set_key(std::string_view p, std::string_view a, std::string key,
+                           const RawAuthParent *parent) {
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::set_key, {p, a}, parent, nullptr}};
+  try {
+    trace.start();
+
+    secret(key);
+    Store s{config_, true};
+    (void)blackbird::descriptor(s, p);
+    save_account(s, p, a,
+                 Value::object({{"kind", Value{"api_key"}},
+                                {"access", Value{std::move(key)}},
+                                {"state", Value{"ready"}}}),
+                 &trace);
+    s.save(&trace);
+
+    trace.stage(109);
+    trace.finish(1);
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
+  }
+}
+void ProviderAuth::use(std::string_view p, std::string_view a,
+                       const RawAuthParent *parent) {
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::use, {p, a}, parent, nullptr}};
+  try {
+    trace.start();
+
+    identifier(p);
+    identifier(a);
+    Store s{config_, true};
+    if (!s.account(p, a))
+      throw Error{ErrorCode::invalid_range};
+    put(s.field("active"), p, Value{std::string{a}});
+    trace.stage(RawAuthField::selection_revision);
+    const auto selection = number(s.field("selection_revision"), p) + 1;
+    trace.scalar(RawAuthField::selection_revision, selection);
+    put(s.field("selection_revision"), p, integer(selection));
+    s.save(&trace);
+
+    trace.stage(109);
+    trace.finish(1);
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
+  }
+}
+void ProviderAuth::logout(std::string_view p, std::string_view a,
+                          const RawAuthParent *parent) {
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::logout, {p, a}, parent, nullptr}};
+  try {
+    trace.start();
+
+    identifier(p);
+    identifier(a);
+    Store s{config_, true};
+    if (!s.account(p, a)) {
+      if (s.field("accounts").array().size() >= 128)
+        throw Error{ErrorCode::capacity};
+      s.field("accounts")
+          .array()
+          .push_back(Value::object({{"provider", Value{std::string{p}}},
+                                    {"account", Value{std::string{a}}},
+                                    {"kind", Value{"none"}},
+                                    {"state", Value{"logged_out"}},
+                                    {"revision", integer(0)}}));
+    }
+    if (auto *record = s.account(p, a)) {
+      put(*record, "access", Value{});
+      put(*record, "refresh", Value{});
+      put(*record, "state", Value{"logged_out"});
+      trace.stage(RawAuthField::account_revision);
+      const auto revision = number(*record, "revision") + 1;
+      trace.scalar(RawAuthField::account_revision, revision);
+      put(*record, "revision", integer(revision));
+      if (auto *metadata = record->find("metadata")) {
+        auto cleaned = *metadata;
+        std::erase_if(cleaned.object(),
+                      [](const auto &v) { return v.first == "id_token"; });
+        put(*record, "metadata", std::move(cleaned));
+      }
+    }
+    auto &pending = s.field("pending").array();
+    std::erase_if(pending, [&](const Value &v) {
+      return str(v, "provider") == p && str(v, "account") == a;
+    });
+    trace.stage(RawAuthField::selection_revision);
+    const auto selection = number(s.field("selection_revision"), p) + 1;
+    trace.scalar(RawAuthField::selection_revision, selection);
+    put(s.field("selection_revision"), p, integer(selection));
+    // Keep the selected account label. Its logged_out state prevents fallback;
+    // a magic account label could accidentally select another stored account.
+    s.save(&trace);
+
+    trace.stage(109);
+    trace.finish(1);
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
+  }
 }
 void ProviderAuth::add_provider(const std::string &id, std::string base,
-                                const std::string &protocol, const std::string &env) {
-  identifier(id);
-  identifier(env);
-  https_url(base);
-  if (protocol != "responses" && protocol != "chat" && protocol != "messages")
-    throw Error{ErrorCode::invalid_range};
+                                const std::string &protocol, const std::string &env,
+                                const RawAuthParent *parent) {
+  RawAuthTrace trace{
+      RawAuthEntry{RawAuthAction::add_provider, {id, {}}, parent, nullptr}};
   try {
-    (void)builtin(id);
-    throw Error{ErrorCode::conflict};
-  } catch (const Error &e) {
-    if (e.code != ErrorCode::unsupported)
-      throw;
+    trace.start(raw_envelope_size + sizeof(IdentityBytes) + sizeof(std::uint64_t) +
+                4 * sizeof(std::size_t) + id.size() + base.size() + protocol.size() +
+                env.size());
+
+    identifier(id);
+    identifier(env);
+    https_url(base);
+    if (protocol != "responses" && protocol != "chat" && protocol != "messages")
+      throw Error{ErrorCode::invalid_range};
+    trace.descriptor_strings(std::array<std::string_view, 4>{id, base, protocol, env});
+    try {
+      (void)builtin(id);
+      throw Error{ErrorCode::conflict};
+    } catch (const Error &e) {
+      if (e.code != ErrorCode::unsupported)
+        throw;
+    }
+    Store s{config_, true};
+    if (s.field("providers").find(id))
+      throw Error{ErrorCode::conflict};
+    if (s.field("providers").object().size() >= 32)
+      throw Error{ErrorCode::capacity};
+    while (base.ends_with('/'))
+      base.pop_back();
+    put(s.field("providers"), id,
+        Value::object({{"id", Value{id}},
+                       {"base_url", Value{base}},
+                       {"protocol", Value{protocol}},
+                       {"environment", Value{env}},
+                       {"login", Value{"none"}}}));
+    s.save(&trace);
+
+    trace.stage(109);
+    trace.finish(1);
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
   }
-  Store s{config_, true};
-  if (s.field("providers").find(id))
-    throw Error{ErrorCode::conflict};
-  if (s.field("providers").object().size() >= 32)
-    throw Error{ErrorCode::capacity};
-  while (base.ends_with('/'))
-    base.pop_back();
-  put(s.field("providers"), id,
-      Value::object({{"id", Value{id}},
-                     {"base_url", Value{base}},
-                     {"protocol", Value{protocol}},
-                     {"environment", Value{env}},
-                     {"login", Value{"none"}}}));
-  s.save();
 }
 void ProviderAuth::save_oauth(std::string_view p, std::string_view a,
                               const Value &tokens, std::string client,
                               std::string token_url, Value metadata,
-                              OAuthExpected expected) {
-  identifier(p);
-  identifier(a);
-  secret(client);
-  https_url(token_url);
-  Store s{config_, true};
-  const auto d = blackbird::descriptor(s, p);
-  if (token_url != str(d, "token_url"))
-    throw Error{ErrorCode::conflict};
-  if (expected.selection_revision >= 0 &&
-      number(s.field("selection_revision"), p) != expected.selection_revision)
-    throw Error{ErrorCode::conflict};
-  const auto *prior = s.account(p, a);
-  if (expected.account_revision != -2 &&
-      (prior ? number(*prior, "revision") : -1) != expected.account_revision)
-    throw Error{ErrorCode::conflict};
-  auto record = token_record(tokens, now(config_));
-  put(record, "client_id", Value{std::move(client)});
-  put(record, "token_url", Value{std::move(token_url)});
-  put(record, "metadata", std::move(metadata));
-  save_account(s, p, a, std::move(record));
-  std::erase_if(s.field("pending").array(), [&](const Value &v) {
-    return str(v, "provider") == p && str(v, "account") == a;
-  });
-  s.save();
+                              OAuthExpected expected, const RawAuthParent *parent) {
+  RawAuthTrace trace{
+      RawAuthEntry{RawAuthAction::save_oauth, {p, a}, parent, &expected}};
+  try {
+    trace.start();
+
+    identifier(p);
+    identifier(a);
+    secret(client);
+    https_url(token_url);
+    Store s{config_, true};
+    const auto d = blackbird::descriptor(s, p);
+    if (token_url != str(d, "token_url"))
+      throw Error{ErrorCode::conflict};
+    if (expected.selection_revision >= 0) {
+      trace.stage(RawAuthField::expected_selection);
+      const auto selection = number(s.field("selection_revision"), p);
+      trace.scalar(RawAuthField::expected_selection, selection);
+      if (selection != expected.selection_revision)
+        throw Error{ErrorCode::conflict};
+    }
+    const auto *prior = s.account(p, a);
+    if (expected.account_revision != -2) {
+      trace.stage(RawAuthField::expected_account);
+      const auto revision = prior ? number(*prior, "revision") : -1;
+      trace.scalar(RawAuthField::expected_account, revision);
+      if (revision != expected.account_revision)
+        throw Error{ErrorCode::conflict};
+    }
+    trace.stage(RawAuthField::token_clock);
+    const auto token_clock = now(config_);
+    trace.scalar(RawAuthField::token_clock, token_clock);
+    auto record = token_record(tokens, token_clock, {}, &trace);
+    put(record, "client_id", Value{std::move(client)});
+    put(record, "token_url", Value{std::move(token_url)});
+    put(record, "metadata", std::move(metadata));
+    save_account(s, p, a, std::move(record), &trace);
+    std::erase_if(s.field("pending").array(), [&](const Value &v) {
+      return str(v, "provider") == p && str(v, "account") == a;
+    });
+    s.save(&trace);
+
+    trace.stage(109);
+    trace.finish(1);
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
+  }
 }
-Value ProviderAuth::device_begin(std::string_view p, std::string_view a) {
-  identifier(p);
-  identifier(a);
-  Store s{config_, true};
-  const auto d = blackbird::descriptor(s, p);
-  if (str(d, "login") != "device")
-    throw Error{ErrorCode::unsupported};
-  ProviderHttpRequest r{str(d, "device_url"), "POST",
-                        "client_id=" + form(str(d, "client_id")), oauth_headers(p), 30};
-  if (!str(d, "scope").empty())
-    r.body += "&scope=" + form(str(d, "scope"));
-  const auto reply = http(config_, r);
-  require_provider_success(reply.status);
-  auto v = unwrap(parse_json(reply.body));
-  secret(str(v, "device_code"));
-  secret(str(v, "user_code"));
-  https_url(str(v, "verification_uri"));
-  auto expiry = number(v, "expires_in", 900), interval = number(v, "interval", 5);
-  if (expiry < 1 || expiry > 1800 || interval < 1 || interval > 60)
-    throw Error{ErrorCode::corrupt};
-  const auto complete = str(v, "verification_uri_complete");
-  if (!complete.empty() && !complete.starts_with(str(v, "verification_uri")))
-    throw Error{ErrorCode::corrupt};
-  auto record = Value::object(
-      {{"provider", Value{std::string{p}}},
-       {"account", Value{std::string{a}}},
-       {"device_code", Value{str(v, "device_code")}},
-       {"selection_revision", integer(number(s.field("selection_revision"), p))},
-       {"expires_at", integer(now(config_) + expiry)},
-       {"interval", integer(interval)},
-       {"next_poll", integer(now(config_) + interval)}});
-  auto &pending = s.field("pending").array();
-  std::erase_if(pending, [&](const Value &x) {
-    return str(x, "provider") == p && str(x, "account") == a;
-  });
-  if (pending.size() >= 16)
-    throw Error{ErrorCode::capacity};
-  pending.push_back(std::move(record));
-  s.save();
-  return Value::object({{"verification_uri", Value{str(v, "verification_uri")}},
-                        {"verification_uri_complete", Value{complete}},
-                        {"user_code", Value{str(v, "user_code")}},
-                        {"expires_in", integer(expiry)},
-                        {"interval", integer(interval)}});
+Value ProviderAuth::device_begin(std::string_view p, std::string_view a,
+                                 const RawAuthParent *parent) {
+  RawAuthTrace trace{
+      RawAuthEntry{RawAuthAction::device_begin, {p, a}, parent, nullptr}};
+  try {
+    trace.start();
+
+    identifier(p);
+    identifier(a);
+    Store s{config_, true};
+    const auto d = blackbird::descriptor(s, p);
+    if (str(d, "login") != "device")
+      throw Error{ErrorCode::unsupported};
+    ProviderHttpRequest r{str(d, "device_url"), "POST",
+                          "client_id=" + form(str(d, "client_id")), oauth_headers(p),
+                          30};
+    if (!str(d, "scope").empty())
+      r.body += "&scope=" + form(str(d, "scope"));
+    const auto reply = http(config_, r, trace, 1);
+    require_provider_success(reply.status);
+    auto v = unwrap(parse_json(reply.body));
+    secret(str(v, "device_code"));
+    secret(str(v, "user_code"));
+    https_url(str(v, "verification_uri"));
+    trace.stage(RawAuthField::device_expiry);
+    const auto expiry = number(v, "expires_in", 900);
+    trace.scalar(RawAuthField::device_expiry, expiry);
+    trace.stage(RawAuthField::device_interval);
+    const auto interval = number(v, "interval", 5);
+    trace.scalar(RawAuthField::device_interval, interval);
+    if (expiry < 1 || expiry > 1800 || interval < 1 || interval > 60)
+      throw Error{ErrorCode::corrupt};
+    const auto complete = str(v, "verification_uri_complete");
+    if (!complete.empty() && !complete.starts_with(str(v, "verification_uri")))
+      throw Error{ErrorCode::corrupt};
+    trace.stage(RawAuthField::pending_selection);
+    const auto selection = number(s.field("selection_revision"), p);
+    trace.scalar(RawAuthField::pending_selection, selection);
+    trace.stage(RawAuthField::device_expiry_clock);
+    const auto expiry_clock = now(config_);
+    trace.scalar(RawAuthField::device_expiry_clock, expiry_clock);
+    const auto expires_at = expiry_clock + expiry;
+    trace.scalar(RawAuthField::token_expires_at, expires_at);
+    trace.stage(RawAuthField::device_next_clock);
+    const auto next_clock = now(config_);
+    trace.scalar(RawAuthField::device_next_clock, next_clock);
+    const auto next_poll = next_clock + interval;
+    trace.scalar(RawAuthField::poll_next, next_poll);
+    auto record = Value::object({{"provider", Value{std::string{p}}},
+                                 {"account", Value{std::string{a}}},
+                                 {"device_code", Value{str(v, "device_code")}},
+                                 {"selection_revision", integer(selection)},
+                                 {"expires_at", integer(expires_at)},
+                                 {"interval", integer(interval)},
+                                 {"next_poll", integer(next_poll)}});
+    auto &pending = s.field("pending").array();
+    std::erase_if(pending, [&](const Value &x) {
+      return str(x, "provider") == p && str(x, "account") == a;
+    });
+    if (pending.size() >= 16)
+      throw Error{ErrorCode::capacity};
+    pending.push_back(std::move(record));
+    s.save(&trace);
+    auto result =
+        Value::object({{"verification_uri", Value{str(v, "verification_uri")}},
+                       {"verification_uri_complete", Value{complete}},
+                       {"user_code", Value{str(v, "user_code")}},
+                       {"expires_in", integer(expiry)},
+                       {"interval", integer(interval)}});
+    trace.stage(109);
+    trace.finish(1);
+    return result;
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
+  }
 }
-Value ProviderAuth::device_poll(std::string_view p, std::string_view a) {
-  identifier(p);
-  identifier(a);
-  Store s{config_, true};
-  const auto d = blackbird::descriptor(s, p);
-  auto &pending = s.field("pending").array();
-  auto it = std::find_if(pending.begin(), pending.end(), [&](const Value &v) {
-    return str(v, "provider") == p && str(v, "account") == a;
-  });
-  if (it == pending.end())
-    throw Error{ErrorCode::invalid_range};
-  const auto clock = now(config_);
-  if (number(*it, "selection_revision") != number(s.field("selection_revision"), p)) {
+Value ProviderAuth::device_poll(std::string_view p, std::string_view a,
+                                const RawAuthParent *parent) {
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::device_poll, {p, a}, parent, nullptr}};
+  try {
+    trace.start();
+
+    identifier(p);
+    identifier(a);
+    Store s{config_, true};
+    const auto d = blackbird::descriptor(s, p);
+    auto &pending = s.field("pending").array();
+    auto it = std::find_if(pending.begin(), pending.end(), [&](const Value &v) {
+      return str(v, "provider") == p && str(v, "account") == a;
+    });
+    if (it == pending.end())
+      throw Error{ErrorCode::invalid_range};
+    trace.stage(RawAuthField::poll_clock);
+    const auto clock = now(config_);
+    trace.scalar(RawAuthField::poll_clock, clock);
+    trace.stage(RawAuthField::pending_selection);
+    const auto selection = number(*it, "selection_revision");
+    trace.scalar(RawAuthField::pending_selection, selection);
+    trace.stage(RawAuthField::current_selection);
+    const auto current = number(s.field("selection_revision"), p);
+    trace.scalar(RawAuthField::current_selection, current);
+    if (selection != current) {
+      pending.erase(it);
+      s.save(&trace);
+      trace.branch({1607, 1});
+      throw Error{ErrorCode::conflict};
+    }
+    trace.stage(RawAuthField::poll_expiry);
+    const auto expires_at = number(*it, "expires_at");
+    trace.scalar(RawAuthField::poll_expiry, expires_at);
+    if (expires_at <= clock) {
+      pending.erase(it);
+      s.save(&trace);
+      trace.branch({1607, 2});
+      auto result = Value::object({{"state", Value{"expired"}}});
+      trace.stage(109);
+      trace.finish(1);
+      return result;
+    }
+    trace.stage(RawAuthField::poll_check_next);
+    const auto next = number(*it, "next_poll");
+    trace.scalar(RawAuthField::poll_check_next, next);
+    if (next > clock) {
+      trace.stage(RawAuthField::poll_next);
+      const auto wait_next = number(*it, "next_poll");
+      trace.scalar(RawAuthField::poll_next, wait_next);
+      const auto wait = wait_next - clock;
+      trace.scalar(RawAuthField::poll_wait, wait);
+      trace.branch({1607, 3});
+      auto result =
+          Value::object({{"state", Value{"pending"}}, {"wait_seconds", integer(wait)}});
+      trace.stage(109);
+      trace.finish(1);
+      return result;
+    }
+    ProviderHttpRequest r{
+        str(d, "token_url"), "POST",
+        "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code&client_id=" +
+            form(str(d, "client_id")) + "&device_code=" + form(str(*it, "device_code")),
+        oauth_headers(p), 30};
+    trace.stage(RawAuthField::poll_interval);
+    const auto initial_interval = number(*it, "interval");
+    trace.scalar(RawAuthField::poll_interval, initial_interval);
+    const auto next_poll = clock + initial_interval;
+    trace.scalar(RawAuthField::poll_next, next_poll);
+    put(*it, "next_poll", integer(next_poll));
+    s.save(&trace);
+    const auto reply = http(config_, r, trace, 2);
+    if (reply.status == 429 || reply.status >= 500) {
+      trace.stage(RawAuthField::retry_clock);
+      const auto retry_clock = now(config_);
+      trace.scalar(RawAuthField::retry_clock, retry_clock);
+      const auto retry_next = retry_clock + 30;
+      trace.scalar(RawAuthField::poll_next, retry_next);
+      put(*it, "next_poll", integer(retry_next));
+      s.save(&trace);
+      trace.branch({1607, 4});
+      auto result =
+          Value::object({{"state", Value{"pending"}}, {"wait_seconds", integer(30)}});
+      trace.stage(109);
+      trace.finish(1);
+      return result;
+    }
+    auto tokens = unwrap(parse_json(reply.body));
+    const auto error = str(tokens, "error");
+    if (error == "authorization_pending" || error == "slow_down") {
+      trace.stage(RawAuthField::poll_interval);
+      auto interval = number(*it, "interval");
+      trace.scalar(RawAuthField::poll_interval, interval);
+      const bool slow_down = error == "slow_down";
+      if (slow_down) {
+        interval += 5;
+        trace.scalar(RawAuthField::poll_slow_interval, interval);
+      }
+      interval = std::min<std::int64_t>(interval, 300);
+      trace.scalar(RawAuthField::poll_clamped_interval, interval);
+      put(*it, "interval", integer(interval));
+      trace.stage(RawAuthField::retry_clock);
+      const auto retry_clock = now(config_);
+      trace.scalar(RawAuthField::retry_clock, retry_clock);
+      const auto retry_next = retry_clock + interval;
+      trace.scalar(RawAuthField::poll_next, retry_next);
+      put(*it, "next_poll", integer(retry_next));
+      s.save(&trace);
+      trace.branch({1607, slow_down ? std::uint8_t{6} : std::uint8_t{5}});
+      auto result = Value::object(
+          {{"state", Value{"pending"}}, {"wait_seconds", integer(interval)}});
+      trace.stage(109);
+      trace.finish(1);
+      return result;
+    }
+    if (!error.empty()) {
+      pending.erase(it);
+      s.save(&trace);
+      trace.branch({1607, 7});
+      auto result = Value::object({{"state", Value{"denied"}}});
+      trace.stage(109);
+      trace.finish(1);
+      return result;
+    }
+    require_provider_success(reply.status);
+    trace.stage(RawAuthField::token_clock);
+    const auto token_clock = now(config_);
+    trace.scalar(RawAuthField::token_clock, token_clock);
+    auto record = token_record(tokens, token_clock, {}, &trace);
+    put(record, "client_id", Value{str(d, "client_id")});
+    put(record, "token_url", Value{str(d, "token_url")});
+    save_account(s, p, a, std::move(record), &trace);
     pending.erase(it);
-    s.save();
-    throw Error{ErrorCode::conflict};
+    s.save(&trace);
+    trace.branch({1607, 8});
+    auto result = Value::object({{"state", Value{"ready"}}});
+    trace.stage(109);
+    trace.finish(1);
+    return result;
+
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
   }
-  if (number(*it, "expires_at") <= clock) {
-    pending.erase(it);
-    s.save();
-    return Value::object({{"state", Value{"expired"}}});
-  }
-  if (number(*it, "next_poll") > clock)
-    return Value::object({{"state", Value{"pending"}},
-                          {"wait_seconds", integer(number(*it, "next_poll") - clock)}});
-  ProviderHttpRequest r{
-      str(d, "token_url"), "POST",
-      "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code&client_id=" +
-          form(str(d, "client_id")) + "&device_code=" + form(str(*it, "device_code")),
-      oauth_headers(p), 30};
-  put(*it, "next_poll", integer(clock + number(*it, "interval")));
-  s.save();
-  const auto reply = http(config_, r);
-  if (reply.status == 429 || reply.status >= 500) {
-    put(*it, "next_poll", integer(now(config_) + 30));
-    s.save();
-    return Value::object({{"state", Value{"pending"}}, {"wait_seconds", integer(30)}});
-  }
-  auto tokens = unwrap(parse_json(reply.body));
-  const auto error = str(tokens, "error");
-  if (error == "authorization_pending" || error == "slow_down") {
-    auto interval = number(*it, "interval");
-    if (error == "slow_down")
-      interval += 5;
-    interval = std::min<std::int64_t>(interval, 300);
-    put(*it, "interval", integer(interval));
-    put(*it, "next_poll", integer(now(config_) + interval));
-    s.save();
-    return Value::object(
-        {{"state", Value{"pending"}}, {"wait_seconds", integer(interval)}});
-  }
-  if (!error.empty()) {
-    pending.erase(it);
-    s.save();
-    return Value::object({{"state", Value{"denied"}}});
-  }
-  require_provider_success(reply.status);
-  auto record = token_record(tokens, now(config_));
-  put(record, "client_id", Value{str(d, "client_id")});
-  put(record, "token_url", Value{str(d, "token_url")});
-  save_account(s, p, a, std::move(record));
-  pending.erase(it);
-  s.save();
-  return Value::object({{"state", Value{"ready"}}});
 }
 ProviderHttpResponse ProviderAuth::request(
     std::string_view p, std::string_view route, const Value &body, int timeout_seconds,
     const std::function<void(std::string_view)> &observer,
     const Value *expected_binding, const RawProviderOwner *raw_owner) {
-  if (route != "responses" && route != "chat/completions" && route != "messages" &&
-      route != "models")
-    throw Error{ErrorCode::invalid_range};
+  RawAuthTrace trace{RawAuthEntry{RawAuthAction::resolve_owned,
+                                  {p, {}},
+                                  nullptr,
+                                  nullptr,
+                                  expected_binding != nullptr}};
+  RawEventRef resolution;
   std::string token, kind, base;
   Value metadata;
-  {
-    Store s{config_, false};
-    const auto d = blackbird::descriptor(s, p);
-    base = str(d, "base_url");
-    const auto active = str(s.field("active"), p);
-    if (expected_binding) {
-      const auto *record = s.account(p, active);
-      if (str(*expected_binding, "provider") != p ||
-          str(*expected_binding, "account") != active ||
-          number(*expected_binding, "revision", -1) !=
-              (record ? number(*record, "revision") : -1) ||
-          str(*expected_binding, "base_url") != base ||
-          str(*expected_binding, "protocol") != str(d, "protocol"))
-        throw Error{ErrorCode::conflict};
-    }
-    if (!active.empty()) {
-      auto *a = s.account(p, active);
-      if (!a)
-        throw Error{ErrorCode::provider_auth};
-      if (str(*a, "state", "ready") != "ready")
-        throw Error{ErrorCode::provider_auth};
-      kind = str(*a, "kind");
-      if (kind == "oauth" && number(*a, "expires_at") <= now(config_) + 60) {
-        if (str(*a, "token_url") != str(d, "token_url"))
+  try {
+    trace.start();
+    if (route != "responses" && route != "chat/completions" && route != "messages" &&
+        route != "models")
+      throw Error{ErrorCode::invalid_range};
+    {
+      Store s{config_, false};
+      const auto d = blackbird::descriptor(s, p);
+      base = str(d, "base_url");
+      const auto active = str(s.field("active"), p);
+      trace.selected_account(active);
+      if (expected_binding) {
+        const auto *record = s.account(p, active);
+        if (str(*expected_binding, "provider") != p ||
+            str(*expected_binding, "account") != active || ([&] {
+              trace.stage(RawAuthField::binding_expected_revision);
+              const auto expected = number(*expected_binding, "revision", -1);
+              trace.scalar(RawAuthField::binding_expected_revision, expected);
+              trace.stage(RawAuthField::binding_current_revision);
+              const auto current = record ? number(*record, "revision") : -1;
+              trace.scalar(RawAuthField::binding_current_revision, current);
+              return expected != current;
+            }()) ||
+            str(*expected_binding, "base_url") != base ||
+            str(*expected_binding, "protocol") != str(d, "protocol"))
           throw Error{ErrorCode::conflict};
-        const auto retry = number(*a, "refresh_after");
-        if (retry > now(config_))
-          throw Error{ErrorCode::provider_rate_limit, -429};
-        ProviderHttpRequest r{
-            str(*a, "token_url"), "POST",
-            "grant_type=refresh_token&client_id=" + form(str(*a, "client_id")) +
-                "&refresh_token=" + form(str(*a, "refresh")),
-            oauth_headers(p), 30};
-        if (p == "openai")
-          r.body += "&resource=https%3A%2F%2Fapi.openai.com%2Fv1";
-        if (p == "anthropic") {
-          r.headers = {{"Content-Type", "application/json"}};
-          r.body = unwrap(
-              dump_json(Value::object({{"grant_type", Value{"refresh_token"}},
-                                       {"client_id", Value{str(*a, "client_id")}},
-                                       {"refresh_token", Value{str(*a, "refresh")}}})));
-        }
-        ProviderHttpResponse reply;
-        try {
-          reply = http(config_, r);
-        } catch (...) {
-          put(*a, "state", Value{"refresh_unknown"});
-          s.save();
-          throw;
-        }
-        if (reply.status == 429 || reply.status >= 500) {
-          put(*a, "refresh_after", integer(now(config_) + 60));
-          s.save();
-          require_provider_success(reply.status);
-        }
-        if (reply.status < 200 || reply.status >= 300) {
-          put(*a, "state", Value{"reauthorize"});
-          s.save();
-          throw Error{ErrorCode::provider_auth, -reply.status};
-        }
-        try {
-          const auto tokens = unwrap(parse_json(reply.body));
-          auto updated = token_record(tokens, now(config_), str(*a, "refresh"));
-          if (!tokens.find("scope"))
-            put(updated, "scope", Value{str(*a, "scope")});
-          for (const auto k : {"provider", "account", "revision", "client_id",
-                               "token_url", "metadata"})
-            if (const auto *v = a->find(k))
-              put(updated, k, *v);
-          *a = std::move(updated);
-          s.save();
-        } catch (...) {
-          put(*a, "state", Value{"refresh_unknown"});
-          s.save();
-          throw;
-        }
       }
-      token = str(*a, "access");
-      if (const auto *v = a->find("metadata"))
-        metadata = *v;
-    } else {
-      kind = "api_key";
-      const auto *env = std::getenv(str(d, "environment").c_str());
-      if (!env || !*env)
-        throw Error{ErrorCode::provider_auth};
-      token = env;
+      if (!active.empty()) {
+        auto *a = s.account(p, active);
+        if (!a)
+          throw Error{ErrorCode::provider_auth};
+        if (str(*a, "state", "ready") != "ready")
+          throw Error{ErrorCode::provider_auth};
+        kind = str(*a, "kind");
+        bool refresh = false;
+        if (kind == "oauth") {
+          trace.stage(RawAuthField::refresh_expiry);
+          const auto expiry = number(*a, "expires_at");
+          trace.scalar(RawAuthField::refresh_expiry, expiry);
+          trace.stage(RawAuthField::refresh_expiry_clock);
+          const auto clock = now(config_);
+          trace.scalar(RawAuthField::refresh_expiry_clock, clock);
+          refresh = expiry <= clock + 60;
+        }
+        if (refresh) {
+          trace.branch({1603, 1});
+          if (str(*a, "token_url") != str(d, "token_url"))
+            throw Error{ErrorCode::conflict};
+          trace.stage(RawAuthField::refresh_after);
+          const auto retry = number(*a, "refresh_after");
+          trace.scalar(RawAuthField::refresh_after, retry);
+          trace.stage(RawAuthField::refresh_retry_clock);
+          const auto retry_clock = now(config_);
+          trace.scalar(RawAuthField::refresh_retry_clock, retry_clock);
+          if (retry > retry_clock)
+            throw Error{ErrorCode::provider_rate_limit, -429};
+          ProviderHttpRequest r{
+              str(*a, "token_url"), "POST",
+              "grant_type=refresh_token&client_id=" + form(str(*a, "client_id")) +
+                  "&refresh_token=" + form(str(*a, "refresh")),
+              oauth_headers(p), 30};
+          if (p == "openai")
+            r.body += "&resource=https%3A%2F%2Fapi.openai.com%2Fv1";
+          if (p == "anthropic") {
+            r.headers = {{"Content-Type", "application/json"}};
+            r.body = unwrap(dump_json(
+                Value::object({{"grant_type", Value{"refresh_token"}},
+                               {"client_id", Value{str(*a, "client_id")}},
+                               {"refresh_token", Value{str(*a, "refresh")}}})));
+          }
+          ProviderHttpResponse reply;
+          try {
+            reply = http(config_, r, trace, 3);
+          } catch (...) {
+            put(*a, "state", Value{"refresh_unknown"});
+            trace.branch({1604, 2});
+            s.save(&trace);
+            throw;
+          }
+          if (reply.status == 429 || reply.status >= 500) {
+            trace.stage(RawAuthField::refresh_retry_clock);
+            const auto clock = now(config_);
+            trace.scalar(RawAuthField::refresh_retry_clock, clock);
+            const auto next = clock + 60;
+            trace.scalar(RawAuthField::refresh_next, next);
+            put(*a, "refresh_after", integer(next));
+            trace.branch({1604, 3});
+            s.save(&trace);
+            require_provider_success(reply.status);
+          }
+          if (reply.status < 200 || reply.status >= 300) {
+            put(*a, "state", Value{"reauthorize"});
+            trace.branch({1604, 4});
+            s.save(&trace);
+            throw Error{ErrorCode::provider_auth, -reply.status};
+          }
+          try {
+            const auto tokens = unwrap(parse_json(reply.body));
+            trace.stage(RawAuthField::token_clock);
+            const auto token_clock = now(config_);
+            trace.scalar(RawAuthField::token_clock, token_clock);
+            auto updated =
+                token_record(tokens, token_clock, str(*a, "refresh"), &trace);
+            if (!tokens.find("scope"))
+              put(updated, "scope", Value{str(*a, "scope")});
+            for (const auto k : {"provider", "account", "revision", "client_id",
+                                 "token_url", "metadata"})
+              if (const auto *v = a->find(k))
+                put(updated, k, *v);
+            *a = std::move(updated);
+            trace.branch({1604, 1});
+            s.save(&trace);
+          } catch (...) {
+            put(*a, "state", Value{"refresh_unknown"});
+            trace.branch({1604, 2});
+            s.save(&trace);
+            throw;
+          }
+        }
+        token = str(*a, "access");
+        if (const auto *v = a->find("metadata"))
+          metadata = *v;
+      } else {
+        kind = "api_key";
+        const auto *env = std::getenv(str(d, "environment").c_str());
+        if (!env || !*env)
+          throw Error{ErrorCode::provider_auth};
+        token = env;
+      }
     }
+    secret(token);
+    trace.branch({1607, 1});
+    resolution = trace.reference();
+    trace.stage(109);
+    trace.finish(1);
+  } catch (const Error &error) {
+    trace.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    trace.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    trace.finish(4);
+    throw;
+  } catch (...) {
+    trace.finish(5);
+    throw;
   }
-  secret(token);
   ProviderHttpRequest r{base + "/" + std::string{route},
                         route == "models" ? "GET" : "POST",
                         unwrap(dump_json(body)),
@@ -883,8 +1417,9 @@ ProviderHttpResponse ProviderAuth::request(
   } else
     r.headers.emplace_back("Authorization", "Bearer " + token);
   (void)metadata;
-  auto result = config_.http ? config_.http(r)
-                             : provider_http(r, config_, observer, raw_owner, true);
+  auto result = config_.http
+                    ? config_.http(r)
+                    : provider_http(r, config_, observer, raw_owner, true, &resolution);
   if (config_.http && observer)
     observer(result.body);
   require_provider_success(result.status);

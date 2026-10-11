@@ -44,6 +44,9 @@ struct RawRuntimeOptions {
 // Registration and allocation happen before a worker starts. The handle owns
 // its mapping and endpoint; binding selects its sole execution owner.
 Result<RawThreadHandle> raw_prepare_thread();
+// Setup only: extend the current producer lifetime for sequential owner transfer.
+// A borrowed native producer must still outlive the returned context.
+RawThreadHandle raw_current_thread() noexcept;
 class RawThreadBinding {
 public:
   explicit RawThreadBinding(RawThreadHandle context);
@@ -57,6 +60,7 @@ public:
 private:
   RawThreadHandle context_;
   RawThreadContext *previous_;
+  RawThreadHandle *previous_handle_;
 };
 
 class RawRuntime {
@@ -83,6 +87,13 @@ bool raw_enabled() noexcept;
 IdentityBytes raw_lane_epoch() noexcept;
 Result<RawControlToken> raw_claim_control(std::uint64_t bytes,
                                           RawWaitControl control = raw_wait_control());
+// One physical grant on the bound sole-owner producer; no wait, RPC or sticky
+// cancellation check. Refuses insufficient capacity before a caller effect.
+// Use only where ordinary admission already ran and cleanup must stay possible.
+Result<RawControlToken> raw_try_claim_control(std::uint64_t bytes) noexcept;
+// Owned data capacity survives nested emission and ordinary reservation release.
+Result<RawCapacityClaim> raw_claim_data(std::uint64_t bytes,
+                                        RawWaitControl control = raw_wait_control());
 // Safe boundary only, before acquiring a new measurement or entering an owned
 // lock. The sole producer cannot consume the checked capacity concurrently.
 Result<void> raw_wait_data(std::uint64_t bytes,

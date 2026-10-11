@@ -18,7 +18,7 @@ import time
 
 binary = str(Path(sys.argv[1]).resolve())
 with tempfile.TemporaryDirectory(prefix="blackbird-auth-cli-") as tmp:
-    root = Path(tmp)
+    root = Path(tmp).resolve()
     env = dict(os.environ, BLACKBIRD_AUTH_HOME=str(root / "auth"))
     key = "synthetic-provider-secret-ONLY-IN-STDIN"
     master, slave = pty.openpty()

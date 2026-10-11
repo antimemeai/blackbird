@@ -165,6 +165,8 @@ private:
   SessionIdentity identity_;
   std::optional<std::string> restart_note_;
   DefinitionGenerationId generation_;
+  std::optional<SourceReference> root_source_;
+  std::size_t root_source_length_ = 0;
   std::unique_ptr<Observations> observations_;
   std::unique_ptr<Runtime> runtime_;
   Value request(Value options = Value::object({}));

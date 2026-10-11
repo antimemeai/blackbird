@@ -1,6 +1,7 @@
 #include "blackbird/openai.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/raw_auth.hpp"
 #include "native_process.hpp"
 #include <algorithm>
 #include <cerrno>
@@ -119,19 +120,60 @@ std::string config_quote(std::string_view s) {
   out += '"';
   return out;
 }
+template <class Operation>
+auto private_auth_operation(RawAuthTrace &trace, RawAuthExchangeSites sites,
+                            std::uint8_t operation, Operation &&body) {
+  RawAuthExchange exchange{trace, sites};
+  try {
+    exchange.start(operation);
+    if constexpr (std::is_void_v<std::invoke_result_t<Operation>>) {
+      body();
+      exchange.returned();
+    } else {
+      auto result = body();
+      exchange.returned();
+      return result;
+    }
+  } catch (const Error &error) {
+    exchange.finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    exchange.finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    exchange.finish(4);
+    throw;
+  } catch (...) {
+    exchange.finish(5);
+    throw;
+  }
+}
 } // namespace
 Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh) {
+  std::optional<RawAuthTrace> owner;
   try {
+    const bool probe = config.codex_home.empty() && config.codex_executable == "codex";
+    owner.emplace(RawAuthEntry{
+        RawAuthAction::resolve_codex, {"openai", {}}, nullptr, nullptr, false, probe});
+    auto &trace = *owner;
+    trace.start();
+    trace.boolean(2, refresh);
+    const auto child_parent = trace.child();
     if (config.codex_home.empty() && config.codex_executable == "codex") {
       ProviderAuth auth;
-      if (auth.selected("openai")) {
-        OpenAiLogin login{"", ""};
+      if (auth.selected("openai", &child_parent)) {
+        OpenAiLogin login{OpenAiLogin::Credentials{"", ""}};
         login.owned_auth_ = true;
+        login.resolution_ = trace.reference();
+        trace.branch({1607, 1});
+        trace.stage(109);
+        trace.finish(1);
         return Result<OpenAiLogin>::success(std::move(login));
       }
     }
     // Pin account before requesting refresh, and refuse a concurrent account switch.
-    auto before = auth_file(config);
+    auto before = private_auth_operation(trace, {1617, 1618}, 1,
+                                         [&] { return auth_file(config); });
     auto mode = required(before, "auth_mode");
     if (mode != "chatgpt")
       fail(ErrorCode::unsupported);
@@ -146,23 +188,29 @@ Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh) {
         "model_provider=\"openai\""};
     child.start(std::move(args), config.codex_home);
     const auto deadline = Clock::now() + std::chrono::seconds{30};
-    (void)rpc(
-        child,
-        "{\"id\":\"init\",\"method\":\"initialize\",\"params\":{\"clientInfo\":{"
-        "\"name\":\"blackbird\",\"title\":\"Blackbird\",\"version\":\"0.1.0\"}}}\n",
-        deadline);
-    child.send("{\"method\":\"initialized\",\"params\":{}}\n", deadline);
-    auto status =
-        rpc(child,
-            refresh ? "{\"id\":\"auth\",\"method\":\"getAuthStatus\",\"params\":{"
-                      "\"includeToken\":true,\"refreshToken\":true}}\n"
-                    : "{\"id\":\"auth\",\"method\":\"getAuthStatus\",\"params\":{"
-                      "\"includeToken\":true,\"refreshToken\":false}}\n",
-            deadline);
+    private_auth_operation(trace, {1615, 1616}, 1, [&] {
+      (void)rpc(
+          child,
+          "{\"id\":\"init\",\"method\":\"initialize\",\"params\":{\"clientInfo\":{"
+          "\"name\":\"blackbird\",\"title\":\"Blackbird\",\"version\":\"0.1.0\"}}}\n",
+          deadline);
+    });
+    private_auth_operation(trace, {1615, 1616}, 2, [&] {
+      child.send("{\"method\":\"initialized\",\"params\":{}}\n", deadline);
+    });
+    auto status = private_auth_operation(trace, {1615, 1616}, 3, [&] {
+      return rpc(child,
+                 refresh ? "{\"id\":\"auth\",\"method\":\"getAuthStatus\",\"params\":{"
+                           "\"includeToken\":true,\"refreshToken\":true}}\n"
+                         : "{\"id\":\"auth\",\"method\":\"getAuthStatus\",\"params\":{"
+                           "\"includeToken\":true,\"refreshToken\":false}}\n",
+                 deadline);
+    });
     if (required(status, "authMethod") != "chatgpt")
       fail(ErrorCode::unsupported);
     auto access = required(status, "authToken");
-    auto latest = auth_file(config);
+    auto latest = private_auth_operation(trace, {1617, 1618}, 2,
+                                         [&] { return auth_file(config); });
     const auto *current = latest.find("tokens");
     if (required(latest, "auth_mode") != "chatgpt" || current == nullptr ||
         required(*current, "account_id") != account ||
@@ -170,13 +218,28 @@ Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh) {
       fail(ErrorCode::conflict);
     if (!header_safe(access) || !header_safe(account))
       fail(ErrorCode::corrupt);
-    return Result<OpenAiLogin>::success(OpenAiLogin{std::move(access), account});
+    OpenAiLogin login{OpenAiLogin::Credentials{std::move(access), account}};
+    login.resolution_ = trace.reference();
+    trace.branch({1607, 2});
+    trace.stage(109);
+    trace.finish(1);
+    return Result<OpenAiLogin>::success(std::move(login));
   } catch (const Error &e) {
+    if (owner)
+      owner->finish(2, &e);
     return Result<OpenAiLogin>::failure(e);
   } catch (const std::bad_alloc &) {
+    if (owner)
+      owner->finish(3);
     return Result<OpenAiLogin>::failure({ErrorCode::allocation});
   } catch (const std::length_error &) {
+    if (owner)
+      owner->finish(4);
     return Result<OpenAiLogin>::failure({ErrorCode::capacity});
+  } catch (...) {
+    if (owner)
+      owner->finish(5);
+    throw;
   }
 }
 Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &login,
@@ -197,14 +260,14 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
       return Result<std::string>::success(response.body);
     }
     if (config.timeout_seconds <= 0 || config.timeout_seconds > 3600) {
-      trace.emplace(config.raw_owner, config.timeout_seconds);
+      trace.emplace(config.raw_owner, config.timeout_seconds, &login.resolution_);
       fail(ErrorCode::invalid_range);
     }
     const auto deadline = Clock::now() + std::chrono::seconds{config.timeout_seconds};
     auto control = raw_wait_control();
     control.deadline = deadline;
     wait_scope.emplace(control);
-    trace.emplace(config.raw_owner, config.timeout_seconds);
+    trace.emplace(config.raw_owner, config.timeout_seconds, &login.resolution_);
     if (route != "responses" && route != "models?client_version=0.160.0")
       fail(ErrorCode::invalid_range);
     const std::string target_url =
