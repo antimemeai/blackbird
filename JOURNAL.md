@@ -6374,3 +6374,35 @@ back that exact main commit. Replace a stalled native HTTPS push with per-comman
 HTTP/1.1 and existing gh credential handling; no persistent transport configuration
 change. Record publication and the supported Beads backup in this text-only
 follow-up; settled source checks are not repeated.
+
+## 2026-10-11 — nls.2 completion design and remaining owner plan
+
+Operator asks what is properly designed/planned and what is needed to complete
+nls.2. Inspect current source, approved design, census, plan, implementation/check
+reports and bead. Separate implemented transport/recorder/initial hooks from the
+60-row family/field census: the latter does not supply exact remaining layouts,
+owner admission/terminal budgets or independent lifecycle oracles.
+
+Record docs/INSTRUMENTATION_COMPLETION.md with all60 rows assigned to remaining
+owner groups, nine mechanical domains, and actual completion checks. Concrete
+design gaps are cancellation/deadline-aware admission waits including RPC,
+bounded read/no-wait ownership, measured capacities, immutable native/Lua authored
+site descriptions, external resource acquisition, preserved-prefix discovery/
+audit enumeration, and setup/registration/closure recovery cuts. Current wait
+APIs poll space/death without an owner cancellation/deadline input; segment
+reader requires caller-supplied discovery. Do not claim either capability ready.
+
+Keep approved architecture and existing successful checks settled. Remaining
+units need their own concrete reviewed details and direct code/oracle attacks,
+not another general research campaign. Repair matching nls.10 retention defects
+where a hook depends on originals; nls.9 and the broader completeness review stay
+separate. Evals/multiplayer/steering remain deferred; host power loss excluded.
+Correct stale pending-approval/debug-only descriptions and active plan timer
+language. No production code, dependency, tests or running executable changed.
+Use diff/document/link checks, supported Beads backup and a text-only checkpoint.
+
+Document checks pass: local links resolve in all eight changed linked documents,
+remaining owner groups assign each census row1–60 once, and git diff has no
+whitespace errors. Update nls.2 description/acceptance to the approved raw scope
+and mark it in progress; retain historical notes. Supported Beads backup succeeds
+with96 issues/494 events. No full source suite/lint run for this text-only work.

@@ -14,6 +14,8 @@ Read the concrete artifacts:
   all60 product surfaces, nine system domains and per-class emission design.
 * [Implementation and verification plan](INSTRUMENTATION_PLAN.md): direct static,
   byte/order, fault, process-death, owner-lock/cancellation and performance oracles.
+* [Completion plan](INSTRUMENTATION_COMPLETION.md): implemented machinery,
+  remaining design gaps, every owner group and the checks needed to close nls.2.
 * [Transport study](../papers/2026-10-10-raw-transport-design-study.md) and
   [recorder study](../papers/2026-10-10-raw-recorder-design-study.md): complete
   reference paths, mechanisms, limits and restoration.

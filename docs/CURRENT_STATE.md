@@ -37,7 +37,7 @@ does not activate a replacement in the running operator executable. Steering and
 trajectory implementation remain deferred. [Design](COMMAND_JOBS.md) and
 [operator controls](USING_BLACKBIRD.md) describe the current limits.
 
-## AFK bug fixes and proposed instrumentation
+## AFK bug fixes and raw instrumentation
 
 On master, Claude reported errors without a success-only result field
 remain known failures; allocation after effect-capable dispatch stays UNKNOWN.
@@ -54,18 +54,24 @@ instrumentation means hooks/surfaces affording system/product metric emission;
 operations and evals consume them. Comprehensive source/reference/literature study
 located the source surfaces. The operator subsequently rejected producer-side
 transforms and the OTel/Prometheus architectural basis. The
-[concrete proposal](INSTRUMENTATION.md) specifies retained named-memory raw byte
+[approved design](INSTRUMENTATION.md) specifies retained named-memory raw byte
 lanes, durable recorder acknowledgement, bidirectional wakeups, protected terminal
 and failure credit, a raw audit segment family and tertiary transforms. It includes
 the complete raw source census and direct implementation/test plan, older C/source
 studies, one design review with corrections, and small Mac/Linux producer/crash
-probes. These probes do not qualify a product implementation. Pending RAM at host
-failure remains an explicit losslessness-contract decision; no loss allowance is
-chosen. Discussion and approval still precede source changes. nls.2 stays open; logical-clock
-system causality nls.9 and P0 audit completeness nls.10 are separate open work.
-The ordinary guarded checkpoint includes the independent bug fixes. No evaluator
-was selected or run. Runtime activation, multiplayer, steering and further
-trajectory views remain separate.
+probes. The operator approved implementation on2026-10-11 and excludes host power
+loss. The first source unit is on master: named-memory transport, separate
+supervisor/recorder, raw disk preservation/recovery and initial startup, retained,
+command, terminal and provider-owner hooks. Application capture starts before
+retained-state creation/recovery and drains on clean shutdown. The source gate
+passed 89 debug tests and all owned C++/Lua lint; actual launcher capture/reopen
+passed Linux debug, release and ASan/UBSan. Earlier probes alone do not qualify
+this source. The [completion plan](INSTRUMENTATION_COMPLETION.md) lists remaining
+owner designs/integrations, runtime fault checks, native/Lua emission, read-only
+consumption and cost/capacity measurements. nls.2 remains open; logical-clock
+nls.9 and P0 audit completeness nls.10 remain separate. No evaluator was selected
+or run. Existing operator executable replacement, multiplayer, steering and
+further trajectory views remain separate.
 [Disposition and evidence](NLS_AFK_SUBPLAN.md).
 
 ## What is on master

@@ -89,10 +89,11 @@ cmake --build build/release --target blackbird
 
 The [tooling guide](tooling/README.md) documents profiles, diagnostics, sanitizer and fuzz tooling, and Linux checks. Python is used by some development and test drivers; production agent logic is C++ and Lua. The present provider transport also uses the system's `curl` executable. There is no JavaScript application runtime or terminal framework underneath the conversation.
 
-`BLACKBIRD_DEBUG` defaults to `OFF`. Normal release builds omit native timing
-implementation, profiling benchmarks and instrumentation fault/fuzz probes.
-Explicit debug, sanitizer and profile presets enable that machinery;
-recording still requires explicit activation. See [debug builds](docs/DEBUG_BUILD.md).
+`BLACKBIRD_DEBUG` defaults to `OFF`. Normal release builds omit developer
+profiling benchmarks and fault/fuzz probes. Raw instrumentation is compiled in
+both modes and starts automatically for application sessions; read-only audit
+inspection starts no capture run. Explicit debug, sanitizer and profile presets
+enable developer machinery. See [debug builds](docs/DEBUG_BUILD.md).
 
 For everyday operation, keep [Using Blackbird](docs/USING_BLACKBIRD.md) nearby. It contains the exact options, limits, Lua interfaces, context proposals, and recovery instructions. This README supplies the landscape; that guide supplies the roads.
 

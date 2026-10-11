@@ -110,9 +110,11 @@ identity is `(lane epoch, ordinal)`. Bodies copy actual owner request, operation
 job, revision and transfer identities. No generic parent tree is invented. A
 local interval without an owner identity ends by referring to its begin record.
 
-The [raw surface specification](../papers/2026-10-10-raw-instrumentation-surfaces.md)
-defines every family, body and owner for all 60 current product surfaces and
-nine system domains. It supersedes old registration, aggregate and callback
+The [raw surface census](../papers/2026-10-10-raw-instrumentation-surfaces.md)
+names event families and available fields for all 60 product surfaces and
+nine system domains. Exact remaining owner byte layouts, admission credit and
+failure oracles are work in the [completion plan](INSTRUMENTATION_COMPLETION.md).
+The census supersedes old registration, aggregate and callback
 recommendations. Logical-clock work remains `arconaut-nls.9`; lane order and
 wall-clock proximity do not establish a global causal order.
 
@@ -308,7 +310,7 @@ Multiplayer, steering/trajectory work and eval definitions/execution remain defe
 The [implementation and verification plan](INSTRUMENTATION_PLAN.md) is sequenced
 by complete invariants: lane lifetime/publication, durable recorder/recovery,
 then one complete product owner at a time. It distinguishes executed research
-probes from future implementation qualification. This draft receives one
-adversarial review and finding-driven recheck within the declared 45-minute
-research/design unit. The operator approved implementation on2026-10-11 under the
-operator's explicit instruction and BLACKBIRD.md.
+probes from implementation qualification. One adversarial design review and
+finding-driven recheck preceded approval. The operator approved implementation
+on2026-10-11 under BLACKBIRD.md; the first source unit is integrated on master.
+Remaining designs and checks are explicit in the completion plan.

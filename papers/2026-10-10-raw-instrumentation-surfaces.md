@@ -1,6 +1,6 @@
 # Raw hooks and bodies: complete current source census
 
-2026-10-10. Proposal; implementation awaits discussion/approval. Source baseline
+2026-10-10 source census and proposed event families. Source baseline
 `e75d57c4bb0beebba0698b3e12b590e9a6de057b`, unchanged during this study. The earlier
 [product census](2026-10-10-instrumentation-product-surfaces.md) covered all46 C++
 units and7 shipped Lua programs. Its60 source/owner rows are retained below;
@@ -8,6 +8,13 @@ its metric-registry/aggregation/callback architecture is superseded. The
 [system census](2026-10-10-instrumentation-system-surfaces.md) supplies the nine
 mechanical domains detailed below. This is the emission schema, not a list of
 consumer metric names.
+
+2026-10-11 status: the operator approved the raw architecture and implementation;
+the first transport/recorder and initial hook unit is on master. This census
+retains its study baseline, including the boundary defects below. Remaining
+exact owner layouts, admission credit and oracles are in the
+[completion plan](../docs/INSTRUMENTATION_COMPLETION.md); these rows do not claim
+implemented coverage. The old LocalSpan mechanism described below is replaced.
 
 ## Classes, attachment and record forms
 

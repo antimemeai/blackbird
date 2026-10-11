@@ -1,6 +1,8 @@
 # Raw instrumentation implementation and verification plan
 
-2026-10-11. Approved implementation sequence; first source unit in progress.
+2026-10-11. Approved implementation sequence; first source unit integrated on
+master. The [completion plan](INSTRUMENTATION_COMPLETION.md) distinguishes the
+remaining concrete designs, owner integrations and unexecuted checks.
 Read the [design](INSTRUMENTATION_RAW_DESIGN.md) and
 [raw site/body census](../papers/2026-10-10-raw-instrumentation-surfaces.md).
 The operator approved implementation and excludes host power loss.
@@ -162,10 +164,11 @@ remaining fault class. Mutation remains deferred by operator instruction; never
 run mutants on this laptop.
 
 Before each implementation unit, declare concrete behavior, direct checks and
-wall/resource allowance. Hardening is two layers only: fix/direct verification,
+resource use. Hardening is two layers only: fix/direct verification,
 then one finding-driven recheck/fix. Review the code and real oracles once, never
-review the review. At a bound leave an unsafe candidate inactive and record exact
-remaining work. Passing this plan on paper is not qualification of product code.
+review the review. Bound the work by concrete defects and those two layers;
+do not invent campaign stopwatches. Leave unsafe candidates inactive and record
+exact remaining work. Passing this plan on paper is not qualification of product code.
 
 ## Performance experiments and completion
 
