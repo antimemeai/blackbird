@@ -31,7 +31,7 @@ order and direct checks; the remaining owner details still need to be written.
 
 ## Designs still needed before their source changes
 
-The first completion unit is now implemented in the current candidate:
+The first completion checkpoint is implemented and published on master as `3561c72`:
 cancel/deadline-aware admission and RPC ownership, bootstrap/metadata recovery,
 read-only discovery/reader, and one actual provider/native-child vertical.
 Its reviewed subplans and direct results are
@@ -39,8 +39,10 @@ Its reviewed subplans and direct results are
 [metadata](../papers/2026-10-11-raw-metadata-recovery.md),
 [reader](../papers/2026-10-11-raw-reader-subplan.md), and
 [provider](../papers/2026-10-11-provider-raw-vertical-subplan.md).
-These are conceptual units, not completed census rows by implication. Integrated
-source/profile qualification and the next owner units remain explicit work.
+The installed gate passes93/93 debug cases, all132 selected owned C++ translation
+units and owned Lua diagnostics. All16 affected cases also pass Mac release and
+ASan/UBSan, and Linux debug/release/ASan-UBSan. These are conceptual units, not
+completed census rows by implication. The next owner units remain explicit work.
 
 | Boundary | Existing machinery / concrete gap | Required owner design |
 | --- | --- | --- |
@@ -49,7 +51,7 @@ source/profile qualification and the next owner units remain explicit work.
 | Capacity selection | Current defaults are 64MiB data, 256KiB control and 128KiB failure per producer, with 128KiB recorder failure space. These are implemented configuration, not a measured workload sizing result. | Measure source rates, finite bursts, terminal sequences and recorder stalls on the first real vertical. Choose capacities and physical frame/batch allowances together. Define oversized acquisition refusal before effects. No silent fallback to dropping, sampling or shortening records. |
 | Native/Lua authored events | Native emission accepts a static site and byte spans. There is no shipped Lua raw-event bridge or authored-site description interface. | Define site identity scoped to immutable source generation, description publication before activation, permitted native/Lua scalar and byte types, exact layouts, invocation linkage, size admission and failure behavior. Copy existing representations; no generic Value/BBM serialization, dictionaries, callback registry or metric arithmetic in the writer. |
 | Resource acquisition | Raw clock acquisition exists. The census proposes a separate sampler for OS observations. | Specify which native observations are obtainable externally, their method/units/incarnation, coherent owner-only snapshots, and acquisition-failure records. Define sampler lifecycle and its emission lane independently of Blackbird execution. Select sampling cadence/control outside the main process. Do not invent counters or label process-wide observations as per-child usage. |
-| Reader discovery and audit enumeration | The candidate native reader and `blackbird-raw-reader` discover preserved run/segment prefixes, retain exact descriptions, expose native origins/bytes and stable restart cursors. | Finish integrated qualification and consumer independence under contention. Normal semantic inspection can reference this separate interface; no reader acquires the writer lease or changes D, retention or admission. Evaluator/scoring design is outside this work. |
+| Reader discovery and audit enumeration | The native reader and `blackbird-raw-reader` discover preserved run/segment prefixes, retain exact descriptions, expose native origins/bytes and stable restart cursors. Native/profile/source checks pass, including concurrent published snapshots. | Normal semantic inspection can reference this separate interface; no reader acquires the writer lease or changes D, retention or admission. Qualify whole-path consumer contention with performance workloads. Evaluator/scoring design is outside this work. |
 | Bootstrap and metadata recovery | The candidate defines activation, independent registration/header/closure copies, bounded prepaid mapping acquisitions, unresolved missing sources and known closed-name cleanup. | Finish integrated qualification and actual runtime append/sync/reclaim cuts. Preserve damaged originals and strict legacy interpretation; never infer an empty lane from missing metadata. |
 
 For each semantic owner, write the exact sites, body widths/optional variants,

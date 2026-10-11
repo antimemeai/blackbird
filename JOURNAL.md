@@ -6477,3 +6477,12 @@ papers claims an implemented owner or closes the60-row census. Rhizome's current
 C++ findings were read at its actual projects_old/inactive-2026-10-07 location;
 ownership, whole-path byte costs and actual API boundaries transfer, its local
 scope/instructions do not.
+
+Source checkpoint3561c72 passes the installed complete gate:93/93 debug tests
+(111.93s), all132 selected owned C++ translation units/header reachability, and
+owned Lua formatting/syntax/type/contract checks. No new suppression or skipped
+unit. The two reported NOLINT warnings come from existing annotations; this unit
+adds none. Publication succeeds to origin/master,206c106..3561c72. User art and
+AFK stash remain untouched, and no installed operator executable is replaced.
+Record the result and stable successor plans with text checks only; do not rerun
+the settled source gate for that documentation. nls.2 remains in progress.
