@@ -1,0 +1,117 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.2/libcxx/src/filesystem/operations.cpp",
+    "path": "quarantine/file-native-2026-10-11/libcxx-operations.cpp",
+    "bytes": 33796,
+    "sha256": "8bee76f1ba91985a07e9e8eeb8e5e4804873841844e2dd10e757229933369b8a",
+    "restore": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.2/libcxx/src/filesystem/operations.cpp",
+      "-o",
+      "quarantine/file-native-2026-10-11/libcxx-operations.cpp"
+    ]
+  },
+  {
+    "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-13.3.0/libstdc%2B%2B-v3/src/c%2B%2B17/fs_ops.cc",
+    "path": "quarantine/file-native-2026-10-11/libstdcxx-fs_ops.cc",
+    "bytes": 38699,
+    "sha256": "6e0a33745a68c37a1d1e46cbafb5ddad5c6bb7cbfee1d5d03c2a0dbaf13e3ef6",
+    "restore": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-13.3.0/libstdc%2B%2B-v3/src/c%2B%2B17/fs_ops.cc",
+      "-o",
+      "quarantine/file-native-2026-10-11/libstdcxx-fs_ops.cc"
+    ]
+  },
+  {
+    "path": "quarantine/file-native-2026-10-11/getcwd.3",
+    "archive": "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+    "archive_sha256": "88a7c42ad2e03d8b96dc72d95e451f2d875ff0f43103a8eb8ac8242133bdcb05",
+    "archive_member": "man-pages-6.19/man/man3/getcwd.3",
+    "bytes": 7541,
+    "sha256": "e6c44ca98bc37cd5218c9605faef4be5afea8d379c028dd07dd1f130601e4620",
+    "restore": {
+      "archive": "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+      "member": "man-pages-6.19/man/man3/getcwd.3",
+      "extract_bytes_to": "quarantine/file-native-2026-10-11/getcwd.3"
+    }
+  },
+  {
+    "path": "quarantine/file-native-2026-10-11/realpath.3",
+    "archive": "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+    "archive_sha256": "88a7c42ad2e03d8b96dc72d95e451f2d875ff0f43103a8eb8ac8242133bdcb05",
+    "archive_member": "man-pages-6.19/man/man3/realpath.3",
+    "bytes": 5284,
+    "sha256": "8bb26a291b0fecca59d06ecbeabbe72991f88fe63e5cd6a5c6ab2378981d767f",
+    "restore": {
+      "archive": "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+      "member": "man-pages-6.19/man/man3/realpath.3",
+      "extract_bytes_to": "quarantine/file-native-2026-10-11/realpath.3"
+    }
+  },
+  {
+    "path": "quarantine/file-native-2026-10-11/darwin-getcwd.3",
+    "installed_source": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/share/man/man3/getcwd.3",
+    "bytes": 4203,
+    "sha256": "39b78f4a938a72ed4240e5e1b939acf2fd5f0622f13a87b61f5a96a45818a1a5",
+    "restore": [
+      "cp",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/share/man/man3/getcwd.3",
+      "quarantine/file-native-2026-10-11/darwin-getcwd.3"
+    ]
+  },
+  {
+    "path": "quarantine/file-native-2026-10-11/darwin-realpath.3",
+    "installed_source": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/share/man/man3/realpath.3",
+    "bytes": 4419,
+    "sha256": "b978ee1e20f37e1c7a1b5d5dacbce1f8c62b501a4783d10a7f1df555b45ce461",
+    "restore": [
+      "cp",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/share/man/man3/realpath.3",
+      "quarantine/file-native-2026-10-11/darwin-realpath.3"
+    ]
+  },
+  {
+    "url": "https://raw.githubusercontent.com/bminor/glibc/glibc-2.39/stdlib/canonicalize.c",
+    "path": "quarantine/file-native-2026-10-11/glibc-canonicalize.c",
+    "bytes": 14310,
+    "sha256": "9af9406501347952eae09ee3c013243bbc6aab3b4d05d6845bf9aeeddd89772c",
+    "restore": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/bminor/glibc/glibc-2.39/stdlib/canonicalize.c",
+      "-o",
+      "quarantine/file-native-2026-10-11/glibc-canonicalize.c"
+    ]
+  },
+  {
+    "url": "https://raw.githubusercontent.com/apple-oss-distributions/Libc/3993268b10453da1651f3fbf54dee16fad6e0dc6/stdlib/FreeBSD/realpath.c",
+    "path": "quarantine/file-native-2026-10-11/darwin-realpath.c",
+    "bytes": 10701,
+    "sha256": "9c0c18bafece4fc0a877374502389f701cf44f292489620f8feec0313eb79052",
+    "original_url": "https://raw.githubusercontent.com/apple-oss-distributions/Libc/main/stdlib/FreeBSD/realpath.c",
+    "source_commit": "3993268b10453da1651f3fbf54dee16fad6e0dc6",
+    "restore": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/apple-oss-distributions/Libc/3993268b10453da1651f3fbf54dee16fad6e0dc6/stdlib/FreeBSD/realpath.c",
+      "-o",
+      "quarantine/file-native-2026-10-11/darwin-realpath.c"
+    ]
+  },
+  {
+    "url": "https://raw.githubusercontent.com/torvalds/linux/v6.8/fs/namei.c",
+    "path": "quarantine/file-native-2026-10-11/linux-namei.c",
+    "bytes": 143128,
+    "sha256": "7c266a01bd2556d277e0d1ceee8c83b725171ad37b63e4ad4fe6b4101154fb12",
+    "restore": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/torvalds/linux/v6.8/fs/namei.c",
+      "-o",
+      "quarantine/file-native-2026-10-11/linux-namei.c"
+    ]
+  }
+]

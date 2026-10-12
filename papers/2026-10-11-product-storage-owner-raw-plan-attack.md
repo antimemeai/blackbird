@@ -127,7 +127,7 @@ CONTROL is222+189S+1047K+810O+303J+271(GP+N) Linux, or222+189S+1015K+774O+
 303J+271(GP+N) Mac; DATA F+86J+145GP+B+49N. Real selected Job K4/O1/G7/S1 and
 exec K12/O3/G24/S3 inputs and positive frame sizes are written in the whole plan.
 
-The current semantic Context+exec alone needs267622 CONTROL, exceeding default
+The current semantic Context+exec alone needs267404 CONTROL, exceeding default
 262144 before physical/existing holds. Main must derive actual simultaneous
 per-issuer CONTROL/DATA and explicitly select capacity or refuse BEFORE effects.
 Default APIs/options stay unchanged; main activation remains held. This is the

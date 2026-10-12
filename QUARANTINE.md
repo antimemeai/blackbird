@@ -771,3 +771,28 @@ memory-probe sources. Exact immutable URLs, byte lengths and hashes are in
 Restore each original by downloading its manifest URL to its manifest path and
 checking SHA-256. These explain the descriptor-exhaustion diagnostic failure;
 no source is built or adopted and no diagnostic is suppressed.
+
+## Native file path and byte acquisition study — 2026-10-11
+
+`quarantine/file-native-2026-10-11/` preserves nine whole original source/manual
+files. [The manifest](papers/2026-10-11-file-native-acquisitions.json) records
+URLs, the Apple source commit, original lengths and SHA-256 hashes, Linux manual
+archive member names and Darwin installed SDK source paths.
+[The proposed owner plan](papers/2026-10-11-file-owner-raw-subplan.md) separates
+source facts, actual native path probes and unqualified implementation claims.
+No acquired code is adopted, modified or built. The owned standalone native
+probe is in ignored context; it does not modify application source.
+
+Restore URL records with their literal `restore` argv after creating the parent
+path. Restore the two Linux manuals from the intact existing recorder archive:
+
+```sh
+mkdir -p quarantine/file-native-2026-10-11
+tar -xOf quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz man-pages-6.19/man/man3/getcwd.3 > quarantine/file-native-2026-10-11/getcwd.3
+tar -xOf quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz man-pages-6.19/man/man3/realpath.3 > quarantine/file-native-2026-10-11/realpath.3
+```
+
+Darwin manual records use the explicit installed SDK `restore` source path;
+check each hash rather than substituting a later SDK silently. All nine restored
+files must match the manifest byte length and SHA-256. References remain intact,
+without nested Git metadata, build output or filesystem detritus.

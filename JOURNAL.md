@@ -7429,3 +7429,26 @@ split diagnostic credit exhaustion; exact files and native effects retained in
 context/operation-owner-baseline. Whole semantic retained/index plan is under ONE
 root plan attack. nls.2 and P0 nls.10 remain open; remaining census and real
 workload costs are not qualified by this checkpoint.
+
+2026-10-11 — File47–48 whole source/native-path study: acquired intact pinned
+libc++/libstdc++/glibc/Apple and Linux pathname source plus two Linux/Darwin
+manual pairs; published hash/source/restore manifest and proposed whole owner
+plan. Native Mac14/Linux17 path cases pass, including actual deep cwd4865/4857
+bytes and proc magiclink. Both profile canonical wrappers make input absolute;
+Mac file/ and file/. succeed while Linux ENOTDIR, so retain native realpath
+semantics. Proposed output-buffer/admission/fallback fields and lexical close/
+unlink credit await ONE independent plan attack; no file production code or
+genuine file-owner red/candidate qualification claimed. One independent compiler
+worker used serially; initial defaultSDK error corrected with qualified SDK.
+Application builds/executable unchanged by this study.
+
+Root SAME semantic whole-plan attack M1–M5 resolves coherent native field
+tables, exact9frame read allowance, disjoint selection sites/native-view
+lifetimes and complete OLD+NEW stop-bank peak793773CONTROL/138922468DATA.
+Main-only256MiBDATA/1MiBCONTROL selected for pending native qualification. M6
+requires one parent-owned typed main/TUI launch/join transfer, rollback on
+actual launch failure, and preserved joined debt on new ordinary-grant refusal;
+spent finite scope credit cannot fund an invented cleanup retry. Genuine old
+SavedState red publishes accepted slot8 while live saved6 and reopen8, with
+actual postACK allocation cut; native missing3100 red also established.
+Carrier/caller/source integration and whole code oracles remain underway.

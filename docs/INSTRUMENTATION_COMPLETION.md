@@ -166,13 +166,17 @@ do not require production changes or another review panel.
 has an accepted whole plan for native prefix capture, explicit TUI authority
 handoff and separately held, serialized cleanup after surviving readers outlive
 the root. Its genuine published-source baseline acquires4096 bytes before EIO
-and loses that prefix from raw recording. The semantic retained/index whole
-plan is under its ONE plan attack; combined caller capacity and main activation
-remain pending. The UI starts turns on a separately registered
+and loses that prefix from raw recording. The [semantic retained/index whole plan](../papers/2026-10-11-retained-index-owner-raw-subplan.md)
+resolves its ONE plan attack, including acknowledged record extents, saved-state
+allocation before publication and one main/TUI transfer transaction. Genuine
+published-source reds precede its implementation. Combined OLD+NEW stop/exec
+grants require793773 CONTROL and138922468 DATA bytes at the declared core bounds;
+main-only1MiB/256MiB capacities are selected pending real caller/workload checks.
+Main activation remains pending. The UI starts turns on a separately registered
 worker, then joins it before returning to main-thread idle work; file creator
 identity alone cannot authorize that worker's ordinary native storage calls.
 Neither owner is active by implication. Remaining program/workflow/bridge owners,
-file/Beads/decision/Git callers, session/UI/station/backstop and measured workloads
+[file47–48](../papers/2026-10-11-file-owner-raw-subplan.md)/Beads/decision/Git callers, session/UI/station/backstop and measured workloads
 remain open. Task hooks cover30–31; authored/VM hooks and authorization hooks
 cover their stated subplans only. No completed subset closes the60-row census.
 

@@ -894,9 +894,9 @@ The earlier statement that postcancel writes were a hypothetical future need
 is withdrawn. No production storage source has been changed during this attack.
 
 The semantic owner's current independently derived CONTROL costs are78536 for
-Context stop,55741 for the initial joined Job terminal,33887 for receipt and189086
+Context stop,55741 for the initial joined Job terminal,33887 for receipt and188868
 for full selected exec. These are study inputs, not a physical main capacity
-selection. Context+exec alone totals267622, exceeding the default262144 CONTROL
+selection. Context+exec alone totals267404, exceeding the default262144 CONTROL
 bytes before any physical/existing turn/provider/command grants. Main activation
 must derive each actual producer's maximum simultaneously live bank set and
 select an explicitly reviewed capacity or refuse BEFORE effects. Adding costs

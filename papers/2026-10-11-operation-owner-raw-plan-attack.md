@@ -54,7 +54,7 @@ admission/external effect. Real background return cannot fabricate process exit
 or task completion. Remove the operation-local scalar clock/time/duration
 metadata; preserve existing enabled human presentation independently.
 
-The operation table's memberwise native widths and fixed3219 control sum were
+The operation table's memberwise native widths and fixed3183 control sum were
 checked; the variable retained-region bank replaces5616 rather than supplementing
 it. The13*432-based8835/9041 totals cannot remain claims after O1. No operation
 source, green result, code attack or nls.2 closure is claimed by this plan review.
@@ -71,3 +71,9 @@ encoder, metric traversal or post-effect wait is introduced. O1 is resolved at
 the plan layer. Genuine baseline reds are authorized; production release waits
 for current Context/turn attacks and checkpoint completion. One code/oracle
 attack follows the whole operation implementation, not another plan panel.
+
+
+Source-derived arithmetic disposition: the actual57-byte identity record,
+51-byte encoder Error variant and66-byte present region link give ONE fixed
+3183-byte owner bank. The whole subplan/table and native source use these exact
+member widths. This corrects the same literal arithmetic finding; no new panel.

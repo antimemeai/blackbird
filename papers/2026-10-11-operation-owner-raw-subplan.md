@@ -142,13 +142,13 @@ the enclosing C++ types. R in each body is the exact whole-operation request.
 |2400 request|bool parent,[R],actual generation ID,operation_depth size_t,pumping_commands bool,capacity_stopped bool,Clock; before preflight|124 CONTROL|
 |2401 name|R,size_t length,existing exact name; before name copy/preflight|48+actual length DATA|
 |2402 original|R,u8 input/primary/fallback/capacity-message,size_t length,exact successful existing encoded vector or existing message|49+actual bytes; normal DATA, bounded fallback/message CONTROL|
-|2403 identity|R,u8 decision/invocation/attempt/admitted-generation/context,actual ID; immediately after its business acquisition|65 CONTROL, at most5|
+|2403 identity|R,u8 decision/invocation/attempt/admitted-generation/context,actual ID; immediately after its business acquisition|57 CONTROL, at most5|
 |2404 admission request|R,u8 admitted-batch,actual expected Cursor,actual events.size(); before append|81 CONTROL|
 |2405 admission return|R,u8 kind,u8 returned/Error/alloc/length/std/nonstd,[actual Cursor or native Error]; before later work|74 CONTROL|
 |2406 effect request|R,actual EffectIntent environment/actor/invocation/attempt IDs,size_t input length; at actual Boundary entry|112 CONTROL|
 |2407 effect return|R,u8 native returned/Error/alloc/length/std/nonstd,bool Error,[actual Error]; before preparation/encoding|51 CONTROL|
 |2408 dispatch report|R,bool dispatched,bool effect_ok,bool recording_ok,[failed native effect Error],[failed native recording Error]; actual returned report|61 CONTROL|
-|2409 source/region link|R,u8 input/primary/fallback/message/command-admission,bool present,[actual OriginalReference or R]; after publication|86 CONTROL; four original links+one65 region link|
+|2409 source/region link|R,u8 input/primary/fallback/message/command-admission,bool present,[actual OriginalReference or R]; after publication|86 CONTROL; four original links+one66 region link|
 |2410 retention request|R,u8 result/capacity-message,actual ApplicationRecordId,actual expected Cursor; before original retention|89 CONTROL, at most2|
 |2411 retention return|R,u8 kind,u8 actual branch,[actual SourceReference or native Error]; before hex/presentation|66 CONTROL, at most2|
 |2412 disposition|R,actual AttemptDisposition,actual timed_out/persistent_command/adapter_capacity bools,bool native Error,[Error]; after existing business branch selection|54 CONTROL|
@@ -157,7 +157,7 @@ the enclosing C++ types. R in each body is the exact whole-operation request.
 |2415 callback request|R,u8 existing cancelled/effect_policy/started/status/outcome/completed/process_output,bool present|42 CONTROL, at most7|
 |2416 callback return|R,u8 kind,u8 native absent/returned/Error/alloc/length/std/nonstd,[actual cancelled bool on its return OR native Error]; actual return/throw|51 CONTROL, at most7|
 |2417 terminal|R,u8 returned/refused/Error/alloc/length/std/nonstd,u8 reached stage,bool Error,[Error],bool actual disposition,[AttemptDisposition:u8],Clock|111 CONTROL|
-|2418 encoder return|R,u8 input/primary/fallback,u8 actual branch,[size_t actual encoded bytes OR native Error]; after immediate body publication or actual error|50 CONTROL, at most3|
+|2418 encoder return|R,u8 input/primary/fallback,u8 actual branch,[size_t actual encoded bytes OR native Error]; after immediate body publication or actual error|51 CONTROL, at most3|
 |2419 encoder request|R,u8 role,actual ValueLimits bytes/nodes/depth; before existing encoder|65 CONTROL, at most3|
 
 2412 maximum is16+24+1+3+1+9=54 (not a larger guessed54-byte payload).
@@ -175,9 +175,9 @@ retention calls are result and that existing capacity message. A terminal-capaci
 fallback changes the existing returned Value but does not introduce a second
 output encoder which the old operation did not run.
 
-The fixed owner credit is3219:
-124+5*65+(81+74)+(112+51)+61+(4*86+65)+2*(89+66)+54+
-2*(68+67)+7*(42+51)+111+3*(65+50)+102+139.
+The fixed owner credit is3183:
+124+5*57+(81+74)+(112+51)+61+(4*86+66)+2*(89+66)+54+
+2*(68+67)+7*(42+51)+111+3*(65+51)+102+139.
 Descriptions/source use this exact sizeof-derived sum; inactive variants omit
 fields and release unused credit. The provider selected result additionally
 keeps its existing phase/link credit206, not a second operation bank.
@@ -187,7 +187,7 @@ and bounded operation proposals BEFORE the effect. The original13*432 plan was
 incorrect: retain_rejection creates diagnostic chunk/group/marker appends, and a
 single region can emit more than three source/event observations. ONE plan attack
 finding O1 replaces that fixed bank, rather than adding a second reserve or review.
-The owner record credit3219 is unchanged; whole CONTROL is3219+A below, with the
+The owner record credit3183 is unchanged; whole CONTROL is3183+A below, with the
 provider's existing206 additional. Claims and raw-current-thread lifetime precede
 publication and outlive their last uses. Nested or unusually small-payload journals
 may require more finite CONTROL than a configured lane has; refuse before effect,
@@ -268,8 +268,8 @@ It includes all thirteen direct upper calls AND all possible diagnostic child
 regions, all their source/event observations, error/outcome/end records and
 partially written/rejected prefix paths. Before-effect budgets use immutable
 limits; later native current remaining journal space can only lower actual work.
-For example M256/N344/J100000 gives A13848, whole generic17067; M1MiB/N(M+88)/
-J1e9 gives A16196, whole19415. These illustrate the arithmetic, not new source
+For example M256/N344/J100000 gives A13848, whole generic17031; M1MiB/N(M+88)/
+J1e9 gives A16196, whole19379. These illustrate the arithmetic, not new source
 constants or changed journal defaults. Physical capacity refusal remains native.
 
 ### Direct loan isolation and maintenance
