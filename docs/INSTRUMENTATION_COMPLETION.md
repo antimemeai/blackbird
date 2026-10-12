@@ -127,7 +127,7 @@ an uncommitted callback failure preserves the initialized extent with unknown
 used length. Participant cancellation uses a native socket shutdown and706
 preheld owner-cleanup bytes per Run. Context and turn plans distinguish actual
 context settlement from actual program acceptance before native activation.
-The next batch implements those owners plus linked audit-query and native
+The third completion checkpoint, `ab23278`, implements those owners plus linked audit-query and native
 command-wake hooks. Their genuine baselines, ONE whole code/oracle attacks and
 finding fixes are retained in the matching papers. Context changes also repair
 pending custody and accepted-state activation after fallible history pinning.
@@ -138,7 +138,7 @@ configuration/header allocation. Turn capture precedes accepted task presentatio
 its real child policy admission refusal preserves pending/activation state.
 The existing ordinary operation receipt still lacks a canceled prepaid bank;
 [operation17](../papers/2026-10-11-operation-owner-raw-subplan.md) explicitly owns
-that next integration. Current source is not yet a published qualification.
+that next integration. This checkpoint is published on master.
 
 Mac changed-path release and ASan/UBSan checks pass. Linux debug checks pass,
 and the broader release batch passes24/24 in15.56s. Its ASan/UBSan batch passes
@@ -159,12 +159,16 @@ mid-frame ID extraction; waiting for the actual renderer frame delimiter fixes
 that existing oracle. Final affected Linux debug/release/ASan checks pass3/3
 each in2.66/1.89/6.59s (run-4bme3mn8). The two borrowed engine fixtures also pass
 Mac release2/2:2.06s and ASan2/2:10.72s. The corrected mandatory source gate
-precedes the main checkpoint. These findings
+passes105/105 debug cases in125.85s, all155 selected owned C++ translation units,
+and owned Lua checks before the `ab23278` commit and push. These findings
 do not require production changes or another review panel.
 [Physical storage](../papers/2026-10-11-product-storage-owner-raw-subplan.md)
-resolves its native cleanup and original-prefix boundaries before source;
-semantic retained/index study supplies the shared mandatory-read envelope and
-actual TUI root-issuer handoff. The UI starts turns on a separately registered
+has an accepted whole plan for native prefix capture, explicit TUI authority
+handoff and separately held, serialized cleanup after surviving readers outlive
+the root. Its genuine published-source baseline acquires4096 bytes before EIO
+and loses that prefix from raw recording. The semantic retained/index whole
+plan is under its ONE plan attack; combined caller capacity and main activation
+remain pending. The UI starts turns on a separately registered
 worker, then joins it before returning to main-thread idle work; file creator
 identity alone cannot authorize that worker's ordinary native storage calls.
 Neither owner is active by implication. Remaining program/workflow/bridge owners,

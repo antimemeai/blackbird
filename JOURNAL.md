@@ -7405,3 +7405,27 @@ backup; actual installed full source gate runs at six workers, with all other
 owners source/docs/compiler/static idle. Commit/push authorized main checkpoint
 only if that gate and unchanged-index checks succeed. nls.2 remains in progress;
 operation/physical/semantic and remaining census/workloads follow, evals deferred.
+
+2026-10-11 — Published owner checkpoint ab23278 on origin/master. Final installed
+source gate passes105/105 debug cases in125.85s, all155 selected owned C++
+translation units and owned Lua checks. Affected native Mac/Linux release and
+ASan/UBSan checks and SAME fixture fixes are recorded in their owner papers.
+Installed executable, AFK stash and untracked operator art remain preserved.
+
+2026-10-11 — Physical storage ONE whole-plan finding integration and native red.
+Integrated accepted SAME TUI authority/dedicated cleanup and positive B/N quota
+resolution into the existing two physical papers, including exact exec3-scope
+lifecycle789/stop-job411 and explicit main composition dependency. Genuine old-API
+diagnostic prefix red on published ab23278/debug library exit1: actual4096-byte
+first prefix matched real65536-byte file, second readEIO propagated, closed raw
+run verified, literal3008 prefix absent. Preserved fixture wphbEq/source/binary/
+logs in ignored context. No production storage source edits; root source release
+and semantic/main capacity integration remain explicit.
+
+
+Operation17 genuine published-source baselines now reproduce missing whole owner,
+post-effect result allocation loss, receipt native EIO capture loss, and combined/
+split diagnostic credit exhaustion; exact files and native effects retained in
+context/operation-owner-baseline. Whole semantic retained/index plan is under ONE
+root plan attack. nls.2 and P0 nls.10 remain open; remaining census and real
+workload costs are not qualified by this checkpoint.
