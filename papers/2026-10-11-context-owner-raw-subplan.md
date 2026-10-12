@@ -4,7 +4,7 @@
 working mutations, managed context, original/history reads and checkpoint/replay.
 CodingEngine turn/budget/protocol/stop owners13–14,27–28 and32 remain the root's
 separate unit. Native physical storage/indexing is a later owner: a Context API
-return does not describe every syscall. No Context source is released here.
+return does not describe every syscall. Source was released after the Wake unit checkpoint and ONE plan attack.
 
 Read context.hpp/cpp, retained_state.hpp/cpp, retained_events.hpp, saved_state,
 the Context/delta/budget/saved-state fixtures and the actual turn catch paths.
@@ -84,14 +84,15 @@ selected64-bit profiles. No padding, Number conversion, dictionary or clock.
 |1816 existing label|owner R,label_kind:u8,Text; existing origin/entry/reason/query kind/format only|49+length DATA; named bounded cleanup literals may use prepaid CONTROL|
 |1817 history page request|owner R,first/requested/history.count:size_t,purpose:u8; before existing page(first,16)|65|
 |1818 history page return|page R,branch:u8,[actual rows:size_t],[Error]; before packet decode|reserve58|
-|1819 original lookup request|owner R,family:u8,RetainedKind2,actual parsed identity16,root JournalCursor32; before lookup|75|
+|1819 original lookup request|owner R,family:u8,RetainedKind2,actual parsed identity16,root JournalCursor32; before lookup|91|
 |1820 original lookup return|lookup R,branch:u8,[actual RecordReference,ApplicationChannel2] OR Error|67|
 |1821 reconstruction branch|reconstruct R,saved/fallback/accepted/rejected/invalid:u8,[Error]; at actual branch|50|
 |1822 saved accelerator input|reconstruct R,actual saved boundary JournalCursor,version/source-present flags; existing saved object, no re-encoding|74|
-|1823 managed fields|managed R,existing mode Text,actual selected count:size_t,existing stage Text; actual computed locals|89 for validated mode<=9/stage<=32|
+|1823 managed fields|managed R,existing mode Text,actual selected count:size_t,existing stage Text; actual computed locals|105 for validated mode<=9/stage<=32|
 |1824 reserved|No extra physical-reference event: native1802 already supplies it; Original retains provenance|—|
 |1825 cancellation budget return|budget R,actual journal max_payload/max_batch:u32,existing JournalCapacity:u64 fields; after business computation|64|
 |1826 inspect parameters|inspect R,actual requested/limit:size_t,json_export:bool; after existing parsing|57|
+|1827 finish parameters|finish R,actual success/boundary-present:bool; before workflow transfer|42|
 
 1814 is emitted before decode/projection. Decode failure belongs to the enclosing
 terminal/1821, not a second input terminal. 1818 describes the page API result;
@@ -157,7 +158,7 @@ describes native append effects; ordinary append/edit also budget their actual
 pending_proposal child when protect is installed. Stop clears protect and has no
 such child. Checkpoint fixed max
 109+51+108+105+115=488. Dynamic acquisitions prepay their bounded request/return
-and resident DATA BEFORE any existing read; source pair102+50=152, lookup75+67=142,
+and resident DATA BEFORE any existing read; source pair102+50=152, lookup91+67=158,
 page65+58=123. Release unused DATA after the immediate native copy. Enclosing
 terminals cannot be consumed by children.
 
@@ -169,10 +170,10 @@ terminals cannot be consumed by children.
 |checkpoint|488; dynamic original reads separately admitted|
 |append/edit|531+209+488=1228; actual pending_proposal argument before protection; origin label before issue/publication|
 |reject_managed|109+51+108+172+(49+24)=513; all compiled reasons<=24|
-|publish_managed|703+89+513+488=1793 including nested rejection/checkpoint; single event releases172|
-|manage|109+51+2*108+91+89+1793+513=2862; actual pending transfer and staged-result extension|
+|publish_managed|703+105+513+488=1809 including nested rejection/checkpoint; single event releases172|
+|manage|109+51+2*108+91+105+1809+513=2894; actual pending transfer and staged-result extension|
 |finish(false)|109+51+3*108+513=997|
-|finish(true)|109+51+3*108+1793+513+172=2962; conflict rejection, managed branch and rejected-boundary program record|
+|finish(true)|109+51+3*108+1809+513+172=2978; conflict rejection, managed branch and rejected-boundary program record|
 |restore|109+51+1228=1388 plus input/entry label; child edit|
 |seed_successor|109+51+93+1228=1481 plus labels; child validation/append|
 |stats|109+51+64+209+209=642; real items/view and per-item56+ID DATA|
@@ -275,7 +276,7 @@ uses context_settlement_accepted independently. Direct cuts distinguish rejectio
 accepted/program write refused, no-pending program accepted/pin failure, and batch
 accepted/pin failure. The corrected root fixed turn allowance is1346 (including
 two actual stop_outputs request/return pairs139 each);1346+9198=10544 preheld.
-This resolves the single plan finding without another panel or Context source.
+This resolves the single plan finding without another panel.
 
 ## Implementation order and direct oracles
 
@@ -284,7 +285,7 @@ This resolves the single plan finding without another panel or Context source.
    candidate descriptions or another metric codec. Pending allocation/write-cut
    custody oracle also must fail against actual unchanged business code.
 2. Implement owner helper, explicit origin/provenance, callbacks and registration.
-   Root owns10266 turn integration and CMake. No broad shared coding.cpp edit.
+   Root owns10544 turn integration and CMake. No broad shared coding.cpp edit.
 3. Implement mutations/workflow, cold/resident acquisitions, managed modes, query,
    checkpoint/reconstruction as this complete owner. Every selected request and
    actual terminal includes refusal/stale/invalid/Error/allocation/unknown/staging.
@@ -316,7 +317,109 @@ This resolves the single plan finding without another panel or Context source.
    supported Linux debug/release/ASan. Build/nls-command -j1 after release, six total
    workers. No extra panel/timer/eval/benchmark campaign/laptop mutant.
 
-Ready for root's ONE plan attack. No Context source/build ran. Root turn integration,
-callback signatures and registration are explicit source dependencies; participant/
-provider optional origins share coordinated Context windows. Physical syscall/index
-owners remain separate work and are not completed by this unit.
+The ONE plan attack and source release are complete. Root owns turn integration,
+registration and the remaining ONE code/oracle attack. Participant/provider optional
+origins share coordinated Context windows. Physical syscall/index owners remain
+separate work and are not completed by this unit.
+
+
+## Implemented owner and direct qualification
+
+The new raw_context helper publishes native fields with explicit actual parents,
+separate requests/returns, exact resident input/page bytes before decode/hex,
+and held failure/allocation/unknown terminals. No metrics encoder, subscriber,
+new historical mirror, count traversal, timer or dependency was added. Existing
+stats/inspection codecs run at their existing business boundaries. Original owns
+actual application and physical provenance where the creating/reconstructing
+operation supplies it; resident entry bytes still use paid DATA even when their
+parent packet has a physical locator.
+
+finish(true) copies Pending before any publication. Actual Context settlement
+acceptance retires it even if later history pinning fails. Actual program append
+or atomic two-record acceptance sets the distinct boundary flag. Prepared state
+swaps precede fallible history pinning; historical reads refresh an explicitly
+stale pin. finish parameters1827 precede workflow transfer. Its42-byte record
+uses the preheld allowance for a third108-byte parent state that this code never
+reaches (at most workflow transfer plus pending retirement). Banks and9198 remain
+unchanged. Protection callbacks receive the actual1804; maintenance callbacks
+receive the actual retained_append begin lane/ordinal, captured at begin.
+
+Two actual source baselines were run before implementation:
+`context/context-owner-missing-owner-red.log` shows a real append/view with zero
+1800 owner requests; `context/context-owner-pending-custody-red.log` shows the
+exact pending proposal lost on allocation refusal inside settlement. The initial
+allocation placement accidentally cut default Value argument construction and
+preserved pending; that run was not the defect. The corrected baseline constructs
+the argument before arming the allocator, so it reaches the actual function body.
+Both sensitive cases now pass.
+
+The fixture measures archive_reader closure allocations during an actual history
+snapshot, resolves its executable call site outside the fault, then refuses only
+that same allocation after publication. Darwin debug measured144 bytes. It does
+not choose a guessed allocation size or fail an earlier candidate allocation.
+Direct cases distinguish accepted append, accepted context/program batch,
+program-only acceptance, and accepted rejection before unattempted program write.
+They verify live state, exact pending retirement, native cursor advancement and
+no second append on retry. Successful saved publication followed by the same
+history-pinning allocation refusal retains save success and a failed final Result.
+
+Actual native forwarding JournalFile/Directory cuts cover prepublication write
+EIO, saved-file replacement EIO, cold tail reconstruction input EIO and archive
+lookup/read EIO. The latter blocks FramedJournal by existing storage policy; the
+oracle checks later restore refusal and unchanged active view rather than
+pretending the damaged owner can continue publishing. Saved replay and cold
+restore independently recover exact original bytes.
+
+The full-lane stop case stops the real recorder/supervisor, fills physical
+ordinary CONTROL, exhausts the actual durable issuer reservoir, and publishes
+sticky native socket EOF. A fresh admission returns interrupted. The original
+9198 bank alone publishes cancellation rejection, reads the working view and
+appends the exact unresolved tool output, including the actual issuer refill.
+Real intervening journal records force the existing checkpoint threshold; the
+held checkpoint refuses unpaid input with a capacity Result before any save,
+without undoing the accepted output append or changing the previous saved boundary.
+
+The native audit reader checks complete envelopes, sole-producer ordinal order,
+all selected earlier parent links and exactly one matching terminal. Literal
+input IDs/channels/physical references and lengths are compared with actual
+retained facts; resident bytes with actual original entry packets; inspection
+pages with the actual business page. Native field widths, callback Error detail,
+allocation terminals and successful lookup shapes are checked independently.
+The cold oracle found lookup credit underestimated in the paper/source: actual
+request is91 (E16+R24+family1+kind2+ID16+cursor32), and return67, so the dynamic
+bank is158. Managed field1823 is105, correcting publish1809/manage2894/finish2978.
+These ordinary/dynamic corrections do not change the stop/turn banks.
+
+Affected Context/delta/budget/saved-state fixtures retain their business assertions.
+Native raw_context includes the new provenance/fault/pressure oracles. Qualification
+logs are under context/context-owner-*. Root owns the ONE code/oracle attack,
+supported-platform profiles and final integrated gate; those are not claimed here.
+
+Current source qualification: affected `raw_context`, `context`, `context_delta`,
+`context_budget` and `saved_state` pass5/5 in17.83s
+(`context/context-owner-final-direct.log`). The native fixture takes0.97s.
+The final build is clean (`context/context-owner-final-build.log`). LLVM23.1.2
+clang-tidy exits0 without diagnostics for context.cpp and, sequentially, the
+raw_context helper, retained_state maintenance seam, local_timing epoch seam,
+native raw_context fixture and the three changed business callback fixtures
+(`context/context-owner-tidy-context.log`,
+`context/context-owner-tidy-remaining.log`). All owned source passes the configured
+clang-format dry check and git diff --check. No compiler/static worker remains.
+The1827 finish argument event and its exact native field oracle are included in
+this current qualification; its42 bytes fit the unused third-state allowance,
+leaving the approved9198 stop bank unchanged.
+
+The root's ONE code/oracle attack found C1 in the native fixture: publication
+pairing alone did not compare native identities or returned references, and1827
+only checked the canceled arguments. The same fixture now collects actual
+application IDs/channels/physical references from retained facts and independently
+reads the accepted native journal frames to locate each real commit cursor.
+It compares every1801 ID/channel/native prefix, every successful1802 physical
+reference or batch cursor, and all seven1827 caller arguments in order. Failed
+EIO identities/channels/prefixes come from the actual unaccepted ARPROP draft;
+their1802 return must have kind0 and the literal error, without a physical Ref.
+Both batch members must name the same actual two-record commit. No production
+source or bank changed. The affected native fixture passes1/1 in1.06s; LLVM23.1.2
+fixture-only tidy exits0 without diagnostics, configured format/diff checks pass.
+Qualification logs are in context/context-owner-c1-*; the optional-access static
+finding/red is retained and resolved by the explicit owned-packet branch.

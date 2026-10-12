@@ -320,7 +320,7 @@ void canceled_exec_receipt(std::string_view fixture, const std::filesystem::path
     }
     require(detail::owned_children.load() == 0, "canceled native command reaped");
     canceled = false;
-    wake.clear();
+    unwrap(wake.clear());
     engine.cancelled = [] { return false; };
     engine.turn({"", "return 73"});
     require(engine.workflow_result() == Value{Number{73}},

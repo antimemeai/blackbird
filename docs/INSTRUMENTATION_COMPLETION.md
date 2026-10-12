@@ -109,7 +109,7 @@ live-child cancellation fixtures check distinct native outcomes and ordinary
 reopen. The late quit path passes unchanged PTY and native checks, Mac release
 and ASan/UBSan. Its final Linux changed-path checks pass2/2 in debug, release and
 ASan/UBSan (run-h7iaz0wu:12.28/9.50/22.36s). The installed source gate passes
-99/99 debug cases in127.26s, all145 owned C++ translation units and the owned
+99/99 debug cases in127.26s, all144 selected owned C++ translation units and the owned
 Lua checks. The formatting rejection was corrected before that complete gate.
 
 The command unit also removes ordinary registration/retirement's recorder
@@ -127,12 +127,50 @@ an uncommitted callback failure preserves the initialized extent with unknown
 used length. Participant cancellation uses a native socket shutdown and706
 preheld owner-cleanup bytes per Run. Context and turn plans distinguish actual
 context settlement from actual program acceptance before native activation.
-These plans require genuine red, implementation, green and one code/oracle
-attack; their source has not been implemented by this checkpoint.
-Physical storage/retained indexing, remaining program/workflow/bridge owners,
-session/UI and actual workload sizing remain open. Task hooks cover30–31;
-authored/VM hooks and authorization hooks cover their stated subplans only.
-No completed subset closes the60-row census.
+The next batch implements those owners plus linked audit-query and native
+command-wake hooks. Their genuine baselines, ONE whole code/oracle attacks and
+finding fixes are retained in the matching papers. Context changes also repair
+pending custody and accepted-state activation after fallible history pinning.
+Participant repair covers reentry, overlapping leases, failed shutdown and armed
+orphan reclamation; supported profiles caught and fixed delayed native-field
+lifetimes. Provider emission preserves its existing encoded request before
+configuration/header allocation. Turn capture precedes accepted task presentation;
+its real child policy admission refusal preserves pending/activation state.
+The existing ordinary operation receipt still lacks a canceled prepaid bank;
+[operation17](../papers/2026-10-11-operation-owner-raw-subplan.md) explicitly owns
+that next integration. Current source is not yet a published qualification.
+
+Mac changed-path release and ASan/UBSan checks pass. Linux debug checks pass,
+and the broader release batch passes24/24 in15.56s. Its ASan/UBSan batch passes
+23/24 in95.99s; command_jobs' native descriptor-exhaustion fixture exposes an LLVM
+memory-probe failure under the depleted descriptor bound. The corrected fixture
+retains a real forwarded native EMFILE and exact semantic no-child terminal;
+its Mac release1/1:3.32s and ASan1/1:6.39s pass. Linux direct debug/release/ASan
+also pass1/1 each in2.10/2.06/2.50s. The other23 Linux ASan checks remain settled.
+The first mandatory source gate builds successfully and passes102/105 debug
+cases. Its three fixture findings are corrected: provider timing uses actual
+reviewed1320–1326 fields and sufficient borrowed codec capacity; authored
+capture retains its intentional full-DATA refusal while supplying turn credit
+and enough reader scratch for the preserved4MiB+1 original; participant PTY
+checks reconstruct chat rows and parse the exact displayed external result.
+Direct affected debug checks pass, narrow changed C++ static checks are clean,
+and the PTY also passes Mac release/ASan. Linux's same PTY check exposes
+mid-frame ID extraction; waiting for the actual renderer frame delimiter fixes
+that existing oracle. Final affected Linux debug/release/ASan checks pass3/3
+each in2.66/1.89/6.59s (run-4bme3mn8). The two borrowed engine fixtures also pass
+Mac release2/2:2.06s and ASan2/2:10.72s. The corrected mandatory source gate
+precedes the main checkpoint. These findings
+do not require production changes or another review panel.
+[Physical storage](../papers/2026-10-11-product-storage-owner-raw-subplan.md)
+resolves its native cleanup and original-prefix boundaries before source;
+semantic retained/index study supplies the shared mandatory-read envelope and
+actual TUI root-issuer handoff. The UI starts turns on a separately registered
+worker, then joins it before returning to main-thread idle work; file creator
+identity alone cannot authorize that worker's ordinary native storage calls.
+Neither owner is active by implication. Remaining program/workflow/bridge owners,
+file/Beads/decision/Git callers, session/UI/station/backstop and measured workloads
+remain open. Task hooks cover30–31; authored/VM hooks and authorization hooks
+cover their stated subplans only. No completed subset closes the60-row census.
 
 ## Shared defects and boundaries
 

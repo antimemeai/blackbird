@@ -14,17 +14,56 @@ with tempfile.TemporaryDirectory(prefix='blackbird-participants-') as work:
     workflow=root/'local.lua';workflow.write_text("print('LOCAL_CONTINUATION')\n")
     master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',32,120,0,0))
     screen=oracle.Screen()
+    frame_open=False
+    frame_tail=b''
     child=subprocess.Popen([executable,'--session',str(session),'--workflow',str(workflow)],stdin=slave,stdout=slave,stderr=slave,start_new_session=True,env=dict(os.environ,PATH=str(bin_dir)+':'+os.environ['PATH'],BLACKBIRD_GRAPHICS='off'))
     def wait(predicate,label,seconds=8):
+        global frame_open,frame_tail
         deadline=time.monotonic()+seconds
         while time.monotonic()<deadline:
             if select.select([master],[],[],0.03)[0]:
-                try: screen.feed(os.read(master,65536))
+                try:
+                    data=os.read(master,65536)
+                    # The real renderer brackets complete frames with2026.
+                    # A partial read must not expose hybrid old/new ID cells.
+                    markers=frame_tail+data
+                    for marker in re.finditer(rb'\x1b\[\?2026([hl])',markers):
+                        frame_open=marker.group(1)==b'h'
+                    frame_tail=markers[-7:]
+                    screen.feed(data)
                 except OSError as error:
                     if error.errno!=errno.EIO:raise
-            if predicate():return
+            if not frame_open and not screen.pending and predicate():return
         raise AssertionError(label+'\n'+screen.text())
     def command(text):os.write(master,(text+'\r').encode())
+    def chat_paragraphs():
+        # Display rows split logical chat text. Read only the chat cells, not
+        # the independent task pane, and never cross a blank or label row.
+        dividers=[column for (row,column),value in screen.cells.items() if row==0 and value=='│']
+        boundary=min(dividers) if dividers else 120
+        paragraph=''
+        for row in range(max((key[0] for key in screen.cells),default=-1)+1):
+            prefix=''.join(screen.cells.get((row,column),' ') for column in range(4))
+            if prefix=='  │ ':
+                paragraph+=''.join(screen.cells.get((row,column),' ') for column in range(4,boundary)).rstrip()
+            elif paragraph:
+                yield paragraph
+                paragraph=''
+        if paragraph:yield paragraph
+    def visible_result(selected=False):
+        for paragraph in chat_paragraphs():
+            try:value=json.loads(paragraph)
+            except json.JSONDecodeError:continue
+            if not isinstance(value,dict):continue
+            if selected and 'runs' in value:continue
+            for run in value.get('runs',[value]):
+                if not isinstance(run,dict):continue
+                result=run.get('result',{})
+                if not isinstance(result,dict):continue
+                if (run.get('run_id')==beta and run.get('state')=='completed' and
+                    result.get('text')=='LOCAL_SELECTED_REVIEW' and
+                    result.get('actual_model')=='fake-claude'):return True
+        return False
     def request(who):
         return dict(request_id='initial-'+who,**{'from':'main','to':who},provider='claude',model='fake',task='Review selected code',context=[dict(id='source',text='selected')],profile=dict(name='context-only',provenance='PTY-local-fake',timeout_seconds=5,tools='none',requests=1))
     try:
@@ -43,17 +82,20 @@ with tempfile.TemporaryDirectory(prefix='blackbird-participants-') as work:
         command('/runs');wait(lambda:'[running] claude/fake' in screen.text(),'read during live work')
         command('/stop '+alpha)
         command('/join '+json.dumps(dict(run_ids=[alpha,beta])))
-        wait(lambda:'LOCAL_SELECTED_REVIEW' in screen.text() and 'fake-claude' in screen.text(),'join surviving participant')
+        wait(visible_result,'join surviving participant')
         command('/tasks read {}')
         wait(lambda:'ALPHA_WORK' in screen.text() and 'BETA_WORK' in screen.text() and 'queued' in screen.text(),'tasks retain plan status')
         command('/restart participant continuity')
         wait(lambda:'LOCAL_CONTINUATION' in screen.text(),'quiescent restart')
         command('/runs');wait(lambda:'[completed] claude/fake' in screen.text(),'completed result discovery after restart')
-        command('/runs '+beta);wait(lambda:'LOCAL_SELECTED_REVIEW' in screen.text(),'selected retained result after restart')
+        command('/runs '+beta);wait(lambda:visible_result(True),'selected retained result after restart')
         command('/quit');wait(lambda:child.poll() is not None,'normal exit')
         assert child.returncode==0
         result=subprocess.check_output([executable,'--session',str(session),'--once','/runs '+beta],text=True)
-        assert 'LOCAL_SELECTED_REVIEW' in result and 'completed' in result
+        selected=json.loads(result)
+        assert selected['run_id']==beta and selected['state']=='completed'
+        assert selected['result']['text']=='LOCAL_SELECTED_REVIEW'
+        assert selected['result']['actual_model']=='fake-claude'
         print('Participant PTY: independent work, inspect/cancel/join, task status, native restart and retained results pass')
     finally:
         if child.poll() is None:

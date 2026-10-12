@@ -26,16 +26,6 @@ using namespace blackbird;
 namespace {
 std::atomic_bool interrupted{false};
 static_assert(std::atomic_bool::is_always_lock_free);
-volatile std::sig_atomic_t interrupt_endpoint = -1;
-extern "C" void interrupt_handler(int) {
-  const int saved = errno;
-  interrupted.store(true, std::memory_order_relaxed);
-  if (interrupt_endpoint >= 0) {
-    const char byte = 1;
-    (void)::write(interrupt_endpoint, &byte, 1);
-  }
-  errno = saved;
-}
 template <class T> T random_id() {
   IdentityBytes bytes{};
   if (getentropy(bytes.data(), bytes.size()) != 0)
@@ -419,17 +409,9 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
         unwrap(context.checkpoint());
     }
     engine.effort(effort);
-    RawCommandWake interrupt_wake;
+    RawCommandInterrupt interrupt_owner{interrupted};
+    auto &interrupt_wake = interrupt_owner.wake();
     RawWaitScope interrupt_wait{{{interrupt_wake.read_fd(), -1}, {}}};
-    struct InterruptEndpointCleanup {
-      ~InterruptEndpointCleanup() { interrupt_endpoint = -1; }
-    } interrupt_cleanup;
-    interrupt_endpoint = interrupt_wake.write_fd();
-    struct sigaction action{};
-    action.sa_handler = interrupt_handler;
-    sigemptyset(&action.sa_mask);
-    if (sigaction(SIGINT, &action, nullptr) != 0)
-      throw Error{ErrorCode::io, errno};
     std::atomic_bool cancelled{false};
     engine.cancelled = [&] {
       return interrupted.load(std::memory_order_relaxed) || cancelled.load();
@@ -529,10 +511,7 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
     publish_workflows(engine.workflows());
     auto perform = [&](std::string_view prompt) {
       if (!tui) {
-        interrupted.store(false, std::memory_order_relaxed);
-        interrupt_wake.clear();
-        if (interrupted.load(std::memory_order_relaxed))
-          interrupt_wake.notify();
+        unwrap(interrupt_owner.reset());
       }
       try {
         if (prompt == "/help") {
@@ -1058,12 +1037,7 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
             }
           },
           engine.command_jobs(), interrupt_wake.read_fd(),
-          [&] {
-            interrupted.store(false, std::memory_order_relaxed);
-            interrupt_wake.clear();
-            if (interrupted.load(std::memory_order_relaxed))
-              interrupt_wake.notify();
-          });
+          [&] { return interrupt_owner.reset(); });
       return finish_interactive();
     }
     if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))

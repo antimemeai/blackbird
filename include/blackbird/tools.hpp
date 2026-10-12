@@ -1,5 +1,6 @@
 #pragma once
 #include "blackbird/context.hpp"
+#include "blackbird/provider_original.hpp"
 #include <filesystem>
 #include <functional>
 namespace blackbird {
@@ -12,7 +13,9 @@ public:
   using Observer = std::function<void(std::string_view, std::string_view)>;
   explicit LocalTools(Observer observer = {}) : observer_(std::move(observer)) {}
   std::function<bool()> cancelled;
-  Value run(std::string_view name, const Value &arguments);
+  Value run(std::string_view name, const Value &arguments,
+            const RawAdapterContext *raw_context = nullptr,
+            RawControlToken *native_return = nullptr);
   const std::vector<CapturedOutput> &captured() const noexcept { return captured_; }
 
 private:

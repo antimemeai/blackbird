@@ -278,7 +278,7 @@ Each repeated event gets its finite local claim before acquisition; do not reser
 500000 parser events on a256KiB control lane.
 
 1323 native variants are0 no field,1 bool,2 unsigned,3 size_t,4 int,
-5 std::errc,6 two size_t,7 native revision string (size_t plus<=32 bytes),
+5 native size_t converter ordinal + std::errc at stage47,6 two size_t,7 native revision string (size_t plus<=32 bytes),
 8 IdentityBytes (16 bytes). Semantic kinds13/14 are SSE-event/preview-event
 subscopes, beneath their actual whole decode/feed owner.
 Descriptions enumerate exact stages: assembly10 restart,11 protocol,12 workflow
@@ -540,3 +540,151 @@ unknown-used storage stops acquisition and remains unresolved semantic debt.
 The direct oracle includes genuine fill/throw without commit, not only a
 committed-prefix failure. No further plan defect was asserted. Source remains
 held until root's completed-owner checkpoint; no second review panel.
+
+## Source release and authentic baseline
+
+Root released the reviewed whole unit after checkpointad2c4e3. Before common API
+migration the isolated current-public-API fixture ran against checkpoint debug
+foundation. One actual config.http callback, one binary-exact observer and the
+business200/body all succeeded; real RawRuntime capture closed. Independent
+1310/1312/1311 native original/ref/return oracle failed: missing real injected
+request/original/return, exit1. This is the actual callback bypass, not Child or
+an artificially disabled hook. Exact source fixture/log remain in ignored context.
+Public source calls now carry one explicit RawAdapterContext (actual owner,
+optional parent, original receiver, receipt output), with existing business labels
+copied by receiver prepare. No role-to-label dictionary. Owner codec admission
+uses the ONE encoder and returned OwnedOriginal Ref without a worker ticket.
+
+
+## Whole exchange source and focused native checks
+
+The bounded ProviderHttp now returns only its actual native status and receives
+ProviderHttpResponseLease; every injection caller was migrated. There is no
+arbitrary-string compatibility path. Its source constructor holds16MiB+58 DATA
+and source return99 CONTROL before callback acquisition. prepare initializes only
+the exact requested extent, commit publishes the observed prefix, and a real
+fill/throw without commit preserves the initialized extent as unknown_used.
+Returned-without-commit records the actual returned status and separately refuses
+the body contract; it never invents observed use or a complete semantic response.
+Callback/private payload exclusions are explicit, independent of callback presence.
+
+RawProviderPhase credits now use sizeof expressions for each native field. Scope
+BEGIN is explicit after the held terminal guard exists; original Error, allocation,
+length and non-Error exception branches close the actual begun scope. Inactive
+raw scope splits carry no claim; they do not call a claim API without a lane.
+The selected operation result claim is admitted before retained attempt admission,
+so cancellation of its transient16MiB+49 grant cannot leave a newly admitted
+business attempt behind. After real retained admission, the caller's borrowed
+kind3 guard starts with the actual attempt/invocation/generation locals, before
+TaskRun allocation and dispatch. Refused admission has no fabricated attempt Ref
+or prior-attempt retry decision. The provider result still uses its ONE existing
+encoder before result-log retention; unrelated operation duration work remains
+owned by the later whole-operation unit.
+
+The application wire body's existing16MiB external encoder allowance is protected
+before dump/export (1301 overhead is E+R+3*sizeof(size_t)+actual method+URL bytes).
+Its unused grant releases after publication, before a response grant. Direct
+provider_http, owned auth, OpenAI compatibility and Coding/OpenAI entry set an
+absolute validated timeout scope before adapter admission and reuse the earlier
+inherited deadline downstream. Native read permits retain DATA across the actual
+read and publish1404 before observer/append/limit, handing the actual61-byte range
+and owned buffer to a selected receiver. Default Child keeps its8192-byte stack
+buffer. Source/control credits stay on their issuer lane.
+
+The standalone launcher creates and verifies its existing NEW_CAPTURE_DIRECTORY
+and uses native getentropy for its actual EnvironmentId before binding and reading
+its bounded request file. Read/parse/setup inherit the caller's RawWaitControl;
+the request's timeout cannot be read before that request is acquired and parsed.
+There is no new signal manager or metrics timer. The launcher preserves its actual
+request-file bytes before parse; physical file syscall facts remain the file unit.
+
+The authentic baseline failed on missing1310/1312/1311 after proving a real injected
+200 response and exact binary observer. Candidate direct real-Runtime fixture now
+passes: actual method/URL/body originals exclude credential config; twelve injected
+outcomes distinguish exact, partial, empty and unknown-used storage; observer and
+callback Error/non-Error paths settle native return; duplicate commit is refused;
+receiver refusal prevents acquisition; overflow transfers before raising capacity;
+inactive raw retains bytes with absent Ref. Two actual stopped-Rec/running-Sup full
+DATA STREAM waits cancel/expire before callback while prepaid cleanup and previous
+wire bytes survive. At injected commit, actual P>A and A==0 plus exact1312 bytes/Ref
+are checked BEFORE killing producer/Sup/Rec; recovery preserves that same original
+and fabricates no callback/owner completion. Native Child hands actual1404 storage
+without second1312; literal BBM2 codec bytes and decoder/preview outcomes are
+checked. A real Coding group retries once and compares admitted IDs, native policy,
+prior-attempt Ref/ordinal/delay/eligibility, two native clock acquisitions and the
+ONE operation encoder's result source. The participant owner independently owns
+queue/emergency/Retain/stop checks using this exact shared seam.
+
+Focused direct green precedes the root's ONE code/oracle attack. Changed-TU static
+and affected final recheck are being completed with one worker; root owns supported
+profiles and the integrated source gate. No additional review panel, eval, timer,
+transform, dependency or separate custody service is added.
+
+The first changed-TU static pass found two unchecked optional trace accesses and
+fixture optional accesses whose assertion helper did not establish presence for
+the analyzer. Explicit source/test guards now precede those accesses; no rule
+suppression was added. The actual standalone launcher oracle acquires a malformed
+literal request file, compares its raw1322 original before parser failure, verifies
+its native owned directory, and refuses reuse. The retry clock oracle compares
+1327 components against the independently observed, forwarded actual native clock
+returns in source order; it does not calculate a duration. Native1404 publication
+releases unused read claims before invoking observers or appending business output.
+
+The new real launcher check initially failed its stderr complaint assertion:
+Child.start defaults merge_error=false, so its collected stdout could not contain
+the real parser complaint. The fixture now selects native stderr merging before
+launch; the literal raw-file and terminal assertions remain unchanged. This was
+a fixture routing defect, not a suppressed parser or capture failure.
+
+Final owner qualification: the nine affected native checks passed24.34s before
+the final native-credit release and strengthened launcher/clock oracles. After
+those changes, provider_auth_raw and provider_raw passed0.81s/0.78s, and the
+corrected complete provider_exchange_raw fixture passed4.54s (ctest4.55s). The
+16 changed translation units completed static analysis; all reported provider
+source and fixture findings were fixed. The final provider_auth/colleague_main/
+raw_provider recheck was clean, and the final exchange fixture static recheck
+returned0 with no diagnostics. Relevant diff checks are clean. Coding request
+and selected result windows are idle; root's separate turn edits and final
+integrated gates/profiles remain root-owned. This candidate is ready for the
+root's ONE whole-unit code/oracle attack, not a completion claim for nls.2.
+
+## PX1 finding correction in the ONE code/oracle attack
+
+The root attack found acquired external JSON destroyed by quote/header allocation
+before1301 publication. All three genuine native reds ran before production edits
+against qualified provider libraries: compatibility encoding, owned public request
+encoding, and already-owned native HTTP body. A fixed live-allocation observer
+compared a literal independent complete JSON body, then refused the actual next
+48byte allocation. Each real allocation failure preceded callback/Child dispatch;
+each old original oracle failed missing the native request/body result. Exact
+source/binary/log are retained in context/provider-px1-baseline-red.*. No source
+hook was disabled and no artificial result was returned.
+
+Compatibility now publishes the ONE encoder result before private curl quote/
+configuration work. Owned auth stages the actual HTTP trace/terminal before its
+encoder, publishes immediately from the protected DATA claim, and passes that
+explicit same trace into synchronous HTTP. The downstream owner creates no second
+trace/body/link; outer errors close the prebound terminal even before HTTP entry.
+The ordinary existing-body HTTP path publishes before private configuration.
+Owned GET models no longer runs an unused body encoder: the actual outgoing body
+remains empty. POST invokes its existing encoder once. Credential configuration
+remains private and no alternate encoder/original service was added.
+
+Context source migration temporarily changed its public constructor ABI. The
+three corrected native allocation checks therefore linked the actual CMake-built
+provider_auth/openai objects into a copy of the qualified foundation library and
+used the identical PX1 oracle functions in an ignored direct TU; no production
+compatibility seam. These direct checks pass, comparing the complete1301 literal,
+actual native request/receipt/terminal, and absence of Child/callback dispatch.
+Full registered fixture/affected integration awaits Context compile stability,
+then uses normal targets. This is the one finding-fix layer, not a second panel.
+
+Context's public seam subsequently became compile-stable. The normal affected
+targets rebuilt successfully, and all nine registered native checks passed23.08s;
+provider_exchange_raw passed5.11s with the strengthened complete-body, receipt,
+single-terminal and actual adapter/auth-resolution link assertions. Final narrow
+static for provider_auth.cpp, openai.cpp and provider_exchange_raw_test.cpp is
+clean, as are relevant diff checks. Actual baseline red, isolated direct green,
+and normal integration logs are retained separately; the isolated composition
+does not stand in for the normal build. PX1 source is idle for root's supported
+profiles/integrated gate. No generic-operation source or second panel was added.

@@ -27,11 +27,14 @@ void write_all(std::string_view bytes) {
   }
 }
 void save(const Path &path, std::string_view bytes) {
-  std::ofstream stream{path, std::ios::binary};
+  auto pending = path;
+  pending += ".pending." + std::to_string(::getpid());
+  std::ofstream stream{pending, std::ios::binary};
   stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
   stream.close();
   if (!stream)
     throw std::runtime_error("fixture marker refused");
+  std::filesystem::rename(pending, path);
 }
 void gate(const Path &path) {
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{8};

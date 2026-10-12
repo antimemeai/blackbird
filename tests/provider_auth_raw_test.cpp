@@ -90,6 +90,13 @@ extern "C" int fsync(int descriptor) {
   return forward_fsync(descriptor);
 }
 using namespace blackbird;
+int reply(ProviderHttpResponseLease &response, int status, std::string body) {
+  auto extent = response.prepare(body.size());
+  std::copy(body.begin(), body.end(), extent.begin());
+  response.commit(body.size());
+  return status;
+}
+
 namespace {
 void check(bool condition, const char *message) {
   if (!condition)
@@ -540,15 +547,16 @@ void private_surfaces(const std::filesystem::path &directory) {
         return clock;
       };
       unsigned private_requests = 0;
-      config.http = [&](const ProviderHttpRequest &request) {
+      config.http = [&](const ProviderHttpRequest &request,
+                        ProviderHttpResponseLease &response) {
         ++private_requests;
         if (request.url.find("device_authorization") != std::string::npos)
-          return ProviderHttpResponse{
-              200,
-              R"({"device_code":"private-device-sentinel","user_code":"private-user-sentinel","verification_uri":"https://example.com/login","expires_in":120,"interval":5})"};
+          return reply(
+              response, 200,
+              R"({"device_code":"private-device-sentinel","user_code":"private-user-sentinel","verification_uri":"https://example.com/login","expires_in":120,"interval":5})");
         check(request.body.find("private-device-sentinel") != std::string::npos,
               "actual private device code absent from business request");
-        return ProviderHttpResponse{400, R"({"error":"slow_down"})"};
+        return reply(response, 400, R"({"error":"slow_down"})");
       };
       ProviderAuth auth{config};
       auth.add_provider("public-provider", "https://example.com/v1///", "chat",
@@ -580,17 +588,18 @@ void private_surfaces(const std::filesystem::path &directory) {
                       "https://platform.claude.com/v1/oauth/token",
                       Value::object({{"id_token", Value{"private-jwt-sentinel"}}}));
       ProviderAuthConfig owned = config;
-      owned.http = [](const ProviderHttpRequest &request) {
+      owned.http = [](const ProviderHttpRequest &request,
+                      ProviderHttpResponseLease &response) {
         if (request.url.find("oauth/token") != std::string::npos)
-          return ProviderHttpResponse{
-              200,
-              R"({"access_token":"fresh-private-access-sentinel","refresh_token":"fresh-private-refresh-sentinel","expires_in":120,"token_type":"Bearer"})"};
+          return reply(
+              response, 200,
+              R"({"access_token":"fresh-private-access-sentinel","refresh_token":"fresh-private-refresh-sentinel","expires_in":120,"token_type":"Bearer"})");
         bool correct = false;
         for (const auto &[name, value] : request.headers)
           if (name == "Authorization")
             correct = value == "Bearer fresh-private-access-sentinel";
         check(correct, "actual owned refresh did not supply acquired private token");
-        return ProviderHttpResponse{200, "{}"};
+        return reply(response, 200, "{}");
       };
       ProviderAuth selected{owned};
       const auto expected_binding = selected.binding("anthropic");
@@ -610,7 +619,9 @@ void private_surfaces(const std::filesystem::path &directory) {
       }
       check(caught, "native observer unknown exception was lost");
       ProviderAuthConfig unknown = config;
-      unknown.http = [](const ProviderHttpRequest &) -> ProviderHttpResponse {
+      unknown.http = [](const ProviderHttpRequest &,
+                        ProviderHttpResponseLease &response) -> int {
+        (void)response;
         throw std::runtime_error{"HTTP error"};
       };
       try {
@@ -621,7 +632,9 @@ void private_surfaces(const std::filesystem::path &directory) {
       }
       check(caught, "private HTTP unknown exception was lost");
       ProviderAuthConfig failed = config;
-      failed.http = [](const ProviderHttpRequest &) -> ProviderHttpResponse {
+      failed.http = [](const ProviderHttpRequest &,
+                       ProviderHttpResponseLease &response) -> int {
+        (void)response;
         throw Error{ErrorCode::io, ECONNRESET};
       };
       bool native_error = false;
@@ -664,8 +677,20 @@ void private_surfaces(const std::filesystem::path &directory) {
   unsigned http_begins = 0, operation_begins = 0;
   bool browser_unknown = false, owner_unknown = false;
   for (const auto &record : records) {
-    check(record.site < 1300 || record.site >= 1600,
-          "private auth child opted into application/native payload capture");
+    // selected.request is an application exchange, unlike the private refresh
+    // and device HTTP operations. Its public body is now captured explicitly.
+    check(record.site < 1400 || record.site >= 1600,
+          "private auth child opted into native payload capture");
+    if (record.site == 1312) {
+      auto application_body = ByteView{record.body}.subspan(24);
+      check(native<std::uint8_t>(application_body) == 1 &&
+                native<std::size_t>(application_body) == 2 &&
+                native<bool>(application_body) &&
+                native<std::size_t>(application_body) == 2 &&
+                application_body.size() == 2 && application_body[0] == std::byte{'{'} &&
+                application_body[1] == std::byte{'}'},
+            "private HTTP body mislabeled as public application response");
+    }
     ByteView body{record.body};
     if (record.site == 1600) {
       const auto action = native<std::uint8_t>(body);
@@ -869,12 +894,19 @@ void codex_originals(const std::filesystem::path &directory,
               records[index + 1].origin.partition == RawPartition::control,
           "Codex private pair has wrong actual producer/partition");
   }
-  check(records[15].site == 1300 && records[16].site == 1612,
+  const auto application =
+      std::find_if(records.begin(), records.end(),
+                   [](const Record &record) { return record.site == 1300; });
+  const auto linked =
+      std::find_if(records.begin(), records.end(),
+                   [](const Record &record) { return record.site == 1612; });
+  check(application != records.end() && linked != records.end() &&
+            linked->ordinal == application->ordinal + 1,
         "actual auth/application link not emitted with application begin");
   std::vector<std::byte> link;
   append_ref(link, epoch, 1);
-  append_ref(link, epoch, records[15].ordinal);
-  check(records[16].body == link, "actual Codex/application Ref pair differs");
+  append_ref(link, epoch, application->ordinal);
+  check(linked->body == link, "actual Codex/application Ref pair differs");
   const std::array secrets{std::string_view{"private-codex-access-sentinel"},
                            std::string_view{"private-codex-account-sentinel"}};
   no_secret(records, secrets);

@@ -2,6 +2,7 @@
 #include "blackbird/json.hpp"
 #include "blackbird/provider_auth.hpp"
 #include "blackbird/tools.hpp"
+#include <algorithm>
 #include <arpa/inet.h>
 #include <charconv>
 #include <fstream>
@@ -12,6 +13,13 @@
 #include <sys/stat.h>
 #include <thread>
 using namespace blackbird;
+int reply(ProviderHttpResponseLease &response, int status, std::string body) {
+  auto extent = response.prepare(body.size());
+  std::copy(body.begin(), body.end(), extent.begin());
+  response.commit(body.size());
+  return status;
+}
+
 void check(bool b, const char *message) {
   if (!b)
     throw std::runtime_error{message};
@@ -163,9 +171,10 @@ int main() {
           jwks, 1000, config);
     });
     std::map<std::string, std::string> authorization;
-    config.http = [&](const ProviderHttpRequest &r) {
+    config.http = [&](const ProviderHttpRequest &r,
+                      ProviderHttpResponseLease &response) {
       if (r.url.ends_with("jwks.json"))
-        return ProviderHttpResponse{200, unwrap(dump_json(jwks))};
+        return reply(response, 200, unwrap(dump_json(jwks)));
       auto fields = params(r.body);
       check(fields["client_id"] == "issued", "dynamic client used for exchange");
       check(fields["redirect_uri"] == authorization["redirect_uri"],
@@ -173,14 +182,15 @@ int main() {
       check(auth_pkce_challenge(fields["code_verifier"], config) ==
                 authorization["code_challenge"],
             "PKCE linkage");
-      return ProviderHttpResponse{
-          200, unwrap(dump_json(Value::object(
-                   {{"access_token", Value{"fixture-access"}},
-                    {"refresh_token", Value{"fixture-refresh"}},
-                    {"expires_in", Value{Number{"3600"}}},
-                    {"id_token", Value{sign(authorization["nonce"])}},
-                    {"scope",
-                     Value{"openid resource.invoke chatgpt.tokens.use.direct"}}})))};
+      return reply(
+          response, 200,
+          unwrap(dump_json(Value::object(
+              {{"access_token", Value{"fixture-access"}},
+               {"refresh_token", Value{"fixture-refresh"}},
+               {"expires_in", Value{Number{"3600"}}},
+               {"id_token", Value{sign(authorization["nonce"])}},
+               {"scope",
+                Value{"openid resource.invoke chatgpt.tokens.use.direct"}}}))));
     };
     ProviderAuth auth{config};
     std::thread browser;
@@ -249,16 +259,17 @@ int main() {
           Value::object({}),
           {.account_revision = std::stoll(saved.find("revision")->number().text())});
     });
-    config.http = [&](const ProviderHttpRequest &r) {
+    config.http = [&](const ProviderHttpRequest &r,
+                      ProviderHttpResponseLease &response) {
       const auto fields = unwrap(parse_json(r.body));
       check(fields.find("state")->string() == authorization["state"],
             "anthropic state missing");
       check(auth_pkce_challenge(fields.find("code_verifier")->string(), config) ==
                 authorization["code_challenge"],
             "anthropic PKCE mismatch");
-      return ProviderHttpResponse{
-          200,
-          R"({"access_token":"anthropic-a","refresh_token":"anthropic-r","expires_in":3600})"};
+      return reply(
+          response, 200,
+          R"({"access_token":"anthropic-a","refresh_token":"anthropic-r","expires_in":3600})");
     };
     ProviderAuth anthropic{config};
     anthropic.browser_login(

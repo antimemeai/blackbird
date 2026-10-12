@@ -1229,7 +1229,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                      std::filesystem::path state_path,
                      const std::function<void()> &idle_work,
                      std::shared_ptr<CommandJobs> commands, int interrupt_fd,
-                     const std::function<void()> &reset_interrupt) {
+                     const std::function<Result<void>()> &reset_interrupt) {
   (void)std::setlocale(LC_CTYPE, "");
   TerminalMode mode;
   ChatOutput output;
@@ -1471,16 +1471,36 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   std::string image_frame;
   auto started = std::chrono::steady_clock::now();
   auto second = started, tool_started = started;
-  auto start = [&](std::string prompt) {
+  bool wake_refused = false;
+  auto start = [&](const std::string &source) {
     welcoming = false;
     if (worker.joinable())
       worker.join();
+    turn_cancel.retire();
     cancelled.store(false);
-    turn_cancel.clear();
-    if (reset_interrupt)
-      reset_interrupt();
-    auto context = unwrap(raw_prepare_thread());
-    const auto dispatch = raw_worker_dispatch();
+    auto reset = turn_cancel.clear();
+    if (reset.has_value() && reset_interrupt)
+      reset = reset_interrupt();
+    if (!reset.has_value()) {
+      cancelled.store(true);
+      wake_refused = true;
+      notice(std::string{"Cancellation rearm refused: "} +
+             error_name(reset.error().code));
+      return false;
+    }
+    std::string prompt;
+    RawThreadHandle context;
+    RawWorkerDispatch dispatch{};
+    try {
+      prompt = source;
+      context = unwrap(raw_prepare_thread());
+      dispatch = raw_worker_dispatch();
+    } catch (...) {
+      cancelled.store(true);
+      wake_refused = true;
+      notice("Turn admission refused; prompt retained.");
+      return false;
+    }
     busy = true;
     tool_active = false;
     turn_failed = false;
@@ -1492,37 +1512,48 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     activity = "Starting";
     // Each worker owns a separately registered lane. Transfer facts reference
     // the UI lane and ordinal; neither producer nor region migrates threads.
-    worker = std::jthread([&, context = std::move(context), dispatch,
-                           prompt = std::move(prompt)]() mutable {
-      try {
-        RawWaitScope wait{{{interrupt_fd, turn_cancel.read_fd()}, {}}};
-        RawThreadBinding binding{std::move(context)};
-        raw_worker_started(dispatch);
-        RawRegion command{raw_regions::command_perform};
+    turn_cancel.publish();
+    try {
+      worker = std::jthread([&, context = std::move(context), dispatch,
+                             prompt = std::move(prompt)]() mutable {
         try {
-          perform(prompt);
-          command.outcome(RawRegionOutcome::returned);
-        } catch (const Error &error) {
-          command.error(error);
-          command.outcome(RawRegionOutcome::exception);
-          post(Kind::failure, {});
-          text("\nTurn failed; inspect the retained audit.\n");
-        } catch (const std::exception &e) {
-          command.outcome(RawRegionOutcome::exception);
-          post(Kind::failure, {});
-          text(std::string{"\nError: "} + e.what() + "\n");
+          RawWaitScope wait{{{interrupt_fd, turn_cancel.read_fd()}, {}}};
+          RawThreadBinding binding{std::move(context)};
+          raw_worker_started(dispatch);
+          RawRegion command{raw_regions::command_perform};
+          try {
+            perform(prompt);
+            command.outcome(RawRegionOutcome::returned);
+          } catch (const Error &error) {
+            command.error(error);
+            command.outcome(RawRegionOutcome::exception);
+            post(Kind::failure, {});
+            text("\nTurn failed; inspect the retained audit.\n");
+          } catch (const std::exception &e) {
+            command.outcome(RawRegionOutcome::exception);
+            post(Kind::failure, {});
+            text(std::string{"\nError: "} + e.what() + "\n");
+          } catch (...) {
+            command.outcome(RawRegionOutcome::exception);
+            post(Kind::failure, {});
+            text("\nTurn failed; inspect the retained audit.\n");
+          }
+          command.finish();
         } catch (...) {
-          command.outcome(RawRegionOutcome::exception);
           post(Kind::failure, {});
-          text("\nTurn failed; inspect the retained audit.\n");
+          text("\nWorker admission failed; inspect the retained raw audit.\n");
         }
-        command.finish();
-      } catch (...) {
-        post(Kind::failure, {});
-        text("\nWorker admission failed; inspect the retained raw audit.\n");
-      }
-      post(Kind::complete, {});
-    });
+        post(Kind::complete, {});
+      });
+    } catch (...) {
+      turn_cancel.retire();
+      cancelled.store(true);
+      busy = false;
+      wake_refused = true;
+      notice("Worker launch refused; prompt retained.");
+      return false;
+    }
+    return true;
   };
   auto edit = [&] {
     if (busy) {
@@ -1560,7 +1591,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     return true;
   };
   if (!initial.empty())
-    start(std::move(initial));
+    if (!start(initial))
+      queued.push_back(std::move(initial));
   while (true) {
     if (output.pending() && output.flush()) {
       first_frame.outcome(RawRegionOutcome::flushed);
@@ -1658,6 +1690,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       if (message.kind == Kind::complete) {
         if (worker.joinable())
           worker.join();
+        turn_cancel.retire();
         busy = false;
         tool_active = false;
         activity = cancelled.load() ? "Turn cancelled"
@@ -1715,13 +1748,11 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       break;
     if (!busy && quitting)
       break;
-    if (!busy && !queued.empty()) {
-      auto prompt = std::move(queued.front());
-      queued.erase(queued.begin());
-      if (persist())
-        start(std::move(prompt));
-      else {
-        recovered.push_back(std::move(prompt));
+    if (!busy && !wake_refused && !queued.empty()) {
+      if (persist()) {
+        if (start(queued.front()))
+          queued.erase(queued.begin());
+      } else {
         recovered.insert(recovered.end(), std::make_move_iterator(queued.begin()),
                          std::make_move_iterator(queued.end()));
         queued.clear();
@@ -2072,7 +2103,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     std::optional<RawCapacityClaim> keyboard_data;
     if (raw_enabled())
       keyboard_data.emplace(unwrap(raw_claim_data(1155081)));
-    auto keyboard_control = raw_command_claim(21950);
+    auto keyboard_control = raw_command_claim(21950 + raw_wake_single_notify_credit);
     std::optional<RawCommandBurstScope> keyboard_burst;
     keyboard_burst.emplace(
         RawCommandBurstCredits{keyboard_data ? &*keyboard_data : nullptr,
@@ -2314,7 +2345,9 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             recovered.erase(recovered.begin() + static_cast<std::ptrdiff_t>(n - 1));
             transcript += "\nLoaded recovered draft; Enter submits explicitly.\n";
           }
-        } else if (busy) {
+        } else if (busy || !queued.empty()) {
+          wake_refused =
+              false; // An explicit submission permits the queued owner to retry.
           auto candidate = composer.state();
           candidate.queued = recovered;
           candidate.queued.insert(candidate.queued.end(), queued.begin(), queued.end());
@@ -2334,7 +2367,9 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             keyboard_burst.reset();
             keyboard_data.reset();
             keyboard_control.reset();
-            start(std::move(result.text));
+            wake_refused = false;
+            if (!start(result.text))
+              composer.draft(std::move(result.text));
           } else
             composer.draft(std::move(result.text));
         }

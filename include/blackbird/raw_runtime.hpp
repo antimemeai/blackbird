@@ -31,6 +31,19 @@ class RawThreadContext;
 class RawRuntime;
 using RawThreadHandle = std::shared_ptr<RawThreadContext>;
 using RawControlToken = RawControlClaim;
+// Nonowning native views prepared under the retained context's exclusive owner.
+// The handle and claim must remain alive and untouched through handler use.
+class RawSignalPublisher {
+public:
+  static Result<RawSignalPublisher> prepare(const RawThreadHandle &context,
+                                            RawControlToken &claim);
+  RawNativePublication emit(std::uint32_t site, const RawNativePart *parts,
+                            std::size_t count) noexcept;
+
+private:
+  RawNativePublisher control_, failure_;
+  bool *fenced_ = nullptr;
+};
 struct RawRuntimeStatus {
   pid_t supervisor;
   pid_t recorder;

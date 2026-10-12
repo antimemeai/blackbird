@@ -1193,7 +1193,8 @@ Result<JournalCursor> RetainedState::append_impl(JournalCursor expected,
         bool &flag;
         ~Reset() { flag = false; }
       } reset{checkpoint_running_};
-      auto maintained = maintenance_checkpoint_();
+      const RawEventRef origin{timing.lane_epoch(), timing.begin_ordinal()};
+      auto maintained = maintenance_checkpoint_(origin);
       maintenance_error_ = maintained.has_value()
                                ? std::nullopt
                                : std::optional<Error>{maintained.error()};

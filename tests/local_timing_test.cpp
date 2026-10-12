@@ -512,7 +512,9 @@ void provider_owner_records(Provider::Mode mode) {
   ContextStore context{log};
   Provider provider{mode};
   // Runtime retains the borrowed producer until its VM closes after turn return.
-  Lane lane{{1024 * 1024, 1024 * 1024, 4096}};
+  // The provider's existing bounded codec lease prepays 16MiB before encoding.
+  // This borrowed lane has no recorder to reclaim its earlier published prefix.
+  Lane lane{{32 * 1024 * 1024, 1024 * 1024, 4096}};
   CodingEngine engine{log, context, provider, "test"};
   bool failed = false;
   {
@@ -528,41 +530,90 @@ void provider_owner_records(Provider::Mode mode) {
                    mode == Provider::Mode::invalid_response),
         "hook changed provider/import failure behavior");
   const auto events = records(lane);
-  std::vector<const Record *> prepared, dispatch, observed, begin, outcomes;
+  struct Phase {
+    const Record *record;
+    std::uint8_t kind;
+    std::optional<RawEventRef> parent;
+    std::optional<std::array<IdentityBytes, 3>> owner;
+  };
+  const auto read_ref = [](ByteView body, std::size_t &offset) {
+    const auto epoch = read<IdentityBytes>(body, offset);
+    return RawEventRef{epoch, read<std::uint64_t>(body, offset)};
+  };
+  const auto same_ref = [](RawEventRef a, RawEventRef b) {
+    return a.lane == b.lane && a.ordinal == b.ordinal;
+  };
+  std::vector<Phase> phases;
+  std::vector<const Record *> prepared, dispatch, observed, begin, links, outcomes,
+      decisions;
   for (const auto &event : events) {
-    if (event.site == 1200)
-      prepared.push_back(&event);
-    if (event.site == 1201)
-      dispatch.push_back(&event);
-    if (event.site == 1202)
-      observed.push_back(&event);
+    if (event.site == 1320) {
+      std::size_t offset = 0;
+      Phase phase{&event, read<std::uint8_t>(event.body, offset), {}, {}};
+      if (read<bool>(event.body, offset))
+        phase.parent = read_ref(event.body, offset);
+      if (read<bool>(event.body, offset)) {
+        std::array<IdentityBytes, 3> owner{};
+        for (auto &value : owner)
+          value = read<IdentityBytes>(event.body, offset);
+        phase.owner = owner;
+      }
+      check(offset == event.body.size(), "phase native fields changed");
+      if (phase.kind == 3)
+        dispatch.push_back(&event);
+      if (phase.kind == 9 && phase.parent)
+        observed.push_back(&event);
+      phases.push_back(phase);
+    }
+    if (event.site == 1322) {
+      std::size_t offset = 24;
+      if (read<std::uint8_t>(event.body, offset) == 1)
+        prepared.push_back(&event);
+    }
+    if (event.site == 1326)
+      decisions.push_back(&event);
     if (event.site == 1080)
       begin.push_back(&event);
+    if (event.site == 1083)
+      links.push_back(&event);
     if (event.site == 1084)
       outcomes.push_back(&event);
     check(event.site != 1, "owner hook ingestion failed");
   }
+  const auto phase_for = [&](const Record *record) -> const Phase & {
+    const auto found =
+        std::find_if(phases.begin(), phases.end(),
+                     [&](const Phase &phase) { return phase.record == record; });
+    check(found != phases.end(), "actual phase missing");
+    return *found;
+  };
+  const auto only_kind = [&](std::uint8_t kind) -> const Phase & {
+    check(std::count_if(phases.begin(), phases.end(),
+                        [&](const Phase &phase) { return phase.kind == kind; }) == 1,
+          "assembly/retry group cardinality changed");
+    return *std::find_if(phases.begin(), phases.end(),
+                         [&](const Phase &phase) { return phase.kind == kind; });
+  };
+  const auto &assembly = only_kind(1), &group = only_kind(2);
+  const RawEventRef assembly_ref{lane.epoch, assembly.record->ordinal};
+  const RawEventRef group_ref{lane.epoch, group.record->ordinal};
+  check(!assembly.parent && !assembly.owner && group.parent && !group.owner &&
+            same_ref(*group.parent, assembly_ref),
+        "request/retry group has fabricated owner or parent");
   const unsigned attempts =
       mode == Provider::Mode::retry || mode == Provider::Mode::failure ? 2 : 1;
-  if (prepared.size() != 1 || dispatch.size() != attempts || begin.size() != attempts ||
-      outcomes.size() != attempts || provider.calls != attempts)
-    std::cerr << "provider mode " << static_cast<int>(mode) << " prepared "
-              << prepared.size() << " dispatch " << dispatch.size() << " begin "
-              << begin.size() << " outcome " << outcomes.size() << " calls "
-              << provider.calls << '\n';
   check(prepared.size() == 1 && dispatch.size() == attempts &&
-            begin.size() == attempts && outcomes.size() == attempts &&
+            decisions.size() == attempts && begin.size() == attempts &&
+            links.size() == attempts && outcomes.size() == attempts &&
             provider.calls == attempts,
         "request/response owner event cardinality");
   check(observed.size() == (mode == Provider::Mode::failure ? 0U : 1U),
         "response observation fabricated/lost");
   std::size_t offset = 0;
-  const auto revision_size = read<std::size_t>(prepared[0]->body, offset);
-  check(revision_size <= prepared[0]->body.size() - offset, "revision overflow");
-  const std::string revision{
-      reinterpret_cast<const char *>(prepared[0]->body.data() + offset), revision_size};
-  offset += revision_size;
-  const auto generation = read<IdentityBytes>(prepared[0]->body, offset);
+  check(same_ref(read_ref(prepared[0]->body, offset), assembly_ref),
+        "prepared request lost actual assembly reference");
+  check(read<std::uint8_t>(prepared[0]->body, offset) == 1,
+        "prepared request role changed");
   const auto request_size = read<std::size_t>(prepared[0]->body, offset);
   const auto expected_request = take(encode_packet_string(provider.observed));
   check(request_size == expected_request.size() &&
@@ -571,20 +622,67 @@ void provider_owner_records(Provider::Mode mode) {
                        text_bytes(expected_request).end(),
                        prepared[0]->body.begin() + static_cast<std::ptrdiff_t>(offset)),
         "request hook altered product-owned native packet");
+  IdentityBytes generation{};
+  std::string revision;
+  unsigned generations = 0, revisions = 0;
+  for (const auto &event : events) {
+    if (event.site != 1323)
+      continue;
+    offset = 0;
+    const auto source = read_ref(event.body, offset);
+    const auto stage = read<std::uint8_t>(event.body, offset);
+    const auto variant = read<std::uint8_t>(event.body, offset);
+    if (!same_ref(source, assembly_ref) || stage != 15)
+      continue;
+    if (variant == 8) {
+      generation = read<IdentityBytes>(event.body, offset);
+      check(offset == event.body.size(), "generation native fields changed");
+      ++generations;
+    }
+    if (variant == 7) {
+      const auto size = read<std::size_t>(event.body, offset);
+      check(size <= event.body.size() - offset && offset + size == event.body.size(),
+            "revision overflow/native fields changed");
+      revision.assign(reinterpret_cast<const char *>(event.body.data() + offset), size);
+      ++revisions;
+    }
+  }
+  check(generations == 1 && revisions == 1 && !revision.empty(),
+        "request generation/context revision absent or duplicated");
   std::set<IdentityBytes> attempts_seen;
   for (unsigned index = 0; index < attempts; ++index) {
-    offset = 0;
-    const auto attempt = read<IdentityBytes>(dispatch[index]->body, offset);
-    const auto invocation = read<IdentityBytes>(dispatch[index]->body, offset);
-    check(read<IdentityBytes>(dispatch[index]->body, offset) == generation,
-          "dispatch generation linkage changed");
-    check(read<unsigned>(dispatch[index]->body, offset) == index + 1,
-          "dispatch retry ordinal changed");
+    const auto &phase = phase_for(dispatch[index]);
+    check(phase.parent && same_ref(*phase.parent, group_ref) && phase.owner,
+          "dispatch lost retry group or actual business owner");
+    const auto &owner = *phase.owner;
+    const auto &attempt = owner[0], &invocation = owner[1];
+    check(owner[2] == generation, "dispatch generation linkage changed");
     check(attempts_seen.insert(attempt).second, "retry reused owner attempt identity");
     const auto admission =
         take(root->attempt(take(OperationAttemptId::from_bytes(attempt))));
     check(admission.admission.invocation.bytes() == invocation,
           "dispatch identity does not reference actual retained attempt");
+    Bytes expected_link;
+    append(expected_link, begin[index]->ordinal);
+    append(expected_link, revision.size());
+    append_bytes(expected_link, text_bytes(revision));
+    append(expected_link, attempt.size());
+    append_bytes(expected_link, attempt);
+    check(links[index]->body == expected_link,
+          "transport lost actual retained owner/context linkage");
+    offset = 0;
+    check(same_ref(read_ref(decisions[index]->body, offset), group_ref),
+          "retry decision references wrong group");
+    check(read<unsigned>(decisions[index]->body, offset) == index + 1,
+          "dispatch retry ordinal changed");
+    check(same_ref(read_ref(decisions[index]->body, offset),
+                   {lane.epoch, dispatch[index]->ordinal}),
+          "retry decision references wrong actual attempt phase");
+    check(read<unsigned>(decisions[index]->body, offset) == 0,
+          "fixture retry delay changed");
+    check(read<bool>(decisions[index]->body, offset) == (index + 1 < attempts) &&
+              offset == decisions[index]->body.size(),
+          "retry eligibility/native fields changed");
     check(prepared[0]->ordinal < dispatch[index]->ordinal,
           "dispatch preceded prepared request");
     offset = 0;
@@ -592,26 +690,26 @@ void provider_owner_records(Provider::Mode mode) {
           "transport outcome references wrong region");
     const auto outcome = read<RawRegionOutcome>(outcomes[index]->body, offset);
     const bool returned = mode != Provider::Mode::failure && index + 1 == attempts;
-    check(outcome ==
-              (returned ? RawRegionOutcome::returned : RawRegionOutcome::exception),
+    check(outcome == (returned ? RawRegionOutcome::returned
+                               : RawRegionOutcome::exception) &&
+              offset == outcomes[index]->body.size(),
           "transport imported failure or exception as returned");
   }
   if (!observed.empty()) {
-    offset = 0;
-    const auto response_attempt = read<IdentityBytes>(observed[0]->body, offset);
-    const auto response_invocation = read<IdentityBytes>(observed[0]->body, offset);
-    check(read<IdentityBytes>(observed[0]->body, offset) == generation,
-          "response generation changed");
-    check(read<std::uint64_t>(observed[0]->body, offset) == begin.back()->ordinal,
-          "response observation lost transport reference");
+    const auto &receipt = phase_for(observed[0]);
+    const auto &dispatch_phase = phase_for(dispatch.back());
+    check(receipt.owner && receipt.owner == dispatch_phase.owner && receipt.parent &&
+              same_ref(*receipt.parent, {lane.epoch, dispatch.back()->ordinal}),
+          "response lost actual attempt/invocation/generation parent");
     const auto admission =
-        take(root->attempt(take(OperationAttemptId::from_bytes(response_attempt))));
-    check(response_invocation == admission.admission.invocation.bytes(),
+        take(root->attempt(take(OperationAttemptId::from_bytes((*receipt.owner)[0]))));
+    check((*receipt.owner)[1] == admission.admission.invocation.bytes(),
           "response observation lost retained source reference");
-    check(observed[0]->ordinal < outcomes.back()->ordinal,
+    check(dispatch.back()->ordinal < begin.back()->ordinal &&
+              begin.back()->ordinal < observed[0]->ordinal &&
+              observed[0]->ordinal < outcomes.back()->ordinal,
           "response observation was deferred until after outcome/import");
   }
-  check(!revision.empty(), "request context revision absent");
   check(lane.bytes(RawPartition::failure).empty(), "actual provider hook fenced");
 }
 } // namespace

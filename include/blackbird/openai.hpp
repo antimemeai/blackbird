@@ -1,5 +1,5 @@
 #pragma once
-#include "blackbird/raw_provider.hpp"
+#include "blackbird/provider_original.hpp"
 #include "blackbird/value.hpp"
 #include <filesystem>
 #include <functional>
@@ -16,6 +16,7 @@ struct OpenAiConfig {
   std::function<void(std::string_view)> response_observer;
   std::function<bool()> cancelled;
   const RawProviderOwner *raw_owner = nullptr;
+  const RawAdapterContext *raw_context = nullptr;
 };
 class OpenAiLogin {
 public:
@@ -50,12 +51,13 @@ struct TextPreview {
 // Presentation only: never publishes context or dispatches a streamed call.
 class ResponsePreview {
 public:
-  std::vector<TextPreview> feed(std::string_view bytes);
+  std::vector<TextPreview> feed(std::string_view bytes,
+                                const RawAdapterContext *context = nullptr);
 
 private:
   std::string pending_, data_;
   std::size_t bytes_ = 0;
 };
-Result<Value> completed_response(std::string_view event_stream,
-                                 ValueLimits limits = {});
+Result<Value> completed_response(std::string_view event_stream, ValueLimits limits = {},
+                                 const RawAdapterContext *context = nullptr);
 } // namespace blackbird

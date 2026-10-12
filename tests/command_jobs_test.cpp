@@ -1,10 +1,15 @@
 #include "blackbird/command_jobs.hpp"
+#include "blackbird/raw_command.hpp"
 #include "blackbird/tools.hpp"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <cstdarg>
+#include <dlfcn.h>
 #include <exception>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -22,6 +27,12 @@
 extern char **environ;
 using namespace blackbird;
 namespace {
+std::atomic<unsigned> resource_normalizations{0};
+std::atomic<int> resource_limit_error{0};
+std::atomic<bool> resource_descriptor_ready{false};
+std::atomic<int> resource_descriptor_result{0}, resource_descriptor_error{0};
+struct rlimit selected_resource_limit{};
+struct rlimit restored_resource_limit{};
 using Path = std::filesystem::path;
 void require(bool value, std::string_view claim) {
   if (!value)
@@ -41,6 +52,10 @@ struct Temporary {
     root = created;
   }
   ~Temporary() {
+    if (std::uncaught_exceptions()) {
+      std::cerr << "retained failed native fixture " << root << '\n';
+      return;
+    }
     std::error_code ignored;
     std::filesystem::remove_all(root, ignored);
   }
@@ -187,8 +202,28 @@ int resource_failure(const Fixture &settings) {
     require(::pipe(probe) == 0, "sanitizer has two descriptor slots before refusal");
     (void)::close(probe[0]);
     (void)::close(probe[1]);
+    bool predispatch_refused = false;
+    try {
+      RawCommandWake wake{RawCommandWake::Mode::one_shot};
+    } catch (const Error &error) {
+      predispatch_refused = error == Error{ErrorCode::io, EMFILE};
+    }
+    require(
+        predispatch_refused && !std::filesystem::exists(child.root / "launches"),
+        "native wake allocation refusal occurs before dispatch without child effects");
+    require(::setrlimit(RLIMIT_NOFILE, &original) == 0,
+            "restore capacity for native wake preparation");
+    selected_resource_limit = exhausted;
+    restored_resource_limit = original;
+    resource_normalizations.store(2);
     e.jobs.start(id, request);
     e.jobs.shutdown(); // Join and release temporary descriptors before observations.
+    require(resource_normalizations.load() == 0 && !resource_descriptor_ready.load() &&
+                resource_limit_error.load() == 0 &&
+                resource_descriptor_result.load() == -1 &&
+                resource_descriptor_error.load() == EMFILE,
+            "actual descriptor normalization fails under the real bound after both "
+            "wake endpoints");
     require(::setrlimit(RLIMIT_NOFILE, &original) == 0, "restore fd resource bound");
     const auto result = e.wait(id);
     require(result.find("error") != nullptr &&
@@ -237,6 +272,45 @@ void check_subprocess(const Path &test, const Fixture &child, std::string mode) 
           "independent " + mode + " child byte/endpoint oracle passes");
 }
 } // namespace
+extern "C" int fcntl(int descriptor, int command, ...) {
+  using Native = int (*)(int, int, ...);
+  static auto native = reinterpret_cast<Native>(::dlsym(RTLD_NEXT, "fcntl"));
+  if (!native)
+    std::abort();
+  const bool no_argument = command == F_GETFL || command == F_GETFD ||
+                           command == F_GETOWN
+#if defined(__APPLE__)
+                           || command == F_FULLFSYNC
+#endif
+      ;
+  int argument = 0;
+  if (!no_argument) {
+    va_list arguments;
+    va_start(arguments, command);
+    argument = va_arg(arguments, int);
+    va_end(arguments);
+  }
+  const bool selected = command == F_DUPFD_CLOEXEC && argument == 4 &&
+                        resource_descriptor_ready.exchange(false);
+  if (selected && ::setrlimit(RLIMIT_NOFILE, &selected_resource_limit) != 0)
+    resource_limit_error.store(errno);
+  const int result =
+      no_argument ? native(descriptor, command) : native(descriptor, command, argument);
+  const int error = errno;
+  if (selected) {
+    resource_descriptor_result.store(result);
+    resource_descriptor_error.store(error);
+    // Keep the genuine native refusal, then return descriptor headroom before
+    // C++ diagnostics whose memory probes themselves need a native pipe.
+    if (::setrlimit(RLIMIT_NOFILE, &restored_resource_limit) != 0)
+      resource_limit_error.store(errno);
+  }
+  if (command == F_SETFL && result == 0 && resource_normalizations.load() != 0 &&
+      resource_normalizations.fetch_sub(1) == 1)
+    resource_descriptor_ready.store(true);
+  errno = error;
+  return result;
+}
 int main(int argc, char **argv) {
   try {
     const auto test = std::filesystem::absolute(argv[0]);
@@ -309,7 +383,10 @@ int main(int argc, char **argv) {
     e.until(
         b, [&] { return std::filesystem::exists(terminal.root / "first-read"); },
         "PTY first line consumed");
-    require(contents(terminal.root / "first-read") == "hello", "first exact input");
+    const auto first_read = contents(terminal.root / "first-read");
+    require(first_read == "hello", "first exact input; observed " +
+                                       std::to_string(first_read.size()) + " bytes [" +
+                                       first_read + "]");
     (void)e.jobs.control(Value::object({{"op", Value{"resize"}},
                                         {"job_id", Value{b}},
                                         {"request_id", Value{"resize-once"}},

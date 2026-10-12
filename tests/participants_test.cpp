@@ -37,49 +37,52 @@ int main() {
     int first_calls = 0, total_calls = 0;
     bool alpha_release = false, beta_release = false;
     Participants pool{Value{},
-                      [&](std::string_view label, std::string_view raw, const Value &) {
+                      [&](const OriginalCapture &capture) {
+                        const auto label = capture.label, raw = capture.bytes;
                         check(std::this_thread::get_id() == owner && !label.empty() &&
                               !raw.empty());
                         if (label == "participant.admission")
                           admissions.emplace_back(raw);
+                        return std::optional<SourceReference>{};
                       },
                       [&](const Value &packet) {
                         check(std::this_thread::get_id() == owner);
                         saved = packet;
+                        return std::optional<ApplicationRecordId>{};
                       }};
-    const ParticipantTransport transport = [&](const Value &prepared,
-                                               const ColleagueCapture &capture,
-                                               const std::function<bool()> &cancelled) {
-      const auto &r = field(prepared, "request");
-      const auto who = string_field(r, "to");
-      const auto delivery = string_field(r, "request_id");
-      {
-        std::unique_lock lock{gate};
-        ++total_calls;
-        if (delivery == "initial") {
-          ++first_calls;
-          cv.notify_all();
-          const auto deadline =
-              std::chrono::steady_clock::now() + std::chrono::seconds{4};
-          check(cv.wait_until(lock, deadline, [&] {
-            return who == "alpha" ? alpha_release : beta_release;
-          }));
-        }
-      }
-      if (cancelled())
-        throw Error{ErrorCode::interrupted};
-      if (delivery != "initial")
-        check(string_field(r, "task").find("direction") != std::string::npos);
-      capture("raw", "captured provider bytes");
-      const auto text = Value::object(
-          {{"type", Value{"output_text"}}, {"text", Value{"answer:" + delivery}}});
-      const auto message = Value::object({{"type", Value{"message"}},
-                                          {"role", Value{"assistant"}},
-                                          {"content", Value{Value::Array{text}}}});
-      return Value::object({{"status", Value{"completed"}},
-                            {"model", Value{"actual"}},
-                            {"output", Value{Value::Array{message}}}});
-    };
+    const ParticipantTransport transport =
+        [&](const Value &prepared, const ColleagueCapture &capture,
+            const std::function<bool()> &cancelled, const RawAdapterContext *) {
+          const auto &r = field(prepared, "request");
+          const auto who = string_field(r, "to");
+          const auto delivery = string_field(r, "request_id");
+          {
+            std::unique_lock lock{gate};
+            ++total_calls;
+            if (delivery == "initial") {
+              ++first_calls;
+              cv.notify_all();
+              const auto deadline =
+                  std::chrono::steady_clock::now() + std::chrono::seconds{4};
+              check(cv.wait_until(lock, deadline, [&] {
+                return who == "alpha" ? alpha_release : beta_release;
+              }));
+            }
+          }
+          if (cancelled())
+            throw Error{ErrorCode::interrupted};
+          if (delivery != "initial")
+            check(string_field(r, "task").find("direction") != std::string::npos);
+          capture("raw", "captured provider bytes");
+          const auto text = Value::object(
+              {{"type", Value{"output_text"}}, {"text", Value{"answer:" + delivery}}});
+          const auto message = Value::object({{"type", Value{"message"}},
+                                              {"role", Value{"assistant"}},
+                                              {"content", Value{Value::Array{text}}}});
+          return Value::object({{"status", Value{"completed"}},
+                                {"model", Value{"actual"}},
+                                {"output", Value{Value::Array{message}}}});
+        };
     pool.start("r1", Value::object({{"request", request("alpha")}}), transport);
     pool.start("r2", Value::object({{"request", request("beta")}}), transport);
     {
@@ -140,9 +143,10 @@ int main() {
     check(string_field(field(rows[1], "result"), "text") == "answer:initial:d1" &&
           !pool.active());
     check(total_calls == 3); // Accepted beta directions were cancelled before dispatch.
-    Participants reopened{crash_snapshot,
-                          [](std::string_view, std::string_view, const Value &) {},
-                          [](const Value &) {}};
+    Participants reopened{
+        crash_snapshot,
+        [](const OriginalCapture &) { return std::optional<SourceReference>{}; },
+        [](const Value &) { return std::optional<ApplicationRecordId>{}; }};
     check(!reopened.active() &&
           string_field(reopened.read(args("r1")), "state") == "unknown");
     check(string_field(reopened.read(args("r2")), "state") == "unknown" &&
@@ -151,48 +155,55 @@ int main() {
     pool.configure(Value::object({{"concurrency", Value{Number{"3"}}}}));
     check(field(pool.read(), "runs").array().size() == 1);
     Participants bounded_capture{
-        Value{}, [](std::string_view, std::string_view, const Value &) {},
-        [](const Value &) {}};
+        Value{},
+        [](const OriginalCapture &) { return std::optional<SourceReference>{}; },
+        [](const Value &) { return std::optional<ApplicationRecordId>{}; }};
     bounded_capture.start(
         "large", Value::object({{"request", request("large")}}),
         [](const Value &, const ColleagueCapture &capture,
-           const std::function<bool()> &) -> Value {
-          capture("raw", std::string(9 * 1024 * 1024, 'x'));
-          throw Error{ErrorCode::corrupt}; // oversized capture must reject first
+           const std::function<bool()> &, const RawAdapterContext *) -> Value {
+          capture("raw", "synchronous preview");
+          throw Error{ErrorCode::capacity}; // actual acquired-source overflow covered
+                                            // in raw fixture
         });
     const auto large = bounded_capture.join(
         Value::object({{"run_ids", Value{Value::Array{Value{"large"}}}}}));
     check(string_field(field(large, "runs").array()[0], "state") == "unknown");
     Participants failed_snapshot{
-        Value{}, [](std::string_view, std::string_view, const Value &) {},
-        [](const Value &) { throw Error{ErrorCode::io}; }};
+        Value{},
+        [](const OriginalCapture &) { return std::optional<SourceReference>{}; },
+        [](const Value &) -> std::optional<ApplicationRecordId> {
+          throw Error{ErrorCode::io};
+        }};
     bool failed_before_launch = false;
     int launches = 0;
     try {
-      failed_snapshot.start(
-          "no-save", Value::object({{"request", request("no-save")}}),
-          [&](const Value &, const ColleagueCapture &, const std::function<bool()> &) {
-            ++launches;
-            return Value{};
-          });
+      failed_snapshot.start("no-save", Value::object({{"request", request("no-save")}}),
+                            [&](const Value &, const ColleagueCapture &,
+                                const std::function<bool()> &,
+                                const RawAdapterContext *) {
+                              ++launches;
+                              return Value{};
+                            });
     } catch (const Error &error) {
       failed_before_launch = error.code == ErrorCode::io;
     }
     check(failed_before_launch && !failed_snapshot.active() && launches == 0);
     int blocked_dispatches = 0;
-    Participants failed{Value{},
-                        [](std::string_view, std::string_view, const Value &) {
-                          throw Error{ErrorCode::io};
-                        },
-                        [](const Value &) {}};
+    Participants failed{
+        Value{},
+        [](const OriginalCapture &) -> std::optional<SourceReference> {
+          throw Error{ErrorCode::io};
+        },
+        [](const Value &) { return std::optional<ApplicationRecordId>{}; }};
     bool refused = false;
     try {
-      failed.start(
-          "blocked", Value::object({{"request", request("blocked")}}),
-          [&](const Value &, const ColleagueCapture &, const std::function<bool()> &) {
-            ++blocked_dispatches;
-            return Value{};
-          });
+      failed.start("blocked", Value::object({{"request", request("blocked")}}),
+                   [&](const Value &, const ColleagueCapture &,
+                       const std::function<bool()> &, const RawAdapterContext *) {
+                     ++blocked_dispatches;
+                     return Value{};
+                   });
     } catch (const Error &e) {
       refused = e.code == ErrorCode::io;
     }

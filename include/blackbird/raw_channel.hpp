@@ -4,8 +4,10 @@
 #include "blackbird/raw_format.hpp"
 
 #include <array>
+#include <atomic>
 #include <optional>
 #include <string_view>
+#include <sys/types.h>
 
 namespace blackbird {
 
@@ -29,6 +31,41 @@ Result<void> raw_send_notice(int endpoint);
 class RawProducer;
 class RawCapacityClaim;
 using RawControlClaim = RawCapacityClaim;
+
+// Prepared outside a signal handler. The native publication path calls only
+// lock-free atomics and POSIX memcpy/send; it has no standard-library wrappers.
+struct RawNativePart {
+  const void *bytes;
+  std::size_t size;
+};
+struct RawNativePublication {
+  std::uint64_t ordinal = 0;
+  Error error{};
+  Error notice_error{};
+  bool published = false;
+  bool notice_failed = false;
+};
+class RawNativePublisher {
+public:
+  RawNativePublication emit(std::uint32_t site, const RawNativePart *parts,
+                            std::size_t count) noexcept;
+
+private:
+  friend class RawProducer;
+  struct Record {
+    std::uint32_t length, site;
+    std::uint64_t ordinal;
+  };
+  RawNativePublication begin(const Record &record) noexcept;
+  RawNativePublication finish(const Record &record) noexcept;
+  unsigned char *ring_ = nullptr;
+  std::uint64_t capacity_ = 0;
+  std::uint64_t *published_ = nullptr, *ordinal_ = nullptr;
+  std::uint64_t *remaining_ = nullptr, *held_ = nullptr;
+  std::atomic<std::uint64_t> *publication_ = nullptr, *armed_ = nullptr;
+  int endpoint_ = -1;
+  ssize_t (*send_)(int, const void *, std::size_t, int) = nullptr;
+};
 
 // One execution owner publishes; one independently fenced recorder reclaims.
 // Mapping destruction only unmaps. Explicit unlink follows registered closure.
@@ -55,6 +92,9 @@ public:
   // Notification failure does not roll back D; inspect cursors before retrying.
   Result<void> acknowledge(RawPartition partition, std::uint64_t end,
                            int recorder_endpoint = -1);
+  // Only after every producer is fenced dead: validate/preserve the same event
+  // boundary, clear an obsolete space arm, and omit a wake to the dead producer.
+  Result<void> acknowledge_quiescent(RawPartition partition, std::uint64_t end);
   // Drain old notices BEFORE arming. After arming, recheck all publication
   // cursors; sleep only if empty, without draining again. Runtime also watches
   // producer death, covering death between publication and notice.
@@ -63,6 +103,7 @@ public:
 
 private:
   friend class RawProducer;
+  Result<bool> advance_acknowledgment(RawPartition partition, std::uint64_t end);
   RawChannel(void *mapping, std::size_t mapped_bytes)
       : mapping_(mapping), mapped_bytes_(mapped_bytes) {}
   void *mapping_ = nullptr;
@@ -124,6 +165,10 @@ public:
   Result<std::uint64_t> emit(std::uint32_t site_id, std::span<const ByteView> raw_parts,
                              RawPartition partition = RawPartition::data,
                              RawControlClaim *claim = nullptr);
+  // Owner retains the producer and credit through every native use. Preparation
+  // is ordinary owner work; emit on the returned POD view is signal-safe.
+  Result<RawNativePublisher> prepare_native(RawPartition partition,
+                                            RawControlClaim *claim = nullptr);
   std::optional<Error> notification_error() const noexcept { return notice_error_; }
   void clear_notification_error() noexcept { notice_error_.reset(); }
 

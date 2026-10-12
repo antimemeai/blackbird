@@ -229,7 +229,7 @@ ProviderHttpResponse http(const ProviderAuthConfig &c, const ProviderHttpRequest
   RawAuthExchange exchange{trace, {1609, 1610}};
   try {
     exchange.start(operation);
-    auto result = c.http ? c.http(r) : provider_http(r, c);
+    auto result = provider_http(r, c);
     exchange.returned(&result.status);
     return result;
   } catch (const Error &error) {

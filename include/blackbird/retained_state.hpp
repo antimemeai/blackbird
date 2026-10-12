@@ -8,6 +8,7 @@
 
 namespace blackbird {
 struct SavedState;
+struct RawEventRef;
 class ArchiveCatalog;
 struct RecordReference {
   AuditStreamId journal;
@@ -92,7 +93,8 @@ public:
     return directory_->expire_diagnostics(now);
   }
   std::weak_ptr<void> lifetime() const noexcept { return lifetime_; }
-  void set_maintenance_checkpoint(std::function<Result<void>()> checkpoint) {
+  void set_maintenance_checkpoint(
+      std::function<Result<void>(const RawEventRef &)> checkpoint) {
     maintenance_checkpoint_ = std::move(checkpoint);
   }
   const std::optional<Error> &maintenance_error() const noexcept {
@@ -219,7 +221,7 @@ private:
     bool previous_;
   };
   std::shared_ptr<void> lifetime_ = std::make_shared<int>(0);
-  std::function<Result<void>()> maintenance_checkpoint_;
+  std::function<Result<void>(const RawEventRef &)> maintenance_checkpoint_;
   std::optional<Error> maintenance_error_;
   std::uint64_t maintenance_retry_sequence_ = 0;
   bool checkpoint_running_ = false;

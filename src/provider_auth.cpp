@@ -331,7 +331,7 @@ ProviderHttpResponse http(const ProviderAuthConfig &c, const ProviderHttpRequest
   RawAuthExchange exchange{action, {1609, 1610}};
   try {
     exchange.start(operation);
-    auto result = c.http ? c.http(r) : provider_http(r, c);
+    auto result = provider_http(r, c);
     exchange.returned(&result.status);
     return result;
   } catch (const Error &error) {
@@ -428,26 +428,70 @@ void require_provider_success(int status) {
     throw Error{ErrorCode::external_unknown, status};
 }
 ProviderHttpResponse
-provider_http(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
-              const std::function<void(std::string_view)> &observer,
-              const RawProviderOwner *raw_owner, bool application,
-              const RawEventRef *auth_resolution) {
-  std::optional<RawProviderTrace> trace;
+provider_http_impl(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
+                   const std::function<void(std::string_view)> &observer,
+                   const RawProviderOwner *raw_owner, bool application,
+                   const RawEventRef *auth_resolution,
+                   const RawAdapterContext *raw_context, RawProviderPhase *phase,
+                   RawProviderTrace *bound_trace = nullptr) {
+  std::optional<RawProviderTrace> owned_trace;
+  RawProviderTrace *trace = bound_trace;
+  std::optional<RawProviderAcquisition> acquisition;
   std::optional<RawWaitScope> wait_scope;
   std::optional<detail::Clock::time_point> initial_deadline;
   try {
     if (application && r.timeout_seconds >= 1 && r.timeout_seconds <= 3600) {
       initial_deadline = detail::Clock::now() + std::chrono::seconds{r.timeout_seconds};
+      const auto inherited = raw_wait_control().deadline;
+      if (inherited && *inherited < *initial_deadline)
+        initial_deadline = inherited;
       auto control = raw_wait_control();
       control.deadline = initial_deadline;
       wait_scope.emplace(control);
     }
-    if (application)
-      trace.emplace(raw_owner, r.timeout_seconds, auth_resolution);
+    if (application && !trace) {
+      owned_trace.emplace(raw_owner, r.timeout_seconds, auth_resolution);
+      trace = &*owned_trace;
+    }
+    if (!bound_trace && trace && raw_context && raw_context->receipt &&
+        trace->reference().ordinal)
+      raw_context->receipt->request = trace->reference();
+    if (!bound_trace && trace && phase)
+      phase->link(trace->reference());
     https_url(r.url);
     if (r.timeout_seconds < 1 || r.timeout_seconds > 3600 ||
         r.body.size() > 16 * 1024 * 1024 || (r.method != "GET" && r.method != "POST"))
       throw Error{ErrorCode::invalid_range};
+    if (!bound_trace && trace)
+      trace->body(r.method, r.url,
+                  r.method == "POST" ? std::string_view{r.body} : std::string_view{});
+    if (c.http) {
+      if (phase)
+        acquisition.emplace(phase->split(provider_callback_credit));
+      ProviderOriginalLease source{
+          {ProviderOriginalRole::callback_body, ProviderOriginalMode::callback_extent,
+           16 * 1024 * 1024, "raw"},
+          trace ? trace->reference() : RawEventRef{},
+          application && raw_context ? raw_context->originals : nullptr,
+          application};
+      if (acquisition && trace) {
+        acquisition->start(trace->reference(), std::nullopt);
+        if (raw_context && raw_context->receipt && acquisition->reference().ordinal)
+          raw_context->receipt->response = acquisition->reference();
+      }
+      auto response = ProviderHttpResponseLease::borrow(source);
+      const int status = c.http(r, response);
+      if (acquisition)
+        acquisition->finish(1, nullptr, &status);
+      if (!source.committed())
+        throw Error{ErrorCode::conflict};
+      auto body = source.response_body();
+      if (observer)
+        observer(body);
+      if (trace)
+        trace->finish(1);
+      return {status, std::move(body)};
+    }
     std::string input =
         "url = " + quote(r.url) + "\nrequest = " + quote(r.method) + "\n";
     for (const auto &[k, v] : r.headers) {
@@ -457,15 +501,14 @@ provider_http(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
     }
     if (r.method == "POST")
       input += "data-binary = " + quote(r.body) + "\n";
-    if (trace)
-      trace->body(r.method, r.url,
-                  r.method == "POST" ? std::string_view{r.body} : std::string_view{});
     detail::Child child;
     child.cancelled = c.cancelled;
     child.deadline_error = {ErrorCode::provider_transport, 28};
     if (trace)
       child.raw_capture(trace->reference());
     child.output_observer = observer;
+    child.original_capture =
+        application && raw_context ? raw_context->originals : nullptr;
     child.start({c.curl_executable, "--disable", "--silent", "--no-buffer", "--proto",
                  "=https", "--max-time", std::to_string(r.timeout_seconds),
                  "--write-out", "\n%{http_code}", "--config", "-"});
@@ -476,7 +519,15 @@ provider_http(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
     child.send(input, deadline);
     child.close_input();
     int code = 0;
+    if (phase && trace) {
+      acquisition.emplace(phase->split(provider_native_acquisition_credit));
+      acquisition->start(trace->reference(), child.raw_reference());
+      if (raw_context && raw_context->receipt && acquisition->reference().ordinal)
+        raw_context->receipt->response = acquisition->reference();
+    }
     auto output = child.collect(deadline, 16 * 1024 * 1024, &code);
+    if (acquisition)
+      acquisition->finish(1);
     if (code != 0)
       throw Error{ErrorCode::provider_transport, code};
     const auto split = output.rfind('\n');
@@ -499,20 +550,73 @@ provider_http(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
         error.code == ErrorCode::interrupted && error.detail == ETIMEDOUT
             ? Error{ErrorCode::provider_transport, 28}
             : error;
+    if (acquisition)
+      acquisition->finish(2, &error);
     if (trace)
       trace->finish(2, 1, returned);
     throw returned;
   } catch (const std::bad_alloc &) {
+    if (acquisition)
+      acquisition->finish(3);
     if (trace)
       trace->finish(3, 1, {ErrorCode::allocation});
     throw;
   } catch (const std::length_error &) {
+    if (acquisition)
+      acquisition->finish(4);
     if (trace)
       trace->finish(4, 1, {ErrorCode::capacity});
     throw;
   } catch (...) {
+    if (acquisition)
+      acquisition->finish(5);
     if (trace)
       trace->finish(5, 1);
+    throw;
+  }
+}
+ProviderHttpResponse
+provider_http(const ProviderHttpRequest &request, const ProviderAuthConfig &config,
+              const std::function<void(std::string_view)> &observer,
+              const RawProviderOwner *raw_owner, bool application,
+              const RawEventRef *auth_resolution, const RawAdapterContext *context) {
+  std::optional<RawWaitScope> deadline_scope;
+  if (application && request.timeout_seconds >= 1 && request.timeout_seconds <= 3600) {
+    auto control = raw_wait_control();
+    control.deadline =
+        detail::Clock::now() + std::chrono::seconds{request.timeout_seconds};
+    deadline_scope.emplace(control);
+  }
+  std::optional<RawProviderPhase> phase;
+  if (application)
+    phase.emplace(provider_adapter_extra);
+  RawAdapterContext call = context ? *context : RawAdapterContext{};
+  if (raw_owner)
+    call.owner = raw_owner;
+  try {
+    if (phase)
+      phase->start(5, &call);
+    auto response =
+        provider_http_impl(request, config, observer, call.owner, application,
+                           auth_resolution, &call, phase ? &*phase : nullptr);
+    if (phase)
+      phase->finish(1);
+    return response;
+  } catch (const Error &error) {
+    if (phase)
+      phase->finish(2, &error);
+    throw;
+  } catch (const std::bad_alloc &) {
+    if (phase)
+      phase->finish(3);
+    throw;
+  } catch (const std::length_error &) {
+    if (phase)
+      phase->finish(4);
+    throw;
+  } catch (...) {
+    if (phase)
+      phase->finish(5);
     throw;
   }
 }
@@ -1236,193 +1340,243 @@ Value ProviderAuth::device_poll(std::string_view p, std::string_view a,
     throw;
   }
 }
-ProviderHttpResponse ProviderAuth::request(
-    std::string_view p, std::string_view route, const Value &body, int timeout_seconds,
-    const std::function<void(std::string_view)> &observer,
-    const Value *expected_binding, const RawProviderOwner *raw_owner) {
-  RawAuthTrace trace{RawAuthEntry{RawAuthAction::resolve_owned,
-                                  {p, {}},
-                                  nullptr,
-                                  nullptr,
-                                  expected_binding != nullptr}};
-  RawEventRef resolution;
-  std::string token, kind, base;
-  Value metadata;
+ProviderHttpResponse
+ProviderAuth::request(std::string_view p, std::string_view route, const Value &body,
+                      int timeout_seconds,
+                      const std::function<void(std::string_view)> &observer,
+                      const Value *expected_binding, const RawProviderOwner *raw_owner,
+                      const RawAdapterContext *raw_context) {
+  std::optional<RawWaitScope> deadline_scope;
+  if (timeout_seconds >= 1 && timeout_seconds <= 3600) {
+    auto control = raw_wait_control();
+    control.deadline = detail::Clock::now() + std::chrono::seconds{timeout_seconds};
+    deadline_scope.emplace(control);
+  }
+  RawProviderPhase adapter{provider_adapter_extra};
+  std::optional<RawProviderTrace> http_trace;
+  RawAdapterContext call = raw_context ? *raw_context : RawAdapterContext{};
+  if (raw_owner)
+    call.owner = raw_owner;
   try {
-    trace.start();
-    if (route != "responses" && route != "chat/completions" && route != "messages" &&
-        route != "models")
-      throw Error{ErrorCode::invalid_range};
-    {
-      Store s{config_, false};
-      const auto d = blackbird::descriptor(s, p);
-      base = str(d, "base_url");
-      const auto active = str(s.field("active"), p);
-      trace.selected_account(active);
-      if (expected_binding) {
-        const auto *record = s.account(p, active);
-        if (str(*expected_binding, "provider") != p ||
-            str(*expected_binding, "account") != active || ([&] {
-              trace.stage(RawAuthField::binding_expected_revision);
-              const auto expected = number(*expected_binding, "revision", -1);
-              trace.scalar(RawAuthField::binding_expected_revision, expected);
-              trace.stage(RawAuthField::binding_current_revision);
-              const auto current = record ? number(*record, "revision") : -1;
-              trace.scalar(RawAuthField::binding_current_revision, current);
-              return expected != current;
-            }()) ||
-            str(*expected_binding, "base_url") != base ||
-            str(*expected_binding, "protocol") != str(d, "protocol"))
-          throw Error{ErrorCode::conflict};
-      }
-      if (!active.empty()) {
-        auto *a = s.account(p, active);
-        if (!a)
-          throw Error{ErrorCode::provider_auth};
-        if (str(*a, "state", "ready") != "ready")
-          throw Error{ErrorCode::provider_auth};
-        kind = str(*a, "kind");
-        bool refresh = false;
-        if (kind == "oauth") {
-          trace.stage(RawAuthField::refresh_expiry);
-          const auto expiry = number(*a, "expires_at");
-          trace.scalar(RawAuthField::refresh_expiry, expiry);
-          trace.stage(RawAuthField::refresh_expiry_clock);
-          const auto clock = now(config_);
-          trace.scalar(RawAuthField::refresh_expiry_clock, clock);
-          refresh = expiry <= clock + 60;
-        }
-        if (refresh) {
-          trace.branch({1603, 1});
-          if (str(*a, "token_url") != str(d, "token_url"))
+    adapter.start(5, &call);
+    RawAuthTrace trace{RawAuthEntry{RawAuthAction::resolve_owned,
+                                    {p, {}},
+                                    nullptr,
+                                    nullptr,
+                                    expected_binding != nullptr}};
+    RawEventRef resolution;
+    std::string token, kind, base;
+    Value metadata;
+    try {
+      trace.start();
+      if (route != "responses" && route != "chat/completions" && route != "messages" &&
+          route != "models")
+        throw Error{ErrorCode::invalid_range};
+      {
+        Store s{config_, false};
+        const auto d = blackbird::descriptor(s, p);
+        base = str(d, "base_url");
+        const auto active = str(s.field("active"), p);
+        trace.selected_account(active);
+        if (expected_binding) {
+          const auto *record = s.account(p, active);
+          if (str(*expected_binding, "provider") != p ||
+              str(*expected_binding, "account") != active || ([&] {
+                trace.stage(RawAuthField::binding_expected_revision);
+                const auto expected = number(*expected_binding, "revision", -1);
+                trace.scalar(RawAuthField::binding_expected_revision, expected);
+                trace.stage(RawAuthField::binding_current_revision);
+                const auto current = record ? number(*record, "revision") : -1;
+                trace.scalar(RawAuthField::binding_current_revision, current);
+                return expected != current;
+              }()) ||
+              str(*expected_binding, "base_url") != base ||
+              str(*expected_binding, "protocol") != str(d, "protocol"))
             throw Error{ErrorCode::conflict};
-          trace.stage(RawAuthField::refresh_after);
-          const auto retry = number(*a, "refresh_after");
-          trace.scalar(RawAuthField::refresh_after, retry);
-          trace.stage(RawAuthField::refresh_retry_clock);
-          const auto retry_clock = now(config_);
-          trace.scalar(RawAuthField::refresh_retry_clock, retry_clock);
-          if (retry > retry_clock)
-            throw Error{ErrorCode::provider_rate_limit, -429};
-          ProviderHttpRequest r{
-              str(*a, "token_url"), "POST",
-              "grant_type=refresh_token&client_id=" + form(str(*a, "client_id")) +
-                  "&refresh_token=" + form(str(*a, "refresh")),
-              oauth_headers(p), 30};
-          if (p == "openai")
-            r.body += "&resource=https%3A%2F%2Fapi.openai.com%2Fv1";
-          if (p == "anthropic") {
-            r.headers = {{"Content-Type", "application/json"}};
-            r.body = unwrap(dump_json(
-                Value::object({{"grant_type", Value{"refresh_token"}},
-                               {"client_id", Value{str(*a, "client_id")}},
-                               {"refresh_token", Value{str(*a, "refresh")}}})));
-          }
-          ProviderHttpResponse reply;
-          try {
-            reply = http(config_, r, trace, 3);
-          } catch (...) {
-            put(*a, "state", Value{"refresh_unknown"});
-            trace.branch({1604, 2});
-            s.save(&trace);
-            throw;
-          }
-          if (reply.status == 429 || reply.status >= 500) {
-            trace.stage(RawAuthField::refresh_retry_clock);
-            const auto clock = now(config_);
-            trace.scalar(RawAuthField::refresh_retry_clock, clock);
-            const auto next = clock + 60;
-            trace.scalar(RawAuthField::refresh_next, next);
-            put(*a, "refresh_after", integer(next));
-            trace.branch({1604, 3});
-            s.save(&trace);
-            require_provider_success(reply.status);
-          }
-          if (reply.status < 200 || reply.status >= 300) {
-            put(*a, "state", Value{"reauthorize"});
-            trace.branch({1604, 4});
-            s.save(&trace);
-            throw Error{ErrorCode::provider_auth, -reply.status};
-          }
-          try {
-            const auto tokens = unwrap(parse_json(reply.body));
-            trace.stage(RawAuthField::token_clock);
-            const auto token_clock = now(config_);
-            trace.scalar(RawAuthField::token_clock, token_clock);
-            auto updated =
-                token_record(tokens, token_clock, str(*a, "refresh"), &trace);
-            if (!tokens.find("scope"))
-              put(updated, "scope", Value{str(*a, "scope")});
-            for (const auto k : {"provider", "account", "revision", "client_id",
-                                 "token_url", "metadata"})
-              if (const auto *v = a->find(k))
-                put(updated, k, *v);
-            *a = std::move(updated);
-            trace.branch({1604, 1});
-            s.save(&trace);
-          } catch (...) {
-            put(*a, "state", Value{"refresh_unknown"});
-            trace.branch({1604, 2});
-            s.save(&trace);
-            throw;
-          }
         }
-        token = str(*a, "access");
-        if (const auto *v = a->find("metadata"))
-          metadata = *v;
-      } else {
-        kind = "api_key";
-        const auto *env = std::getenv(str(d, "environment").c_str());
-        if (!env || !*env)
-          throw Error{ErrorCode::provider_auth};
-        token = env;
+        if (!active.empty()) {
+          auto *a = s.account(p, active);
+          if (!a)
+            throw Error{ErrorCode::provider_auth};
+          if (str(*a, "state", "ready") != "ready")
+            throw Error{ErrorCode::provider_auth};
+          kind = str(*a, "kind");
+          bool refresh = false;
+          if (kind == "oauth") {
+            trace.stage(RawAuthField::refresh_expiry);
+            const auto expiry = number(*a, "expires_at");
+            trace.scalar(RawAuthField::refresh_expiry, expiry);
+            trace.stage(RawAuthField::refresh_expiry_clock);
+            const auto clock = now(config_);
+            trace.scalar(RawAuthField::refresh_expiry_clock, clock);
+            refresh = expiry <= clock + 60;
+          }
+          if (refresh) {
+            trace.branch({1603, 1});
+            if (str(*a, "token_url") != str(d, "token_url"))
+              throw Error{ErrorCode::conflict};
+            trace.stage(RawAuthField::refresh_after);
+            const auto retry = number(*a, "refresh_after");
+            trace.scalar(RawAuthField::refresh_after, retry);
+            trace.stage(RawAuthField::refresh_retry_clock);
+            const auto retry_clock = now(config_);
+            trace.scalar(RawAuthField::refresh_retry_clock, retry_clock);
+            if (retry > retry_clock)
+              throw Error{ErrorCode::provider_rate_limit, -429};
+            ProviderHttpRequest r{
+                str(*a, "token_url"), "POST",
+                "grant_type=refresh_token&client_id=" + form(str(*a, "client_id")) +
+                    "&refresh_token=" + form(str(*a, "refresh")),
+                oauth_headers(p), 30};
+            if (p == "openai")
+              r.body += "&resource=https%3A%2F%2Fapi.openai.com%2Fv1";
+            if (p == "anthropic") {
+              r.headers = {{"Content-Type", "application/json"}};
+              r.body = unwrap(dump_json(
+                  Value::object({{"grant_type", Value{"refresh_token"}},
+                                 {"client_id", Value{str(*a, "client_id")}},
+                                 {"refresh_token", Value{str(*a, "refresh")}}})));
+            }
+            ProviderHttpResponse reply;
+            try {
+              reply = http(config_, r, trace, 3);
+            } catch (...) {
+              put(*a, "state", Value{"refresh_unknown"});
+              trace.branch({1604, 2});
+              s.save(&trace);
+              throw;
+            }
+            if (reply.status == 429 || reply.status >= 500) {
+              trace.stage(RawAuthField::refresh_retry_clock);
+              const auto clock = now(config_);
+              trace.scalar(RawAuthField::refresh_retry_clock, clock);
+              const auto next = clock + 60;
+              trace.scalar(RawAuthField::refresh_next, next);
+              put(*a, "refresh_after", integer(next));
+              trace.branch({1604, 3});
+              s.save(&trace);
+              require_provider_success(reply.status);
+            }
+            if (reply.status < 200 || reply.status >= 300) {
+              put(*a, "state", Value{"reauthorize"});
+              trace.branch({1604, 4});
+              s.save(&trace);
+              throw Error{ErrorCode::provider_auth, -reply.status};
+            }
+            try {
+              const auto tokens = unwrap(parse_json(reply.body));
+              trace.stage(RawAuthField::token_clock);
+              const auto token_clock = now(config_);
+              trace.scalar(RawAuthField::token_clock, token_clock);
+              auto updated =
+                  token_record(tokens, token_clock, str(*a, "refresh"), &trace);
+              if (!tokens.find("scope"))
+                put(updated, "scope", Value{str(*a, "scope")});
+              for (const auto k : {"provider", "account", "revision", "client_id",
+                                   "token_url", "metadata"})
+                if (const auto *v = a->find(k))
+                  put(updated, k, *v);
+              *a = std::move(updated);
+              trace.branch({1604, 1});
+              s.save(&trace);
+            } catch (...) {
+              put(*a, "state", Value{"refresh_unknown"});
+              trace.branch({1604, 2});
+              s.save(&trace);
+              throw;
+            }
+          }
+          token = str(*a, "access");
+          if (const auto *v = a->find("metadata"))
+            metadata = *v;
+        } else {
+          kind = "api_key";
+          const auto *env = std::getenv(str(d, "environment").c_str());
+          if (!env || !*env)
+            throw Error{ErrorCode::provider_auth};
+          token = env;
+        }
       }
+      secret(token);
+      trace.branch({1607, 1});
+      resolution = trace.reference();
+      trace.stage(109);
+      trace.finish(1);
+    } catch (const Error &error) {
+      trace.finish(2, &error);
+      throw;
+    } catch (const std::bad_alloc &) {
+      trace.finish(3);
+      throw;
+    } catch (const std::length_error &) {
+      trace.finish(4);
+      throw;
+    } catch (...) {
+      trace.finish(5);
+      throw;
     }
-    secret(token);
-    trace.branch({1607, 1});
-    resolution = trace.reference();
-    trace.stage(109);
-    trace.finish(1);
+    const std::string target = base + "/" + std::string{route};
+    const std::string method = route == "models" ? "GET" : "POST";
+    http_trace.emplace(call.owner, timeout_seconds, &resolution);
+    adapter.link(http_trace->reference());
+    adapter.link(resolution);
+    if (call.receipt && http_trace->reference().ordinal)
+      call.receipt->request = http_trace->reference();
+    std::optional<RawCapacityClaim> body_credit;
+    if (raw_enabled())
+      body_credit.emplace(unwrap(raw_claim_data(
+          (method == "POST" ? ValueLimits{}.bytes : 0) + raw_envelope_size + 24 +
+          3 * sizeof(std::size_t) + target.size() + method.size())));
+    std::string encoded = method == "POST" ? unwrap(dump_json(body)) : std::string{};
+    http_trace->body(method, target, encoded, body_credit ? &*body_credit : nullptr);
+    body_credit.reset();
+    ProviderHttpRequest r{target,
+                          method,
+                          std::move(encoded),
+                          {{"Content-Type", "application/json"}},
+                          timeout_seconds};
+    if ((p == "anthropic" || p == "kimi") && route == "messages") {
+      r.headers.emplace_back("anthropic-version", "2023-06-01");
+      if (kind == "api_key")
+        r.headers.emplace_back("x-api-key", token);
+      else
+        r.headers.emplace_back("Authorization", "Bearer " + token);
+      if (p == "anthropic" && kind == "oauth") {
+        r.headers.emplace_back("anthropic-beta",
+                               "oauth-2025-04-20,claude-code-20250219");
+        r.headers.emplace_back("User-Agent", "claude-cli/2.1.163 (external, cli)");
+        r.headers.emplace_back("x-app", "cli");
+      }
+      if (p == "kimi")
+        r.headers.emplace_back("User-Agent", "KimiCLI/blackbird-0.1");
+    } else
+      r.headers.emplace_back("Authorization", "Bearer " + token);
+    (void)metadata;
+    auto result = provider_http_impl(r, config_, observer, call.owner, true,
+                                     &resolution, &call, &adapter, &*http_trace);
+    require_provider_success(result.status);
+    adapter.finish(1);
+    return result;
   } catch (const Error &error) {
-    trace.finish(2, &error);
+    if (http_trace)
+      http_trace->finish(2, 1, error);
+    adapter.finish(2, &error);
     throw;
   } catch (const std::bad_alloc &) {
-    trace.finish(3);
+    if (http_trace)
+      http_trace->finish(3, 1, {ErrorCode::allocation});
+    adapter.finish(3);
     throw;
   } catch (const std::length_error &) {
-    trace.finish(4);
+    if (http_trace)
+      http_trace->finish(4, 1, {ErrorCode::capacity});
+    adapter.finish(4);
     throw;
   } catch (...) {
-    trace.finish(5);
+    if (http_trace)
+      http_trace->finish(5, 1);
+    adapter.finish(5);
     throw;
   }
-  ProviderHttpRequest r{base + "/" + std::string{route},
-                        route == "models" ? "GET" : "POST",
-                        unwrap(dump_json(body)),
-                        {{"Content-Type", "application/json"}},
-                        timeout_seconds};
-  if ((p == "anthropic" || p == "kimi") && route == "messages") {
-    r.headers.emplace_back("anthropic-version", "2023-06-01");
-    if (kind == "api_key")
-      r.headers.emplace_back("x-api-key", token);
-    else
-      r.headers.emplace_back("Authorization", "Bearer " + token);
-    if (p == "anthropic" && kind == "oauth") {
-      r.headers.emplace_back("anthropic-beta", "oauth-2025-04-20,claude-code-20250219");
-      r.headers.emplace_back("User-Agent", "claude-cli/2.1.163 (external, cli)");
-      r.headers.emplace_back("x-app", "cli");
-    }
-    if (p == "kimi")
-      r.headers.emplace_back("User-Agent", "KimiCLI/blackbird-0.1");
-  } else
-    r.headers.emplace_back("Authorization", "Bearer " + token);
-  (void)metadata;
-  auto result = config_.http
-                    ? config_.http(r)
-                    : provider_http(r, config_, observer, raw_owner, true, &resolution);
-  if (config_.http && observer)
-    observer(result.body);
-  require_provider_success(result.status);
-  return result;
 }
 } // namespace blackbird

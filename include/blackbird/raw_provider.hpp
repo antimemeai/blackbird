@@ -25,7 +25,8 @@ public:
   RawProviderTrace(const RawProviderTrace &) = delete;
   RawProviderTrace &operator=(const RawProviderTrace &) = delete;
   RawEventRef reference() const noexcept { return request_; }
-  void body(std::string_view method, std::string_view url, std::string_view bytes);
+  void body(std::string_view method, std::string_view url, std::string_view bytes,
+            RawCapacityClaim *credit = nullptr);
   void http(RawEventRef child, int status);
   void finish(std::uint8_t branch, std::uint8_t stage = 0, Error error = {}) noexcept;
 
@@ -43,6 +44,7 @@ inline ByteView raw_string_field(std::string_view value) noexcept {
 }
 struct RawNativePermit {
   std::optional<RawControlToken> control;
+  std::optional<RawCapacityClaim> data;
 };
 enum class RawReadChannel : std::uint8_t { stdout_pipe = 1, stderr_pipe = 2 };
 
@@ -64,8 +66,9 @@ public:
             int timeout, int result, short revents, int error) noexcept;
   void write(RawNativePermit &permit, std::size_t requested, ssize_t result,
              int error) noexcept;
-  void read(RawNativePermit &permit, std::uint8_t channel, std::size_t requested,
-            ssize_t result, int error, const char *bytes) noexcept;
+  std::optional<RawEventRef> read(RawNativePermit &permit, std::uint8_t channel,
+                                  std::size_t requested, ssize_t result, int error,
+                                  const char *bytes) noexcept;
   void wait(RawNativePermit &permit, const siginfo_t &observed, int result,
             int error) noexcept;
   void close(std::uint8_t channel, int fd, int result, int error) noexcept;

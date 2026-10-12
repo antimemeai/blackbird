@@ -583,8 +583,9 @@ participant plan attack in
 [participant plan attack](2026-10-11-participant-owner-raw-plan-attack.md). Both
 inherited-endpoint cancellation and mandatory-cleanup finding resolutions are now written above, including
 corrected native shutdown widths, whole banks and direct inherited-endpoint cuts. Parent finding
-acceptance and the completed-owner checkpoint still precede source release.
-No participant source is released and no second plan panel is requested.
+acceptance and checkpointad2c4e3 released the whole participant source unit.
+The candidate below remains subject to its ONE whole code/oracle attack and root
+profiles; no second plan panel is requested.
 
 Participant owner owns new raw_participants.hpp/cpp, participants.hpp/cpp,
 participants_raw_test, affected existing participant/recovery fixtures and this
@@ -596,3 +597,76 @@ files or implement two source leases. Root owns CMake/raw description integratio
 Coordinate CodingEngine constructor/start origin/callback changes and main
 shutdown linkage with command owner before editing common files; select named
 boundaries and format only owned ranges while another lane edits coding/main.
+
+
+## Implemented candidate and direct qualification, 2026-10-11
+
+The whole source unit is now written in raw_participants.hpp/cpp and
+participants.hpp/cpp. It uses the shared provider source lease, actual retained
+prepared requests, sixteen preallocated inbox ownership slots, staged receipt
+nodes and intrusive original nodes. Worker ticket claims remain on the worker;
+owner Retain/Save/cleanup claims remain on their actual owner lanes. Same-buffer
+emergency originals survive the8MiB crossing; initialized unknown-used extents
+remain unresolved debt and never undergo complete-response Retain or parsing.
+No fallback turns a borrowed ColleagueCapture preview into claimed byte custody.
+
+The native semantic dependency is the transferred narrow AuditLog overload:
+`original(preissued ApplicationRecordId,OriginalCapture)` returns optional actual
+SourceReference after acknowledgment. The existing string API stages its actual
+formatted identity before effects. Diagnostic-only provider.stream returns no
+physical SourceReference. Participant Retain borrows the existing
+`const OriginalCapture&`, not adjacent untyped label/bytes callback arguments;
+Save returns optional actual ApplicationRecordId. Both callbacks still execute
+only on the owner. Each original uses the existing one packet encode and append.
+
+CodingEngine's private operation callback carries the actual admitted attempt,
+invocation and immutable definition generation through Boundary into participant
+start/send. It does not substitute current generation after dispatch. Mandatory
+Participants::shutdown uses only each retained setup owner's706 credit, even
+for a business-finished worker still inside Publish. CodingEngine calls it FIRST,
+then separately drains only when the actual cancellation callback is absent/false
+and retained root is live. Owner END preserves actual pending debt; a later
+ordinary drain records its real resolution without retroactive END success.
+
+Two existing-API baselines genuinely failed on the checkpoint: acquired9MiB bytes
+were lost at the8MiB check, and stop after waiting left16 accepted directions
+queued without their dropped count. The missing native-original overload was a
+genuine compile red. Their exact commands/results remain under ignored
+context/participant-owner-next-unit. The candidate native fixture uses actual
+NativeJournalDirectory acknowledgment, ALL-allocation refusal after accepted
+cursor advancement, selected journal-inode pwrite EIO forwarding and the real
+diagnostic branch. It checks exact source bytes, actual IDs/references and one
+accepted source/record batch.
+
+The actual bounded ProviderAuth HTTP callback commits the independent9MiB
+00/ff/81/47 byte pattern. Closed-run reader checks every physical original byte,
+actual partition/range handoff and one successful semantic Retain after zero/one
+real Retain failure. The initialized unknown-used callback throws before commit;
+the same physical snapshot is checked and its semantic debt refuses Retain.
+The queue cut requires all16 distinct accepted offers to have one actual worker
+withdrawal before its own END, while the duplicate offer links its real receipt.
+Worker dispatch compares the exact retained prepared Value and actual native IDs.
+
+The cancellation cut stops the actual current recorder and supervisor, confirms
+their native stopped states, and holds a fork child SIGSTOP before exec with
+inherited socket aliases. It physically fills owner and worker ordinary CONTROL
+while held claims remain excluded, enters a forwarded real blocking poll on the
+worker's actual cancellation endpoint, then performs mandatory cleanup under the
+owner's already-ready cancellation scope. The worker sees interrupted admission
+and persistent EOF/readiness while the inherited child is still stopped. Exact
+shutdown arguments/native return/errno and linked worker/owner ENDs are checked;
+all test-owned holders/aliases are resumed or killed before mapping retirement.
+No timer or repeated wake write is introduced.
+
+Qualification corrections were fixture errors, not asserted source defects:
+ProviderAuth's real route is `responses` (not an HTTP path with a leading slash);
+source handoff has79 exact-used body bytes, not the conservative max88; only the
+worker may enter its waiting-Publish gate; and a capacity wait must request a
+possible grant after physically filling unheld capacity, not request an impossible
+whole-ring grant while lifetime credit is held. The direct mechanism replaced the
+bad cut. Mac debug participants/colleague-engine/native raw checks pass3/3 in7.85s
+(native raw6.10s). Changed-TU static checking is clean for the owned participant/helper/tests and
+narrow Original implementation. Its sole shared coding.cpp diagnostic is an
+unchecked optional in the provider-owned result block, returned to that owner
+for correction/recheck. Participant semantics are idle for the ONE parent
+code/oracle attack; supported root profiles/merge are later.

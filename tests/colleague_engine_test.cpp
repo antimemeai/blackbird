@@ -57,7 +57,8 @@ int main() {
     int dispatches = 0;
     bool unknown = false;
     engine.colleague_transport = [&](const Value &prepared,
-                                     const ColleagueCapture &capture) {
+                                     const ColleagueCapture &capture,
+                                     const RawAdapterContext *) {
       ++dispatches;
       const auto &prompt = field(prepared, "prompt").string();
       check(prompt.find("SELECTED_ONLY") != std::string::npos &&
@@ -88,11 +89,11 @@ int main() {
     check(string_field(engine.operator_call("colleague", invalid), "status") ==
               "refused" &&
           dispatches == 3);
-    engine.participant_transport = [&](const Value &prepared,
-                                       const ColleagueCapture &capture,
-                                       const std::function<bool()> &) {
-      return engine.colleague_transport(prepared, capture);
-    };
+    engine.participant_transport =
+        [&](const Value &prepared, const ColleagueCapture &capture,
+            const std::function<bool()> &, const RawAdapterContext *context) {
+          return engine.colleague_transport(prepared, capture, context);
+        };
     const auto task = engine.tasks().operator_command("add WORK_STAYS_QUEUED");
     const auto task_id = field(field(task, "changed").array()[0], "id");
     const auto start = engine.operator_call(
@@ -141,8 +142,8 @@ int main() {
       }
     }
     check(saw_unknown && saw_raw);
-    engine.colleague_transport = [&](const Value &,
-                                     const ColleagueCapture &capture) -> Value {
+    engine.colleague_transport = [&](const Value &, const ColleagueCapture &capture,
+                                     const RawAdapterContext *) -> Value {
       ++dispatches;
       capture("raw", "ACTUAL_DISPATCH_THEN_ALLOCATION");
       throw std::bad_alloc{};

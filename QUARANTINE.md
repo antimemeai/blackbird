@@ -721,6 +721,14 @@ preserved with raw measurements in [their report](papers/2026-10-10-raw-emission
 
 ## Native storage lock and close study, 2026-10-11
 
+The command-wake Linux finding also acquires unchanged glibc2.39 native
+`libc_sigaction.c` for x86_64 and its Linux shared implementation in
+`quarantine/command-wake-2026-10-11/`. Exact URLs/hashes/lengths are in
+[the manifest](papers/platform/command-wake-2026-10-11/glibc-sigaction.json).
+Restore each file by downloading its manifest URL to its manifest file path and
+checking SHA-256. These establish libc's restoration trampoline and native
+kernel-mask boundary; no glibc source is adopted or built.
+
 `quarantine/native-storage-2026-10-11/` preserves original Linux6.12 `fs/locks.c`
 and XNU `bsd/kern/kern_descrip.c` source files. Exact pinned URLs, byte lengths
 and SHA-256 hashes are in the
@@ -736,3 +744,30 @@ curl -fL https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/locks.c -o qu
 curl -fL https://raw.githubusercontent.com/apple-oss-distributions/xnu/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_descrip.c -o quarantine/native-storage-2026-10-11/xnu-kern_descrip.c
 shasum -a 256 quarantine/native-storage-2026-10-11/*.c
 ```
+
+## Native command wake — 2026-10-11
+
+Ignored `quarantine/command-wake-2026-10-11/` preserves source snapshots intact.
+No dependencies adopted. Restoration uses the direct immutable URLs below;
+SHA256 is recorded in the wake subplan. No nested Git metadata or build artifacts.
+
+```sh
+mkdir -p quarantine/command-wake-2026-10-11
+curl -fL https://raw.githubusercontent.com/torvalds/linux/v6.6/net/unix/af_unix.c -o quarantine/command-wake-2026-10-11/linux-unix.c
+curl -fL https://raw.githubusercontent.com/apple-oss-distributions/xnu/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/uipc_socket.c -o quarantine/command-wake-2026-10-11/xnu-socket.c
+curl -fL https://raw.githubusercontent.com/apple-oss-distributions/xnu/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/uipc_usrreq.c -o quarantine/command-wake-2026-10-11/xnu-unix.c
+```
+
+Primary POSIX.1-2017 signal safety table is acquired in
+`quarantine/command-wake-2026-10-11/posix-signal.html`. Exact source URL, hash and
+length are in [the manifest](papers/platform/command-wake-2026-10-11/posix-signal.json);
+restore by downloading its URL to its path and checking SHA-256.
+See [wake subplan](papers/2026-10-11-command-wake-raw-subplan.md)
+and [ONE plan attack](papers/2026-10-11-command-wake-raw-plan-attack.md).
+
+The same directory preserves LLVM18.1.3 UBSan dynamic-type and sanitizer native
+memory-probe sources. Exact immutable URLs, byte lengths and hashes are in
+[the source manifest](papers/platform/command-wake-2026-10-11/llvm-sanitizer.json).
+Restore each original by downloading its manifest URL to its manifest path and
+checking SHA-256. These explain the descriptor-exhaustion diagnostic failure;
+no source is built or adopted and no diagnostic is suppressed.

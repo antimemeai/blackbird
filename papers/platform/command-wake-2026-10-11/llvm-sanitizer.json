@@ -1,0 +1,26 @@
+[
+  {
+    "path": "quarantine/command-wake-2026-10-11/llvm-18.1.3-ubsan-type-hash.cpp",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.3/compiler-rt/lib/ubsan/ubsan_type_hash_itanium.cpp",
+    "sha256": "706ee880748f5fedc169c43c771ca944104dbd1583940e31e823b38d260e3ed2",
+    "bytes": 10043
+  },
+  {
+    "path": "quarantine/command-wake-2026-10-11/llvm-18.1.3-sanitizer-posix.cpp",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.3/compiler-rt/lib/sanitizer_common/sanitizer_posix.cpp",
+    "sha256": "87d762f4cba3dc565a1a7c9e800ee734cef55bde57f0f1828514a331104abefc",
+    "bytes": 12731
+  },
+  {
+    "path": "quarantine/command-wake-2026-10-11/llvm-18.1.3-sanitizer_posix_libcdep.cpp",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.3/compiler-rt/lib/sanitizer_common/sanitizer_posix_libcdep.cpp",
+    "sha256": "a8589cd7cdcef6b4dfd1a6ca9f966c5829f1088a9b809536a6a923e65a82ef95",
+    "bytes": 16478
+  },
+  {
+    "path": "quarantine/command-wake-2026-10-11/llvm-18.1.3-sanitizer_linux_libcdep.cpp",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.3/compiler-rt/lib/sanitizer_common/sanitizer_linux_libcdep.cpp",
+    "sha256": "bacf6e864385e4ddb9994334a8b15325cb3f9d5703cad9f415ec6c63836703b1",
+    "bytes": 36627
+  }
+]

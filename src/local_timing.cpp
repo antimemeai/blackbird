@@ -108,6 +108,7 @@ RawRegion::RawRegion(const RawRegionSites &sites, RawRegionOptions options)
   if (!emitted.has_value())
     throw emitted.error();
   begin_ = emitted.value();
+  epoch_ = raw_lane_epoch();
 }
 void RawRegion::observe(const RawRegionObservation &observation) {
   const RestoreErrno restore;

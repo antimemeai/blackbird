@@ -1,10 +1,18 @@
 #include "blackbird/colleague.hpp"
 #include "blackbird/tools.hpp"
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 #include <unistd.h>
 using namespace blackbird;
+int reply(ProviderHttpResponseLease &response, int status, std::string body) {
+  auto extent = response.prepare(body.size());
+  std::copy(body.begin(), body.end(), extent.begin());
+  response.commit(body.size());
+  return status;
+}
+
 void check(bool b, const char *why) {
   if (!b)
     throw std::runtime_error{why};
@@ -60,7 +68,8 @@ int main() {
     for (const std::string provider :
          {"kimi", "mimo", "openai", "anthropic", "grok", "openrouter"}) {
       auth.set_key(provider, "test", "private-key");
-      config.http = [&](const ProviderHttpRequest &wire) {
+      config.http = [&](const ProviderHttpRequest &wire,
+                        ProviderHttpResponseLease &response) {
         ++calls;
         check(wire.body.find("selected-source-only") != std::string::npos,
               "source missing");
@@ -74,25 +83,26 @@ int main() {
               "cross-provider routing");
         const auto protocol = d.find("protocol")->string();
         if (protocol == "responses")
-          return ProviderHttpResponse{
-              200,
+          return reply(
+              response, 200,
               "data: "
               "{\"type\":\"response.completed\",\"response\":{\"status\":\"completed\","
               "\"model\":\"observed\",\"output\":[{\"type\":\"message\",\"role\":"
               "\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":"
-              "\"answer\"}]}],\"usage\":{\"input_tokens\":1}}}\n\n"};
+              "\"answer\"}]}],\"usage\":{\"input_tokens\":1}}}\n\n");
         if (protocol == "messages")
-          return ProviderHttpResponse{
-              200,
-              R"({"type":"message","model":"observed","stop_reason":"end_turn","content":[{"type":"thinking","thinking":"opaque"},{"type":"text","text":"answer"}],"usage":{"input_tokens":1}})"};
-        return ProviderHttpResponse{
-            200,
-            R"({"model":"observed","choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"answer"}}],"usage":{"prompt_tokens":1}})"};
+          return reply(
+              response, 200,
+              R"({"type":"message","model":"observed","stop_reason":"end_turn","content":[{"type":"thinking","thinking":"opaque"},{"type":"text","text":"answer"}],"usage":{"input_tokens":1}})");
+        return reply(
+            response, 200,
+            R"({"model":"observed","choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"answer"}}],"usage":{"prompt_tokens":1}})");
       };
       const auto reply = call_colleague(
           make(provider), capture,
-          [&](const Value &prepared, const ColleagueCapture &sink) {
-            return native_colleague_transport(prepared, sink, {}, &config);
+          [&](const Value &prepared, const ColleagueCapture &sink,
+              const RawAdapterContext *context) {
+            return native_colleague_transport(prepared, sink, {}, &config, context);
           });
       check(reply.find("status")->string() == "completed", "native colleague failed");
       check(reply.find("text")->string() == "answer", "wrong native text");
@@ -100,14 +110,16 @@ int main() {
     }
     check(calls == 6, "extra dispatch");
     for (const int status : {401, 403, 429}) {
-      config.http = [&](const ProviderHttpRequest &) {
+      config.http = [&](const ProviderHttpRequest &,
+                        ProviderHttpResponseLease &response) {
         ++calls;
-        return ProviderHttpResponse{status, R"({"error":"rejected"})"};
+        return reply(response, status, R"({"error":"rejected"})");
       };
       const auto reply = call_colleague(
           make("mimo"), capture,
-          [&](const Value &prepared, const ColleagueCapture &sink) {
-            return native_colleague_transport(prepared, sink, {}, &config);
+          [&](const Value &prepared, const ColleagueCapture &sink,
+              const RawAdapterContext *context) {
+            return native_colleague_transport(prepared, sink, {}, &config, context);
           });
       check(reply.find("status")->string() == "failed", "auth rejection unknown");
       check(reply.find("remote_disposition")->string() == "reported_failure",
@@ -123,12 +135,16 @@ int main() {
       check(e.code == ErrorCode::conflict, "account change wrong failure");
     }
     check(calls == before, "dispatch after account change");
-    config.http = [](const ProviderHttpRequest &) -> ProviderHttpResponse {
+    config.http = [](const ProviderHttpRequest &,
+                     ProviderHttpResponseLease &response) -> int {
+      (void)response;
       throw Error{ErrorCode::provider_transport, 28};
     };
     const auto timeout = call_colleague(
-        make("mimo"), capture, [&](const Value &p, const ColleagueCapture &sink) {
-          return native_colleague_transport(p, sink, {}, &config);
+        make("mimo"), capture,
+        [&](const Value &p, const ColleagueCapture &sink,
+            const RawAdapterContext *context) {
+          return native_colleague_transport(p, sink, {}, &config, context);
         });
     check(timeout.find("remote_disposition")->string() == "unknown",
           "timeout treated as auth rejection");

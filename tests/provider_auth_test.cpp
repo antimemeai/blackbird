@@ -1,6 +1,7 @@
 #include "blackbird/json.hpp"
 #include "blackbird/provider_auth.hpp"
 #include "blackbird/tools.hpp"
+#include <algorithm>
 #include <atomic>
 #include <fcntl.h>
 #include <filesystem>
@@ -12,6 +13,13 @@
 #include <thread>
 #include <unistd.h>
 using namespace blackbird;
+int reply(ProviderHttpResponseLease &response, int status, std::string body) {
+  auto extent = response.prepare(body.size());
+  std::copy(body.begin(), body.end(), extent.begin());
+  response.commit(body.size());
+  return status;
+}
+
 void check(bool b, const char *what) {
   if (!b)
     throw std::runtime_error{what};
@@ -41,13 +49,14 @@ int main() {
     ProviderAuthConfig config;
     config.directory = root;
     config.now = [&] { return clock.load(); };
-    config.http = [&](const ProviderHttpRequest &r) {
+    config.http = [&](const ProviderHttpRequest &r,
+                      ProviderHttpResponseLease &response) {
       check(r.url.starts_with("https://"), "insecure URL");
       if (r.url.find("oauth/token") != std::string::npos) {
         ++refreshes;
         check(r.body.find("refresh_token=rotated-secret") != std::string::npos,
               "wrong refresh token");
-        return ProviderHttpResponse{200, unwrap(dump_json(tokens()))};
+        return reply(response, 200, unwrap(dump_json(tokens())));
       }
       ++requests;
       bool found = false;
@@ -55,7 +64,7 @@ int main() {
         if (k == "Authorization")
           found = v == "Bearer new-secret" || v == "Bearer api-secret";
       check(found, "incorrect credential header");
-      return ProviderHttpResponse{200, "{\"ok\":true}"};
+      return reply(response, 200, "{\"ok\":true}");
     };
     ProviderAuth auth{config};
     check(!auth.selected("openai"), "selected missing");
@@ -115,13 +124,14 @@ int main() {
         ErrorCode::corrupt);
     check(auth.status().find("accounts")->array().size() == 3,
           "partial token record committed");
-    config.http = [&](const ProviderHttpRequest &r) {
+    config.http = [&](const ProviderHttpRequest &r,
+                      ProviderHttpResponseLease &response) {
       if (r.url.ends_with("device_authorization"))
-        return ProviderHttpResponse{
-            200,
-            R"({"device_code":"private-device","user_code":"CODE","verification_uri":"https://auth.kimi.com/device","verification_uri_complete":"https://auth.kimi.com/device?code=CODE","expires_in":30,"interval":2})"};
+        return reply(
+            response, 200,
+            R"({"device_code":"private-device","user_code":"CODE","verification_uri":"https://auth.kimi.com/device","verification_uri_complete":"https://auth.kimi.com/device?code=CODE","expires_in":30,"interval":2})");
       ++requests;
-      return ProviderHttpResponse{400, R"({"error":"slow_down"})"};
+      return reply(response, 400, R"({"error":"slow_down"})");
     };
     ProviderAuth device{config};
     const auto public_device = unwrap(dump_json(device.device_begin("kimi", "code")));
@@ -154,16 +164,17 @@ int main() {
     auto process_config = config;
     process_config.directory = std::filesystem::path{tmp} / "process-auth";
     const auto count_file = std::filesystem::path{tmp} / "refresh-count";
-    process_config.http = [&](const ProviderHttpRequest &r) {
+    process_config.http = [&](const ProviderHttpRequest &r,
+                              ProviderHttpResponseLease &response) {
       if (r.url.find("oauth/token") != std::string::npos) {
         const int fd = ::open(count_file.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0600);
         check(fd >= 0, "counter open");
         check(::write(fd, "1", 1) == 1, "counter write");
         (void)::close(fd);
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
-        return ProviderHttpResponse{200, unwrap(dump_json(tokens()))};
+        return reply(response, 200, unwrap(dump_json(tokens())));
       }
-      return ProviderHttpResponse{200, "{}"};
+      return reply(response, 200, "{}");
     };
     ProviderAuth process_auth{process_config};
     process_auth.save_oauth("openai", "work", tokens(), "issued",

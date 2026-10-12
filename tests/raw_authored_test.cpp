@@ -24,6 +24,7 @@ lua_Number __real_lua_tonumberx(lua_State *, int, int *);
 #include <fcntl.h>
 #include <limits>
 #include <poll.h>
+#include <source_location>
 #include <thread>
 #if defined(__APPLE__)
 #include <libproc.h>
@@ -44,7 +45,13 @@ void check(bool good, int line) {
   }
 }
 #define CHECK(...) check((__VA_ARGS__), __LINE__)
-template <class T> T take(Result<T> result) {
+template <class T>
+T take(Result<T> result,
+       std::source_location location = std::source_location::current()) {
+  if (!result.has_value())
+    std::fprintf(stderr, "raw_authored native error:%s:%lld at %u\n",
+                 error_name(result.error().code),
+                 static_cast<long long>(result.error().detail), location.line());
   CHECK(result.has_value());
   return std::move(result).value();
 }
@@ -253,9 +260,20 @@ std::vector<AuthoredRecord> records(const Directory &directory) {
       (std::filesystem::path{directory.name.data()} / "raw" / entries[0].name)
           .string()));
   CHECK(reader->snapshot().closed);
-  std::array<std::byte, 65536> buffer{};
+  std::vector<std::byte> buffer(65536);
   std::vector<AuthoredRecord> out;
-  while (const auto record = take(reader->read(buffer))) {
+  for (;;) {
+    auto result = reader->read(buffer);
+    if (!result.has_value() && result.error().code == ErrorCode::capacity) {
+      // The rejected 4MiB+1 turn source is preserved as 1902 (64-byte prefix).
+      // A refused read keeps its cursor; retry the same original, without skip.
+      CHECK(buffer.size() == 65536);
+      buffer.resize(4 * 1024 * 1024 + 65);
+      result = reader->read(buffer);
+    }
+    const auto record = take(std::move(result));
+    if (!record)
+      break;
     const auto site = field<std::uint32_t>(record->raw, 4);
     if (site >= 1500 && site <= 1599)
       out.push_back({site,
@@ -317,7 +335,9 @@ assert(not pcall(blackbird.emit,20,string.rep('x',32768)));return true
   {
     auto runtime = take(RawRuntime::open(fixture.directory.name.data(),
                                          identity<EnvironmentId>(51),
-                                         {{32768, 4096, 4096}, 4096}));
+                                         // Turn/Context cleanup prepays 10544;
+                                         // keep the authored DATA refusal at 32768.
+                                         {{32768, 32768, 4096}, 4096}));
     RawThreadBinding binding{take(runtime->prepare_thread())};
     native_number_count = 0;
     observe_numbers.store(true);
@@ -623,7 +643,8 @@ void finalizers(bool warnings) {
   LuaFixture fixture;
   std::array<int, 2> stop{}, notice{};
   CHECK(::pipe(stop.data()) == 0 && ::pipe(notice.data()) == 0);
-  constexpr RawCapacities capacity{32768, 8192, 4096};
+  // The real turn also holds its Context/terminal bank before the full-DATA cut.
+  constexpr RawCapacities capacity{32768, 32768, 4096};
   auto runtime = take(RawRuntime::open(fixture.directory.name.data(),
                                        identity<EnvironmentId>(51), {capacity, 4096}));
   auto original = take(runtime->prepare_thread()),

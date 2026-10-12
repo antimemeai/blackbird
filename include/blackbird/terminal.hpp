@@ -111,7 +111,7 @@ public:
            std::filesystem::path state_path = {},
            const std::function<void()> &idle_work = {},
            std::shared_ptr<CommandJobs> commands = {}, int interrupt_fd = -1,
-           const std::function<void()> &reset_interrupt = {});
+           const std::function<Result<void>()> &reset_interrupt = {});
 
 private:
   enum class Kind {

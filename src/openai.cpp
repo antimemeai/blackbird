@@ -29,6 +29,11 @@ namespace {
 }
 using detail::Child;
 using detail::Clock;
+template <class T> T own_value(Result<T> result) {
+  if (!result.has_value())
+    throw result.error();
+  return std::move(result).value();
+}
 const std::string *text(const Value *j) {
   return j == nullptr ? nullptr : std::get_if<std::string>(&j->value());
 }
@@ -245,8 +250,22 @@ Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh) {
 Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &login,
                                 std::string_view route, const Value *request) {
   std::optional<RawProviderTrace> trace;
+  std::optional<RawProviderPhase> adapter;
+  std::optional<RawProviderAcquisition> acquisition;
+  RawAdapterContext call =
+      config.raw_context ? *config.raw_context : RawAdapterContext{};
+  if (config.raw_owner)
+    call.owner = config.raw_owner;
   std::optional<RawWaitScope> wait_scope;
   try {
+    const auto deadline = Clock::now() + std::chrono::seconds{config.timeout_seconds};
+    if (config.timeout_seconds >= 1 && config.timeout_seconds <= 3600) {
+      auto control = raw_wait_control();
+      control.deadline = deadline;
+      wait_scope.emplace(control);
+    }
+    adapter.emplace(provider_adapter_extra);
+    adapter->start(5, &call);
     if (login.owned_auth_) {
       ProviderAuthConfig owned;
       owned.curl_executable = config.curl_executable;
@@ -256,22 +275,37 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
         throw Error{ErrorCode::unsupported};
       const auto response = auth.request(
           "openai", route, request ? *request : Value::object({}),
-          config.timeout_seconds, config.response_observer, nullptr, config.raw_owner);
+          config.timeout_seconds, config.response_observer, nullptr, call.owner, &call);
+      adapter->finish(1);
       return Result<std::string>::success(response.body);
     }
     if (config.timeout_seconds <= 0 || config.timeout_seconds > 3600) {
-      trace.emplace(config.raw_owner, config.timeout_seconds, &login.resolution_);
+      trace.emplace(call.owner, config.timeout_seconds, &login.resolution_);
       fail(ErrorCode::invalid_range);
     }
-    const auto deadline = Clock::now() + std::chrono::seconds{config.timeout_seconds};
-    auto control = raw_wait_control();
-    control.deadline = deadline;
-    wait_scope.emplace(control);
-    trace.emplace(config.raw_owner, config.timeout_seconds, &login.resolution_);
+    trace.emplace(call.owner, config.timeout_seconds, &login.resolution_);
+    adapter->link(trace->reference());
+    if (call.receipt && trace->reference().ordinal)
+      call.receipt->request = trace->reference();
     if (route != "responses" && route != "models?client_version=0.160.0")
       fail(ErrorCode::invalid_range);
     const std::string target_url =
         "https://chatgpt.com/backend-api/codex/" + std::string{route};
+    std::string encoded_body;
+    std::optional<RawCapacityClaim> body_credit;
+    if (request != nullptr) {
+      if (raw_enabled())
+        body_credit.emplace(own_value(raw_claim_data(
+            ValueLimits{}.bytes + raw_envelope_size + 24 + 3 * sizeof(std::size_t) +
+            sizeof("POST") - 1 + target_url.size())));
+      auto encoded = dump_json(export_provider_request(*request));
+      if (!encoded.has_value())
+        throw encoded.error();
+      encoded_body = std::move(encoded).value();
+    }
+    trace->body(request ? "POST" : "GET", target_url, encoded_body,
+                body_credit ? &*body_credit : nullptr);
+    body_credit.reset();
     std::string input = "url = " + config_quote(target_url) + "\n";
     input +=
         "header = " + config_quote("Authorization: Bearer " + login.access_token_) +
@@ -280,19 +314,13 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
         "header = " + config_quote("ChatGPT-Account-ID: " + login.account_id_) + "\n";
     input += "header = \"Content-Type: application/json\"\nheader = \"originator: "
              "blackbird\"\n";
-    std::string encoded_body;
-    if (request != nullptr) {
-      auto encoded = dump_json(export_provider_request(*request));
-      if (!encoded.has_value())
-        throw encoded.error();
-      input += "data-binary = " + config_quote(encoded.value()) + "\n";
-      encoded_body = std::move(encoded).value();
-    }
-    trace->body(request ? "POST" : "GET", target_url, encoded_body);
+    if (request)
+      input += "data-binary = " + config_quote(encoded_body) + "\n";
     Child child;
     child.deadline_error = {ErrorCode::provider_transport, 28};
     child.raw_capture(trace->reference());
     child.output_observer = config.response_observer;
+    child.original_capture = call.originals;
     child.cancelled = config.cancelled;
     // --disable is first: do not load curlrc; no redirects, retries or verbose secret
     // output.
@@ -302,7 +330,12 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
     child.send(input, deadline);
     child.close_input();
     int curl_exit = 0;
+    acquisition.emplace(adapter->split(provider_native_acquisition_credit));
+    acquisition->start(trace->reference(), child.raw_reference());
+    if (call.receipt && acquisition->reference().ordinal)
+      call.receipt->response = acquisition->reference();
     auto output = child.collect(deadline, config.response_limit, &curl_exit);
+    acquisition->finish(1);
     if (curl_exit != 0)
       fail(ErrorCode::provider_transport, curl_exit);
     const auto separator = output.rfind('\n');
@@ -319,72 +352,119 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
       fail(ErrorCode::external_unknown, status);
     output.resize(separator);
     trace->finish(1);
+    adapter->finish(1);
     return Result<std::string>::success(std::move(output));
   } catch (const Error &e) {
     const Error returned = e.code == ErrorCode::interrupted && e.detail == ETIMEDOUT
                                ? Error{ErrorCode::provider_transport, 28}
                                : e;
+    if (acquisition)
+      acquisition->finish(2, &e);
+    if (adapter)
+      adapter->finish(2, &returned);
     if (trace)
       trace->finish(2, 1, returned);
     return Result<std::string>::failure(returned);
   } catch (const std::bad_alloc &) {
+    if (acquisition)
+      acquisition->finish(3);
+    if (adapter)
+      adapter->finish(3);
     if (trace)
       trace->finish(3, 1, {ErrorCode::allocation});
     return Result<std::string>::failure({ErrorCode::allocation});
   } catch (const std::length_error &) {
+    if (acquisition)
+      acquisition->finish(4);
+    if (adapter)
+      adapter->finish(4);
     if (trace)
       trace->finish(4, 1, {ErrorCode::capacity});
     return Result<std::string>::failure({ErrorCode::capacity});
   } catch (...) {
+    if (acquisition)
+      acquisition->finish(5);
+    if (adapter)
+      adapter->finish(5);
     if (trace)
       trace->finish(5, 1);
     throw;
   }
 }
-std::vector<TextPreview> ResponsePreview::feed(std::string_view bytes) {
-  if (bytes.size() > 16 * 1024 * 1024 - bytes_)
-    fail(ErrorCode::capacity);
-  bytes_ += bytes.size();
-  pending_.append(bytes);
-  std::vector<TextPreview> output;
-  std::size_t consumed = 0;
-  while (true) {
-    const auto end = pending_.find('\n', consumed);
-    if (end == std::string::npos)
-      break;
-    auto line = std::string_view{pending_}.substr(consumed, end - consumed);
-    consumed = end + 1;
-    if (!line.empty() && line.back() == '\r')
-      line.remove_suffix(1);
-    if (line.empty()) {
-      if (!data_.empty()) {
-        auto packet = parse_json(data_);
-        if (!packet.has_value())
-          throw packet.error();
-        const auto *type = packet.value().find("type");
-        if (type && std::holds_alternative<std::string>(type->value()) &&
-            type->string() == "response.output_text.delta") {
-          const auto *item = packet.value().find("item_id");
-          if (item && std::holds_alternative<std::string>(item->value()) &&
-              !item->string().empty())
-            output.push_back({item->string(), required(packet.value(), "delta")});
+std::vector<TextPreview> ResponsePreview::feed(std::string_view bytes,
+                                               const RawAdapterContext *context) {
+  RawProviderPhase phase{provider_link_credit};
+  return phase.run([&] {
+    phase.start(7, context);
+    if (context && context->receipt && context->receipt->response)
+      phase.link(*context->receipt->response);
+    phase.stage(60);
+    if (bytes.size() > 16 * 1024 * 1024 - bytes_)
+      fail(ErrorCode::capacity);
+    bytes_ += bytes.size();
+    phase.stage(61);
+    pending_.append(bytes);
+    std::vector<TextPreview> output;
+    std::size_t consumed = 0;
+    while (true) {
+      const auto end = pending_.find('\n', consumed);
+      if (end == std::string::npos)
+        break;
+      auto line = std::string_view{pending_}.substr(consumed, end - consumed);
+      consumed = end + 1;
+      if (!line.empty() && line.back() == '\r')
+        line.remove_suffix(1);
+      if (line.empty()) {
+        if (!data_.empty()) {
+          RawProviderPhase event_phase{provider_scalar_credit};
+          RawAdapterContext event_context{nullptr, phase.reference(), nullptr, nullptr};
+          event_phase.run([&] {
+            event_phase.start(14, &event_context);
+            event_phase.stage(62);
+            auto packet = parse_json(data_);
+            if (!packet.has_value())
+              throw packet.error();
+            event_phase.stage(63);
+            const auto *type = packet.value().find("type");
+            if (type && std::holds_alternative<std::string>(type->value()) &&
+                type->string() == "response.output_text.delta") {
+              const auto *item = packet.value().find("item_id");
+              if (item && std::holds_alternative<std::string>(item->value()) &&
+                  !item->string().empty()) {
+                event_phase.stage(64);
+                event_phase.scalar(64, 0);
+                output.push_back({item->string(), required(packet.value(), "delta")});
+              } else
+                event_phase.scalar(63, 0);
+            } else
+              event_phase.scalar(63, 0);
+            data_.clear();
+          });
         }
-        data_.clear();
+      } else if (line.starts_with("data:")) {
+        line.remove_prefix(5);
+        if (!line.empty() && line.front() == ' ')
+          line.remove_prefix(1);
+        if (!data_.empty())
+          data_ += '\n';
+        data_.append(line);
       }
-    } else if (line.starts_with("data:")) {
-      line.remove_prefix(5);
-      if (!line.empty() && line.front() == ' ')
-        line.remove_prefix(1);
-      if (!data_.empty())
-        data_ += '\n';
-      data_.append(line);
     }
-  }
-  pending_.erase(0, consumed);
-  return output;
+    phase.stage(66);
+    pending_.erase(0, consumed);
+    phase.stage(67);
+    return output;
+  });
 }
-Result<Value> completed_response(std::string_view stream, ValueLimits limits) {
+Result<Value> completed_response(std::string_view stream, ValueLimits limits,
+                                 const RawAdapterContext *context) {
+  std::optional<RawProviderPhase> phase;
   try {
+    phase.emplace(provider_link_credit);
+    phase->start(6, context);
+    if (context && context->receipt && context->receipt->response)
+      phase->link(*context->receipt->response);
+    phase->stage(40);
     if (stream.size() > limits.bytes)
       fail(ErrorCode::capacity);
     std::string data;
@@ -394,48 +474,79 @@ Result<Value> completed_response(std::string_view stream, ValueLimits limits) {
     auto event = [&] {
       if (data.empty())
         return;
-      auto parsed = parse_json(data, limits);
-      data.clear();
-      if (!parsed.has_value())
-        throw parsed.error();
-      if (++total_nodes > limits.nodes)
-        fail(ErrorCode::capacity);
-      const auto type = required(parsed.value(), "type");
-      if (type == "error" || type == "response.failed")
-        fail(ErrorCode::external_unknown);
-      if (type == "response.incomplete")
-        fail(ErrorCode::incomplete);
-      if (completed.has_value())
-        fail(ErrorCode::corrupt);
-      if (type == "response.output_item.done") {
-        const auto *index = parsed.value().find("output_index");
-        const auto *item = parsed.value().find("item");
-        if (index == nullptr || item == nullptr ||
-            !std::holds_alternative<Number>(index->value()))
+      RawProviderPhase event_phase{3 * provider_scalar_credit +
+                                   3 * sizeof(std::size_t) + sizeof(std::errc)};
+      RawAdapterContext event_context{nullptr, phase->reference(), nullptr, nullptr};
+      event_phase.run([&] {
+        event_phase.start(13, &event_context);
+        event_phase.stage(41);
+        auto parsed = parse_json(data, limits);
+        data.clear();
+        if (!parsed.has_value())
+          throw parsed.error();
+        event_phase.stage(42);
+        ++total_nodes;
+        const std::array count_fields{detail::raw_native_field(total_nodes),
+                                      detail::raw_native_field(limits.nodes)};
+        event_phase.scalar(42, 6, count_fields);
+        if (total_nodes > limits.nodes)
+          fail(ErrorCode::capacity);
+        event_phase.stage(43);
+        const auto type = required(parsed.value(), "type");
+        if (type == "error" || type == "response.failed") {
+          event_phase.stage(44);
+          event_phase.scalar(44, 0);
+          fail(ErrorCode::external_unknown);
+        }
+        if (type == "response.incomplete") {
+          event_phase.stage(45);
+          event_phase.scalar(45, 0);
+          fail(ErrorCode::incomplete);
+        }
+        if (completed.has_value()) {
+          event_phase.stage(46);
+          event_phase.scalar(46, 0);
           fail(ErrorCode::corrupt);
-        const auto &number = index->number().text();
-        std::size_t ordinal = 0;
-        const auto converted =
-            std::from_chars(number.data(), number.data() + number.size(), ordinal);
-        if (converted.ec != std::errc{} ||
-            converted.ptr != number.data() + number.size() || ordinal >= limits.nodes)
-          fail(ErrorCode::corrupt);
-        for (const auto &old : items)
-          if (old.first == ordinal)
-            fail(ErrorCode::conflict);
-        items.emplace_back(ordinal, *item);
-      }
-      if (type == "response.completed") {
-        if (completed.has_value())
-          fail(ErrorCode::corrupt);
-        const auto *response = parsed.value().find("response");
-        if (response == nullptr || required(*response, "status") != "completed")
-          fail(ErrorCode::corrupt);
-        const auto *output = response->find("output");
-        if (output == nullptr || !std::holds_alternative<Value::Array>(output->value()))
-          fail(ErrorCode::corrupt);
-        completed = *response;
-      }
+        }
+        if (type == "response.output_item.done") {
+          event_phase.stage(47);
+          event_phase.scalar(47, 0);
+          const auto *index = parsed.value().find("output_index");
+          const auto *item = parsed.value().find("item");
+          if (index == nullptr || item == nullptr ||
+              !std::holds_alternative<Number>(index->value()))
+            fail(ErrorCode::corrupt);
+          const auto &number = index->number().text();
+          std::size_t ordinal = 0;
+          const auto converted =
+              std::from_chars(number.data(), number.data() + number.size(), ordinal);
+          const std::array converted_fields{detail::raw_native_field(ordinal),
+                                            detail::raw_native_field(converted.ec)};
+          event_phase.scalar(47, 5, converted_fields);
+          if (converted.ec != std::errc{} ||
+              converted.ptr != number.data() + number.size() || ordinal >= limits.nodes)
+            fail(ErrorCode::corrupt);
+          for (const auto &old : items)
+            if (old.first == ordinal)
+              fail(ErrorCode::conflict);
+          items.emplace_back(ordinal, *item);
+        }
+        if (type == "response.completed") {
+          event_phase.stage(48);
+          event_phase.scalar(48, 0);
+          if (completed.has_value())
+            fail(ErrorCode::corrupt);
+          const auto *response = parsed.value().find("response");
+          if (response == nullptr || required(*response, "status") != "completed")
+            fail(ErrorCode::corrupt);
+          const auto *output = response->find("output");
+          if (output == nullptr ||
+              !std::holds_alternative<Value::Array>(output->value()))
+            fail(ErrorCode::corrupt);
+          completed = *response;
+        } else if (type != "response.output_item.done")
+          event_phase.scalar(43, 0);
+      });
     };
     while (!stream.empty()) {
       auto end = stream.find('\n');
@@ -456,6 +567,7 @@ Result<Value> completed_response(std::string_view stream, ValueLimits limits) {
         data += line;
       }
     }
+    phase->stage(49);
     if (!data.empty() || !completed.has_value())
       fail(ErrorCode::incomplete);
     // Codex's subscription stream can leave completed.output empty. Final item
@@ -478,13 +590,25 @@ Result<Value> completed_response(std::string_view stream, ValueLimits limits) {
               fail(ErrorCode::conflict);
           }
       }
+    phase->stage(50);
+    phase->finish(1);
     return Result<Value>::success(std::move(*completed));
   } catch (const Error &e) {
+    if (phase)
+      phase->finish(2, &e);
     return Result<Value>::failure(e);
   } catch (const std::bad_alloc &) {
+    if (phase)
+      phase->finish(3);
     return Result<Value>::failure({ErrorCode::allocation});
   } catch (const std::length_error &) {
+    if (phase)
+      phase->finish(4);
     return Result<Value>::failure({ErrorCode::capacity});
+  } catch (...) {
+    if (phase)
+      phase->finish(5);
+    throw;
   }
 }
 } // namespace blackbird

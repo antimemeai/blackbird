@@ -1,9 +1,13 @@
 #include "blackbird/colleague.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/tools.hpp"
+#include <cerrno>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sys/random.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 using namespace blackbird;
 int main(int argc, char **argv) {
@@ -12,14 +16,35 @@ int main(int argc, char **argv) {
     return 2;
   }
   try {
-    const auto request = unwrap(parse_json(read_file(argv[1], 65536)));
-    // Refuse existing capture directory; reading it is recovery, never retry.
-    if (!std::filesystem::create_directory(argv[2])) {
-      std::cerr << "capture directory exists; no dispatch\n";
-      return 2;
-    }
-    const std::filesystem::path directory{argv[2]};
-    std::filesystem::permissions(directory, std::filesystem::perms::owner_all);
+    // Native exclusive setup happens before source acquisition or dispatch.
+    if (::mkdir(argv[2], 0700) != 0)
+      throw Error{ErrorCode::io, errno};
+    const auto directory = std::filesystem::canonical(argv[2]);
+    struct stat owned{};
+    if (::lstat(directory.c_str(), &owned) != 0)
+      throw Error{ErrorCode::io, errno};
+    if (!S_ISDIR(owned.st_mode) || owned.st_uid != ::geteuid() ||
+        (owned.st_mode & 0777) != 0700)
+      throw Error{ErrorCode::conflict};
+    IdentityBytes identity{};
+    if (::getentropy(identity.data(), identity.size()) != 0)
+      throw Error{ErrorCode::io, errno};
+    auto runtime = unwrap(RawRuntime::open(
+        directory.string(), unwrap(EnvironmentId::from_bytes(identity))));
+    auto handle = unwrap(runtime->prepare_thread());
+    RawThreadBinding binding{handle};
+    RawProviderPhase input_phase;
+    const auto request = input_phase.run([&] {
+      input_phase.start(11);
+      // Header must use the actual live phase, so stage source after its BEGIN.
+      ProviderOriginalLease original{{ProviderOriginalRole::standalone_request,
+                                      ProviderOriginalMode::codec_adopt,
+                                      65536,
+                                      {}},
+                                     input_phase.reference()};
+      original.adopt(read_file(argv[1], 65536));
+      return unwrap(parse_json(original.bytes()));
+    });
 
     std::ofstream raw;
     raw.exceptions(std::ios::failbit | std::ios::badbit);
@@ -33,8 +58,10 @@ int main(int argc, char **argv) {
       }
     };
     const auto result = call_colleague(
-        request, capture, [](const Value &prepared, const ColleagueCapture &retain) {
-          return native_colleague_transport(prepared, retain);
+        request, capture,
+        [](const Value &prepared, const ColleagueCapture &retain,
+           const RawAdapterContext *context) {
+          return native_colleague_transport(prepared, retain, {}, nullptr, context);
         });
     std::cout << unwrap(dump_json(result)) << '\n';
     return result.find("status")->string() == "completed" ? 0 : 1;

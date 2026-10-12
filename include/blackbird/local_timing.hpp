@@ -131,6 +131,7 @@ public:
   RawRegion &operator=(RawRegion &&) = delete;
   bool enabled() const noexcept { return claim_.has_value(); }
   std::uint64_t begin_ordinal() const noexcept { return begin_; }
+  const IdentityBytes &lane_epoch() const noexcept { return epoch_; }
   void observe(const RawRegionObservation &observation);
   void linkage(const RawRegionLinkage &linkage);
   void outcome(RawRegionOutcome outcome) noexcept;
@@ -142,6 +143,7 @@ private:
   RawRegionOptions options_;
   std::optional<RawControlClaim> claim_;
   std::uint64_t begin_ = 0;
+  IdentityBytes epoch_{};
   bool outcome_written_ = false;
   bool error_written_ = false;
   bool prepaid_ = false;

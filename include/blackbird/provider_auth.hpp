@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/provider_original.hpp"
 #include "blackbird/value.hpp"
 #include <filesystem>
 #include <functional>
@@ -17,7 +18,8 @@ struct ProviderHttpResponse {
   int status = 0;
   std::string body;
 };
-using ProviderHttp = std::function<ProviderHttpResponse(const ProviderHttpRequest &)>;
+using ProviderHttp =
+    std::function<int(const ProviderHttpRequest &, ProviderHttpResponseLease &)>;
 struct ProviderAuthConfig {
   std::filesystem::path directory;
   std::filesystem::path metrics_directory;
@@ -31,7 +33,8 @@ ProviderHttpResponse
 provider_http(const ProviderHttpRequest &request, const ProviderAuthConfig &config = {},
               const std::function<void(std::string_view)> &observer = {},
               const RawProviderOwner *raw_owner = nullptr, bool application = false,
-              const RawEventRef *auth_resolution = nullptr);
+              const RawEventRef *auth_resolution = nullptr,
+              const RawAdapterContext *raw_context = nullptr);
 void require_provider_success(int status);
 
 struct OAuthExpected {
@@ -84,7 +87,8 @@ public:
           int timeout_seconds,
           const std::function<void(std::string_view)> &observer = {},
           const Value *expected_binding = nullptr,
-          const RawProviderOwner *raw_owner = nullptr);
+          const RawProviderOwner *raw_owner = nullptr,
+          const RawAdapterContext *raw_context = nullptr);
   std::filesystem::path directory() const;
   const ProviderAuthConfig &config() const { return config_; }
 

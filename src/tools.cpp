@@ -176,7 +176,9 @@ Value process_output_presentation(const std::string &raw, const Value &args) {
                         {"returned_bytes", Value{Number{shown.size()}}},
                         {"omitted_bytes", Value{Number{raw.size() - shown.size()}}}});
 }
-Value LocalTools::run(std::string_view name, const Value &args) {
+Value LocalTools::run(std::string_view name, const Value &args,
+                      const RawAdapterContext *raw_context,
+                      RawControlToken *native_return) {
   captured_.clear();
   if (name == "read_file") {
     const auto range = file_range(args);
@@ -226,6 +228,10 @@ Value LocalTools::run(std::string_view name, const Value &args) {
     // Arbitrary programs may setsid/detach. Group cleanup is not containment.
     detail::uncontained_exec.store(true);
     detail::Child child;
+    if (raw_context && raw_context->parent) {
+      child.raw_capture(*raw_context->parent);
+      child.original_capture = raw_context->originals;
+    }
     child.cancelled = cancelled;
     child.output_observer = [this](std::string_view chunk) {
       if (observer_)
@@ -258,6 +264,17 @@ Value LocalTools::run(std::string_view name, const Value &args) {
     } catch (...) {
       captured_.push_back({"process.partial", child.take_partial()});
       throw;
+    }
+    if (raw_context && raw_context->parent && native_return) {
+      const auto stage = std::uint8_t{82}, variant = std::uint8_t{4};
+      const std::array fields{ByteView{raw_context->parent->lane},
+                              detail::raw_native_field(raw_context->parent->ordinal),
+                              detail::raw_native_field(stage),
+                              detail::raw_native_field(variant),
+                              detail::raw_native_field(status)};
+      const auto result = raw_emit(1323, fields, RawPartition::control, native_return);
+      if (!result.has_value())
+        raw_fence(result.error());
     }
     auto shown = display_bytes(output.substr(0, budget));
     const auto total = output.size();

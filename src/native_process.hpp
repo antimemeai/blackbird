@@ -1,6 +1,7 @@
 #pragma once
 #include "blackbird/foundation.hpp"
 #include "blackbird/process_lifetime.hpp"
+#include "blackbird/provider_original.hpp"
 #include "blackbird/raw_provider.hpp"
 #include <algorithm>
 #include <cerrno>
@@ -60,6 +61,7 @@ private:
 class Child {
 public:
   std::function<void(std::string_view)> output_observer;
+  ProviderOriginalCapture *original_capture = nullptr;
   std::function<bool()> cancelled;
   std::function<void(std::string_view)> error_observer;
   std::string error_bytes;
@@ -430,47 +432,95 @@ private:
   bool read(Clock::time_point deadline, std::size_t limit) {
     if (error_output >= 0) {
       wait(error_output, POLLIN, deadline);
-      char b[8192];
+      char stack[8192];
       RawWaitControl control = raw_wait_control();
       control.deadline = deadline;
       RawWaitScope scope{control};
-      auto permit = trace ? trace->read_permit(RawReadChannel::stderr_pipe, sizeof(b))
-                          : RawNativePermit{};
-      const auto n = ::read(error_output, b, sizeof(b));
+      std::optional<ProviderOriginalLease> original;
+      if (original_capture)
+        original.emplace(ProviderOriginalRequest{ProviderOriginalRole::native_stderr,
+                                                 ProviderOriginalMode::native_extent,
+                                                 sizeof(stack), "raw"},
+                         raw_reference(), original_capture, false);
+      char *bytes = original ? original->writable().data() : stack;
+      auto permit = trace
+                        ? trace->read_permit(RawReadChannel::stderr_pipe, sizeof(stack))
+                        : RawNativePermit{};
+      const auto n = ::read(error_output, bytes, sizeof(stack));
       const int error = errno;
-      if (trace)
-        trace->read(permit, 2, sizeof(b), n, error, b);
+      const auto published =
+          trace ? trace->read(permit, 2, sizeof(stack), n, error, bytes) : std::nullopt;
+      if (n > 0 && original)
+        original->native(
+            published
+                ? std::optional<ProviderOriginalReference>{{*published,
+                                                            RawPartition::data,
+                                                            raw_envelope_size +
+                                                                provider_ref_bytes +
+                                                                sizeof(std::uint8_t) +
+                                                                sizeof(std::size_t) +
+                                                                sizeof(ssize_t) +
+                                                                sizeof(int),
+                                                            static_cast<std::size_t>(
+                                                                n)}}
+                : std::nullopt,
+            static_cast<std::size_t>(n));
+      errno = error;
       if (n == 0) {
         close_owned(error_output, 2);
       } else if (n > 0) {
         if (error_observer)
-          error_observer(std::string_view{b, static_cast<std::size_t>(n)});
+          error_observer(std::string_view{bytes, static_cast<std::size_t>(n)});
         if (error_bytes.size() + static_cast<std::size_t>(n) > limit)
           fail(ErrorCode::capacity);
-        error_bytes.append(b, static_cast<std::size_t>(n));
-      } else if (errno != EAGAIN && errno != EINTR)
-        fail(ErrorCode::io, errno);
+        error_bytes.append(bytes, static_cast<std::size_t>(n));
+        if (original)
+          require_capture(original->complete());
+      } else if (error != EAGAIN && error != EINTR)
+        fail(ErrorCode::io, error);
     }
     if (stdout_done)
       return error_output >= 0;
     wait(output, POLLIN, deadline);
-    char bytes[8192];
+    char stack[8192];
     RawWaitControl control = raw_wait_control();
     control.deadline = deadline;
     RawWaitScope scope{control};
-    auto permit = trace ? trace->read_permit(RawReadChannel::stdout_pipe, sizeof(bytes))
+    std::optional<ProviderOriginalLease> original;
+    if (original_capture)
+      original.emplace(ProviderOriginalRequest{ProviderOriginalRole::native_stdout,
+                                               ProviderOriginalMode::native_extent,
+                                               sizeof(stack), "raw"},
+                       raw_reference(), original_capture, false);
+    char *bytes = original ? original->writable().data() : stack;
+    auto permit = trace ? trace->read_permit(RawReadChannel::stdout_pipe, sizeof(stack))
                         : RawNativePermit{};
-    const auto n = ::read(output, bytes, sizeof(bytes));
+    const auto n = ::read(output, bytes, sizeof(stack));
     const int error = errno;
-    if (trace)
-      trace->read(permit, 1, sizeof(bytes), n, error, bytes);
+    const auto published =
+        trace ? trace->read(permit, 1, sizeof(stack), n, error, bytes) : std::nullopt;
+    if (n > 0 && original)
+      original->native(
+          published
+              ? std::optional<ProviderOriginalReference>{{*published,
+                                                          RawPartition::data,
+                                                          raw_envelope_size +
+                                                              provider_ref_bytes +
+                                                              sizeof(std::uint8_t) +
+                                                              sizeof(std::size_t) +
+                                                              sizeof(ssize_t) +
+                                                              sizeof(int),
+                                                          static_cast<std::size_t>(n)}}
+              : std::nullopt,
+          static_cast<std::size_t>(n));
+    errno = error;
     if (n == 0) {
       stdout_done = true;
       return error_output >= 0;
     }
     if (n < 0) {
-      if (errno != EAGAIN && errno != EINTR)
-        fail(ErrorCode::io, errno);
+      if (error != EAGAIN && error != EINTR)
+        fail(ErrorCode::io, error);
       return true;
     }
     const auto count = static_cast<std::size_t>(n);
@@ -479,7 +529,17 @@ private:
     if (pending.size() > limit || count > limit - pending.size())
       fail(ErrorCode::capacity);
     pending.append(bytes, count);
+    if (original)
+      require_capture(original->complete());
     return true;
+  }
+  static void require_capture(const ProviderCaptureDisposition &disposition) {
+    if (disposition.error)
+      throw *disposition.error;
+    if (disposition.state != ProviderCaptureState::accepted)
+      throw Error{disposition.state == ProviderCaptureState::overflow
+                      ? ErrorCode::capacity
+                      : ErrorCode::interrupted};
   }
 };
 } // namespace blackbird::detail

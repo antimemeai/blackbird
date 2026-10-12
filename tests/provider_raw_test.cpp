@@ -44,9 +44,8 @@ extern "C" int poll(pollfd *fds, nfds_t count, int timeout) {
   return native_poll(fds, count, timeout);
 }
 namespace {
-// Auth resolution preclaims its source-bounded credential-packet text burst,
-// which exceeds one MiB before any actual request bytes are acquired.
-constexpr RawCapacities owned_provider_capacities{2 * 1024 * 1024, 128 * 1024, 4096};
+// Owned wire formatting prepays its existing 16MiB codec/source bound.
+constexpr RawCapacities owned_provider_capacities{32 * 1024 * 1024, 128 * 1024, 4096};
 void check(bool condition, const char *message) {
   if (!condition)
     throw std::runtime_error{message};
@@ -337,8 +336,7 @@ void compatibility_exception(const std::filesystem::path &directory,
   epoch[0] = std::byte{18};
   const auto name = "/bbcompat" + std::to_string(::getpid());
   (void)RawChannel::unlink(name);
-  auto channel =
-      unwrap(RawChannel::create(name, epoch, {1024 * 1024, 128 * 1024, 4096}));
+  auto channel = unwrap(RawChannel::create(name, epoch, owned_provider_capacities));
   RawProducer producer{channel};
   bool observed = false;
   {

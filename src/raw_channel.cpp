@@ -88,18 +88,23 @@ void ring_copy_out(const SharedHeader &header, std::size_t index,
     std::memcpy(output.data() + first, base, output.size() - first);
   }
 }
+void native_ring_copy(unsigned char *base, std::uint64_t capacity,
+                      std::uint64_t position, const void *input,
+                      std::size_t size) noexcept {
+  const auto offset = position % capacity;
+  const auto available = static_cast<std::size_t>(capacity - offset);
+  const auto first = size < available ? size : available;
+  if (first != 0) {
+    ::memcpy(base + offset, input, first);
+  }
+  if (first != size) {
+    ::memcpy(base, static_cast<const unsigned char *>(input) + first, size - first);
+  }
+}
 void ring_copy_in(SharedHeader &header, std::size_t index, std::uint64_t position,
                   ByteView input) {
-  const auto offset = position % header.capacities[index];
-  const auto first = std::min<std::size_t>(
-      input.size(), static_cast<std::size_t>(header.capacities[index] - offset));
-  auto *base = reinterpret_cast<std::byte *>(&header) + header.offsets[index];
-  if (first != 0) {
-    std::memcpy(base + offset, input.data(), first);
-  }
-  if (first != input.size()) {
-    std::memcpy(base, input.data() + first, input.size() - first);
-  }
+  native_ring_copy(reinterpret_cast<unsigned char *>(&header) + header.offsets[index],
+                   header.capacities[index], position, input.data(), input.size());
 }
 Result<RawCursors> load_cursors(const SharedHeader &header, std::size_t index) {
   const auto &state = header.partitions[index];
@@ -142,6 +147,80 @@ Result<void> boundary(const SharedHeader &header, std::size_t index, RawCursors 
                            : Result<void>::failure({ErrorCode::invalid_range});
 }
 } // namespace
+
+RawNativePublication RawNativePublisher::begin(const Record &record) noexcept {
+  const auto site = record.site, length = record.length;
+  if (site == 0)
+    return {0, {ErrorCode::invalid_identity}, {}, false, false};
+  if (ring_ == nullptr || published_ == nullptr || ordinal_ == nullptr ||
+      remaining_ == nullptr || publication_ == nullptr || armed_ == nullptr)
+    return {0, {ErrorCode::invalid_range}, {}, false, false};
+  if (length < raw_envelope_size || length > capacity_ || length > *remaining_)
+    return {0, {ErrorCode::capacity}, {}, false, false};
+  if (*ordinal_ == 0 || *ordinal_ == UINT64_MAX || length > UINT64_MAX - *published_)
+    return {0, {ErrorCode::overflow}, {}, false, false};
+  if (held_ != nullptr && length > *held_)
+    return {0, {ErrorCode::corrupt}, {}, false, false};
+  if (publication_->load(std::memory_order_relaxed) != *published_)
+    return {0, {ErrorCode::conflict}, {}, false, false};
+  const auto ordinal = record.ordinal;
+  if (ordinal != *ordinal_)
+    return {0, {ErrorCode::conflict}, {}, false, false};
+  unsigned char envelope[raw_envelope_size]{};
+  ::memcpy(envelope, &length, sizeof(length));
+  ::memcpy(envelope + 4, &site, sizeof(site));
+  ::memcpy(envelope + 8, &ordinal, sizeof(ordinal));
+  native_ring_copy(ring_, capacity_, *published_, envelope, sizeof(envelope));
+  return {ordinal, {}, {}, false, false};
+}
+RawNativePublication RawNativePublisher::finish(const Record &record) noexcept {
+  const auto length = record.length;
+  const auto ordinal = record.ordinal;
+  *remaining_ -= length;
+  if (held_ != nullptr)
+    *held_ -= length;
+  *published_ += length;
+  ++*ordinal_;
+  publication_->store(*published_, std::memory_order_release);
+  RawNativePublication result{ordinal, {}, {}, true, false};
+  if (armed_->exchange(0, std::memory_order_acq_rel) != 0) {
+    if (endpoint_ < 0 || send_ == nullptr) {
+      result.notice_failed = true;
+      result.notice_error = {ErrorCode::invalid_range};
+    } else {
+      const unsigned char notice = 1;
+      const auto sent = send_(endpoint_, &notice, 1, MSG_DONTWAIT | MSG_NOSIGNAL);
+      const int error = errno;
+      if (sent != 1 && !(sent == -1 && (error == EAGAIN || error == EWOULDBLOCK))) {
+        result.notice_failed = true;
+        result.notice_error = {error == EINTR ? ErrorCode::interrupted : ErrorCode::io,
+                               sent == -1 ? error : 0};
+      }
+    }
+  }
+  return result;
+}
+RawNativePublication RawNativePublisher::emit(std::uint32_t site,
+                                              const RawNativePart *parts,
+                                              std::size_t count) noexcept {
+  std::uint64_t size = raw_envelope_size;
+  for (std::size_t index = 0; index < count; ++index) {
+    if (parts[index].size > UINT32_MAX - size)
+      return {0, {ErrorCode::overflow}, {}, false, false};
+    size += parts[index].size;
+  }
+  const auto length = static_cast<std::uint32_t>(size);
+  const Record record{length, site, ordinal_ == nullptr ? 0 : *ordinal_};
+  const auto start = begin(record);
+  if (start.ordinal == 0)
+    return start;
+  auto position = *published_ + raw_envelope_size;
+  for (std::size_t index = 0; index < count; ++index) {
+    native_ring_copy(ring_, capacity_, position, parts[index].bytes, parts[index].size);
+    position += parts[index].size;
+  }
+  return finish(record);
+}
 
 Result<std::array<int, 2>> raw_socket_pair() {
   const std::lock_guard spawn_lock{detail::process_spawn_mutex};
@@ -399,22 +478,34 @@ Result<RawRead> RawChannel::read(RawPartition partition, std::uint64_t start,
     return Result<RawRead>::failure({ErrorCode::allocation});
   }
 }
-Result<void> RawChannel::acknowledge(RawPartition partition, std::uint64_t end,
-                                     int recorder_endpoint) {
+Result<bool> RawChannel::advance_acknowledgment(RawPartition partition,
+                                                std::uint64_t end) {
   const auto index = partition_index(partition);
   const auto cursor = cursors(partition);
   if (!index.has_value() || !cursor.has_value()) {
-    return Result<void>::failure(!index.has_value() ? index.error() : cursor.error());
+    return Result<bool>::failure(!index.has_value() ? index.error() : cursor.error());
   }
   auto &header = *static_cast<SharedHeader *>(mapping_);
   const auto checked = boundary(header, index.value(), cursor.value(), end);
-  if (!checked.has_value()) {
-    return checked;
-  }
+  if (!checked.has_value())
+    return Result<bool>::failure(checked.error());
   header.partitions[index.value()].acknowledged.value.store(end,
                                                             std::memory_order_release);
-  const auto armed = header.space_armed.value.exchange(0, std::memory_order_acq_rel);
-  return armed == 0 ? Result<void>::success() : raw_send_notice(recorder_endpoint);
+  return Result<bool>::success(
+      header.space_armed.value.exchange(0, std::memory_order_acq_rel) != 0);
+}
+Result<void> RawChannel::acknowledge(RawPartition partition, std::uint64_t end,
+                                     int recorder_endpoint) {
+  const auto armed = advance_acknowledgment(partition, end);
+  if (!armed.has_value())
+    return Result<void>::failure(armed.error());
+  return armed.value() ? raw_send_notice(recorder_endpoint) : Result<void>::success();
+}
+Result<void> RawChannel::acknowledge_quiescent(RawPartition partition,
+                                               std::uint64_t end) {
+  const auto advanced = advance_acknowledgment(partition, end);
+  return advanced.has_value() ? Result<void>::success()
+                              : Result<void>::failure(advanced.error());
 }
 Result<void> RawChannel::arm_data() {
   if (mapping_ == nullptr) {
@@ -516,6 +607,28 @@ Result<RawCapacityClaim> RawProducer::hold_capacity(RawPartition partition,
 Result<RawControlClaim> RawProducer::hold_control(std::uint64_t bytes) {
   return hold_capacity(RawPartition::control, bytes);
 }
+Result<RawNativePublisher> RawProducer::prepare_native(RawPartition partition,
+                                                       RawControlClaim *claim) {
+  const auto index = partition_index(partition);
+  if (!index.has_value() || channel_->mapping_ == nullptr)
+    return Result<RawNativePublisher>::failure({ErrorCode::invalid_range});
+  if (claim != nullptr && (claim->owner_ != this || claim->partition_ != partition))
+    return Result<RawNativePublisher>::failure({ErrorCode::conflict});
+  const auto slot = index.value();
+  auto &header = *static_cast<SharedHeader *>(channel_->mapping_);
+  RawNativePublisher prepared;
+  prepared.ring_ = reinterpret_cast<unsigned char *>(&header) + header.offsets[slot];
+  prepared.capacity_ = header.capacities[slot];
+  prepared.published_ = &published_[slot];
+  prepared.ordinal_ = &next_ordinal_;
+  prepared.remaining_ = claim == nullptr ? &reserved_[slot] : &claim->remaining_;
+  prepared.held_ = claim == nullptr ? nullptr : &held_[slot];
+  prepared.publication_ = &header.partitions[slot].published.value;
+  prepared.armed_ = &header.data_armed.value;
+  prepared.endpoint_ = endpoint_;
+  prepared.send_ = &::send;
+  return Result<RawNativePublisher>::success(prepared);
+}
 Result<void> RawProducer::admission_ready(RawPartition partition) const {
   const auto index = partition_index(partition);
   if (!index.has_value() || channel_->mapping_ == nullptr) {
@@ -561,61 +674,25 @@ Result<std::uint64_t> RawProducer::emit(std::uint32_t site_id,
   }
   auto &header = *static_cast<SharedHeader *>(channel_->mapping_);
   const auto position = published_[index.value()];
-  if (size > header.capacities[index.value()]) {
-    return Result<std::uint64_t>::failure({ErrorCode::capacity});
-  }
-  if (size > UINT64_MAX - position) {
-    return Result<std::uint64_t>::failure({ErrorCode::overflow});
-  }
-  if (claim != nullptr) {
-    if (partition != claim->partition_ || claim->owner_ != this) {
-      return Result<std::uint64_t>::failure({ErrorCode::conflict});
-    }
-    if (size > claim->remaining_) {
-      return Result<std::uint64_t>::failure({ErrorCode::capacity});
-    }
-    if (size > held_[index.value()]) {
-      return Result<std::uint64_t>::failure({ErrorCode::corrupt});
-    }
-  } else if (size > reserved_[index.value()]) {
-    return Result<std::uint64_t>::failure({ErrorCode::capacity});
-  }
-  // Ownership/admission are caller obligations; validate publication before any
-  // copies to fail closed on an accidentally concurrent producer attachment.
-  if (header.partitions[index.value()].published.value.load(
-          std::memory_order_relaxed) != position) {
-    return Result<std::uint64_t>::failure({ErrorCode::conflict});
-  }
+  // The shared native begin primitive checks capacity, claim remaining/held,
+  // publication cursor and overflow once for either publication API.
   const auto length = static_cast<std::uint32_t>(size);
-  const auto ordinal = next_ordinal_;
-  std::array<std::byte, raw_envelope_size> envelope{};
-  std::memcpy(envelope.data(), &length, sizeof(length));
-  std::memcpy(envelope.data() + 4, &site_id, sizeof(site_id));
-  std::memcpy(envelope.data() + 8, &ordinal, sizeof(ordinal));
-  ring_copy_in(header, index.value(), position, envelope);
+  auto native = prepare_native(partition, claim);
+  if (!native.has_value())
+    return Result<std::uint64_t>::failure(native.error());
+  const RawNativePublisher::Record record{length, site_id, next_ordinal_};
+  const auto start = native.value().begin(record);
+  if (start.ordinal == 0)
+    return Result<std::uint64_t>::failure(start.error);
   auto body_position = position + raw_envelope_size;
   for (const auto part : raw_parts) {
     ring_copy_in(header, index.value(), body_position, part);
     body_position += part.size();
   }
-  if (claim != nullptr) {
-    claim->remaining_ -= size;
-    held_[index.value()] -= size;
-  } else {
-    reserved_[index.value()] -= size;
-  }
-  published_[index.value()] = position + size;
-  ++next_ordinal_;
-  header.partitions[index.value()].published.value.store(position + size,
-                                                         std::memory_order_release);
-  const auto armed = header.data_armed.value.exchange(0, std::memory_order_acq_rel);
-  if (armed != 0) {
-    const auto notice = raw_send_notice(endpoint_);
-    if (!notice.has_value()) {
-      notice_error_ = notice.error();
-    }
-  }
-  return Result<std::uint64_t>::success(ordinal);
+  const auto completed = native.value().finish(record);
+  if (completed.notice_failed)
+    notice_error_ = completed.notice_error;
+  return Result<std::uint64_t>::success(completed.ordinal);
 }
 RawCapacityClaim::~RawCapacityClaim() {
   if (owner_ != nullptr) {

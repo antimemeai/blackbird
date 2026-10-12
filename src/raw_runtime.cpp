@@ -1,13 +1,18 @@
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/local_timing.hpp"
 #include "blackbird/process_lifetime.hpp"
+#include "blackbird/provider_original.hpp"
 #include "blackbird/raw_audit.hpp"
 #include "blackbird/raw_auth.hpp"
 #include "blackbird/raw_authored.hpp"
 #include "blackbird/raw_command.hpp"
+#include "blackbird/raw_context.hpp"
+#include "blackbird/raw_participants.hpp"
 #include "blackbird/raw_provider.hpp"
+#include "blackbird/raw_query.hpp"
 #include "blackbird/raw_sampler.hpp"
 #include "blackbird/raw_tasks.hpp"
+#include "blackbird/raw_turn.hpp"
 
 #include <algorithm>
 #include <array>
@@ -439,6 +444,11 @@ void write_descriptions(const std::string &path) {
   write_description(file.value, raw_authored_description());
   write_description(file.value, raw_auth_description());
   write_description(file.value, raw_tasks_description());
+  write_description(file.value, provider_original_description());
+  write_description(file.value, raw_participants_description());
+  write_description(file.value, raw_query_description());
+  write_description(file.value, raw_turn_description());
+  write_description(file.value, raw_context_description());
   for (unsigned code = 0; code <= static_cast<unsigned>(ErrorCode::provider_rate_limit);
        ++code) {
     const auto value = static_cast<ErrorCode>(code);
@@ -603,6 +613,12 @@ struct RecorderLane {
   Registration registration;
   RawChannel channel;
   Descriptor producer_endpoint, recorder_endpoint;
+  // Only orphan recovery assigns this after the dead-owner/catalogue fence.
+  bool quiescent = false;
+  Result<void> acknowledge(RawPartition partition, std::uint64_t end) {
+    return quiescent ? channel.acknowledge_quiescent(partition, end)
+                     : channel.acknowledge(partition, end, recorder_endpoint.value);
+  }
 };
 volatile sig_atomic_t child_notice = -1;
 volatile sig_atomic_t recorder_stop = 0;
@@ -680,7 +696,7 @@ std::unique_ptr<RawAudit> open_audit(NativeJournalDirectory &directory,
         if (end > cursor.published)
           throw Error{ErrorCode::conflict};
         if (end > cursor.acknowledged)
-          take(lane.channel.acknowledge(partition, end, lane.recorder_endpoint.value));
+          take(lane.acknowledge(partition, end));
         if (end != 0)
           inherited.push_back({lane.registration.epoch, partition, end});
       }
@@ -935,8 +951,7 @@ int record(const std::string &path, JournalHeader header,
             stage = 4;
             progress = audit->progress();
             publish_cursor(path, segment, audit->cursor());
-            take(lane.channel.acknowledge(partition, source.end,
-                                          lane.recorder_endpoint.value));
+            take(lane.acknowledge(partition, source.end));
             release_failure();
           }
         }
@@ -1436,7 +1451,8 @@ void recover_orphans(const std::filesystem::path &base, std::uint64_t failure_by
       }
       // The dead owner and acquired catalogue lease fence these publications.
       // A drain-only recorder needs no source wake endpoints.
-      lanes.push_back({source, std::move(mapped).value(), Descriptor{}, Descriptor{}});
+      lanes.push_back(
+          {source, std::move(mapped).value(), Descriptor{}, Descriptor{}, true});
     }
     reporter.release_reservation(RawPartition::failure);
     const auto child = ::fork();
@@ -1703,6 +1719,37 @@ public:
   IdentityBytes epoch_;
   bool fenced_ = false;
 };
+Result<RawSignalPublisher> RawSignalPublisher::prepare(const RawThreadHandle &context,
+                                                       RawControlToken &claim) {
+  if (!context || context.get() != bound_context)
+    return Result<RawSignalPublisher>::failure({ErrorCode::conflict});
+  auto control = context->producer_->prepare_native(RawPartition::control, &claim);
+  if (!control.has_value())
+    return Result<RawSignalPublisher>::failure(control.error());
+  auto failure = context->producer_->prepare_native(RawPartition::failure);
+  if (!failure.has_value())
+    return Result<RawSignalPublisher>::failure(failure.error());
+  RawSignalPublisher publisher;
+  publisher.control_ = control.value();
+  publisher.failure_ = failure.value();
+  publisher.fenced_ = &context->fenced_;
+  return Result<RawSignalPublisher>::success(publisher);
+}
+RawNativePublication RawSignalPublisher::emit(std::uint32_t site,
+                                              const RawNativePart *parts,
+                                              std::size_t count) noexcept {
+  if (fenced_ == nullptr)
+    return {0, {}, {}, true, false};
+  const auto result = control_.emit(site, parts, count);
+  if ((!result.published || result.notice_failed) && !*fenced_) {
+    *fenced_ = true;
+    const Error error = result.published ? result.notice_error : result.error;
+    const RawNativePart failure_parts[]{{&error.code, sizeof(error.code)},
+                                        {&error.detail, sizeof(error.detail)}};
+    (void)failure_.emit(8001, failure_parts, 2);
+  }
+  return result;
+}
 RawRuntime::RawRuntime(std::shared_ptr<State> state) : state_(std::move(state)) {}
 RawRuntime::~RawRuntime() = default;
 Result<std::unique_ptr<RawRuntime>> RawRuntime::open(std::string_view directory,

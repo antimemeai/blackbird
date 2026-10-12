@@ -14,6 +14,8 @@
 #include <map>
 #include <memory>
 namespace blackbird {
+class RawTurnTrace;
+class RawPolicyTrace;
 class CodingProvider {
 public:
   virtual ~CodingProvider() = default;
@@ -26,6 +28,11 @@ public:
                         const RawProviderOwner *) {
     return respond(request, capture);
   }
+  virtual Value respond(const Value &request,
+                        const std::function<void(std::string_view)> &capture,
+                        const RawProviderOwner *owner, const RawAdapterContext *) {
+    return respond(request, capture, owner);
+  }
 };
 class OpenAiCodingProvider final : public CodingProvider {
 public:
@@ -37,6 +44,8 @@ public:
   Value respond(const Value &, const std::function<void(std::string_view)> &) override;
   Value respond(const Value &, const std::function<void(std::string_view)> &,
                 const RawProviderOwner *) override;
+  Value respond(const Value &, const std::function<void(std::string_view)> &,
+                const RawProviderOwner *, const RawAdapterContext *) override;
 
 private:
   OpenAiConfig config_;
@@ -104,20 +113,24 @@ public:
 
 private:
   struct Runtime;
+  struct CommandTaskActivity;
+  using CommandTaskMap = std::map<std::string, CommandTaskActivity>;
   bool turn_running_ = false, backstop_claimed_ = false;
+  RawTurnTrace *turn_trace_ = nullptr;
   std::optional<Error> failed_turn_;
   Value workflow_result_;
   std::optional<Value> operator_arguments_;
   std::shared_ptr<CommandJobs> command_jobs_;
   std::unique_ptr<RetainedState::SettlementScope> settlement_;
-  std::map<std::string, std::string> command_tasks_;
+  CommandTaskMap command_tasks_;
   std::optional<Error> command_failure_;
   bool pumping_commands_ = false;
   bool uncontained_exec_recovery_ = false;
   bool capacity_stopped_ = false;
   std::size_t operation_depth_ = 0;
   std::size_t unretained_bytes_ = 0;
-  void protect_workflow(const Value::Array &entries, const Value &proposal);
+  void protect_workflow(const Value::Array &entries, const Value &proposal,
+                        std::optional<RawEventRef> parent = {});
   AuditLog &log_;
   ContextStore &context_;
   TaskStore tasks_;
@@ -157,6 +170,8 @@ private:
   std::string budget_revision_ = "initial-disabled", pending_budget_revision_;
   Value context_budget(const Value &arguments);
   Value budget_view(std::string_view model, std::size_t input_bytes) const;
+  Value budget_view(std::string_view model, std::size_t input_bytes,
+                    RawPolicyTrace &trace) const;
   std::map<std::string, std::string> previewed_;
   void present(const Value &item);
 
@@ -171,8 +186,11 @@ private:
   std::unique_ptr<Runtime> runtime_;
   Value request(Value options = Value::object({}));
   Value call(std::string name, Value arguments);
-  Value operation(std::string_view name, const Value &input,
-                  const std::function<Value(OperationAttemptId)> &body);
+  Value operation(
+      std::string_view name, const Value &input,
+      const std::function<Value(OperationAttemptId, InvocationId,
+                                DefinitionGenerationId, CommandTaskActivity *)> &body,
+      RawProviderOperationContext *provider_operation = nullptr);
   friend struct Runtime;
 };
 } // namespace blackbird

@@ -1,0 +1,14 @@
+[
+  {
+    "file": "quarantine/command-wake-2026-10-11/glibc-2.39-x86_64-libc_sigaction.c",
+    "url": "https://raw.githubusercontent.com/bminor/glibc/glibc-2.39/sysdeps/unix/sysv/linux/x86_64/libc_sigaction.c",
+    "sha256": "d31b7e06dd09ae389b446e27fa9fcd1e237f5b6e32f5acc6597e34dcaff6ecbf",
+    "bytes": 5518
+  },
+  {
+    "file": "quarantine/command-wake-2026-10-11/glibc-2.39-linux-libc_sigaction.c",
+    "url": "https://raw.githubusercontent.com/bminor/glibc/glibc-2.39/sysdeps/unix/sysv/linux/libc_sigaction.c",
+    "sha256": "34d4bb96c851a786db936be10135e0ba3e5767592fc91cfe8363b8de4c6059b0",
+    "bytes": 2308
+  }
+]

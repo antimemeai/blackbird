@@ -1,16 +1,22 @@
 #pragma once
 #include "blackbird/colleague.hpp"
+#include "blackbird/context.hpp"
+#include "blackbird/provider_original.hpp"
+#include "blackbird/raw_participants.hpp"
 #include <memory>
 #include <vector>
 namespace blackbird {
-using ParticipantTransport = std::function<Value(
-    const Value &, const ColleagueCapture &, const std::function<bool()> &)>;
+using ParticipantTransport =
+    std::function<Value(const Value &, const ColleagueCapture &,
+                        const std::function<bool()> &, const RawAdapterContext *)>;
 // One owner calls controls/drain. Workers only touch their guarded state and
 // bounded capture queue; admission is retained by the owner before launch/send.
+// Ordinary controls refuse reentry from owner Retain/Save/Publish/cancelled
+// callbacks. Mandatory shutdown remains callable from those callbacks.
 class Participants {
 public:
-  using Retain = std::function<void(std::string_view, std::string_view, const Value &)>;
-  using Save = std::function<void(const Value &)>;
+  using Retain = std::function<std::optional<SourceReference>(const OriginalCapture &)>;
+  using Save = std::function<std::optional<ApplicationRecordId>(const Value &)>;
   using Publish = std::function<void(const Value &)>;
   Participants(const Value &saved, Retain retain, Save save, Publish publish = {});
   ~Participants();
@@ -18,16 +24,19 @@ public:
   Participants &operator=(const Participants &) = delete;
   Value configure(const Value &arguments);
   Value start(std::string id, const Value &arguments,
-              const ParticipantTransport &transport);
+              const ParticipantTransport &transport, RawParticipantOrigin origin = {});
   Value read(const Value &arguments = Value::object({}));
-  Value send(const Value &arguments);
+  Value send(const Value &arguments, RawParticipantOrigin origin = {});
   Value cancel(const Value &arguments);
   Value await(const Value &arguments, const std::function<bool()> &cancelled = {});
   Value join(const Value &arguments, const std::function<bool()> &cancelled = {});
   Value archive(const Value &arguments);
   void drain();
   bool active() const;
+  // Mandatory native cleanup uses only credits held before live publication.
+  // Retention is a separate ordinary drain; it can remain pending after cancel.
   void shutdown();
+  bool debt() const;
 
 private:
   struct Impl;

@@ -8,6 +8,7 @@
 #include "blackbird/raw_command.hpp"
 #include "blackbird/raw_provider.hpp"
 #include "blackbird/raw_runtime.hpp"
+#include "blackbird/raw_turn.hpp"
 #include "stream_capture.hpp"
 extern "C" {
 #include <lauxlib.h>
@@ -277,26 +278,37 @@ template <class T> T parse_id(std::string_view s) {
   }
   return unwrap(T::from_bytes(out));
 }
-void validate_protocol(const Value::Array &items) {
-  std::set<std::string> seen, pending;
-  for (const auto &item : items) {
-    const auto *type = item.find("type");
-    if (type == nullptr)
-      continue;
-    const auto &s = type->string();
-    if (s == "function_call") {
-      const auto &call = string_field(item, "call_id");
-      if (!seen.insert(call).second)
-        throw Error{ErrorCode::conflict};
-      pending.insert(call);
+void validate_protocol(const Value::Array &items,
+                       std::optional<RawEventRef> parent = {}) {
+  RawProtocolTrace trace{items.size(), parent};
+  trace.run([&] {
+    std::set<std::string> seen, pending;
+    for (const auto &item : items) {
+      const auto *type = item.find("type");
+      if (type == nullptr)
+        continue;
+      const auto &s = type->string();
+      if (s == "function_call") {
+        const auto &call = string_field(item, "call_id");
+        if (!seen.insert(call).second) {
+          trace.conflict(call);
+          throw Error{ErrorCode::conflict};
+        }
+        pending.insert(call);
+      }
+      if (s == "function_call_output") {
+        const auto &call = string_field(item, "call_id");
+        if (pending.erase(call) != 1) {
+          trace.conflict(call);
+          throw Error{ErrorCode::conflict};
+        }
+      }
     }
-    if (s == "function_call_output") {
-      if (pending.erase(string_field(item, "call_id")) != 1)
-        throw Error{ErrorCode::conflict};
+    if (!pending.empty()) {
+      trace.conflict(*pending.begin());
+      throw Error{ErrorCode::conflict};
     }
-  }
-  if (!pending.empty())
-    throw Error{ErrorCode::conflict};
+  });
 }
 } // namespace
 Value OpenAiCodingProvider::respond(
@@ -306,14 +318,89 @@ Value OpenAiCodingProvider::respond(
 Value OpenAiCodingProvider::respond(
     const Value &request, const std::function<void(std::string_view)> &capture,
     const RawProviderOwner *owner) {
-  auto config = config_;
-  config.raw_owner = owner;
-  config.response_observer = capture;
-  config.cancelled = cancelled;
-  auto login = unwrap(codex_login(config));
-  auto raw = unwrap(openai_http(config, login, "responses", &request));
-  return unwrap(completed_response(raw));
+  return respond(request, capture, owner, nullptr);
 }
+Value OpenAiCodingProvider::respond(
+    const Value &request, const std::function<void(std::string_view)> &capture,
+    const RawProviderOwner *owner, const RawAdapterContext *context) {
+  std::optional<RawWaitScope> deadline_scope;
+  if (config_.timeout_seconds >= 1 && config_.timeout_seconds <= 3600) {
+    auto control = raw_wait_control();
+    control.deadline = std::chrono::steady_clock::now() +
+                       std::chrono::seconds{config_.timeout_seconds};
+    deadline_scope.emplace(control);
+  }
+  RawProviderPhase adapter;
+  return adapter.run([&] {
+    adapter.start(5, context);
+    auto config = config_;
+    config.raw_owner = owner;
+    config.raw_context = context;
+    config.response_observer = capture;
+    config.cancelled = cancelled;
+    auto login = unwrap(codex_login(config));
+    auto raw = unwrap(openai_http(config, login, "responses", &request));
+    return unwrap(completed_response(raw, {}, context));
+  });
+}
+struct CodingEngine::CommandTaskActivity {
+  RawThreadHandle owner;
+  RawTaskActivityTrace trace;
+  std::function<void(const Value &)> &observer;
+  std::string id, attempt_text, operation;
+  OperationAttemptId attempt;
+  CommandTaskMap::node_type *pending_node = nullptr;
+  bool *transferred = nullptr;
+  bool bound = false, ended = false;
+  CommandTaskActivity(std::function<void(const Value &)> &callback, std::string task,
+                      OperationAttemptId actual_attempt, std::string encoded_attempt,
+                      std::string operation_name)
+      : owner(raw_current_thread()), observer(callback), id(std::move(task)),
+        attempt_text(std::move(encoded_attempt)), operation(std::move(operation_name)),
+        attempt(actual_attempt) {}
+  CommandTaskActivity(const CommandTaskActivity &) = delete;
+  CommandTaskActivity &operator=(const CommandTaskActivity &) = delete;
+  ~CommandTaskActivity() {
+    if (bound && !ended)
+      emit(3);
+  }
+  void bind(RawEventRef operation_request) noexcept {
+    trace.binding(operation_request, attempt, id);
+    bound = true;
+  }
+  void emit(std::uint8_t branch, const Value *exit = nullptr) noexcept {
+    if (!bound || ended)
+      return;
+    if (branch != 0)
+      ended = true;
+    RawThreadBinding binding{owner};
+    const auto activity = trace.activity(branch);
+    const auto notification = trace.notification(activity, bool(observer));
+    if (!observer) {
+      trace.notified(notification, 0);
+      return;
+    }
+    try {
+      std::string phase{branch == 0   ? "running"
+                        : branch == 1 ? "finished"
+                        : branch == 2 ? "failed"
+                                      : "outcome unknown"};
+      if (exit)
+        phase += " (exit " + exit->number().text() + ")";
+      observer(Value::object({{"task_id", Value{id}},
+                              {"attempt", Value{attempt_text}},
+                              {"operation", Value{operation}},
+                              {"phase", Value{std::move(phase)}}}));
+      trace.notified(notification, 1);
+    } catch (const Error &error) {
+      trace.notified(notification, 2, error);
+    } catch (const std::bad_alloc &) {
+      trace.notified(notification, 3);
+    } catch (...) {
+      trace.notified(notification, 4);
+    }
+  }
+};
 struct CodingEngine::Runtime {
   CodingEngine &engine;
   struct Trace {
@@ -1177,7 +1264,7 @@ std::size_t budget_number(const Value &value, std::string_view key) {
     throw Error{ErrorCode::invalid_range};
   return n;
 }
-void validate_context_budget(const Value &value) {
+void validate_context_budget(const Value &value, RawPolicyFields &fields) {
   if (!std::holds_alternative<Value::Object>(value.value()))
     throw Error{ErrorCode::invalid_range};
   for (const auto &[key, v] : value.object()) {
@@ -1186,9 +1273,15 @@ void validate_context_budget(const Value &value) {
         key != "reason")
       throw Error{ErrorCode::invalid_range};
   }
-  if (!std::holds_alternative<bool>(field(value, "enabled").value()) ||
-      budget_number(value, "target_bytes") >= budget_number(value, "trigger_bytes") ||
-      string_field(value, "reason").empty() ||
+  const auto *enabled = std::get_if<bool>(&field(value, "enabled").value());
+  if (!enabled)
+    throw Error{ErrorCode::invalid_range};
+  fields.enabled = *enabled;
+  const auto target = budget_number(value, "target_bytes");
+  fields.target = target;
+  const auto trigger = budget_number(value, "trigger_bytes");
+  fields.trigger = trigger;
+  if (target >= trigger || string_field(value, "reason").empty() ||
       string_field(value, "reason").size() > 4096)
     throw Error{ErrorCode::invalid_range};
 }
@@ -1347,59 +1440,102 @@ Value CodingEngine::define_tool(const Value &arguments) {
   return result;
 }
 Value CodingEngine::budget_view(std::string_view model, std::size_t input_bytes) const {
-  const bool triggered = std::get<bool>(field(budget_, "enabled").value()) &&
-                         input_bytes >= budget_number(budget_, "trigger_bytes");
-  return Value::object(
-      {{"revision", Value{budget_revision_}},
-       {"effective", budget_},
-       {"pending", pending_budget_},
-       {"pending_revision",
-        pending_budget_ == Value{} ? Value{} : Value{pending_budget_revision_}},
-       {"triggered", Value{triggered}},
-       {"input_bytes", Value{Number{input_bytes}}},
-       {"units",
-        Value{"native binary input packet bytes; not tokens or total wire bytes"}},
-       {"capability",
-        Value::object(
-            {{"provider", Value{std::string{provider_.provider_identity()}}},
-             {"provider_source",
-              Value{"native adapter identity; unavailable for unspecified adapters"}},
-             {"model", Value{std::string{model}}},
-             {"model_source",
-              Value{"effective request model; stats uses engine default"}},
-             {"context_window_tokens", Value{}},
-             {"context_window_source",
-              Value{"unavailable; no qualified model capability catalog"}}})}});
+  RawPolicyTrace trace{2, budget_revision_, 119,
+                       turn_trace_ ? std::optional{turn_trace_->reference()}
+                                   : std::nullopt};
+  return budget_view(model, input_bytes, trace);
+}
+Value CodingEngine::budget_view(std::string_view model, std::size_t input_bytes,
+                                RawPolicyTrace &trace) const {
+  return trace.run([&] {
+    const bool enabled = std::get<bool>(field(budget_, "enabled").value());
+    std::optional<std::size_t> trigger;
+    if (enabled)
+      trigger = budget_number(budget_, "trigger_bytes");
+    const bool triggered = trigger && input_bytes >= *trigger;
+    trace.observation(enabled, trigger, input_bytes, triggered);
+    auto result = Value::object(
+        {{"revision", Value{budget_revision_}},
+         {"effective", budget_},
+         {"pending", pending_budget_},
+         {"pending_revision",
+          pending_budget_ == Value{} ? Value{} : Value{pending_budget_revision_}},
+         {"triggered", Value{triggered}},
+         {"input_bytes", Value{Number{input_bytes}}},
+         {"units",
+          Value{"native binary input packet bytes; not tokens or total wire bytes"}},
+         {"capability",
+          Value::object(
+              {{"provider", Value{std::string{provider_.provider_identity()}}},
+               {"provider_source",
+                Value{"native adapter identity; unavailable for unspecified adapters"}},
+               {"model", Value{std::string{model}}},
+               {"model_source",
+                Value{"effective request model; stats uses engine default"}},
+               {"context_window_tokens", Value{}},
+               {"context_window_source",
+                Value{"unavailable; no qualified model capability catalog"}}})}});
+    trace.finish(0);
+    return result;
+  });
 }
 Value CodingEngine::context_budget(const Value &arguments) {
-  if (!arguments.find("proposal"))
-    return budget_view(string_field(program_config_, "model").empty()
-                           ? model_
-                           : string_field(program_config_, "model"),
-                       unwrap(encode_packet_string(Value{context_.items()})).size());
-  auto proposal = field(arguments, "proposal");
-  const auto *base = proposal.find("base");
-  if (base && base->string() != budget_revision_)
-    return Value::object(
-        {{"staged", Value{false}}, {"reason", Value{"stale-policy-revision"}}});
-  if (base) {
-    auto &fields = proposal.object();
-    fields.erase(std::remove_if(fields.begin(), fields.end(),
-                                [](const auto &f) { return f.first == "base"; }),
-                 fields.end());
-  }
-  validate_context_budget(proposal);
-  auto revision =
-      hex_identity(unwrap(log_.root().issue<DefinitionGenerationId>()).bytes());
-  pending_budget_ = std::move(proposal);
-  pending_budget_revision_ = std::move(revision);
-  auto result =
-      budget_view(string_field(program_config_, "model").empty()
-                      ? model_
-                      : string_field(program_config_, "model"),
-                  unwrap(encode_packet_string(Value{context_.items()})).size());
-  result.object().emplace_back("staged", Value{true});
-  return result;
+  const bool proposal_present = arguments.find("proposal") != nullptr;
+  RawPolicyTrace trace{proposal_present ? std::uint8_t{1} : std::uint8_t{0},
+                       budget_revision_, proposal_present ? 318U : 170U,
+                       turn_trace_ ? std::optional{turn_trace_->reference()}
+                                   : std::nullopt};
+  return trace.run([&] {
+    if (!proposal_present) {
+      RawPolicyTrace view{2, budget_revision_, 119, trace.reference(), trace.bank()};
+      auto result = budget_view(
+          string_field(program_config_, "model").empty()
+              ? model_
+              : string_field(program_config_, "model"),
+          unwrap(encode_packet_string(Value{context_.items({view.reference()})}))
+              .size(),
+          view);
+      trace.finish(0);
+      return result;
+    }
+    auto proposal = field(arguments, "proposal");
+    const auto *base = proposal.find("base");
+    if (base && base->string() != budget_revision_) {
+      auto result = Value::object(
+          {{"staged", Value{false}}, {"reason", Value{"stale-policy-revision"}}});
+      trace.finish(1);
+      return result;
+    }
+    if (base) {
+      auto &fields = proposal.object();
+      fields.erase(std::remove_if(fields.begin(), fields.end(),
+                                  [](const auto &f) { return f.first == "base"; }),
+                   fields.end());
+    }
+    RawPolicyFields parsed;
+    try {
+      validate_context_budget(proposal, parsed);
+    } catch (...) {
+      trace.validation(parsed);
+      throw;
+    }
+    trace.validation(parsed);
+    auto revision =
+        hex_identity(unwrap(log_.root().issue<DefinitionGenerationId>()).bytes());
+    RawPolicyTrace view{2, budget_revision_, 119, trace.reference(), trace.bank()};
+    pending_budget_ = std::move(proposal);
+    pending_budget_revision_ = std::move(revision);
+    trace.staged(pending_budget_revision_);
+    auto result = budget_view(
+        string_field(program_config_, "model").empty()
+            ? model_
+            : string_field(program_config_, "model"),
+        unwrap(encode_packet_string(Value{context_.items({view.reference()})})).size(),
+        view);
+    result.object().emplace_back("staged", Value{true});
+    trace.finish(0);
+    return result;
+  });
 }
 CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
                            CodingProvider &provider, std::string model,
@@ -1433,9 +1569,21 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
 
       continue;
     auto policy = field(packet, "policy");
-    validate_context_budget(policy);
-    budget_ = std::move(policy);
-    budget_revision_ = string_field(packet, "revision");
+    const auto &revision = string_field(packet, "revision");
+    RawPolicyTrace restore{3, revision, 119};
+    restore.run([&] {
+      RawPolicyFields parsed;
+      try {
+        validate_context_budget(policy, parsed);
+      } catch (...) {
+        restore.validation(parsed);
+        throw;
+      }
+      restore.validation(parsed);
+      budget_ = std::move(policy);
+      budget_revision_ = revision;
+      restore.finish(0);
+    });
   }
   Value participants_saved;
   for (const auto &packet : log_.root().current_programs())
@@ -1443,11 +1591,13 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
       participants_saved = packet;
   participants_ = std::make_unique<Participants>(
       participants_saved,
-      [&](std::string_view label, std::string_view raw, const Value &metadata) {
-        log_.original({label, raw, metadata});
+      [&](const OriginalCapture &capture) {
+        return log_.original(log_.issue(), capture);
       },
       [&](const Value &snapshot) {
-        log_.record(ApplicationChannel::program, snapshot);
+        const auto identity = log_.issue();
+        log_.record(identity, ApplicationChannel::program, snapshot);
+        return std::optional{identity};
       },
       [&](const Value &activity) {
         if (task_activity)
@@ -1595,6 +1745,15 @@ void CodingEngine::poll_commands() {
               submitted.evidence == RetainedEvidence::recovered_pending)
             throw Error{ErrorCode::audit_unavailable};
         });
+        if (const auto task = command_tasks_.find(event.job_id);
+            task != command_tasks_.end()) {
+          auto accepted = command_tasks_.extract(task);
+          const auto branch =
+              disposition == AttemptDisposition::success   ? std::uint8_t{1}
+              : disposition == AttemptDisposition::failure ? std::uint8_t{2}
+                                                           : std::uint8_t{3};
+          accepted.mapped().emit(branch, event.result.find("exit_code"));
+        }
         if (process_output && event.result.find("exit_code") &&
             string_field(command_jobs_->foreground(), "job_id") == event.job_id)
           try {
@@ -1602,23 +1761,6 @@ void CodingEngine::poll_commands() {
                            field(event.result, "exit_code").number().text() + "]\n");
           } catch (...) {
           }
-        if (const auto task = command_tasks_.find(event.job_id);
-            task != command_tasks_.end()) {
-          if (task_activity) {
-            std::string phase = disposition == AttemptDisposition::success ? "finished"
-                                : disposition == AttemptDisposition::unknown
-                                    ? "outcome unknown"
-                                    : "failed";
-            if (event.result.find("exit_code"))
-              phase +=
-                  " (exit " + field(event.result, "exit_code").number().text() + ")";
-            task_activity(Value::object({{"task_id", Value{task->second}},
-                                         {"attempt", Value{event.job_id}},
-                                         {"operation", Value{"exec"}},
-                                         {"phase", Value{std::move(phase)}}}));
-          }
-          command_tasks_.erase(task);
-        }
       }
       if (!command_failure_)
         break;
@@ -1638,7 +1780,11 @@ void CodingEngine::poll_commands() {
     throw *command_failure_;
 }
 void CodingEngine::poll_participants() { participants_->drain(); }
-void CodingEngine::shutdown_participants() { participants_->shutdown(); }
+void CodingEngine::shutdown_participants() {
+  participants_->shutdown();
+  if ((!cancelled || !cancelled()) && log_.root().state() == JournalWriterState::live)
+    participants_->drain();
+}
 void recover_coding_session(RetainedState &root, RecoveryMode mode) {
   struct CodingRecovery final : CustodyVerifier {
     struct Abandoned {
@@ -1777,14 +1923,18 @@ void recover_coding_session(RetainedState &root, RecoveryMode mode) {
   }
 }
 
-void CodingEngine::protect_workflow(const Value::Array &entries,
-                                    const Value &proposal) {
+void CodingEngine::protect_workflow(const Value::Array &entries, const Value &proposal,
+                                    std::optional<RawEventRef> parent) {
   if (capacity_stopped_)
     throw Error{ErrorCode::capacity};
   try {
-    auto credit = context_.cancellation_budget(entries, proposal);
-    const auto existing = context_.cancellation_budget(
-        field(context_.view(), "entries").array(), context_.pending_proposal());
+    if (!parent && turn_trace_)
+      parent = turn_trace_->reference();
+    const RawContextOrigin origin{parent.value_or(RawEventRef{})};
+    auto credit = context_.cancellation_budget(entries, proposal, origin);
+    const auto existing =
+        context_.cancellation_budget(field(context_.view(origin), "entries").array(),
+                                     context_.pending_proposal(origin), origin);
     credit.max_file_bytes = std::max(credit.max_file_bytes, existing.max_file_bytes);
     credit.max_records = std::max(credit.max_records, existing.max_records);
     // One future admission plus each outstanding nested attempt. Error sources,
@@ -1798,8 +1948,11 @@ void CodingEngine::protect_workflow(const Value::Array &entries,
     throw;
   }
 }
-Value CodingEngine::operation(std::string_view name, const Value &input,
-                              const std::function<Value(OperationAttemptId)> &body) {
+Value CodingEngine::operation(
+    std::string_view name, const Value &input,
+    const std::function<Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
+                              CommandTaskActivity *)> &body,
+    RawProviderOperationContext *provider_operation) {
   poll_commands();
   std::string task_id;
   if (const auto *binding = input.find("task_id"); name == "exec" && binding) {
@@ -1842,10 +1995,22 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
   // publishing an attempt that must be closed even if the owner stops now.
   auto exec_settlement_credit =
       name == "exec" ? raw_command_claim(3 * raw_command_region_credit) : std::nullopt;
+  std::optional<RawProviderPhase> provider_result;
+  std::optional<ProviderOriginalLease> provider_original;
+  if (provider_operation) {
+    provider_result.emplace(provider_link_credit);
+    provider_original.emplace(
+        ProviderOriginalRequest{ProviderOriginalRole::upstream_packet,
+                                ProviderOriginalMode::codec_adopt,
+                                ValueLimits{}.bytes,
+                                {}},
+        RawEventRef{});
+  }
   RawRegion admission{raw_regions::command_admission};
   auto &root = log_.root();
   const auto decision = unwrap(root.issue<DecisionId>());
   const auto invocation = unwrap(root.issue<InvocationId>());
+  const auto admitted_generation = generation_;
   const auto attempt = unwrap(root.issue<OperationAttemptId>());
   const auto exec_id = name == "exec" ? hex_identity(attempt.bytes()) : std::string{};
   const auto serialized = unwrap(encode_packet_string(input));
@@ -1859,8 +2024,27 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
                      {"invocation", Value{hex_identity(invocation.bytes())}},
                      {"revision", Value{context_.head()}},
                      {"time", began_time},
-                     {"generation", Value{hex_identity(generation_.bytes())}}});
+                     {"generation", Value{hex_identity(admitted_generation.bytes())}}});
   const auto continuation_bytes = unwrap(encode_packet(meta));
+  CommandTaskMap staged_tasks;
+  CommandTaskMap::node_type task_node;
+  if (!task_id.empty()) {
+    staged_tasks.try_emplace(exec_id, task_activity, std::move(task_id), attempt,
+                             exec_id, std::string{name});
+    task_node = staged_tasks.extract(exec_id);
+  }
+  struct TaskRun {
+    CommandTaskActivity *activity;
+    bool transferred = false;
+    ~TaskRun() {
+      if (activity && !transferred)
+        activity->emit(3);
+    }
+  } task_run{task_node.empty() ? nullptr : &task_node.mapped()};
+  if (task_run.activity) {
+    task_run.activity->pending_node = &task_node;
+    task_run.activity->transferred = &task_run.transferred;
+  }
   // Fresh identities: one ordered batch, no authoritative partial admission.
   const std::array<RetainedEvent, 3> admitted{
       RetainedEvent{
@@ -1869,11 +2053,12 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
                         identity_.actor,
                         identity_.conversation,
                         identity_.workflow,
-                        generation_,
+                        admitted_generation,
                         context,
                         {invocation},
                         {continuation_bytes.begin(), continuation_bytes.end()}}},
-      RetainedEvent{{}, InvocationEvent{invocation, decision, generation_, bytes}},
+      RetainedEvent{{},
+                    InvocationEvent{invocation, decision, admitted_generation, bytes}},
       RetainedEvent{{},
                     AttemptAdmissionEvent{attempt, invocation, decision, bytes, true}}};
   admission.linkage({raw_text(context_.head()), attempt.bytes()});
@@ -1889,45 +2074,44 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
   }
   admission.outcome(RawRegionOutcome::admitted);
   admission.finish();
-  struct TaskRun {
-    std::function<void(const Value &)> &observer;
-    std::string id, attempt, operation;
-    bool ended = false;
-    void emit(std::string_view phase) noexcept {
-      if (id.empty() || !observer)
-        return;
-      try {
-        observer(Value::object({{"task_id", Value{id}},
-                                {"attempt", Value{attempt}},
-                                {"operation", Value{operation}},
-                                {"phase", Value{std::string{phase}}}}));
-      } catch (...) {
-      } // Derived presentation cannot undo a retained operation.
-    }
-    ~TaskRun() {
-      if (!ended)
-        emit("outcome unknown");
-    }
-  } task_run{task_activity, name == "participant_start" ? "" : task_id,
-             hex_identity(attempt.bytes()), std::string{name}};
-  task_run.emit("running");
+  if (task_run.activity) {
+    task_run.activity->bind({raw_lane_epoch(), admission.begin_ordinal()});
+    task_run.activity->emit(0);
+  }
+  if (provider_operation) {
+    provider_operation->owner = {
+        attempt.bytes(), invocation.bytes(), admitted_generation.bytes(), {}};
+    const RawAdapterContext attempt_context{&provider_operation->owner,
+                                            provider_operation->parent, nullptr,
+                                            &provider_operation->receipt};
+    provider_operation->attempt_phase->start(3, &attempt_context);
+    provider_operation->attempt_phase->stage(22);
+  }
   struct Boundary final : EffectBoundary {
-    const std::function<Value(OperationAttemptId)> &fn;
+    const std::function<Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
+                              CommandTaskActivity *)> &fn;
+    InvocationId invocation;
+    DefinitionGenerationId generation;
+    CommandTaskActivity *activity;
     Value result;
     std::optional<Error> error;
     std::optional<RawControlToken> receipt_credit;
     std::optional<RawRegionPrepaidScope> receipt_scope;
     bool dispatched = false;
-    Boundary(const std::function<Value(OperationAttemptId)> &f,
-             std::optional<RawControlToken> credit)
-        : fn(f), receipt_credit(std::move(credit)) {}
+    Boundary(
+        const std::function<Value(OperationAttemptId, InvocationId,
+                                  DefinitionGenerationId, CommandTaskActivity *)> &f,
+        InvocationId actual_invocation, DefinitionGenerationId actual_generation,
+        std::optional<RawControlToken> credit, CommandTaskActivity *task)
+        : fn(f), invocation(actual_invocation), generation(actual_generation),
+          activity(task), receipt_credit(std::move(credit)) {}
     Result<void> dispatch(const EffectIntent &intent) override {
       // The prepaid open append has finished. Native body admission remains
       // interruptible and never borrows the caller's settlement region bank.
       receipt_scope.reset();
       dispatched = true;
       try {
-        result = fn(intent.attempt);
+        result = fn(intent.attempt, invocation, generation, activity);
       } catch (const Error &e) {
         error = e;
       } catch (const std::bad_alloc &) {
@@ -1941,7 +2125,8 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
         receipt_scope.emplace(*receipt_credit);
       return error ? Result<void>::failure(*error) : Result<void>::success();
     }
-  } boundary{body, std::move(exec_settlement_credit)};
+  } boundary{body, invocation, admitted_generation, std::move(exec_settlement_credit),
+             task_run.activity};
   auto interrupted_terminal = [&](std::string_view message) {
     std::optional<RawRegionPrepaidScope> terminal_scope;
     if (boundary.receipt_credit)
@@ -2036,7 +2221,22 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
       result.object().emplace_back("effect_outcome", Value{"unknown"});
     }
   }
-  auto output = unwrap(encode_packet_string(result));
+  std::string output;
+  if (provider_original && provider_result) {
+    output = provider_result->run([&] {
+      const RawAdapterContext context{&provider_operation->owner, std::nullopt, nullptr,
+                                      &provider_operation->receipt};
+      provider_result->start(9, &context);
+      provider_result->stage(24);
+      if (provider_operation->receipt.response)
+        provider_result->link(*provider_operation->receipt.response);
+      provider_original->source(provider_result->reference());
+      provider_original->adopt(unwrap(encode_packet_string(result)));
+      provider_operation->result = provider_original->reference();
+      return provider_original->response_body();
+    });
+  } else
+    output = unwrap(encode_packet_string(result));
   const auto observed_time = observations_->time();
   const auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                                std::chrono::steady_clock::now() - began)
@@ -2149,17 +2349,15 @@ Value CodingEngine::operation(std::string_view name, const Value &input,
     }
     (void)unwrap(std::move(recorded));
   }
-  std::string task_phase = disposition == AttemptDisposition::unknown
-                               ? "outcome unknown"
-                           : disposition == AttemptDisposition::failure ? "failed"
-                                                                        : "finished";
-  if (name == "exec" && !boundary.error)
-    if (const auto *exit = result.find("exit_code");
-        exit && exit->number().text() != "0")
-      task_phase = "failed (exit " + exit->number().text() + ")";
-  task_run.ended = true;
-  if (!persistent_command)
-    task_run.emit(task_phase);
+  if (task_run.activity && !task_run.transferred) {
+    auto branch = disposition == AttemptDisposition::unknown   ? std::uint8_t{3}
+                  : disposition == AttemptDisposition::failure ? std::uint8_t{2}
+                                                               : std::uint8_t{1};
+    const Value *task_exit = nullptr;
+    if (name == "exec" && !boundary.error && branch == 2)
+      task_exit = result.find("exit_code");
+    task_run.activity->emit(branch, task_exit);
+  }
   if (operation_completed || operation_outcome) {
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - began)
@@ -2210,7 +2408,9 @@ Value CodingEngine::execute_workflow(const WorkflowContinuation &invocation) {
     if (workflow_depth_ >= 8 || ++workflow_invocations_ > 64)
       throw Error{ErrorCode::capacity};
     return operation(
-        "workflow_execute", invocation.arguments, [&](OperationAttemptId attempt) {
+        "workflow_execute", invocation.arguments,
+        [&](OperationAttemptId attempt, InvocationId, DefinitionGenerationId,
+            CommandTaskActivity *) {
           const auto metadata = Value::object(
               {{"name", field(invocation.definition, "name")},
                {"revision", Value{invocation.revision}},
@@ -2262,800 +2462,964 @@ void CodingEngine::drain_workflows() {
   }
 }
 Value CodingEngine::request(Value options) {
-  RawRegion preparation{raw_regions::provider_prepare};
-  if (restart_note_)
-    throw Error{ErrorCode::busy};
-  validate_protocol(context_.items());
-  drain_workflows();
-  auto items = context_.items();
-  validate_protocol(items);
-  auto request = Value::object(
-      {{"model", Value{string_field(program_config_, "model").empty()
-                           ? model_
-                           : string_field(program_config_, "model")}},
-       {"instructions",
-        Value{
-            "You are Blackbird, a programmable coding colleague for an expert "
-            "operator. Use local file/process tools without approval ceremony. "
-            "Context is ordinary editable data: inspect it, transform it with Lua, "
-            "repair it from originals. A timed-out tool returns a result: inspect "
-            "its "
-            "retained output and choose a new attempt or another approach; never "
-            "blindly repeat an effect with unknown outcome. Keep tool call/result "
-            "linkage valid. Governing "
-            "Lua workflow changes activate next turn. For compiled changes, build "
-            "build/release/blackbird and request restart with a note listing changes, "
-            "checks and next steps; the same session will resume with continue. "
-            "Bound hardening before starting: list concrete remediation tasks, "
-            "direct checks and a time/resource allowance. Layer one: remediate "
-            "and fix. Layer two: one recheck and fix its findings within that "
-            "allowance. Never a third assurance layer: no reviews of reviews, "
-            "certifying rechecks, unrelated full-suite reruns or silent budget "
-            "resets. Settled checks stay settled absent relevant change or new "
-            "defect evidence. If blocked at the bound, retain the unsafe candidate "
-            "inactive and continue independent useful work; do not call it safe. "
-            "Work carefully and verify "
-            "actual results. Host cwd: " +
-            std::filesystem::current_path().string()}},
-       {"reasoning",
-        Value::object(
-            {{"effort", Value{string_field(program_config_, "effort").empty()
-                                  ? effort_
-                                  : string_field(program_config_, "effort")}}})},
-       {"input", Value{std::move(items)}},
-       {"tools", request_tools()},
-       {"parallel_tool_calls", Value{false}},
-       {"include", Value{Value::Array{Value{"reasoning.encrypted_content"}}}},
-       {"store", Value{false}},
-       {"stream", Value{true}}});
-  if (!std::holds_alternative<Value::Object>(options.value()))
-    throw Error{ErrorCode::invalid_range};
-  unsigned max_attempts = 5;
-  unsigned base_ms = 1000;
-  unsigned cap_ms = 16000;
-  if (const auto *policy = options.find("retry_policy")) {
-    if (!std::holds_alternative<Value::Object>(policy->value()))
+  RawProviderPhase assembly{2 * provider_scalar_credit + sizeof(IdentityBytes) +
+                            sizeof(std::size_t) + 32};
+  return assembly.run([&] {
+    assembly.start(1);
+    assembly.stage(10);
+    RawRegion preparation{raw_regions::provider_prepare};
+    if (restart_note_)
+      throw Error{ErrorCode::busy};
+    assembly.stage(11);
+    validate_protocol(context_.items(), assembly.reference());
+    assembly.stage(12);
+    drain_workflows();
+    auto items = context_.items();
+    validate_protocol(items, assembly.reference());
+    auto request = Value::object(
+        {{"model", Value{string_field(program_config_, "model").empty()
+                             ? model_
+                             : string_field(program_config_, "model")}},
+         {"instructions",
+          Value{"You are Blackbird, a programmable coding colleague for an expert "
+                "operator. Use local file/process tools without approval ceremony. "
+                "Context is ordinary editable data: inspect it, transform it with Lua, "
+                "repair it from originals. A timed-out tool returns a result: inspect "
+                "its "
+                "retained output and choose a new attempt or another approach; never "
+                "blindly repeat an effect with unknown outcome. Keep tool call/result "
+                "linkage valid. Governing "
+                "Lua workflow changes activate next turn. For compiled changes, build "
+                "build/release/blackbird and request restart with a note listing "
+                "changes, "
+                "checks and next steps; the same session will resume with continue. "
+                "Bound hardening before starting: list concrete remediation tasks, "
+                "direct checks and a time/resource allowance. Layer one: remediate "
+                "and fix. Layer two: one recheck and fix its findings within that "
+                "allowance. Never a third assurance layer: no reviews of reviews, "
+                "certifying rechecks, unrelated full-suite reruns or silent budget "
+                "resets. Settled checks stay settled absent relevant change or new "
+                "defect evidence. If blocked at the bound, retain the unsafe candidate "
+                "inactive and continue independent useful work; do not call it safe. "
+                "Work carefully and verify "
+                "actual results. Host cwd: " +
+                std::filesystem::current_path().string()}},
+         {"reasoning",
+          Value::object(
+              {{"effort", Value{string_field(program_config_, "effort").empty()
+                                    ? effort_
+                                    : string_field(program_config_, "effort")}}})},
+         {"input", Value{std::move(items)}},
+         {"tools", request_tools()},
+         {"parallel_tool_calls", Value{false}},
+         {"include", Value{Value::Array{Value{"reasoning.encrypted_content"}}}},
+         {"store", Value{false}},
+         {"stream", Value{true}}});
+    assembly.stage(13);
+    if (!std::holds_alternative<Value::Object>(options.value()))
       throw Error{ErrorCode::invalid_range};
-    for (const auto &[key, value] : policy->object()) {
-      if (!std::holds_alternative<Number>(value.value()))
+    unsigned max_attempts = 5;
+    unsigned base_ms = 1000;
+    unsigned cap_ms = 16000;
+    if (const auto *policy = options.find("retry_policy")) {
+      if (!std::holds_alternative<Value::Object>(policy->value()))
         throw Error{ErrorCode::invalid_range};
-      unsigned n = 0;
-      const auto &text = value.number().text();
-      const auto parsed = std::from_chars(text.data(), text.data() + text.size(), n);
-      if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size())
-        throw Error{ErrorCode::invalid_range};
-      if (key == "max_attempts" && n >= 1 && n <= 100)
-        max_attempts = n;
-      else if (key == "base_ms" && n <= 60000)
-        base_ms = n;
-      else if (key == "cap_ms" && n <= 60000)
-        cap_ms = n;
+      for (const auto &[key, value] : policy->object()) {
+        if (!std::holds_alternative<Number>(value.value()))
+          throw Error{ErrorCode::invalid_range};
+        unsigned n = 0;
+        const auto &text = value.number().text();
+        const auto parsed = std::from_chars(text.data(), text.data() + text.size(), n);
+        if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size())
+          throw Error{ErrorCode::invalid_range};
+        if (key == "max_attempts" && n >= 1 && n <= 100)
+          max_attempts = n;
+        else if (key == "base_ms" && n <= 60000)
+          base_ms = n;
+        else if (key == "cap_ms" && n <= 60000)
+          cap_ms = n;
+        else
+          throw Error{ErrorCode::invalid_range};
+      }
+    }
+    for (auto &[key, value] : options.object()) {
+      if (key == "retry_policy")
+        continue;
+      auto &fields = request.object();
+      auto found = std::find_if(fields.begin(), fields.end(),
+                                [&](const auto &f) { return f.first == key; });
+      if (found == fields.end())
+        fields.emplace_back(key, std::move(value));
       else
-        throw Error{ErrorCode::invalid_range};
+        found->second = std::move(value);
     }
-  }
-  for (auto &[key, value] : options.object()) {
-    if (key == "retry_policy")
-      continue;
-    auto &fields = request.object();
-    auto found = std::find_if(fields.begin(), fields.end(),
-                              [&](const auto &f) { return f.first == key; });
-    if (found == fields.end())
-      fields.emplace_back(key, std::move(value));
-    else
-      found->second = std::move(value);
-  }
-  const auto *store = std::get_if<bool>(&field(request, "store").value());
-  if (!tasks_.state().empty() || tasks_.state().revision() != 0) {
-    auto &instructions =
-        std::find_if(request.object().begin(), request.object().end(),
-                     [](const auto &f) { return f.first == "instructions"; })
-            ->second;
-    instructions = Value{
-        instructions.string() + "\nCURRENT_TASKS " +
-        unwrap(format_value(tasks_.read(Value::object({{"status", Value{"open"}},
-                                                       {"limit", Value{Number{"16"}}},
-                                                       {"compact", Value{true}}})))) +
-        "\nTasks are durable session working state. Read more with tasks_read; use "
-        "tasks_edit for small atomic batches at real work transitions. Keep stable "
-        "IDs through renames. Exactly tasks and subtasks, no deeper nesting. Multiple "
-        "active tasks are fine. Completion is explicit, including parents. Use item "
-        "versions for set, and current list base for structural edits. Preserve op_id "
-        "and arguments for retries; resolve conflicts by reading before a new edit. "
-        "Use exec task_id for observed activity; a running command does not itself "
-        "complete a task. Unfinished tasks remain across turns and compaction."};
-  }
-  const auto *stream = std::get_if<bool>(&field(request, "stream").value());
-  if (store == nullptr || *store || stream == nullptr || !*stream)
-    throw Error{ErrorCode::unsupported};
-  validate_protocol(field(request, "input").array());
-  const auto budget =
-      budget_view(string_field(request, "model"),
-                  unwrap(encode_packet_string(field(request, "input"))).size());
-  if (std::get<bool>(field(budget, "triggered").value())) {
-    auto &instructions =
-        std::find_if(request.object().begin(), request.object().end(),
-                     [](const auto &f) { return f.first == "instructions"; })
-            ->second;
-    instructions = Value{
-        instructions.string() + "\nCONTEXT_BUDGET " + unwrap(format_value(budget)) +
-        "\nThe configured advisory trigger is reached. Inspect the working map "
-        "and propose managed context "
-        "with context_manage or Lua toward target_bytes, or revise/defer policy "
-        "with context_budget and a reason. "
-        "Do not discard live instructions or incomplete tool groups. Destructive "
-        "proposals remain model-authored; "
-        "native acceptance checks structure, not summary quality. Managed "
-        "proposals and policy changes activate only "
-        "after successful workflow completion: finish this workflow to use them "
-        "on the next turn. "
-        "Repair may exceed the target; retrieve bounded originals and restore "
-        "when useful. "
-        "Neither target nor trigger is a token estimate, hard provider limit, or "
-        "audit reclamation."};
-  }
-  const auto prepared_request = unwrap(encode_packet_string(request));
-  last_request_bytes_ = Value{Number{prepared_request.size()}};
-  usage_ = Value{};
-  if (diagnostic || display)
-    (diagnostic ? diagnostic : display)("\n[request " +
-                                        last_request_bytes_.number().text() +
-                                        " native request bytes]\n");
-  const auto origin = context_.head();
-  if (preparation.enabled()) {
-    preparation.linkage({raw_text(origin), {}});
-    preparation.observe({RawObservationKind::request_bytes, 0, prepared_request.size(),
-                         log_.root().cursor().sequence});
+    const auto *store = std::get_if<bool>(&field(request, "store").value());
+    if (!tasks_.state().empty() || tasks_.state().revision() != 0) {
+      auto &instructions =
+          std::find_if(request.object().begin(), request.object().end(),
+                       [](const auto &f) { return f.first == "instructions"; })
+              ->second;
+      instructions = Value{
+          instructions.string() + "\nCURRENT_TASKS " +
+          unwrap(format_value(tasks_.read(Value::object({{"status", Value{"open"}},
+                                                         {"limit", Value{Number{"16"}}},
+                                                         {"compact", Value{true}}})))) +
+          "\nTasks are durable session working state. Read more with tasks_read; use "
+          "tasks_edit for small atomic batches at real work transitions. Keep stable "
+          "IDs through renames. Exactly tasks and subtasks, no deeper nesting. "
+          "Multiple "
+          "active tasks are fine. Completion is explicit, including parents. Use item "
+          "versions for set, and current list base for structural edits. Preserve "
+          "op_id "
+          "and arguments for retries; resolve conflicts by reading before a new edit. "
+          "Use exec task_id for observed activity; a running command does not itself "
+          "complete a task. Unfinished tasks remain across turns and compaction."};
+    }
+    const auto *stream = std::get_if<bool>(&field(request, "stream").value());
+    if (store == nullptr || *store || stream == nullptr || !*stream)
+      throw Error{ErrorCode::unsupported};
+    validate_protocol(field(request, "input").array(), assembly.reference());
+    const auto budget =
+        budget_view(string_field(request, "model"),
+                    unwrap(encode_packet_string(field(request, "input"))).size());
+    if (std::get<bool>(field(budget, "triggered").value())) {
+      auto &instructions =
+          std::find_if(request.object().begin(), request.object().end(),
+                       [](const auto &f) { return f.first == "instructions"; })
+              ->second;
+      instructions = Value{
+          instructions.string() + "\nCONTEXT_BUDGET " + unwrap(format_value(budget)) +
+          "\nThe configured advisory trigger is reached. Inspect the working map "
+          "and propose managed context "
+          "with context_manage or Lua toward target_bytes, or revise/defer policy "
+          "with context_budget and a reason. "
+          "Do not discard live instructions or incomplete tool groups. Destructive "
+          "proposals remain model-authored; "
+          "native acceptance checks structure, not summary quality. Managed "
+          "proposals and policy changes activate only "
+          "after successful workflow completion: finish this workflow to use them "
+          "on the next turn. "
+          "Repair may exceed the target; retrieve bounded originals and restore "
+          "when useful. "
+          "Neither target nor trigger is a token estimate, hard provider limit, or "
+          "audit reclamation."};
+    }
+    assembly.stage(14);
+    ProviderOriginalLease final_packet{{ProviderOriginalRole::request_packet,
+                                        ProviderOriginalMode::codec_adopt,
+                                        ValueLimits{}.bytes,
+                                        {}},
+                                       assembly.reference()};
+    final_packet.adopt(unwrap(encode_packet_string(request)));
+    const auto prepared_request = final_packet.response_body();
+    last_request_bytes_ = Value{Number{prepared_request.size()}};
+    usage_ = Value{};
+    if (diagnostic || display)
+      (diagnostic ? diagnostic : display)("\n[request " +
+                                          last_request_bytes_.number().text() +
+                                          " native request bytes]\n");
+    assembly.stage(15);
+    const auto origin = context_.head();
+    if (origin.size() > 32)
+      throw Error{ErrorCode::invalid_range};
     const auto origin_bytes = origin.size();
-    const auto request_bytes = prepared_request.size();
-    const std::array fields{raw_native(origin_bytes), raw_text(origin),
-                            ByteView{generation_.bytes()}, raw_native(request_bytes),
-                            raw_text(prepared_request)};
-    emit_provider_fact(1200, fields);
-    preparation.outcome(RawRegionOutcome::success);
-  }
-  preparation.finish();
-  // One live request group; each failed attempt stays independently recorded.
-  const auto retry_group =
-      hex_identity(unwrap(log_.root().issue<OperationAttemptId>()).bytes());
-  provider_.cancelled = [this] {
-    poll_commands();
-    return cancelled && cancelled();
-  };
-  Value response;
-  unsigned delay_ms = std::min(base_ms, cap_ms);
-  for (unsigned ordinal = 1;; ++ordinal) {
-    if (cancelled && cancelled())
-      throw Error{ErrorCode::interrupted};
-    const auto journal = log_.root().journal_usage();
-    if (journal.approaching() || journal.extent_error) {
-      const auto remaining = journal.remaining_bytes();
-      const auto warning =
-          "audit headroom: " +
-          (remaining ? std::to_string(*remaining) + " bytes" : "bytes unavailable") +
-          ", " + std::to_string(journal.remaining_records()) +
-          " indexed records remaining; observation only, no handoff reserve; "
-          "context compaction does not reclaim audit history";
-      if (status)
-        status(warning);
-      if (notice || display)
-        (notice ? notice : display)("\n[" + warning + "]\n");
+    const std::array generation_fields{ByteView{generation_.bytes()}};
+    assembly.scalar(15, 8, generation_fields);
+    const std::array origin_fields{raw_native(origin_bytes), raw_text(origin)};
+    assembly.scalar(15, 7, origin_fields);
+    if (preparation.enabled()) {
+      preparation.linkage({raw_text(origin), {}});
+      preparation.observe({RawObservationKind::request_bytes, 0,
+                           prepared_request.size(), log_.root().cursor().sequence});
+      preparation.outcome(RawRegionOutcome::success);
     }
-    ResponsePreview preview;
-    previewed_.clear();
-    try {
-      response = operation("provider", request, [&](OperationAttemptId attempt) {
-        const auto admission = unwrap(log_.root().attempt(attempt));
-        const auto *instructions = request.find("instructions");
-        if (instructions && std::holds_alternative<std::string>(instructions->value()))
-          observations_->doctrine(instructions->string(),
-                                  admission.admission.invocation, attempt);
-        log_.record(ApplicationChannel::log,
-                    Value::object(
-                        {{"label", Value{"provider.request"}},
-                         {"metadata",
-                          Value::object(
-                              {{"attempt", Value{hex_identity(attempt.bytes())}},
-                               {"revision", Value{origin}},
-                               {"generation", Value{hex_identity(generation_.bytes())}},
-                               {"input_binding", Value{"attempt-invocation-v1"}},
-                               {"retry_group", Value{retry_group}},
-                               {"ordinal", Value{Number{ordinal}}}})}}));
-        RawRegion transport{raw_regions::provider_transport, {.cpu = false}};
-        std::optional<RawControlToken> response_credit;
-        if (transport.enabled()) {
-          transport.linkage({raw_text(origin), attempt.bytes()});
-          // Decoded response observation has fixed native identity fields. Its
-          // credit is held before provider acquisition, independent of data full.
-          auto held = raw_claim_control(raw_envelope_size + 3 * sizeof(IdentityBytes) +
-                                        sizeof(std::uint64_t));
-          if (!held.has_value()) {
-            if (held.error().code != ErrorCode::interrupted)
-              raw_fence(held.error());
-            throw held.error();
-          }
-          response_credit.emplace(std::move(held).value());
-          const auto group_bytes = retry_group.size();
-          const std::array fields{ByteView{attempt.bytes()},
-                                  ByteView{admission.admission.invocation.bytes()},
-                                  ByteView{generation_.bytes()},
-                                  raw_native(ordinal),
-                                  raw_native(group_bytes),
-                                  raw_text(retry_group)};
-          emit_provider_fact(1201, fields);
-        }
-        StreamCapture capture{[&](std::string_view block) {
-          try {
-            log_.original(
-                {"provider.stream", block,
-                 Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
-                                {"revision", Value{origin}},
-                                {"capture_policy", Value{"bounded-blocks-v1"}}})});
-          } catch (const Error &e) {
-            if (e.code == ErrorCode::capacity)
-              unretained_bytes_ += block.size();
-            throw;
-          }
-        }};
-        Value result;
-        try {
-          const RawProviderOwner owner{attempt.bytes(),
-                                       admission.admission.invocation.bytes(),
-                                       generation_.bytes(),
-                                       {raw_lane_epoch(), transport.begin_ordinal()}};
-          result = provider_.respond(
-              request,
-              [&](std::string_view raw) {
-                poll_commands();
-                capture.append(raw);
-                // Preview follows transport delivery, not diagnostic flush cadence.
-                for (const auto &delta : preview.feed(raw)) {
-                  previewed_[delta.item_id] += delta.text;
-                  if (display)
-                    display(delta.text);
-                }
-              },
-              &owner);
-        } catch (const Error &error) {
-          transport.error(error);
-          transport.outcome(RawRegionOutcome::exception);
-          transport.finish();
-          response_credit.reset();
-          // No destructor I/O and no retry if a prior sink write was uncertain.
-          capture.flush();
-          throw;
-        } catch (...) {
-          transport.outcome(RawRegionOutcome::exception);
-          transport.finish();
-          response_credit.reset();
-          capture.flush();
-          throw;
-        }
-        if (response_credit) {
-          const auto begin = transport.begin_ordinal();
-          const std::array fields{ByteView{attempt.bytes()},
-                                  ByteView{admission.admission.invocation.bytes()},
-                                  ByteView{generation_.bytes()}, raw_native(begin)};
-          emit_provider_fact(1202, fields, &*response_credit);
-          response_credit.reset();
-        }
-        transport.outcome(RawRegionOutcome::returned);
-        transport.finish();
-        capture.flush();
-        return import_provider_response(std::move(result));
-      });
-      break;
-    } catch (const Error &e) {
-      const bool transient_http =
-          e.code == ErrorCode::external_unknown &&
-          (e.detail == 408 || e.detail == 429 || e.detail == 500 || e.detail == 502 ||
-           e.detail == 503 || e.detail == 504);
-      const bool transient_curl =
-          e.code == ErrorCode::provider_transport &&
-          (e.detail == 5 || e.detail == 6 || e.detail == 7 || e.detail == 16 ||
-           e.detail == 18 || e.detail == 28 || e.detail == 52 || e.detail == 55 ||
-           e.detail == 56 || e.detail == 92 || e.detail == 95 || e.detail == 96);
-      if (ordinal >= max_attempts || !(transient_http || transient_curl) ||
-          log_.root().state() != JournalWriterState::live)
-        throw;
-      const auto message =
-          "provider attempt " + std::to_string(ordinal) + " stopped (" +
-          error_name(e.code) + ":" + std::to_string(e.detail) +
-          "); partial output not accepted; retry " + std::to_string(ordinal + 1) + "/" +
-          std::to_string(max_attempts) + " in " + std::to_string(delay_ms) + "ms";
-      log_.original({"provider.retry", message,
-                     Value::object({{"retry_group", Value{retry_group}}})});
-      if (status)
-        status(message);
-      if (notice || display)
-        (notice ? notice : display)("\n[" + message + "]\n");
-      const auto until =
-          std::chrono::steady_clock::now() + std::chrono::milliseconds{delay_ms};
-      while (std::chrono::steady_clock::now() < until) {
+    preparation.finish();
+    assembly.finish(1);
+    constexpr std::uint64_t decision_bytes = raw_envelope_size + provider_ref_bytes +
+                                             sizeof(unsigned) + provider_ref_bytes +
+                                             sizeof(unsigned) + sizeof(bool);
+    constexpr std::uint64_t clock_bytes = raw_envelope_size + provider_ref_bytes +
+                                          sizeof(clockid_t) + 2 * sizeof(int) +
+                                          sizeof(time_t) + sizeof(long);
+    constexpr std::uint64_t wait_bytes = provider_phase_credit + 2 * clock_bytes;
+    const std::uint64_t retry_extra =
+        raw_envelope_size + provider_ref_bytes + sizeof(IdentityBytes) +
+        3 * sizeof(unsigned) +
+        static_cast<std::uint64_t>(max_attempts) * decision_bytes +
+        static_cast<std::uint64_t>(max_attempts - 1) * wait_bytes;
+    RawProviderPhase group{retry_extra};
+    return group.run([&] {
+      const RawAdapterContext group_context{nullptr, assembly.reference(), nullptr,
+                                            nullptr};
+      group.start(2, &group_context);
+      group.stage(22);
+      // One live request group; each failed attempt stays independently recorded.
+      const auto retry_id = unwrap(log_.root().issue<OperationAttemptId>());
+      const auto group_ref = group.reference();
+      const std::array policy_fields{
+          ByteView{group_ref.lane},   raw_native(group_ref.ordinal),
+          ByteView{retry_id.bytes()}, raw_native(max_attempts),
+          raw_native(base_ms),        raw_native(cap_ms)};
+      group.emit(1325, policy_fields);
+      const auto retry_group = hex_identity(retry_id.bytes());
+      provider_.cancelled = [this] {
+        poll_commands();
+        return cancelled && cancelled();
+      };
+      Value response;
+      unsigned delay_ms = std::min(base_ms, cap_ms);
+      for (unsigned ordinal = 1;; ++ordinal) {
+        RawProviderPhase attempt_phase{2 * provider_link_credit};
+        RawProviderOperationContext operation_context;
+        operation_context.attempt_phase = &attempt_phase;
+        operation_context.parent = group.reference();
+        group.stage(20);
         if (cancelled && cancelled())
           throw Error{ErrorCode::interrupted};
-        std::this_thread::sleep_for(std::chrono::milliseconds{25});
+        group.stage(21);
+        const auto journal = log_.root().journal_usage();
+        if (journal.approaching() || journal.extent_error) {
+          const auto remaining = journal.remaining_bytes();
+          const auto warning =
+              "audit headroom: " +
+              (remaining ? std::to_string(*remaining) + " bytes"
+                         : "bytes unavailable") +
+              ", " + std::to_string(journal.remaining_records()) +
+              " indexed records remaining; observation only, no handoff reserve; "
+              "context compaction does not reclaim audit history";
+          if (status)
+            status(warning);
+          if (notice || display)
+            (notice ? notice : display)("\n[" + warning + "]\n");
+        }
+        ResponsePreview preview;
+        previewed_.clear();
+        try {
+          group.stage(22);
+          response = attempt_phase.run([&] {
+            return operation(
+                "provider", request,
+                [&](OperationAttemptId attempt, InvocationId, DefinitionGenerationId,
+                    CommandTaskActivity *) {
+                  const auto admission = unwrap(log_.root().attempt(attempt));
+                  const auto *instructions = request.find("instructions");
+                  if (instructions &&
+                      std::holds_alternative<std::string>(instructions->value()))
+                    observations_->doctrine(instructions->string(),
+                                            admission.admission.invocation, attempt);
+                  log_.record(
+                      ApplicationChannel::log,
+                      Value::object(
+                          {{"label", Value{"provider.request"}},
+                           {"metadata",
+                            Value::object(
+                                {{"attempt", Value{hex_identity(attempt.bytes())}},
+                                 {"revision", Value{origin}},
+                                 {"generation",
+                                  Value{hex_identity(generation_.bytes())}},
+                                 {"input_binding", Value{"attempt-invocation-v1"}},
+                                 {"retry_group", Value{retry_group}},
+                                 {"ordinal", Value{Number{ordinal}}}})}}));
+                  RawRegion transport{raw_regions::provider_transport, {.cpu = false}};
+                  if (transport.enabled())
+                    transport.linkage({raw_text(origin), attempt.bytes()});
+                  RawProviderPhase receipt{provider_link_credit};
+                  RawProviderPhase acceptance{provider_link_credit +
+                                              provider_scalar_credit +
+                                              sizeof(std::size_t) + 32};
+                  StreamCapture capture{[&](std::string_view block) {
+                    try {
+                      log_.original(
+                          {"provider.stream", block,
+                           Value::object(
+                               {{"attempt", Value{hex_identity(attempt.bytes())}},
+                                {"revision", Value{origin}},
+                                {"capture_policy", Value{"bounded-blocks-v1"}}})});
+                    } catch (const Error &e) {
+                      if (e.code == ErrorCode::capacity)
+                        unretained_bytes_ += block.size();
+                      throw;
+                    }
+                  }};
+                  Value result;
+                  try {
+                    operation_context.owner.dispatch = {raw_lane_epoch(),
+                                                        transport.begin_ordinal()};
+                    const auto &owner = operation_context.owner;
+                    const RawAdapterContext source_context{
+                        &owner, attempt_phase.reference(), nullptr,
+                        &operation_context.receipt};
+                    attempt_phase.stage(23);
+                    result = provider_.respond(
+                        request,
+                        [&](std::string_view raw) {
+                          poll_commands();
+                          capture.append(raw);
+                          // Preview follows transport delivery, not diagnostic flush
+                          // cadence.
+                          for (const auto &delta : preview.feed(raw, &source_context)) {
+                            RawProviderPhase presentation;
+                            presentation.run([&] {
+                              presentation.start(8, &source_context);
+                              previewed_[delta.item_id] += delta.text;
+                              if (display)
+                                display(delta.text);
+                            });
+                          }
+                        },
+                        &owner, &source_context);
+                    receipt.start(9, &source_context);
+                    if (operation_context.receipt.response)
+                      receipt.link(*operation_context.receipt.response);
+                    receipt.finish(1);
+                  } catch (const Error &error) {
+                    transport.error(error);
+                    transport.outcome(RawRegionOutcome::exception);
+                    transport.finish();
+                    // No destructor I/O and no retry if a prior sink write was
+                    // uncertain.
+                    capture.flush();
+                    throw;
+                  } catch (...) {
+                    transport.outcome(RawRegionOutcome::exception);
+                    transport.finish();
+                    capture.flush();
+                    throw;
+                  }
+                  transport.outcome(RawRegionOutcome::returned);
+                  transport.finish();
+                  attempt_phase.stage(24);
+                  capture.flush();
+                  return acceptance.run([&] {
+                    const RawAdapterContext acceptance_context{
+                        &operation_context.owner, attempt_phase.reference(), nullptr,
+                        &operation_context.receipt};
+                    acceptance.start(10, &acceptance_context);
+                    if (operation_context.receipt.response)
+                      acceptance.link(*operation_context.receipt.response);
+                    acceptance.stage(25);
+                    return import_provider_response(std::move(result));
+                  });
+                },
+                &operation_context);
+          });
+          const bool eligible = false;
+          const auto attempt_ref = attempt_phase.reference();
+          const std::array decision_fields{ByteView{group_ref.lane},
+                                           raw_native(group_ref.ordinal),
+                                           raw_native(ordinal),
+                                           ByteView{attempt_ref.lane},
+                                           raw_native(attempt_ref.ordinal),
+                                           raw_native(delay_ms),
+                                           raw_native(eligible)};
+          group.emit(1326, decision_fields);
+          break;
+        } catch (const Error &e) {
+          const bool transient_http =
+              e.code == ErrorCode::external_unknown &&
+              (e.detail == 408 || e.detail == 429 || e.detail == 500 ||
+               e.detail == 502 || e.detail == 503 || e.detail == 504);
+          const bool transient_curl =
+              e.code == ErrorCode::provider_transport &&
+              (e.detail == 5 || e.detail == 6 || e.detail == 7 || e.detail == 16 ||
+               e.detail == 18 || e.detail == 28 || e.detail == 52 || e.detail == 55 ||
+               e.detail == 56 || e.detail == 92 || e.detail == 95 || e.detail == 96);
+          group.stage(27);
+          const bool eligible = ordinal < max_attempts &&
+                                (transient_http || transient_curl) &&
+                                log_.root().state() == JournalWriterState::live;
+          const auto attempt_ref = attempt_phase.reference();
+          const std::array decision_fields{ByteView{group_ref.lane},
+                                           raw_native(group_ref.ordinal),
+                                           raw_native(ordinal),
+                                           ByteView{attempt_ref.lane},
+                                           raw_native(attempt_ref.ordinal),
+                                           raw_native(delay_ms),
+                                           raw_native(eligible)};
+          // No attempt begin exists if native retained admission itself refused.
+          if (attempt_ref.ordinal)
+            group.emit(1326, decision_fields);
+          if (!eligible)
+            throw;
+          const auto message =
+              "provider attempt " + std::to_string(ordinal) + " stopped (" +
+              error_name(e.code) + ":" + std::to_string(e.detail) +
+              "); partial output not accepted; retry " + std::to_string(ordinal + 1) +
+              "/" + std::to_string(max_attempts) + " in " + std::to_string(delay_ms) +
+              "ms";
+          log_.original({"provider.retry", message,
+                         Value::object({{"retry_group", Value{retry_group}}})});
+          if (status)
+            status(message);
+          if (notice || display)
+            (notice ? notice : display)("\n[" + message + "]\n");
+          group.stage(28);
+          RawProviderPhase wait_phase{group.split(wait_bytes)};
+          wait_phase.run([&] {
+            const RawAdapterContext wait_context{nullptr, group.reference(), nullptr,
+                                                 nullptr};
+            wait_phase.start(4, &wait_context);
+            auto clocks = wait_phase.split(2 * clock_bytes);
+            const auto clock = [&] {
+              const int saved_errno = errno;
+              const clockid_t method = CLOCK_MONOTONIC;
+              timespec value{};
+              const int result = ::clock_gettime(method, &value);
+              const int native_errno = errno;
+              const auto ref = wait_phase.reference();
+              const std::array fields{
+                  ByteView{ref.lane},       raw_native(ref.ordinal),
+                  raw_native(method),       raw_native(result),
+                  raw_native(native_errno), raw_native(value.tv_sec),
+                  raw_native(value.tv_nsec)};
+              emit_provider_fact(1327, fields, clocks ? &*clocks : nullptr);
+              errno = saved_errno;
+            };
+            clock();
+            const auto until =
+                std::chrono::steady_clock::now() + std::chrono::milliseconds{delay_ms};
+            try {
+              while (std::chrono::steady_clock::now() < until) {
+                if (cancelled && cancelled())
+                  throw Error{ErrorCode::interrupted};
+                std::this_thread::sleep_for(std::chrono::milliseconds{25});
+              }
+            } catch (...) {
+              clock();
+              throw;
+            }
+            clock();
+          });
+          delay_ms = std::min(cap_ms, delay_ms * 2);
+        }
       }
-      delay_ms = std::min(cap_ms, delay_ms * 2);
-    }
-  }
-  if (const auto *usage = response.find("usage");
-      usage && std::holds_alternative<Value::Object>(usage->value())) {
-    Value::Object selected;
-    auto select = [](const Value &source, std::string_view key, Value::Object &dest) {
-      const auto *v = source.find(key);
-      if (!v || !std::holds_alternative<Number>(v->value()))
-        return;
-      const auto &n = v->number().text();
-      if (!n.empty() &&
-          std::all_of(n.begin(), n.end(), [](char c) { return c >= '0' && c <= '9'; }))
-        dest.emplace_back(std::string{key}, *v);
-    };
-    for (const auto key : {"input_tokens", "output_tokens", "total_tokens"})
-      select(*usage, key, selected);
-    for (const auto &[group, key] :
-         {std::pair{"input_tokens_details", "cached_tokens"},
-          std::pair{"output_tokens_details", "reasoning_tokens"}}) {
-      if (const auto *details = usage->find(group)) {
-        Value::Object kept;
-        select(*details, key, kept);
-        if (!kept.empty())
-          selected.emplace_back(group, Value::object(std::move(kept)));
+      group.stage(29);
+      if (const auto *usage = response.find("usage");
+          usage && std::holds_alternative<Value::Object>(usage->value())) {
+        Value::Object selected;
+        auto select = [](const Value &source, std::string_view key,
+                         Value::Object &dest) {
+          const auto *v = source.find(key);
+          if (!v || !std::holds_alternative<Number>(v->value()))
+            return;
+          const auto &n = v->number().text();
+          if (!n.empty() && std::all_of(n.begin(), n.end(),
+                                        [](char c) { return c >= '0' && c <= '9'; }))
+            dest.emplace_back(std::string{key}, *v);
+        };
+        for (const auto key : {"input_tokens", "output_tokens", "total_tokens"})
+          select(*usage, key, selected);
+        for (const auto &[usage_group, key] :
+             {std::pair{"input_tokens_details", "cached_tokens"},
+              std::pair{"output_tokens_details", "reasoning_tokens"}}) {
+          if (const auto *details = usage->find(usage_group)) {
+            Value::Object kept;
+            select(*details, key, kept);
+            if (!kept.empty())
+              selected.emplace_back(usage_group, Value::object(std::move(kept)));
+          }
+        }
+        if (!selected.empty()) {
+          usage_ = Value::object(std::move(selected));
+          if (observed_usage)
+            observed_usage(usage_);
+          if (diagnostic || display)
+            (diagnostic ? diagnostic : display)("\n[provider usage " +
+                                                unwrap(format_value(usage_)) + "]\n");
+        }
       }
-    }
-    if (!selected.empty()) {
-      usage_ = Value::object(std::move(selected));
-      if (observed_usage)
-        observed_usage(usage_);
-      if (diagnostic || display)
-        (diagnostic ? diagnostic : display)("\n[provider usage " +
-                                            unwrap(format_value(usage_)) + "]\n");
-    }
-  }
-  if (context_.head() != origin)
-    throw Error{ErrorCode::conflict};
-  context_.append(field(response, "output").array(), "provider.branch:" + origin);
-  return response;
+      group.stage(30);
+      if (context_.head() != origin)
+        throw Error{ErrorCode::conflict};
+      RawProviderPhase final_acceptance{provider_scalar_credit + sizeof(std::size_t) +
+                                        32};
+      const RawAdapterContext final_context{nullptr, group.reference(), nullptr,
+                                            nullptr};
+      final_acceptance.run([&] {
+        final_acceptance.start(10, &final_context);
+        final_acceptance.stage(31);
+        context_.append(field(response, "output").array(), "provider.branch:" + origin);
+        const auto &head = context_.head();
+        const auto size = head.size();
+        if (size > 32)
+          throw Error{ErrorCode::invalid_range};
+        const std::array fields{raw_native(size), raw_text(head)};
+        final_acceptance.scalar(31, 7, fields);
+      });
+      return response;
+    });
+  });
 }
 Value CodingEngine::call(std::string name, Value arguments) {
   if (name == "provider")
     throw Error{ErrorCode::invalid_range};
-  return operation(name, arguments, [&](OperationAttemptId attempt) {
-    if (name == "exec") {
-      const auto id = hex_identity(attempt.bytes());
-      const auto limits = log_.root().journal_limits();
-      if (limits.max_payload < 2048 || limits.max_batch_bytes < 4096)
-        throw Error{ErrorCode::capacity};
-      auto credit = context_.cancellation_budget(
-          field(context_.view(), "entries").array(), context_.pending_proposal());
-      credit.max_file_bytes += (operation_depth_ + command_jobs_->debt() + 2) * 8192;
-      credit.max_records += (operation_depth_ + command_jobs_->debt() + 2) * 16;
-      if (!settlement_)
-        settlement_ = unwrap(log_.root().protect_settlement(credit));
-      else
-        unwrap(log_.root().refresh_settlement(credit));
-      JobWaitOptions options;
-      if (arguments.find("yield_ms"))
-        options.yield_ms = command_number(arguments, "yield_ms", 3600000);
-      if (arguments.find("output_max_bytes"))
-        options.max_output = static_cast<std::size_t>(
-            command_number(arguments, "output_max_bytes", 16 * 1024 * 1024));
-      options.stop_on_cancel = true;
-      if (const auto *task = arguments.find("task_id"))
-        command_tasks_.emplace(id, task->string());
-      try {
-        command_jobs_->start(id, arguments);
-      } catch (...) {
-        command_tasks_.erase(id);
-        throw;
-      }
-      return command_jobs_->wait(
-          id, options, [this] { poll_commands(); },
-          [this] { return cancelled && cancelled(); });
-    }
-    if (name == "process") {
-      if (string_field(arguments, "op") == "foreground") {
-        JobWaitOptions options;
-        if (arguments.find("yield_ms"))
-          options.yield_ms = command_number(arguments, "yield_ms", 3600000);
-        return command_jobs_->wait(
-            string_field(arguments, "job_id"), options, [this] { poll_commands(); },
-            [this] { return cancelled && cancelled(); });
-      }
-      return command_jobs_->control(arguments);
-    }
-    if (name == "decision_model") {
-      decision_models_.cancelled = cancelled;
-      decision_models_.observer = [&](std::string_view label, std::string_view raw) {
-        log_.original(
-            {label, raw,
-             Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
-      };
-      auto result = decision_models_.evaluate(arguments);
-      result.object().emplace_back("audit_ref", Value{hex_identity(attempt.bytes())});
-      return result;
-    }
-    if (name == "beads") {
-      beads_.cancelled = cancelled;
-      beads_.observer = [&](std::string_view label, std::string_view raw) {
-        log_.original(
-            {label, raw,
-             Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
-      };
-      auto result = beads_.run(arguments);
-      result.object().emplace_back("audit_ref", Value{hex_identity(attempt.bytes())});
-      return result;
-    }
-
-    if (name == "workflow_registry")
-      return workflows_->discover();
-    if (name == "workflow_invoke") {
-      const auto &definition = workflows_->named(string_field(arguments, "name"));
-      WorkflowContinuation invocation{definition, arguments, workflows_->revision(),
-                                      hex_identity(attempt.bytes())};
-      const auto selection =
-          Value::object({{"name", field(definition, "name")},
-                         {"revision", Value{workflows_->revision()}},
-                         {"definition", definition},
-                         {"invocation", arguments},
-                         {"selection_attempt", Value{invocation.selection_attempt}}});
-      log_.original(
-          {"workflow.selection", string_field(definition, "source"), selection});
-      log_.record(ApplicationChannel::program, selection);
-      const auto unanswered =
-          ContextStore::stop_outputs(field(context_.view(), "entries").array(), false);
-      if (!unanswered.empty()) {
-        if (workflow_continuations_.size() >= 8)
-          throw Error{ErrorCode::capacity};
-        workflow_continuations_.push_back(std::move(invocation));
-        return Value::object(
-            {{"status", Value{"accepted"}},
-             {"name", field(definition, "name")},
-             {"revision", Value{workflows_->revision()}},
-             {"execution", Value{"same-turn after tool outputs, before next request or "
-                                 "successful boundary"}}});
-      }
-      return execute_workflow(invocation);
-    }
-    if (name == "program_config")
-      return program_config(arguments);
-    if (name == "module_source")
-      return module_source(arguments);
-    if (name == "tool_define")
-      return define_tool(arguments);
-    if (name == "tool_registry")
-      return tool_registry();
-    for (const auto &definition : lua_tools_.array()) {
-      if (string_field(definition, "name") != name)
-        continue;
-      validate_tool_arguments(
-          {.schema = field(definition, "parameters"), .arguments = arguments});
-      log_.original(
-          {"tool.source", string_field(definition, "source"),
-           Value::object({{"name", Value{name}},
-                          {"revision", Value{tools_revision_}},
-                          {"attempt", Value{hex_identity(attempt.bytes())}}})});
-      return runtime_->invoke_tool(definition, arguments);
-    }
-    if (name == "restart") {
-
-      auto note = string_field(arguments, "note");
-      if (note.empty() || note.size() > 65536)
-        throw Error{ErrorCode::invalid_range};
-      restart_note_ = std::move(note);
-      return Value::object({{"scheduled", Value{true}}});
-    }
-    if (name == "read_process_output") {
-      const auto &reference = string_field(arguments, "output_ref");
-      auto read_credit = raw_command_claim(58);
-      const auto reference_size = reference.size();
-      const std::uint8_t mode = 2;
-      const auto request =
-          raw_command_data(2037, std::array{detail::raw_native_field(reference_size),
-                                            detail::raw_string_field(reference),
-                                            detail::raw_native_field(mode)});
-      bool known = false;
-      std::string raw;
-      try {
-        for (std::size_t ordinal = 0; ordinal < log_.root().fact_count(); ++ordinal) {
-          const auto fact = unwrap(log_.root().fact(ordinal));
-          const auto *record = std::get_if<ApplicationRecordEvent>(&fact.event.body);
-          if (!record || record->channel != ApplicationChannel::log)
-            continue;
-          const auto packet = unwrap(read_packet(record->payload));
-          const auto &label = string_field(packet, "label");
-          if (label != "operation.result" && label != "process.output")
-            continue;
-          const auto &metadata = field(packet, "metadata");
-          const auto *old_attempt = metadata.find("attempt");
-          if (!old_attempt || old_attempt->string() != reference)
-            continue;
-          if (label == "operation.result") {
-            const auto *op = metadata.find("operation");
-            if (op && op->string() == "exec")
-              known = true;
-          }
-          if (label == "process.output") {
-            known = true;
-            for (const auto dependency : fact.event.dependencies) {
-              auto source_credit = raw_command_claim(96);
-              const auto bytes = unwrap(log_.root().source(dependency));
-              const auto source_size = bytes.size();
-              (void)raw_command_linked(
-                  2038, request,
-                  std::array{ByteView{fact.record.journal.bytes()},
-                             detail::raw_native_field(fact.record.sequence),
-                             ByteView{dependency.journal.bytes()},
-                             detail::raw_native_field(dependency.sequence),
-                             detail::raw_native_field(source_size)},
-                  source_credit ? &*source_credit : nullptr);
-              raw.append(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+  return operation(
+      name, arguments,
+      [&](OperationAttemptId attempt, InvocationId invocation,
+          DefinitionGenerationId admitted_generation, CommandTaskActivity *activity) {
+        if (name == "exec") {
+          const auto id = hex_identity(attempt.bytes());
+          const auto limits = log_.root().journal_limits();
+          if (limits.max_payload < 2048 || limits.max_batch_bytes < 4096)
+            throw Error{ErrorCode::capacity};
+          auto credit = context_.cancellation_budget(
+              field(context_.view(), "entries").array(), context_.pending_proposal());
+          credit.max_file_bytes +=
+              (operation_depth_ + command_jobs_->debt() + 2) * 8192;
+          credit.max_records += (operation_depth_ + command_jobs_->debt() + 2) * 16;
+          if (!settlement_)
+            settlement_ = unwrap(log_.root().protect_settlement(credit));
+          else
+            unwrap(log_.root().refresh_settlement(credit));
+          JobWaitOptions options;
+          if (arguments.find("yield_ms"))
+            options.yield_ms = command_number(arguments, "yield_ms", 3600000);
+          if (arguments.find("output_max_bytes"))
+            options.max_output = static_cast<std::size_t>(
+                command_number(arguments, "output_max_bytes", 16 * 1024 * 1024));
+          options.stop_on_cancel = true;
+          command_jobs_->start(id, arguments);
+          if (activity) {
+            if (!activity->pending_node || !activity->transferred)
+              throw Error{ErrorCode::conflict};
+            auto inserted = command_tasks_.insert(std::move(*activity->pending_node));
+            if (!inserted.inserted) {
+              *activity->pending_node = std::move(inserted.node);
+              throw Error{ErrorCode::conflict};
             }
+            *activity->transferred = true;
+            activity->pending_node = nullptr;
+            activity->transferred = nullptr;
+          }
+          return command_jobs_->wait(
+              id, options, [this] { poll_commands(); },
+              [this] { return cancelled && cancelled(); });
+        }
+        if (name == "process") {
+          if (string_field(arguments, "op") == "foreground") {
+            JobWaitOptions options;
+            if (arguments.find("yield_ms"))
+              options.yield_ms = command_number(arguments, "yield_ms", 3600000);
+            return command_jobs_->wait(
+                string_field(arguments, "job_id"), options, [this] { poll_commands(); },
+                [this] { return cancelled && cancelled(); });
+          }
+          return command_jobs_->control(arguments);
+        }
+        if (name == "decision_model") {
+          decision_models_.cancelled = cancelled;
+          decision_models_.observer = [&](std::string_view label,
+                                          std::string_view raw) {
+            log_.original(
+                {label, raw,
+                 Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
+          };
+          auto result = decision_models_.evaluate(arguments);
+          result.object().emplace_back("audit_ref",
+                                       Value{hex_identity(attempt.bytes())});
+          return result;
+        }
+        if (name == "beads") {
+          beads_.cancelled = cancelled;
+          beads_.observer = [&](std::string_view label, std::string_view raw) {
+            log_.original(
+                {label, raw,
+                 Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
+          };
+          auto result = beads_.run(arguments);
+          result.object().emplace_back("audit_ref",
+                                       Value{hex_identity(attempt.bytes())});
+          return result;
+        }
+
+        if (name == "workflow_registry")
+          return workflows_->discover();
+        if (name == "workflow_invoke") {
+          const auto &definition = workflows_->named(string_field(arguments, "name"));
+          WorkflowContinuation continuation{definition, arguments,
+                                            workflows_->revision(),
+                                            hex_identity(attempt.bytes())};
+          const auto selection = Value::object(
+              {{"name", field(definition, "name")},
+               {"revision", Value{workflows_->revision()}},
+               {"definition", definition},
+               {"invocation", arguments},
+               {"selection_attempt", Value{continuation.selection_attempt}}});
+          log_.original(
+              {"workflow.selection", string_field(definition, "source"), selection});
+          log_.record(ApplicationChannel::program, selection);
+          const auto unanswered = ContextStore::stop_outputs(
+              field(context_.view(), "entries").array(), false);
+          if (!unanswered.empty()) {
+            if (workflow_continuations_.size() >= 8)
+              throw Error{ErrorCode::capacity};
+            workflow_continuations_.push_back(std::move(continuation));
+            return Value::object(
+                {{"status", Value{"accepted"}},
+                 {"name", field(definition, "name")},
+                 {"revision", Value{workflows_->revision()}},
+                 {"execution",
+                  Value{"same-turn after tool outputs, before next request or "
+                        "successful boundary"}}});
+          }
+          return execute_workflow(continuation);
+        }
+        if (name == "program_config")
+          return program_config(arguments);
+        if (name == "module_source")
+          return module_source(arguments);
+        if (name == "tool_define")
+          return define_tool(arguments);
+        if (name == "tool_registry")
+          return tool_registry();
+        for (const auto &definition : lua_tools_.array()) {
+          if (string_field(definition, "name") != name)
+            continue;
+          validate_tool_arguments(
+              {.schema = field(definition, "parameters"), .arguments = arguments});
+          log_.original(
+              {"tool.source", string_field(definition, "source"),
+               Value::object({{"name", Value{name}},
+                              {"revision", Value{tools_revision_}},
+                              {"attempt", Value{hex_identity(attempt.bytes())}}})});
+          return runtime_->invoke_tool(definition, arguments);
+        }
+        if (name == "restart") {
+
+          auto note = string_field(arguments, "note");
+          if (note.empty() || note.size() > 65536)
+            throw Error{ErrorCode::invalid_range};
+          restart_note_ = std::move(note);
+          return Value::object({{"scheduled", Value{true}}});
+        }
+        if (name == "read_process_output") {
+          const auto &reference = string_field(arguments, "output_ref");
+          auto read_credit = raw_command_claim(58);
+          const auto reference_size = reference.size();
+          const std::uint8_t mode = 2;
+          const auto request = raw_command_data(
+              2037, std::array{detail::raw_native_field(reference_size),
+                               detail::raw_string_field(reference),
+                               detail::raw_native_field(mode)});
+          bool known = false;
+          std::string raw;
+          try {
+            for (std::size_t ordinal = 0; ordinal < log_.root().fact_count();
+                 ++ordinal) {
+              const auto fact = unwrap(log_.root().fact(ordinal));
+              const auto *record =
+                  std::get_if<ApplicationRecordEvent>(&fact.event.body);
+              if (!record || record->channel != ApplicationChannel::log)
+                continue;
+              const auto packet = unwrap(read_packet(record->payload));
+              const auto &label = string_field(packet, "label");
+              if (label != "operation.result" && label != "process.output")
+                continue;
+              const auto &metadata = field(packet, "metadata");
+              const auto *old_attempt = metadata.find("attempt");
+              if (!old_attempt || old_attempt->string() != reference)
+                continue;
+              if (label == "operation.result") {
+                const auto *op = metadata.find("operation");
+                if (op && op->string() == "exec")
+                  known = true;
+              }
+              if (label == "process.output") {
+                known = true;
+                for (const auto dependency : fact.event.dependencies) {
+                  auto source_credit = raw_command_claim(96);
+                  const auto bytes = unwrap(log_.root().source(dependency));
+                  const auto source_size = bytes.size();
+                  (void)raw_command_linked(
+                      2038, request,
+                      std::array{ByteView{fact.record.journal.bytes()},
+                                 detail::raw_native_field(fact.record.sequence),
+                                 ByteView{dependency.journal.bytes()},
+                                 detail::raw_native_field(dependency.sequence),
+                                 detail::raw_native_field(source_size)},
+                      source_credit ? &*source_credit : nullptr);
+                  raw.append(reinterpret_cast<const char *>(bytes.data()),
+                             bytes.size());
+                }
+              }
+            }
+            if (!known)
+              throw Error{ErrorCode::invalid_range};
+            // Retrieval supports byte ranges only, never file line semantics.
+            if (arguments.find("line_start") || arguments.find("line_end"))
+              throw Error{ErrorCode::invalid_range};
+            auto result = process_output_presentation(raw, arguments);
+            const std::uint8_t branch = 1;
+            const Error error{};
+            const auto source_size = raw.size();
+            (void)raw_command_linked(2039, request,
+                                     std::array{detail::raw_native_field(branch),
+                                                detail::raw_native_field(error.code),
+                                                detail::raw_native_field(error.detail),
+                                                detail::raw_native_field(source_size)},
+                                     read_credit ? &*read_credit : nullptr);
+            return result;
+          } catch (const Error &error) {
+            const std::uint8_t branch = 2;
+            const auto source_size = raw.size();
+            (void)raw_command_linked(2039, request,
+                                     std::array{detail::raw_native_field(branch),
+                                                detail::raw_native_field(error.code),
+                                                detail::raw_native_field(error.detail),
+                                                detail::raw_native_field(source_size)},
+                                     read_credit ? &*read_credit : nullptr);
+            throw;
+          } catch (...) {
+            const std::uint8_t branch = 3;
+            const Error error{ErrorCode::allocation};
+            const auto source_size = raw.size();
+            (void)raw_command_linked(2039, request,
+                                     std::array{detail::raw_native_field(branch),
+                                                detail::raw_native_field(error.code),
+                                                detail::raw_native_field(error.detail),
+                                                detail::raw_native_field(source_size)},
+                                     read_credit ? &*read_credit : nullptr);
+            throw;
           }
         }
-        if (!known)
-          throw Error{ErrorCode::invalid_range};
-        // Retrieval supports byte ranges only, never file line semantics.
-        if (arguments.find("line_start") || arguments.find("line_end"))
-          throw Error{ErrorCode::invalid_range};
-        auto result = process_output_presentation(raw, arguments);
-        const std::uint8_t branch = 1;
-        const Error error{};
-        const auto source_size = raw.size();
-        (void)raw_command_linked(2039, request,
-                                 std::array{detail::raw_native_field(branch),
-                                            detail::raw_native_field(error.code),
-                                            detail::raw_native_field(error.detail),
-                                            detail::raw_native_field(source_size)},
-                                 read_credit ? &*read_credit : nullptr);
-        return result;
-      } catch (const Error &error) {
-        const std::uint8_t branch = 2;
-        const auto source_size = raw.size();
-        (void)raw_command_linked(2039, request,
-                                 std::array{detail::raw_native_field(branch),
-                                            detail::raw_native_field(error.code),
-                                            detail::raw_native_field(error.detail),
-                                            detail::raw_native_field(source_size)},
-                                 read_credit ? &*read_credit : nullptr);
-        throw;
-      } catch (...) {
-        const std::uint8_t branch = 3;
-        const Error error{ErrorCode::allocation};
-        const auto source_size = raw.size();
-        (void)raw_command_linked(2039, request,
-                                 std::array{detail::raw_native_field(branch),
-                                            detail::raw_native_field(error.code),
-                                            detail::raw_native_field(error.detail),
-                                            detail::raw_native_field(source_size)},
-                                 read_credit ? &*read_credit : nullptr);
-        throw;
-      }
-    }
-    if (name == "context_repair") {
-      if (string_field(arguments, "base") != context_.head() || operation_depth_ != 1 ||
-          detail::owned_children.load() != 0 ||
-          log_.root().state() != JournalWriterState::live)
-        throw Error{ErrorCode::conflict};
-      auto outputs =
-          ContextStore::stop_outputs(field(context_.view(), "entries").array(), false);
-      for (auto &output : outputs) {
-        const auto &id = string_field(output, "call_id");
-        if (id.empty())
-          throw Error{ErrorCode::conflict};
-        const auto eligible = std::any_of(
-            repairable_outputs_.begin(), repairable_outputs_.end(),
-            [&](const Value &old) { return string_field(old, "call_id") == id; });
-        if (!eligible)
-          throw Error{ErrorCode::conflict};
-        output = Value::object(
-            {{"type", Value{"function_call_output"}},
-             {"call_id", Value{id}},
-             {"output",
+        if (name == "context_repair") {
+          if (string_field(arguments, "base") != context_.head() ||
+              operation_depth_ != 1 || detail::owned_children.load() != 0 ||
+              log_.root().state() != JournalWriterState::live)
+            throw Error{ErrorCode::conflict};
+          auto outputs = ContextStore::stop_outputs(
+              field(context_.view(), "entries").array(), false);
+          for (auto &output : outputs) {
+            const auto &id = string_field(output, "call_id");
+            if (id.empty())
+              throw Error{ErrorCode::conflict};
+            const auto eligible = std::any_of(
+                repairable_outputs_.begin(), repairable_outputs_.end(),
+                [&](const Value &old) { return string_field(old, "call_id") == id; });
+            if (!eligible)
+              throw Error{ErrorCode::conflict};
+            output = Value::object(
+                {{"type", Value{"function_call_output"}},
+                 {"call_id", Value{id}},
+                 {"output",
+                  Value::object(
+                      {{"error", Value{"workflow_result_missing"}},
+                       {"effect_outcome", Value{"unknown"}},
+                       {"replayed", Value{false}},
+                       {"detail", Value{"Protocol placeholder only. Inspect retained "
+                                        "program, tool results and audit for actual "
+                                        "effects; no automatic retry."}}})}});
+          }
+          auto candidate = context_.items();
+          candidate.insert(candidate.end(), outputs.begin(), outputs.end());
+          // Reject duplicates/orphan outputs before publishing anything.
+          validate_protocol(candidate);
+          const auto count = outputs.size();
+          if (!outputs.empty())
+            context_.append(std::move(outputs), "workflow.protocol-repair");
+          return Value::object({{"repaired", Value{Number{count}}},
+                                {"base", Value{context_.head()}},
+                                {"effect_outcome", Value{"unknown"}},
+                                {"replayed", Value{false}}});
+        }
+        if (name == "context_budget")
+          return context_budget(arguments);
+        if (name == "context_manage") {
+          auto proposal = field(arguments, "proposal");
+          // Explicit invocation-time snapshot convenience. Supplied bases remain strict
+          // CAS.
+          if (std::holds_alternative<Value::Object>(proposal.value()) &&
+              !proposal.find("base"))
+            proposal.object().emplace_back("base", Value{context_.head()});
+          return context_.manage(proposal);
+        }
+        if (name == "rageshake") {
+          const auto &observation = string_field(arguments, "observation");
+          if (observation.empty() || observation.size() > 65536)
+            throw Error{ErrorCode::invalid_range};
+          const auto references = arguments.find("references")
+                                      ? field(arguments, "references")
+                                      : Value::object({});
+          if (!std::holds_alternative<Value::Object>(references.value()) ||
+              unwrap(encode_packet_string(references)).size() > 65536)
+            throw Error{ErrorCode::invalid_range};
+          std::set<std::string> active;
+          for (const auto &unresolved : unwrap(log_.root().unresolved_attempts()))
+            active.insert(hex_identity(unresolved.admission.attempt.bytes()));
+          Value::Array active_ids;
+          for (const auto &id : active) {
+            if (active_ids.size() == 64)
+              break;
+            active_ids.push_back(Value{id});
+          }
+          auto detail = Value::object(
+              {{"observation", Value{observation}},
+               {"references", references},
+               {"active_attempts", Value{std::move(active_ids)}},
+               {"active_attempt_count", Value{Number{active.size()}}},
+               {"revision", Value{context_.head()}},
+               {"generation", Value{hex_identity(generation_.bytes())}},
+               {"actor", Value{hex_identity(identity_.actor.bytes())}},
+               {"conversation", Value{hex_identity(identity_.conversation.bytes())}},
+               {"workflow", Value{hex_identity(identity_.workflow.bytes())}},
+               {"model", Value{model_}},
+               {"effort", Value{effort_}},
+               {"audit_end", Value{Number{log_.root().fact_count()}}},
+               {"reporting_attempt", Value{hex_identity(attempt.bytes())}},
+               {"repair_required_now", Value{false}}});
+          const auto complaint = log_.original(
+              {"complaint.detail", unwrap(encode_packet_string(detail)),
+               Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
+          // Only a non-sensitive locator goes to beads (and hence issue backups).
+          // The observation and provider/context history remain in the local audit.
+          auto delivery = call(
+              "exec",
               Value::object(
-                  {{"error", Value{"workflow_result_missing"}},
-                   {"effect_outcome", Value{"unknown"}},
-                   {"replayed", Value{false}},
-                   {"detail", Value{"Protocol placeholder only. Inspect retained "
-                                    "program, tool results and audit for actual "
-                                    "effects; no automatic retry."}}})}});
-      }
-      auto candidate = context_.items();
-      candidate.insert(candidate.end(), outputs.begin(), outputs.end());
-      // Reject duplicates/orphan outputs before publishing anything.
-      validate_protocol(candidate);
-      const auto count = outputs.size();
-      if (!outputs.empty())
-        context_.append(std::move(outputs), "workflow.protocol-repair");
-      return Value::object({{"repaired", Value{Number{count}}},
-                            {"base", Value{context_.head()}},
-                            {"effect_outcome", Value{"unknown"}},
-                            {"replayed", Value{false}}});
-    }
-    if (name == "context_budget")
-      return context_budget(arguments);
-    if (name == "context_manage") {
-      auto proposal = field(arguments, "proposal");
-      // Explicit invocation-time snapshot convenience. Supplied bases remain strict
-      // CAS.
-      if (std::holds_alternative<Value::Object>(proposal.value()) &&
-          !proposal.find("base"))
-        proposal.object().emplace_back("base", Value{context_.head()});
-      return context_.manage(proposal);
-    }
-    if (name == "rageshake") {
-      const auto &observation = string_field(arguments, "observation");
-      if (observation.empty() || observation.size() > 65536)
-        throw Error{ErrorCode::invalid_range};
-      const auto references = arguments.find("references")
-                                  ? field(arguments, "references")
-                                  : Value::object({});
-      if (!std::holds_alternative<Value::Object>(references.value()) ||
-          unwrap(encode_packet_string(references)).size() > 65536)
-        throw Error{ErrorCode::invalid_range};
-      std::set<std::string> active;
-      for (const auto &unresolved : unwrap(log_.root().unresolved_attempts()))
-        active.insert(hex_identity(unresolved.admission.attempt.bytes()));
-      Value::Array active_ids;
-      for (const auto &id : active) {
-        if (active_ids.size() == 64)
-          break;
-        active_ids.push_back(Value{id});
-      }
-      auto detail = Value::object(
-          {{"observation", Value{observation}},
-           {"references", references},
-           {"active_attempts", Value{std::move(active_ids)}},
-           {"active_attempt_count", Value{Number{active.size()}}},
-           {"revision", Value{context_.head()}},
-           {"generation", Value{hex_identity(generation_.bytes())}},
-           {"actor", Value{hex_identity(identity_.actor.bytes())}},
-           {"conversation", Value{hex_identity(identity_.conversation.bytes())}},
-           {"workflow", Value{hex_identity(identity_.workflow.bytes())}},
-           {"model", Value{model_}},
-           {"effort", Value{effort_}},
-           {"audit_end", Value{Number{log_.root().fact_count()}}},
-           {"reporting_attempt", Value{hex_identity(attempt.bytes())}},
-           {"repair_required_now", Value{false}}});
-      const auto complaint = log_.original(
-          {"complaint.detail", unwrap(encode_packet_string(detail)),
-           Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
-      // Only a non-sensitive locator goes to beads (and hence issue backups).
-      // The observation and provider/context history remain in the local audit.
-      auto delivery = call(
-          "exec",
-          Value::object(
-              {{"argv",
-                Value{Value::Array{
-                    Value{"bd"}, Value{"create"},
-                    Value{"Blackbird model complaint " + complaint}, Value{"--type"},
-                    Value{"bug"}, Value{"--description"},
-                    Value{"Local audit complaint " + complaint + "; conversation " +
-                          hex_identity(identity_.conversation.bytes()) +
-                          ". Inspect complaint.detail locally. Advisory; no "
-                          "immediate repair required."},
-                    Value{"--json"}}}},
-               {"timeout_seconds", Value{Number{"20"}}},
-               {"output_max_bytes", Value{Number{"4096"}}}}));
-      const auto *exit = delivery.find("exit_code");
-      const bool delivered = exit && exit->number().text() == "0";
-      auto result = Value::object({{"complaint", Value{complaint}},
-                                   {"retained_locally", Value{true}},
-                                   {"bead_created", Value{delivered}},
-                                   {"delivery", delivery},
-                                   {"sink", Value{"external consumer not configured"}},
-                                   {"repair_required_now", Value{false}}});
-      log_.original({"complaint.delivery", unwrap(encode_packet_string(result)),
-                     Value::object({{"complaint", Value{complaint}}})});
-      return result;
-    }
-    if (name == "audit_inspect")
-      return log_.inspect(field(arguments, "query"));
-    if (name == "trajectory_read")
-      return log_.trajectory(field(arguments, "query"));
-    if (name == "variables_read") {
-      auto query = field(arguments, "query");
-      if (query.find("variables"))
-        throw Error{ErrorCode::invalid_range};
-      query.object().emplace_back("variables", Value{true});
-      return log_.trajectory(query);
-    }
-    if (name == "git_observe")
-      return observations_->git(arguments, cancelled);
-    if (name == "participant_configure")
-      return participants_->configure(arguments);
-    if (name == "participant_read")
-      return participants_->read(arguments);
-    if (name == "participant_send")
-      return participants_->send(arguments);
-    if (name == "participant_cancel")
-      return participants_->cancel(arguments);
-    if (name == "participant_await")
-      return participants_->await(arguments, cancelled);
-    if (name == "participant_join")
-      return participants_->join(arguments, cancelled);
-    if (name == "participant_archive")
-      return participants_->archive(arguments);
-    if (name == "participant_start") {
-      if (const auto *task = arguments.find("task_id"); task && !task->string().empty())
-        if (field(tasks_.read(Value::object({{"id", *task}})), "items").array().empty())
-          throw Error{ErrorCode::invalid_range};
-      const auto transport =
-          participant_transport
-              ? participant_transport
-              : ParticipantTransport{[&](const Value &prepared,
-                                         const ColleagueCapture &capture,
-                                         const std::function<bool()> &stop) {
-                  return native_colleague_transport(prepared, capture, stop);
-                }};
-      return participants_->start(hex_identity(attempt.bytes()), arguments, transport);
-    }
-    if (name == "provider_auth_status")
-      return ProviderAuth{}.status();
-    if (name == "colleague_catalog")
-      return colleague_catalog();
-    if (name == "colleague") {
-      const auto capture = [&](std::string_view label, std::string_view raw) {
-        log_.original(
-            {"colleague." + std::string{label}, raw,
-             Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
-                            {"request_id", arguments.find("request_id")
-                                               ? field(arguments, "request_id")
-                                               : Value{}}})});
-      };
-      const auto transport =
-          colleague_transport
-              ? colleague_transport
-              : ColleagueTransport{
-                    [&](const Value &prepared, const ColleagueCapture &retain) {
-                      return native_colleague_transport(prepared, retain, cancelled);
+                  {{"argv",
+                    Value{Value::Array{
+                        Value{"bd"}, Value{"create"},
+                        Value{"Blackbird model complaint " + complaint},
+                        Value{"--type"}, Value{"bug"}, Value{"--description"},
+                        Value{"Local audit complaint " + complaint + "; conversation " +
+                              hex_identity(identity_.conversation.bytes()) +
+                              ". Inspect complaint.detail locally. Advisory; no "
+                              "immediate repair required."},
+                        Value{"--json"}}}},
+                   {"timeout_seconds", Value{Number{"20"}}},
+                   {"output_max_bytes", Value{Number{"4096"}}}}));
+          const auto *exit = delivery.find("exit_code");
+          const bool delivered = exit && exit->number().text() == "0";
+          auto result =
+              Value::object({{"complaint", Value{complaint}},
+                             {"retained_locally", Value{true}},
+                             {"bead_created", Value{delivered}},
+                             {"delivery", delivery},
+                             {"sink", Value{"external consumer not configured"}},
+                             {"repair_required_now", Value{false}}});
+          log_.original({"complaint.delivery", unwrap(encode_packet_string(result)),
+                         Value::object({{"complaint", Value{complaint}}})});
+          return result;
+        }
+        if (name == "audit_inspect")
+          return log_.inspect(field(arguments, "query"), attempt);
+        if (name == "trajectory_read")
+          return log_.trajectory(field(arguments, "query"), attempt);
+        if (name == "variables_read")
+          return log_.variables(field(arguments, "query"), attempt);
+        if (name == "git_observe")
+          return observations_->git(arguments, cancelled);
+        if (name == "participant_configure")
+          return participants_->configure(arguments);
+        if (name == "participant_read")
+          return participants_->read(arguments);
+        if (name == "participant_send")
+          return participants_->send(
+              arguments, {{},
+                          RawParticipantIdentities{attempt.bytes(), invocation.bytes(),
+                                                   admitted_generation.bytes()}});
+        if (name == "participant_cancel")
+          return participants_->cancel(arguments);
+        if (name == "participant_await")
+          return participants_->await(arguments, cancelled);
+        if (name == "participant_join")
+          return participants_->join(arguments, cancelled);
+        if (name == "participant_archive")
+          return participants_->archive(arguments);
+        if (name == "participant_start") {
+          if (const auto *task = arguments.find("task_id");
+              task && !task->string().empty())
+            if (field(tasks_.read(Value::object({{"id", *task}})), "items")
+                    .array()
+                    .empty())
+              throw Error{ErrorCode::invalid_range};
+          const auto transport =
+              participant_transport
+                  ? participant_transport
+                  : ParticipantTransport{[&](const Value &prepared,
+                                             const ColleagueCapture &capture,
+                                             const std::function<bool()> &stop,
+                                             const RawAdapterContext *context) {
+                      return native_colleague_transport(prepared, capture, stop,
+                                                        nullptr, context);
                     }};
-      return call_colleague(arguments, capture, transport);
-    }
-    if (name == "tasks_read")
-      return tasks_.read(arguments.find("query") ? field(arguments, "query")
-                                                 : Value::object({}));
-    if (name == "tasks_edit")
-      return tasks_.edit(arguments);
-    if (name == "context_inspect")
-      return context_.inspect(field(arguments, "query"));
-    if (name == "context_stats")
+          return participants_->start(
+              hex_identity(attempt.bytes()), arguments, transport,
+              {{},
+               RawParticipantIdentities{attempt.bytes(), invocation.bytes(),
+                                        admitted_generation.bytes()}});
+        }
+        if (name == "provider_auth_status")
+          return ProviderAuth{}.status();
+        if (name == "colleague_catalog")
+          return colleague_catalog();
+        if (name == "colleague") {
+          const auto capture = [&](std::string_view label, std::string_view raw) {
+            log_.original(
+                {"colleague." + std::string{label}, raw,
+                 Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
+                                {"request_id", arguments.find("request_id")
+                                                   ? field(arguments, "request_id")
+                                                   : Value{}}})});
+          };
+          const auto transport =
+              colleague_transport
+                  ? colleague_transport
+                  : ColleagueTransport{[&](const Value &prepared,
+                                           const ColleagueCapture &retain,
+                                           const RawAdapterContext *context) {
+                      return native_colleague_transport(prepared, retain, cancelled,
+                                                        nullptr, context);
+                    }};
+          const RawProviderOwner owner{
+              attempt.bytes(), invocation.bytes(), admitted_generation.bytes(), {}};
+          const RawAdapterContext context{&owner, std::nullopt, nullptr, nullptr};
+          return call_colleague(arguments, capture, transport, &context);
+        }
+        if (name == "tasks_read")
+          return tasks_.read(arguments.find("query") ? field(arguments, "query")
+                                                     : Value::object({}));
+        if (name == "tasks_edit")
+          return tasks_.edit(arguments);
+        if (name == "context_inspect")
+          return context_.inspect(field(arguments, "query"));
+        if (name == "context_stats")
 
-      return stats();
-    if (name == "context_view")
-      return context_.view();
-    if (name == "context_edit")
-      return context_.edit(field(arguments, "candidate"));
-    if (name == "context_originals")
-      return context_.originals();
-    if (name == "context_restore") {
-      context_.restore(string_field(arguments, "entry"));
-      return context_.view();
-    }
-    if (name == "lua")
-      return runtime_->eval(string_field(arguments, "code"));
-    LocalTools tools{[&](std::string_view label, std::string_view raw) {
-      try {
-        log_.original(
-            {label, raw,
-             Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
-      } catch (const Error &e) {
-        if (e.code == ErrorCode::capacity)
-          unretained_bytes_ += raw.size();
-        throw;
-      }
-      if (label == "process.output" && process_output)
-        process_output(raw);
-    }};
-    tools.cancelled = [this] {
-      poll_commands();
-      return cancelled && cancelled();
-    };
-    auto result = tools.run(name, arguments);
-    if (name == "exec" && process_output)
-      process_output("\n[exit " + field(result, "exit_code").number().text() + "]\n");
-    return result;
-  });
+          return stats();
+        if (name == "context_view")
+          return context_.view();
+        if (name == "context_edit")
+          return context_.edit(field(arguments, "candidate"));
+        if (name == "context_originals")
+          return context_.originals();
+        if (name == "context_restore") {
+          context_.restore(string_field(arguments, "entry"));
+          return context_.view();
+        }
+        if (name == "lua")
+          return runtime_->eval(string_field(arguments, "code"));
+        LocalTools tools{[&](std::string_view label, std::string_view raw) {
+          try {
+            log_.original(
+                {label, raw,
+                 Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
+          } catch (const Error &e) {
+            if (e.code == ErrorCode::capacity)
+              unretained_bytes_ += raw.size();
+            throw;
+          }
+          if (label == "process.output" && process_output)
+            process_output(raw);
+        }};
+        tools.cancelled = [this] {
+          poll_commands();
+          return cancelled && cancelled();
+        };
+        auto result = tools.run(name, arguments);
+        if (name == "exec" && process_output)
+          process_output("\n[exit " + field(result, "exit_code").number().text() +
+                         "]\n");
+        return result;
+      });
 }
 Value CodingEngine::stats() const {
   auto result = context_.stats();
@@ -3191,45 +3555,108 @@ bool CodingEngine::operator_turn(std::string_view prompt, std::string_view fallb
   return true;
 }
 void CodingEngine::turn(TurnInput input) {
-  if (backstop_claimed_ || turn_running_)
-    throw Error{ErrorCode::conflict};
+  RawTurnTrace trace{turn_running_, backstop_claimed_, generation_, context_.head()};
+  std::uint8_t branch = 4, stage = 0;
+  std::optional<Error> terminal_error;
+  struct Terminal {
+    RawTurnTrace &trace;
+    std::uint8_t &branch, &stage;
+    std::optional<Error> &error;
+    ~Terminal() { trace.finish(branch, stage, error); }
+  } terminal{trace, branch, stage, terminal_error};
+  if (backstop_claimed_ || turn_running_) {
+    branch = 1;
+    terminal_error = Error{ErrorCode::conflict};
+    throw *terminal_error;
+  }
+  const auto is_null = [](const Value &value) noexcept {
+    return std::holds_alternative<std::nullptr_t>(value.value());
+  };
+  const auto state = [&](std::uint8_t reached) noexcept {
+    trace.state(reached, {turn_running_, backstop_claimed_, capacity_stopped_,
+                          !is_null(pending_budget_), !is_null(pending_program_config_),
+                          !is_null(pending_lua_tools_), bool(pending_workflows_),
+                          workflow_depth_, workflow_invocations_, operation_depth_,
+                          unretained_bytes_});
+  };
+  const auto clear_value = [](Value &value) noexcept {
+    const auto discarded = std::move(value);
+  };
+  const auto clear_pending = [&]() noexcept {
+    clear_value(pending_budget_);
+    pending_workflows_.reset();
+    clear_value(pending_program_config_);
+    pending_program_revision_.clear();
+    clear_value(pending_lua_tools_);
+    pending_tools_revision_.clear();
+    pending_budget_revision_.clear();
+  };
+  auto *previous_trace = turn_trace_;
+  turn_trace_ = &trace;
   turn_running_ = true;
   struct Running {
-    bool &value;
-    std::vector<WorkflowContinuation> &continuations;
-    std::optional<Value> &arguments;
+    CodingEngine &engine;
+    RawTurnTrace *previous;
+    const decltype(state) &capture;
     ~Running() {
-      value = false;
-      continuations.clear();
-      arguments.reset();
+      engine.turn_running_ = false;
+      engine.workflow_continuations_.clear();
+      engine.operator_arguments_.reset();
+      capture(5);
+      engine.turn_trace_ = previous;
     }
-  } running{turn_running_, workflow_continuations_, operator_arguments_};
-  failed_turn_.reset();
-  workflow_result_ = Value{};
-  workflow_continuations_.clear();
-  workflow_invocations_ = 0;
-  workflow_failure_.reset();
-  pending_budget_ = Value{};
-  pending_workflows_.reset();
-  pending_program_config_ = Value{};
-  pending_program_revision_.clear();
-  pending_lua_tools_ = Value{};
-  pending_tools_revision_.clear();
-  pending_budget_revision_.clear();
-  repairable_outputs_ =
-      ContextStore::stop_outputs(field(context_.view(), "entries").array(), false);
-  restart_note_.reset();
-  capacity_stopped_ = false;
-  unretained_bytes_ = 0;
+  } running{*this, previous_trace, state};
   auto &root = log_.root();
-  auto credit =
-      context_.cancellation_budget(field(context_.view(), "entries").array(), Value{});
-  credit.max_file_bytes += (1 + command_jobs_->debt()) * 8192;
-  credit.max_records += (1 + command_jobs_->debt()) * 16;
-  if (!settlement_)
-    settlement_ = unwrap(root.protect_settlement(credit));
-  else
-    unwrap(root.refresh_settlement(credit));
+  const RawContextOrigin origin{trace.reference()};
+  const RawContextOrigin stop_origin{trace.reference(), trace.context_bank(),
+                                     trace.region_bank(),
+                                     RawContextOrigin::Input::no_new};
+  WorkflowAcceptance acceptance;
+  bool workflow_began = false, activation_applied = false;
+  bool activate_program = false, activate_tools = false, activate_budget = false;
+  const auto apply_activation = [&]() noexcept {
+    if (!acceptance.boundary_program_accepted || activation_applied)
+      return;
+    if (activate_program) {
+      program_config_.swap(pending_program_config_);
+      program_revision_.swap(pending_program_revision_);
+      workflows_.swap(pending_workflows_);
+    }
+    if (activate_tools) {
+      lua_tools_.swap(pending_lua_tools_);
+      tools_revision_.swap(pending_tools_revision_);
+    }
+    if (activate_budget) {
+      budget_.swap(pending_budget_);
+      budget_revision_.swap(pending_budget_revision_);
+    }
+    activation_applied = true;
+    if (activate_program)
+      trace.activation(0, program_revision_);
+    if (activate_tools)
+      trace.activation(1, tools_revision_);
+    if (activate_budget)
+      trace.activation(2, budget_revision_);
+    clear_pending();
+  };
+  const auto placeholders = [&](bool interrupted, RawContextOrigin context_origin) {
+    const auto request = trace.placeholder_request(interrupted, context_.head());
+    try {
+      auto result = ContextStore::stop_outputs(
+          field(context_.view(context_origin), "entries").array(), interrupted);
+      trace.placeholder_return(request, RawPlaceholderOutcome::returned, result.size());
+      return result;
+    } catch (const Error &error) {
+      trace.placeholder_return(request, RawPlaceholderOutcome::error, 0, error);
+      throw;
+    } catch (const std::bad_alloc &) {
+      trace.placeholder_return(request, RawPlaceholderOutcome::allocation);
+      throw;
+    } catch (...) {
+      trace.placeholder_return(request, RawPlaceholderOutcome::unknown);
+      throw;
+    }
+  };
   struct SettlementRelease {
     CodingEngine &engine;
     ~SettlementRelease() {
@@ -3237,125 +3664,152 @@ void CodingEngine::turn(TurnInput input) {
         engine.settlement_.reset();
     }
   } settlement_release{*this};
-  context_.protect = [this](const Value::Array &entries, const Value &proposal) {
-    protect_workflow(entries, proposal);
-  };
   struct Reset {
     ContextStore &context;
     ~Reset() { context.protect = {}; }
   } reset{context_};
-  const auto prompt = input.prompt;
-  const auto workflow = input.program;
-  context_.begin_workflow();
   try {
-    generation_ = unwrap(log_.root().issue<DefinitionGenerationId>());
-    root_source_.reset();
-    root_source_ = log_.retain_program(workflow, generation_);
-    root_source_length_ = workflow.size();
-    if (!prompt.empty())
-      context_.append({Value::object({{"role", Value{"user"}},
-                                      {"content", Value{std::string{prompt}}}})},
-                      "operator");
-    runtime_ = std::make_unique<Runtime>(*this);
-    workflow_result_ =
-        runtime_->eval(workflow, operator_arguments_ ? &*operator_arguments_ : nullptr);
-    operator_arguments_.reset();
-    drain_workflows();
-    if (workflow_failure_)
-      throw *workflow_failure_;
-    if (capacity_stopped_)
-      throw Error{ErrorCode::capacity};
-    if (cancelled && cancelled())
-      throw Error{ErrorCode::interrupted};
-    if (restart_note_)
-      validate_protocol(context_.items());
-    const auto boundary_program =
-        pending_budget_ == Value{} && pending_lua_tools_ == Value{} &&
-                pending_program_config_ == Value{}
-            ? Value{}
-            : Value::object(
-                  {{"label", Value{"workflow-config-effective-v1"}},
-                   {"program_config", pending_program_config_ == Value{}
-                                          ? program_config_
-                                          : pending_program_config_},
-                   {"program_revision", Value{pending_program_config_ == Value{}
-                                                  ? program_revision_
-                                                  : pending_program_revision_}},
-                   {"policy", pending_budget_ == Value{} ? budget_ : pending_budget_},
-                   {"revision",
-                    Value{pending_budget_ == Value{} ? budget_revision_
-                                                     : pending_budget_revision_}},
-                   {"tools",
-                    pending_lua_tools_ == Value{} ? lua_tools_ : pending_lua_tools_},
-                   {"tools_revision",
-                    Value{pending_lua_tools_ == Value{} ? tools_revision_
-                                                        : pending_tools_revision_}},
-                   {"activation", Value{"successful-workflow-boundary"}}});
-    // Context + policy share one durable append. Everything fallible precedes
-    // publication; afterward only noexcept moves and best-effort notification.
-    auto settlement = context_.finish_workflow(true, boundary_program);
-    if (pending_program_config_ != Value{}) {
-      std::swap(program_config_, pending_program_config_);
-      program_revision_.swap(pending_program_revision_);
-      workflows_.swap(pending_workflows_);
-      pending_workflows_.reset();
-      pending_program_config_ = Value{};
-      pending_program_revision_.clear();
-    }
-    if (pending_lua_tools_ != Value{}) {
-      std::swap(lua_tools_, pending_lua_tools_);
-      tools_revision_.swap(pending_tools_revision_);
-      pending_lua_tools_ = Value{};
-      pending_tools_revision_.clear();
-    }
-    if (pending_budget_ != Value{}) {
-
-      std::swap(budget_, pending_budget_);
-      budget_revision_.swap(pending_budget_revision_);
-      pending_budget_ = Value{};
-      pending_budget_revision_.clear();
-    }
-    if (settlement != Value{} && display) {
-      try {
-        display("Managed context: " + unwrap(format_value(settlement)) + "\n");
-      } catch (...) { /* Notification cannot undo committed workflow work. */
+    // The null business value is prepared before effects; cleanup uses moves.
+    const Value empty;
+    const auto rollback = [&](const Error *error) {
+      apply_activation();
+      clear_pending();
+      context_.protect = {};
+      stage = 4;
+      state(stage);
+      RetainedState::MaintenanceScope maintenance{root};
+      if (workflow_began)
+        (void)context_.finish_workflow(false, empty, stop_origin);
+      restart_note_.reset();
+      if (error &&
+          (error->code == ErrorCode::interrupted ||
+           error->code == ErrorCode::capacity) &&
+          root.state() == JournalWriterState::live) {
+        auto results = placeholders(error->code == ErrorCode::interrupted, stop_origin);
+        if (!results.empty())
+          context_.append(std::move(results), "stop.linkage", stop_origin);
       }
+    };
+    try {
+      failed_turn_.reset();
+      clear_value(workflow_result_);
+      workflow_continuations_.clear();
+      workflow_invocations_ = 0;
+      workflow_failure_.reset();
+      clear_pending();
+      repairable_outputs_ = placeholders(false, origin);
+      restart_note_.reset();
+      capacity_stopped_ = false;
+      unretained_bytes_ = 0;
+      state(stage);
+      const bool existed = bool(settlement_);
+      auto credit = context_.cancellation_budget(
+          field(context_.view(origin), "entries").array(), empty, origin);
+      credit.max_file_bytes += (1 + command_jobs_->debt()) * 8192;
+      credit.max_records += (1 + command_jobs_->debt()) * 16;
+      if (!settlement_)
+        settlement_ = unwrap(root.protect_settlement(credit));
+      else
+        unwrap(root.refresh_settlement(credit));
+      trace.admission(existed, credit, root.cursor());
+      context_.protect = [this](const Value::Array &entries, const Value &proposal,
+                                const RawEventRef &parent) {
+        protect_workflow(entries, proposal, parent);
+      };
+      context_.begin_workflow(origin);
+      workflow_began = true;
+      stage = 1;
+      state(stage);
+      generation_ = unwrap(root.issue<DefinitionGenerationId>());
+      root_source_.reset();
+      const auto source_request = trace.source_request(generation_, input.program);
+      try {
+        root_source_ = log_.retain_program(input.program, generation_);
+        trace.source_return(source_request, 0, root_source_);
+      } catch (const Error &error) {
+        trace.source_return(source_request, 1, {}, error);
+        throw;
+      } catch (const std::bad_alloc &) {
+        trace.source_return(source_request, 2);
+        throw;
+      } catch (...) {
+        trace.source_return(source_request, 3);
+        throw;
+      }
+      root_source_length_ = input.program.size();
+      if (!input.prompt.empty())
+        context_.append(
+            {Value::object({{"role", Value{"user"}},
+                            {"content", Value{std::string{input.prompt}}}})},
+            "operator", origin);
+      stage = 2;
+      state(stage);
+      runtime_ = std::make_unique<Runtime>(*this);
+      workflow_result_ = runtime_->eval(
+          input.program, operator_arguments_ ? &*operator_arguments_ : nullptr);
+      operator_arguments_.reset();
+      drain_workflows();
+      if (workflow_failure_)
+        throw *workflow_failure_;
+      if (capacity_stopped_)
+        throw Error{ErrorCode::capacity};
+      if (cancelled && cancelled())
+        throw Error{ErrorCode::interrupted};
+      if (restart_note_)
+        validate_protocol(context_.items(origin), trace.reference());
+      activate_program = !is_null(pending_program_config_);
+      activate_tools = !is_null(pending_lua_tools_);
+      activate_budget = !is_null(pending_budget_);
+      const auto boundary_program =
+          !activate_budget && !activate_tools && !activate_program
+              ? empty
+              : Value::object(
+                    {{"label", Value{"workflow-config-effective-v1"}},
+                     {"program_config",
+                      activate_program ? pending_program_config_ : program_config_},
+                     {"program_revision",
+                      Value{activate_program ? pending_program_revision_
+                                             : program_revision_}},
+                     {"policy", activate_budget ? pending_budget_ : budget_},
+                     {"revision", Value{activate_budget ? pending_budget_revision_
+                                                        : budget_revision_}},
+                     {"tools", activate_tools ? pending_lua_tools_ : lua_tools_},
+                     {"tools_revision", Value{activate_tools ? pending_tools_revision_
+                                                             : tools_revision_}},
+                     {"activation", Value{"successful-workflow-boundary"}}});
+      stage = 3;
+      state(stage);
+      auto settlement =
+          context_.finish_workflow(true, boundary_program, origin, &acceptance);
+      apply_activation();
+      if (!is_null(settlement) && display) {
+        try {
+          display("Managed context: " + unwrap(format_value(settlement)) + "\n");
+        } catch (...) { /* Notification cannot undo committed workflow work. */
+        }
+      }
+    } catch (const Error &error) {
+      rollback(&error);
+      throw;
+    } catch (...) {
+      rollback(nullptr);
+      throw;
     }
-  } catch (const Error &e) {
-    failed_turn_ = e;
-    pending_budget_ = Value{};
-    pending_workflows_.reset();
-    pending_program_config_ = Value{};
-    pending_program_revision_.clear();
-    pending_lua_tools_ = Value{};
-    pending_tools_revision_.clear();
-    pending_budget_revision_.clear();
-    context_.protect = {};
-    RetainedState::MaintenanceScope maintenance{root};
-    (void)context_.finish_workflow(false);
-    restart_note_.reset();
-    if ((e.code == ErrorCode::interrupted || e.code == ErrorCode::capacity) &&
-        log_.root().state() == JournalWriterState::live) {
-      auto results = ContextStore::stop_outputs(
-          field(context_.view(), "entries").array(), e.code == ErrorCode::interrupted);
-      if (!results.empty())
-        context_.append(std::move(results), "stop.linkage");
-    }
+    branch = 0;
+  } catch (const Error &error) {
+    failed_turn_ = error;
+    terminal_error = error;
+    branch = 2;
+    throw;
+  } catch (const std::bad_alloc &) {
+    failed_turn_ = Error{ErrorCode::allocation};
+    branch = 3;
     throw;
   } catch (...) {
     failed_turn_ = Error{ErrorCode::external_unknown};
-    pending_budget_ = Value{};
-    pending_workflows_.reset();
-    pending_program_config_ = Value{};
-    pending_program_revision_.clear();
-    pending_lua_tools_ = Value{};
-    pending_tools_revision_.clear();
-    pending_budget_revision_.clear();
-    context_.protect = {};
-    RetainedState::MaintenanceScope maintenance{root};
-    (void)context_.finish_workflow(false);
-    restart_note_.reset();
+    branch = 4;
     throw;
   }
 }
+
 } // namespace blackbird

@@ -68,6 +68,8 @@ RawProviderTrace::RawProviderTrace(const RawProviderOwner *owner, int timeout_se
   std::optional<RawControlToken> link;
   if (auth_resolution && auth_resolution->ordinal)
     link.emplace(claim(raw_envelope_size + 2 * ref_bytes));
+  if (owner && !owner->dispatch.ordinal)
+    owner = nullptr;
   const auto present = static_cast<std::uint8_t>(owner != nullptr);
   std::array<ByteView, 8> fields{};
   fields[0] = raw_native_field(present);
@@ -90,7 +92,7 @@ RawProviderTrace::RawProviderTrace(const RawProviderOwner *owner, int timeout_se
 }
 RawProviderTrace::~RawProviderTrace() { finish(6); }
 void RawProviderTrace::body(std::string_view method, std::string_view url,
-                            std::string_view bytes) {
+                            std::string_view bytes, RawCapacityClaim *credit) {
   const ErrnoGuard guard;
   if (!terminal_)
     return;
@@ -101,7 +103,14 @@ void RawProviderTrace::body(std::string_view method, std::string_view url,
       raw_native_field(method_size), raw_string_field(method),
       raw_native_field(url_size),    raw_string_field(url),
       raw_native_field(body_size),   raw_string_field(bytes)};
-  (void)data(1301, fields);
+  if (credit) {
+    const auto result = raw_emit(1301, fields, RawPartition::data, credit);
+    if (!result.has_value()) {
+      raw_fence(result.error());
+      throw result.error();
+    }
+  } else
+    (void)data(1301, fields);
 }
 void RawProviderTrace::http(RawEventRef child, int status) {
   const ErrnoGuard guard;
@@ -168,13 +177,14 @@ RawNativePermit RawChildTrace::read_permit(RawReadChannel channel,
                                            std::size_t requested) {
   auto result = permit(read_bytes);
   if (cleanup_ && captures(static_cast<std::uint8_t>(channel))) {
-    const auto ready = raw_wait_data(read_bytes + requested);
+    auto ready = raw_claim_data(read_bytes + requested);
     if (!ready.has_value()) {
       const auto error = ready.error();
       if (error.code == ErrorCode::interrupted && error.detail == ETIMEDOUT)
         throw deadline_error_;
       throw error;
     }
+    result.data.emplace(std::move(ready).value());
   }
   return result;
 }
@@ -218,12 +228,13 @@ void RawChildTrace::write(RawNativePermit &credit, std::size_t requested,
                           raw_native_field(error)};
   immediate(1403, fields, &*credit.control);
 }
-void RawChildTrace::read(RawNativePermit &credit, std::uint8_t channel,
-                         std::size_t requested, ssize_t result, int error,
-                         const char *bytes) noexcept {
+std::optional<RawEventRef> RawChildTrace::read(RawNativePermit &credit,
+                                               std::uint8_t channel,
+                                               std::size_t requested, ssize_t result,
+                                               int error, const char *bytes) noexcept {
   const ErrnoGuard guard;
   if (!credit.control)
-    return;
+    return std::nullopt;
   std::array fields{ByteView{child_.lane},
                     raw_native_field(child_.ordinal),
                     raw_native_field(channel),
@@ -233,10 +244,21 @@ void RawChildTrace::read(RawNativePermit &credit, std::uint8_t channel,
                     ByteView{}};
   if (result > 0 && captures(channel)) {
     fields.back() = std::as_bytes(std::span{bytes, static_cast<std::size_t>(result)});
-    immediate(1404, fields, nullptr);
+    const auto published = raw_emit(1404, fields, RawPartition::data,
+                                    credit.data ? &*credit.data : nullptr);
+    credit.data.reset();
+    credit.control.reset();
+    if (!published.has_value()) {
+      raw_fence(published.error());
+      return std::nullopt;
+    }
+    return RawEventRef{raw_lane_epoch(), published.value()};
   } else {
     immediate(1404, std::span{fields}.first(6), &*credit.control);
+    credit.data.reset();
+    credit.control.reset();
   }
+  return std::nullopt;
 }
 void RawChildTrace::wait(RawNativePermit &credit, const siginfo_t &observed, int result,
                          int error) noexcept {

@@ -31,8 +31,9 @@ void reported_failure_cases(const ColleagueCapture &capture) {
                                       {"usage", usage},
                                       {"modelUsage", models}});
   int dispatches = 0;
-  const auto reply =
-      call_colleague(request(), capture, [&](const Value &, const ColleagueCapture &) {
+  const auto reply = call_colleague(
+      request(), capture,
+      [&](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
         ++dispatches;
         return cli_result(failure);
       });
@@ -46,8 +47,9 @@ void reported_failure_cases(const ColleagueCapture &capture) {
             string_field(reply, "actual_model") == "claude-observed",
         "reported failure must preserve observed usage and model metadata");
 
-  const auto no_diagnostic =
-      call_colleague(request(), capture, [](const Value &, const ColleagueCapture &) {
+  const auto no_diagnostic = call_colleague(
+      request(), capture,
+      [](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
         return cli_result(
             Value::object({{"type", Value{"result"}}, {"is_error", Value{true}}}));
       });
@@ -57,7 +59,8 @@ void reported_failure_cases(const ColleagueCapture &capture) {
 
   for (const auto &flag : {Value{}, Value{Number{1}}, Value{"true"}}) {
     const auto malformed = call_colleague(
-        request(), capture, [&](const Value &, const ColleagueCapture &) {
+        request(), capture,
+        [&](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
           return cli_result(Value::object({{"type", Value{"result"}},
                                            {"is_error", flag},
                                            {"result", Value{"not an error flag"}}}));
@@ -69,8 +72,9 @@ void reported_failure_cases(const ColleagueCapture &capture) {
 
   const auto multiple = Value::object(
       {{"claude-primary", Value::object({})}, {"claude-secondary", Value::object({})}});
-  const auto multi_reply =
-      call_colleague(request(), capture, [&](const Value &, const ColleagueCapture &) {
+  const auto multi_reply = call_colleague(
+      request(), capture,
+      [&](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
         auto upstream = failure;
         for (auto &[name, value] : upstream.object())
           if (name == "modelUsage")
@@ -83,16 +87,17 @@ void reported_failure_cases(const ColleagueCapture &capture) {
         "multiple observed models cannot become the requested alias on failure");
 
   const auto nonzero =
-      call_colleague(request(), capture, [&](const Value &, const ColleagueCapture &) {
-        return cli_result(failure, 1);
-      });
+      call_colleague(request(), capture,
+                     [&](const Value &, const ColleagueCapture &,
+                         const RawAdapterContext *) { return cli_result(failure, 1); });
   check(string_field(nonzero, "remote_disposition") == "unknown" &&
             field(nonzero, "usage") == usage &&
             string_field(nonzero, "actual_model") == "claude-observed",
         "nonzero CLI exit preserves uncertainty and available model metadata");
 
   const auto incomplete = call_colleague(
-      request("openai"), capture, [&](const Value &, const ColleagueCapture &) {
+      request("openai"), capture,
+      [&](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
         return Value::object({{"status", Value{"incomplete"}},
                               {"model", Value{"gpt-observed"}},
                               {"usage", usage}});
@@ -103,7 +108,8 @@ void reported_failure_cases(const ColleagueCapture &capture) {
         "incomplete received native response must preserve model and usage");
 
   const auto refusal = call_colleague(
-      request("openai"), capture, [&](const Value &, const ColleagueCapture &) {
+      request("openai"), capture,
+      [&](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
         return Value::object(
             {{"status", Value{"completed"}},
              {"model", Value{"gpt-refused"}},
@@ -128,7 +134,8 @@ void reported_failure_cases(const ColleagueCapture &capture) {
             string_field(no_diagnostic, "model_metadata_status") == "unavailable",
         "model attribution must distinguish observed, ambiguous and unavailable");
   const auto malformed_model = call_colleague(
-      request("openai"), capture, [&](const Value &, const ColleagueCapture &) {
+      request("openai"), capture,
+      [&](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
         return Value::object({{"status", Value{"incomplete"}},
                               {"model", Value{Number{7}}},
                               {"usage", Value{"invalid reported usage"}}});
@@ -146,7 +153,8 @@ int main() {
       events.emplace_back(name);
     };
     reported_failure_cases(capture);
-    const auto transport = [&](const Value &prepared, const ColleagueCapture &) {
+    const auto transport = [&](const Value &prepared, const ColleagueCapture &,
+                               const RawAdapterContext *) {
       ++calls;
       check(events.back() == "admission");
       check(prepared.find("prompt")->string().find("selected bytes") !=
@@ -184,26 +192,30 @@ int main() {
       check(calls == 1);
     }
     reply = call_colleague(request(), capture,
-                           [&](const Value &, const ColleagueCapture &c) -> Value {
+                           [&](const Value &, const ColleagueCapture &c,
+                               const RawAdapterContext *) -> Value {
                              ++calls;
                              c("raw", "partial");
                              throw Error{ErrorCode::external_unknown};
                            });
     check(reply.find("status")->string() == "unknown" && calls == 2);
     check(events[events.size() - 2] == "raw");
-    reply =
-        call_colleague(request(), capture, [](const Value &, const ColleagueCapture &) {
+    reply = call_colleague(
+        request(), capture,
+        [](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
           return unwrap(parse_json(R"({"exit_code":0,"output":"partial prose"})"));
         });
     check(reply.find("status")->string() == "unknown");
-    reply =
-        call_colleague(request(), capture, [](const Value &, const ColleagueCapture &) {
+    reply = call_colleague(
+        request(), capture,
+        [](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
           return unwrap(parse_json(R"({"exit_code":7,"output":"refused"})"));
         });
     check(reply.find("status")->string() == "failed" &&
           reply.find("remote_disposition")->string() == "unknown");
     reply = call_colleague(
-        request("openai"), capture, [](const Value &p, const ColleagueCapture &) {
+        request("openai"), capture,
+        [](const Value &p, const ColleagueCapture &, const RawAdapterContext *) {
           check(p.find("upstream")->find("tools")->array().empty());
           return unwrap(parse_json(
               R"({"status":"completed","model":"gpt-actual","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"native diagnosis"}]}],"usage":{"output_tokens":3}})"));
@@ -212,27 +224,33 @@ int main() {
           reply.find("actual_model")->string() == "gpt-actual");
     reply = call_colleague(Value{}, capture, transport);
     check(reply.find("status")->string() == "refused" && calls == 2);
-    reply = call_colleague(request(), capture, [](const Value &, const ColleagueCapture &) {
-      return unwrap(parse_json(
-          R"({"exit_code":0,"output":"{\"type\":\"result\",\"is_error\":false,\"subtype\":\"success\",\"result\":7}"})"));
-    });
+    reply = call_colleague(
+        request(), capture,
+        [](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
+          return unwrap(parse_json(
+              R"({"exit_code":0,"output":"{\"type\":\"result\",\"is_error\":false,\"subtype\":\"success\",\"result\":7}"})"));
+        });
     check(reply.find("status")->string() == "unknown");
-    reply = call_colleague(request(), capture, [](const Value &, const ColleagueCapture &) {
-      return unwrap(parse_json(
-          R"({"exit_code":1,"output":"{\"is_error\":true,\"result\":\"OAuth expired\",\"api_error_status\":401}"})"));
-    });
+    reply = call_colleague(
+        request(), capture,
+        [](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
+          return unwrap(parse_json(
+              R"({"exit_code":1,"output":"{\"is_error\":true,\"result\":\"OAuth expired\",\"api_error_status\":401}"})"));
+        });
     check(reply.find("status")->string() == "failed" &&
           reply.find("reported_error")->find("api_error_status")->number().text() ==
               "401");
     reply = call_colleague(
-        request("openai"), capture, [](const Value &, const ColleagueCapture &) {
+        request("openai"), capture,
+        [](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
           return unwrap(parse_json(
               R"({"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"No"}]}]})"));
         });
     check(reply.find("status")->string() == "refused" &&
           reply.find("remote_disposition")->string() == "completed");
     reply = call_colleague(
-        request("openai"), capture, [](const Value &, const ColleagueCapture &) {
+        request("openai"), capture,
+        [](const Value &, const ColleagueCapture &, const RawAdapterContext *) {
           return unwrap(parse_json(
               R"({"status":"completed","output":[{"type":"function_call","name":"shell","arguments":"{}"}]})"));
         });
@@ -244,10 +262,11 @@ int main() {
       if (key == "exec")
         value = unwrap(parse_json(
             R"({"argv":["/bin/sh","-c","printf partial; sleep 4"],"timeout_seconds":1})"));
-    reply = call_colleague(request(), capture,
-                           [&](const Value &, const ColleagueCapture &c) {
-                             return native_colleague_transport(p, c);
-                           });
+    reply = call_colleague(
+        request(), capture,
+        [&](const Value &, const ColleagueCapture &c, const RawAdapterContext *) {
+          return native_colleague_transport(p, c);
+        });
     check(reply.find("status")->string() == "unknown");
     std::cout << "colleague contract checks passed\n";
   } catch (const std::exception &e) {

@@ -96,7 +96,7 @@ int main() {
       // and original indexes unchanged. Burned revision identities are permitted.
       const auto prior = ctx.view();
       const auto originals = ctx.originals();
-      ctx.protect = [](const Value::Array &, const Value &) {
+      ctx.protect = [](const Value::Array &, const Value &, const RawEventRef &) {
         throw Error{ErrorCode::capacity};
       };
       bool failed = false;

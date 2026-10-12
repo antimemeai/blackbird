@@ -306,7 +306,6 @@ struct CommandJobs::Impl {
   struct Job {
     std::string id;
     Launch launch;
-    std::jthread worker;
     RawThreadHandle raw_context;
     std::optional<RawControlToken> worker_credit, retry_credit, semantic_credit,
         caller_stop_credit;
@@ -331,6 +330,8 @@ struct CommandJobs::Impl {
     std::uint64_t release_epoch = 0;
     unsigned short rows = 24, columns = 80;
     bool resize_pending = false;
+    // Joined before the wake, its claims, and its producer are destroyed.
+    std::jthread worker;
   };
   mutable std::mutex mutex;
   std::condition_variable condition;
@@ -339,9 +340,9 @@ struct CommandJobs::Impl {
   std::map<std::string, std::shared_ptr<Job>> jobs;
   // Every access to cleanup producer/claims is serialized by mutex.
   void caller_stop(Job &job, std::uint8_t source) noexcept {
+    RawThreadBinding owner{cleanup_context};
     if (!job.stop && !job.finished) {
       if (cleanup_context && job.caller_stop_credit) {
-        RawThreadBinding owner{cleanup_context};
         const auto length = job.id.size();
         (void)raw_command_record(2029,
                                  std::array{raw_native_field(length),
@@ -350,10 +351,11 @@ struct CommandJobs::Impl {
                                  &*job.caller_stop_credit);
       }
       job.stop = true;
+      if (job.stop_wake)
+        job.stop_wake->notify(job.caller_stop_credit ? &*job.caller_stop_credit
+                                                     : nullptr);
     }
     job.caller_stop_credit.reset();
-    if (job.stop_wake)
-      job.stop_wake->notify();
   }
   struct Mailbox {
     Value value;
@@ -641,7 +643,7 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
           worker_stop(2);
           job->timed_out = true;
           if (job->stop_wake)
-            job->stop_wake->notify();
+            job->stop_wake->notify(held);
         }
         stop = job->stop;
         exited = job->leader_exited;
@@ -876,7 +878,7 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
             output_read.close();
             job->output_closed = true;
             if (job->stop_wake)
-              job->stop_wake->notify();
+              job->stop_wake->notify(held);
           }
         } else if (n == 0 ||
                    (n < 0 && errno == EIO && job->launch.pty && group_ready)) {
@@ -1101,15 +1103,17 @@ void CommandJobs::start(const std::string &id, const Value &arguments) {
     if (prepare_cleanup)
       cleanup_candidate = unwrap(raw_prepare_thread());
     job->raw_context = unwrap(raw_prepare_thread());
-    if (job->raw_context) {
-      job->stop_wake.emplace();
+    {
       RawThreadBinding binding{job->raw_context};
-      auto bank = raw_command_claim(raw_command_initial_credit);
-      if (!bank)
-        throw Error{ErrorCode::audit_unavailable};
-      job->worker_credit.emplace(unwrap(bank->split(raw_command_worker_credit)));
-      job->retry_credit.emplace(unwrap(bank->split(raw_command_retry_credit)));
-      job->semantic_credit.emplace(unwrap(bank->split(raw_command_semantic_credit)));
+      job->stop_wake.emplace(RawCommandWake::Mode::one_shot);
+      if (job->raw_context) {
+        auto bank = raw_command_claim(raw_command_initial_credit);
+        if (!bank)
+          throw Error{ErrorCode::audit_unavailable};
+        job->worker_credit.emplace(unwrap(bank->split(raw_command_worker_credit)));
+        job->retry_credit.emplace(unwrap(bank->split(raw_command_retry_credit)));
+        job->semantic_credit.emplace(unwrap(bank->split(raw_command_semantic_credit)));
+      }
     }
     sigset_t previous, blocked;
     sigemptyset(&blocked);
@@ -1143,12 +1147,15 @@ void CommandJobs::start(const std::string &id, const Value &arguments) {
     }
     if (impl_->cleanup_context) {
       RawThreadBinding owner{impl_->cleanup_context};
-      job->caller_stop_credit.emplace(unwrap(raw_try_claim_control(57)));
+      job->caller_stop_credit.emplace(
+          unwrap(raw_try_claim_control(raw_command_caller_stop_credit)));
     }
     impl_->jobs.emplace(id, job);
     try {
+      job->stop_wake->publish();
       job->worker = std::jthread([state = impl_.get(), job] { state->run(job); });
     } catch (...) {
+      job->stop_wake->retire();
       impl_->jobs.erase(id);
       throw;
     }
@@ -1422,6 +1429,9 @@ Value CommandJobs::control(const Value &arguments) {
     }
     if (op == "stop")
       raw_command_data_credit(57);
+    std::optional<RawControlToken> stop_credit;
+    if (op == "stop")
+      stop_credit = raw_command_claim(raw_wake_single_notify_credit);
     std::optional<RawControlToken> background_credit;
     if (op == "background") {
       background_credit = raw_command_claim(58);
@@ -1495,7 +1505,7 @@ Value CommandJobs::control(const Value &arguments) {
       job.stop = true;
       job.caller_stop_credit.reset();
       if (job.stop_wake)
-        job.stop_wake->notify();
+        job.stop_wake->notify(stop_credit ? &*stop_credit : nullptr);
       impl_->condition.notify_all();
       auto result =
           Value::object({{"job_id", Value{id}}, {"stop_requested", Value{true}}});

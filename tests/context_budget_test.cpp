@@ -111,7 +111,8 @@ int main() {
       const auto before_combined = context.view();
       engine.operation_completed = [&](std::string_view v) {
         if (v.starts_with("context_budget"))
-          context.protect = [](const Value::Array &, const Value &) {
+          context.protect = [](const Value::Array &, const Value &,
+                               const RawEventRef &) {
             throw Error{ErrorCode::capacity};
           };
       };

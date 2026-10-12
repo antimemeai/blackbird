@@ -356,7 +356,7 @@ int main() {
         unwrap(ctx.checkpoint());
         // Persistent accelerator failure refuses fresh work at a finite suffix.
         root->set_maintenance_checkpoint(
-            [] { return Result<void>::failure({ErrorCode::io}); });
+            [](const RawEventRef &) { return Result<void>::failure({ErrorCode::io}); });
         bool bounded = false;
         for (unsigned i = 0; i < 1100; ++i) {
           const auto before = root->cursor();
@@ -386,7 +386,8 @@ int main() {
         CHECK(bounded && root->tail_facts().size() <= 1024 &&
               root->maintenance_error());
         unwrap(ctx.checkpoint());
-        root->set_maintenance_checkpoint([&ctx] { return ctx.checkpoint(); });
+        root->set_maintenance_checkpoint(
+            [&ctx](const RawEventRef &parent) { return ctx.checkpoint({parent}); });
         count = root->fact_count();
         const auto old = root->history_snapshot();
         ctx.append({Value::object({{"role", Value{"user"}},
