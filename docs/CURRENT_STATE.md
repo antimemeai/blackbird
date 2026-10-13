@@ -68,7 +68,9 @@ adds original result preservation, physical I/O and retained/index emission,
 prepaid terminal/cleanup banks and explicit main/worker transfer. Actual launcher
 capture/reopen checks native storage and Root lifecycle; inspection creates no
 capture run. The [completion plan](INSTRUMENTATION_COMPLETION.md) records owner
-checks and remaining census/workload measurements. nls.2 remains open; logical-clock
+checks and remaining census/workload measurements. Source ca6747b passes110
+Debug cases, all161 owned C++ translation units and owned Lua checks, with
+affected Mac/Linux Release and ASan-UBSan qualification. nls.2 remains open; logical-clock
 nls.9 and P0 audit completeness nls.10 remain separate. No evaluator was selected
 or run. Existing operator executable replacement, multiplayer, steering and
 further trajectory views remain separate.

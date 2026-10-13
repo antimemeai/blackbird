@@ -279,3 +279,13 @@ closed at cleanup ordinal43; a later saved-state temporary opens as different
 R739/fd15 with that retired inode. The observer now stops following an incarnation
 after successful close/EBADF. Per-openR raw close pair/resource END counts remain
 separate direct assertions. No production race or lost close was established.
+
+
+Root completed supported-profile integration and the installed source hook in
+source ca6747b:110/110 Debug cases in146.29s, all161 owned C++ translation units
+and owned Lua checks. The existing owner/finding oracles pass affected Mac/Linux
+Release and ASan-UBSan profiles. The required hook's seven obsolete integration
+fixture assumptions are corrected and their direct/profile checks pass; native
+byte, failure, custody and publication assertions remain strict. Full disposition
+and remaining scope are in [the completion plan](../docs/INSTRUMENTATION_COMPLETION.md).
+nls.2 remains open; this completes the present owner segment.

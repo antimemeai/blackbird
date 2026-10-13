@@ -290,3 +290,13 @@ Current strict fixture links and all four direct Debug cases pass8.16s with the
 existing watchdogs. Logs are under ignored context/retained-index-study with
 legacy-fixture-qualified-* names. Root owns the supported affected profiles and
 mandatory source-hook retry.
+
+
+Root completed supported-profile integration and the installed source hook in
+source ca6747b:110/110 Debug cases in146.29s, all161 owned C++ translation units
+and owned Lua checks. The existing owner/finding oracles pass affected Mac/Linux
+Release and ASan-UBSan profiles. The required hook's seven obsolete integration
+fixture assumptions are corrected and their direct/profile checks pass; native
+byte, failure, custody and publication assertions remain strict. Full disposition
+and remaining scope are in [the completion plan](../docs/INSTRUMENTATION_COMPLETION.md).
+nls.2 remains open; this completes the present owner segment.

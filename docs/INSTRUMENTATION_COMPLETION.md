@@ -202,8 +202,16 @@ reports. The semantic repairs deny unbudgeted public inspection, end terminal
 loans before callbacks, validate issuer before reading mutable Root state, and
 emit the direct checked-read writer state on actual Error. Actual launch/reopen, cold lifetime/concurrent cleanup, retarget refusal,
 result/cancellation and positive native-read boundary tests qualify the stated
-paths. Supported-profile and final source-gate results are recorded below when
-complete; no further review panel is introduced.
+paths. Source ca6747b passes the installed source hook:110/110 Debug tests in146.29s,
+all161 owned C++ translation units and owned Lua formatting/syntax/type/contract
+checks. The20 affected owner cases qualify on Mac Release/ASan-UBSan and Linux
+Debug/Release/ASan-UBSan. Finding-driven fixture rechecks are included: Linux
+storage76.11s with a120s whole-group watchdog, optimized GNU projection caller,
+retired-inode observation and ASan thread forwarding. Native fault deadlines and
+byte/custody assertions remain intact. The seven older integration fixtures also
+pass Mac Debug/Release/ASan-UBSan and Linux Release/ASan-UBSan; Linux7/7 completes
+in2.68s/24.75s. Exact logs are in ignored context/current-segment-joint-snapshot
+and context/linux. No further review panel is introduced.
 
 Remaining program/workflow/bridge owners,
 [file47–48](../papers/2026-10-11-file-owner-raw-subplan.md)/Beads/decision/Git callers, session/UI/station/backstop and measured workloads
