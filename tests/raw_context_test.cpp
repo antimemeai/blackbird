@@ -1023,10 +1023,13 @@ void owner() {
               ContextStore::stop_outputs(field(stopping, "entries").array(), true);
           require(outputs.size() == 1, "one actual unresolved tool output");
           context.append(outputs, "stop.linkage", stop_origin);
+          // Independent native layout: BEGIN/END/outcome/error and one journal
+          // observation total276; this actual one-event append adds52 bytes.
+          constexpr std::uint64_t one_event_region = 276 + 52;
           require(acceptance.context_settlement_accepted &&
                       !acceptance.boundary_program_accepted &&
                       root->issuer_counter() > issued_limit &&
-                      regions.remaining() <= 6912 - 3 * 432,
+                      regions.remaining() == 6912 - 3 * one_event_region,
                   "actual canceled rejection and issuer refill use original held "
                   "region bank");
           require(context.checkpoint_error() ==

@@ -134,6 +134,22 @@ Default APIs/options stay unchanged; main activation remains held. This is the
 same whole-plan finding resolution, not a new source/review panel or a census53
 completion claim.
 
+The same actual catalog-lifetime finding includes optional ordinary exec
+maintenance inside an active physical scope. Explicit pause detaches borrowed
+pointers and retains old selected files; restoration publishes3048/3049 naming
+the actual current journal/catalog identities and native catalog count before
+new acquisition. Nullable identities require98+50=148 maximum bytes per pair.
+Only exec prepays148O for at most one reached callback per outer submission;
+diagnostic children skip maintenance, stop/job no_new do not run it. Exec O3
+lifecycle is789+444=1233 with its original3-scope quota. General CONTROL adds
+148O for that kind; DATA stays unchanged. A uses the checked business maximum
+min(UINT32_MAX,max_records*6) before admission, since an absent/current-small
+catalog can grow before later stop/Job activation or during ordinary exec
+maintenance. A real replacement exceeding admitted A refuses before further
+native acquisition and remains honest debt. Original callback failure stays
+primary while restore publishes its distinct native outcome. No silent retarget,
+extra producer, registry or new panel is introduced.
+
 
 ## Genuine preimplementation native prefix red
 
@@ -147,3 +163,39 @@ bytes acquired then destroyed by EIO". Fixture /tmp/blackbird-storage-prefix-red
 wphbEq and ignored source/build/binary/log are retained. No production storage
 source was changed to obtain this red; old opt-out behavior remains distinct from
 the candidate's explicit owner overload. Parent owns implementation release.
+
+### Same custody implementation disposition
+
+Actual original-issuer retirement records process PID as well as TLS thread:
+TLS addresses survive fork and do not grant a child the parent's SPSC producer.
+Legal OLDmain retirement after child entry remains on the original parent
+producer/thread; it grants no ordinary I/O. Detected live wrong-thread bank
+retirement exits74 before claim destruction, without an unsafe producer write.
+Selected semantic Root teardown125 uses the existing serialized cleanup producer
+and a private typed wrapper, copies final native fields before member destruction,
+and adds no lane or semantic escape. Partial factories release unused credit and
+have no completed Root END. These resolve concrete shared ownership boundaries
+inside the existing whole physical/semantic plans.
+
+### Physical source candidate handoff
+
+The matching strict debug foundation/coding/storage fixture build passes. The
+final whole twenty-one-group native fixture passes, and narrow tidy passes for
+raw_storage, journal_storage, diagnostics, journal_writer, Terminal and the
+storage fixture. Native checks cover exact returned kernel bytes/fields, initial
+diagnostic prefix followed by EIO without allocation, real death-prefix recovery,
+stopped actual recorder/full ordinary DATA and CONTROL with sticky cancellation,
+finite native short/EINTR refusals, failed single unlock and eventual cold close,
+real TUI handoff/rollback/canceled join, and explicit changed-catalog restoration.
+
+The strengthened catalog refusal oracle initially counted legitimate native reads
+made during checkpoint before the refusal. Its corrected cut compares actual
+same-lane ordinals after the recorded rejected retarget and requires the exact
+linked capacity/Error detail0 body. The initial failing run is preserved; no
+production defect was inferred from that fixture error. Logs are
+context/storage-owner-final-recheck-build.log,
+context/storage-owner-final-native-recheck.log and
+context/storage-owner-final-oracle-build.log; final changed-file tidy logs are
+under context/storage-tidy-final-*.log. Root's ONE whole code/oracle attack and
+supported-profile integration follow. Main positive activation remains held for
+semantic/caller composition; no census53 completion is claimed yet.

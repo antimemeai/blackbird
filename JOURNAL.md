@@ -7452,3 +7452,224 @@ spent finite scope credit cannot fund an invented cleanup retry. Genuine old
 SavedState red publishes accepted slot8 while live saved6 and reopen8, with
 actual postACK allocation cut; native missing3100 red also established.
 Carrier/caller/source integration and whole code oracles remain underway.
+
+2026-10-11 — Published text-only whole-plan checkpoint785f133 on origin/master.
+Ten document files checked,83 local links resolve, nine intact file-reference
+lengths/hashes match and relevant diff checks pass; supported Beads backup included.
+No full source suite/lint rerun for this text-only checkpoint. Actual physical
+first strict foundation compile and SAME diagnostic recheck now pass, including
+current unactivated semantic helper migration. Native whole-owner fixture/
+transfer/qualification remains unfinished. Root keeps main activation held.
+
+Loan owners identified wrong-custody fence+return would still destroy held credit.
+Selected legal never-started/joined retirements finalize under actual exclusive
+issuer. A detected internal live-custody violation exits74 before member release;
+existing raw_fence may precede exit only with independently valid current-producer
+OS-thread custody. An unrelated same-live-producer rebind exits directly, leaving
+existing process-death recording to preserve unresolved work. Ordinary capacity,
+cancellation, native short/error and joined-transfer refusal remain nonfatal and
+retain their actual banks/debt. Source and direct subprocess checks pending.
+
+2026-10-11 — Current native owner qualification continues. Operation strict
+snapshot links; native five baseline repairs and split fourth-group EIO preserve
+exact originals. SAME fixture fixes handle the actual two-field provider packet
+and the adapter's unchanged nonstandard int exception. Physical first fixture
+passes prefix/optout/handoff/held-credit/short-EINTR/unlock/exec3; its live append
+failure oracle is corrected to actual poisoned writer, unchanged accepted cursor
+and four-byte tail, rather than recovery-only pending_records. Whole native
+greens/code attacks are pending. Root registers the two direct retained fixture
+cases without invoking a build before owner readiness.
+
+Root source-to-plan conformance read identifies a fabricated allocation Error
+in the developing RawRetainedPair: the accepted plan emits Error fields only
+when owned. Owner fixes thrown bad_alloc to branch2 without Error fields; actual
+Result failure Error remains branch1 with unchanged fields. Root.dispatch may
+throw during its real planned-invocations copy; its eventual boundary must retain
+throw versus Result rather than convert caller semantics. This is current native
+field-table implementation conformance, not an additional whole review panel.
+Main opt-in and final descriptions remain pending whole-owner completion.
+
+2026-10-11 continuation: the operation native fixture reached actual compact
+maintenance and exposed a heap use-after-free in the semantic instrumentation
+scope. A checkpoint replaced ArchiveCatalog while append_impl still borrowed its
+raw origin. The fix retains the selected catalog through origin restoration and
+restores a replacement catalog after the Root scope unwinds. This is an actual
+integration defect, not a weakened maintenance oracle. The coordinated strict
+storage/Coding snapshot compiles with that fix; direct native reruns remain in
+progress. A delegated continuation was rejected by automatic review citing
+possible cybersecurity risk; root takes the local operation regression work.
+
+Decision52 source study is recorded in ignored
+context/decision-owner-source-study.md: preserve the existing external encoder
+string before private curl preparation; select native child reads before observer
+or parser work; keep credentials/configuration private; remove returned elapsed
+arithmetic. Quiet stderr needs an explicit native read design because the current
+separate_error path polls it before stdout and creates a second accumulated
+string. The source study is not a complete subplan or instrumentation delivery.
+
+The same operation fixture now passes actual maintenance and persistent command
+completion. Its final process-exit setup stopped the recorder before a new
+producer's live registration, which waits for that recorder. An explicit pipe
+handshake now finishes registration before stopping the recorder and starting
+the operation. The native original-publication/receipt boundary and P>A byte
+oracle remain unchanged; no timer, sleep or production workaround was added.
+
+2026-10-13 — Operator requests completion and main integration of the current
+operation/semantic/physical segment; the remaining nls.2 surfaces stay open.
+Operation ONE code/oracle review reports OP1 missing dispatch throw outcome and
+OP2 incomplete provider error/original/receipt/settlement assertions. A fixture-only
+checkpoint-copy allocation refusal against the matching pre-fix archives reaches
+the actual caller without an effect, then fails on missing2421. Root implements
+the outcome handlers, preserves throws, and distinguishes returned failure from
+thrown Error within the same3290-byte bank. Independent literal provider packet
+and real caller/receipt/report/disposition/settlement assertions are strengthened;
+candidate direct recheck is pending. No new review layer, timer or library.
+
+Operation OP1/OP2 direct native recheck passes in the strict shared candidate.
+The full fixture includes native maintenance, later command exit, producer-exit
+P>A originals and the actual thrown checkpoint copy. Matching pre-fix oracle
+failed only after its required caller/no-effect checks, on the missing outcome
+record. Common production source released to semantic/storage owners after the
+link; root has zero compiler workers. Profile/source-gate work remains pending.
+
+Main activation direct oracle now compares actual selected-owner/startup linkage,
+Root create/open native header and capacity fields against the business audit
+header, factory return, final owner cursor/outcome and actual storage close. The
+existing read-only inspection unchanged-stream oracle stays in the same check.
+Against the published debug launcher the extended real CLI check fails exactly
+at missing3000 (zero selected owner events), establishing the current opt-out
+gap. Main source patch remains prepared/held for completed semantic caller and
+physical finding qualification. Operation native fixture static is clean after
+explicit optional guards and type-safe literal helper signatures, with no
+suppressions or changed byte expectations.
+
+Caller integration identifies a real finite read quota boundary: the native
+checked-packet reader acquires payload plus its32-byte frame header, so the16MiB
+call ceiling includes that header. At the already published maximum encoded
+Invocation/Decision extents the ceilings remain2, but the old summary table's
+N12 was itself inconsistent with5+3*2+2=13. Source/table are corrected to one
+additional maximum call: physical exec238018 CONTROL; core794488 CONTROL and
+138922517 DATA. Main1MiB/256MiB selection stays sufficient; exact16MiB boundary
+gets the direct native quota oracle within the same integration work.
+
+The generic provider/file/Lua receipt boundary also needs its planned33887
+semantic bank; the exec carrier alone does not cover those actual bodies. The
+same plan now derives a separate physical receipt bank from the real36-byte
+encoded receipt and384-byte single-rejection envelope: F420/K4/O1/G4/B56/N1.
+AtP33/J4 it costs42664 CONTROL/20009 DATA; total receipt76551 CONTROL plus the
+existing operation/region holds. It starts only after the body with no_new;
+3152/53 already holds its pair before the body. A local dispatch scope unwinds
+before its parent origin guard, and receipt permission failure must preserve
+the actual effect Result. Native sticky/full pressure and real nested Lua→exec
+qualification are included; the large whole exec union is not charged to all
+ordinary operations, and all sixteen nesting levels are not promised at1MiB.
+
+2026-10-13: Root completes the physical ONE review findings and promised lifetime oracles. P1-P4 matching pre-fix archives each reproduce a real red; strict expanded native test is green. The retarget negative now reopens a real supported compact session, confirms/reconciles it, grows the actual suffix to the existing maintenance threshold, and calls RetainedState::append: one real checkpoint produces an oversized new catalog, exact linked3049 capacity, unchanged accepted cursor and no subsequent acquisition/apply. Earlier fixture-only restore/no-later-call assertion is replaced.
+
+Actual replayed ImmutableBytes and FactHistory pin native journal/catalog generations beyond Context/Root destruction. An authorized Terminal-style worker creates a new archive and drops the old MAIN-created history while its actual close is held under a fixture condition-variable barrier and MAIN emits a real render event. Joined MAIN replaces the worker catalog; two native threads simultaneously drop actual remaining closures and an unused bank from an actual ENOENT open. Independent dev/inode matched forwarded closes reach EBADF exactly once; native pairs/resource ENDs use the sole serialized cleanup producer and cleanup owner END is later. Primary cold reads preserve independent literal BBM2 bytes, no resident cache; a real contender acquires writer lease after Root death while readers still pin files. The final cut stops actual Rec/Sup, fills MAIN CONTROL, introduces actual EOF cancellation, and still emits paid cleanup plus paid MAIN outcome. Current whole storage Debug passes31.91s. Fixture correction: ContextStore checkpoint itself pins history, so Context is destroyed before asserting worker final ownership; ordinary observations precede cancellation, only paid terminal/outcome records follow it. These were oracle errors, not asserted production defects.
+
+Main source opt-in uses the same owner from startup through actual native directory and Root, and actual TerminalUI receives that Root. Isolated Debug launcher check is green: exact3000/3001, native3104/3105 header/capacity/method fields,3108/3109 teardown, ordinary native hooks, reopen and read-only inspection. Preserved published launcher red had no3000. Main runtime selects256MiB DATA/1MiB CONTROL/128KiB FAILURE per prepared producer; defaults for other callers remain unchanged. This capacity pays selected finite banks, not a real-workload RSS/performance claim. Operator executable is not replaced. Supported profiles, whole semantic ONE review and required source gate are still finishing before main delivery.
+
+2026-10-13 — Whole retained/index caller integration now prepares the exec and
+generic adapter banks from the existing codec buffers before ordered admission;
+no second encode or metadata-only read. The actual acknowledged Admission.attempt
+locks the loan to its dispatch. Joined Job terminal grants stay on the actual
+prelaunch worker producer, become usable after join, stage their business result
+before publication and accept acknowledged terminals even when later followup
+throws. Turn cancellation borrows the protected stop bundle without fresh grants.
+
+Generic receipt owns33887 semantic/F420 physical credit and a local postbody
+scope that ends before the native dispatch origin. The actual later terminal
+calls are primary and capacity fallback. The first capacity can acquire its
+dependencies before refusing but writes no frames/diagnostic children. Their one
+lexical scope owns107639 semantic/F8576/K4/O2/G14 physical credit and twice the
+actual positive dependency quota. Later semantic result retention may honestly
+return interrupted; its already-paid raw original and actual operation failure
+remain on disk, with no invented business locator or accepted terminal. Formal
+generic receipt+terminal318991 CONTROL does not fit alongside worst core794488
+at1MiB; native admission checks every actual simultaneous holder before effects.
+
+Current caller Debug native checks pass: actual fullCONTROL/sticky EOF receipt;
+forwarded Lua result projection allocation, exact32768-byte raw result and actual
+stage7 interrupted return; native2048 source cap refusing4096 result while
+preserving original/fallback and one bounded Error terminal; accepted large Lua
+result locator; real nested Lua-to-exec; actual joined terminal and no-child
+third-scope refusal. Allocator measurement showed libc++32776 at lua_string ->
+read_value -> Runtime::eval, so the fixture selects that acquisition stack rather
+than a guessed32769 allocation. Illegal128-item fact paging and empty-argv shell
+fallback assumptions were corrected from the actual16-item API/launch parser.
+
+The final boundary case independently decodes the CRC-valid Invocation payload
+at exactly16MiB, then acquires three actual archived16MiB+32 frames during
+dispatch/receipt/terminal. Actual3033 B/N includes each header remainder; no
+metrics re-encoding. The initial two-frame oracle omitted the real terminal
+operation and was corrected by executing it. Logs remain under ignored
+context/retained-index-study/{caller-capacity,quota-boundary}-*. Narrow production and final fixture static are clean; the ONE whole semantic
+code/oracle review is in progress. No new review layer, timer or library. Main candidate
+activation/profile/source-gate/merge belong to the root owner.
+
+2026-10-13 supported-profile checkpoint: Mac Release19/20 in50.97s followed final changed caller1/1 in1.63s; Mac ASan/UBSan20/20 in213.37s. Linux first Debug18/20 in34.90s. Its caller acquisition-stack predicate did not see GNU local helper symbols; Metadata owns the platform predicate correction. Physical diagnostic native count measurement reproduces writes1/closes23/unlinks1: Linux /proc state observation reuses the externally closed file descriptor number. This was a fixture incarnation error. Native close observation now checks dev/inode while the file survives; after the deliberately external close, it counts only the actual EBADF close on the dedicated cleanup issuer, not MAIN /proc closes. The exact source/raw cleanup assertions stay unchanged. No production defect is inferred from that count.
+
+The SAME semantic ONE code/oracle review identifies inspection borrowing outside its zero allowance, terminal scopes surviving into later callbacks, failed checked-read native state omission, and mutable archive copy before issuer check. Findings are being integrated by the whole semantic owner. Only changed paths require another direct/profile check; settled unrelated cases stay settled. The mandatory source commit hook remains required, with all six workers reserved after fleet work completes.
+
+
+2026-10-13 — The SAME whole semantic review findings S1–S4 are repaired and
+native Debug3/3 passes15.90s. Matching prior headers/archives reproduce the actual
+resident public inspection defect, completion-scope wrong_incarnation and direct
+checked-read missing-state defect before rebuilding. S1 refuses public fact/page/
+reader borrowing while funded internal lookup remains unchanged. S2 releases the
+one primary/fallback terminal scope before later callbacks. Its direct callback
+reenters actual CodingEngine::call in the existing admitted turn and observes a
+real child effect plus outer3036/3037 before nested2400; the initial second-turn
+oracle instead reached legitimate protected-settlement busy and was corrected.
+S3 checks immutable issuer/thread custody before mutable archive selection and
+restoration; the actual foreign-thread constructor refuses. S4 preserves direct
+owned writer state on Error without invented acquired count, with an actual
+33-byte frame prefix/EOF and restored independently checked originals.
+
+GNU projection acquisition selection now also accepts the actual visible
+basic_string storage frame beneath Runtime::eval when ELF cannot name its local
+lua_string/read_value helpers. The selected acquisition size is still the real
+large string range and exact32768-byte retained raw result, native EOF and
+stage7 interrupted/no-locator assertions remain mandatory. Supported GNU
+qualification belongs to the root's final profiles. Current strict Debug,
+five-TU narrow static and six-file dry format pass; source/header/fixtures are
+idle with zero workers for final supported profiles and mandatory source gate.
+Whole review disposition is recorded in the existing retained-index code-attack
+paper, with no additional panel, dependency, timer or expansion of the segment.
+
+2026-10-13 final semantic finding rechecks: current strict Debug3/3 passes15.90s; S1/S2/S4 genuine matching old archive reds reach their actual assertions, S3 has static guard-before-mutable-copy and the actual foreign constructor refusal. Same corrected completion callback invokes the existing turn's real private call through a fixture-only member-pointer instantiation; the earlier second operator_call correctly refused busy and was an oracle error. Actual child effect/live Root and3036/3037-before-nested2400 pass. Revised Release caller/CLI2/2 pass2.83s; current ASan affected8/8 pass171.99s. Linux revised native/caller2/2 pass0.18/12.73s; storage lifetime comparison exposed an intermittent observer identity error.
+
+Recovered the preserved failed Linux raw stream (ignored context/linux-cold-failure-capture). Original archive0, openR433, fd14, dev64512/inode3437367 closes on cleanup ordinal43. The later journal.state.0.tmp file opens as distinctR739/fd15 and reuses that dev/inode after retirement. All native resourceR close pairs were correct; the observer incorrectly continued following the retired inode. It now stops watching after the actual successful close/EBADF; exact per-openR raw close/request/return/END counts still independently detect duplicate or missing resource cleanup. The unchanged measurement rerun already passed24.38s, confirming intermittence; the fix follows the actual recovered identity sequence, not a flaky-test retry acceptance. Final Linux Debug/Release/ASan and mandatory source hook follow, with no new review layer.
+
+2026-10-13 final Linux Debug passes all20 affected cases in70.15s. Release passes19/20 in15.30s; only the fixture acquisition-stack predicate fails because optimized GNU inlines both local read_value/lua_string and basic_string storage helpers. A forwarded-allocation measurement in the unchanged optimized production executable identifies the actual32769-byte Lua result copy: operator new, then Runtime::eval as the first exported caller, then actual RetainedState::dispatch. Later packet/proposal/frame allocations instead have intervening codec/journal callers. The fixture adds that measured direct-eval branch while retaining the existing helper paths, forwards malloc, and leaves exact32768-byte raw original, actual native EOF and stage7 interrupted/no-locator oracles unchanged. Measurement red is context/linux/run-nuew7gq2/checks.log; corrected Release caller, changed Mac caller and remaining Linux ASan are the direct followup. No new source defect or review layer.
+
+Measured projection correction passes Linux Release caller1/1 in1.77s (context/linux/run-20yk2buo), Mac Release caller1/1 in2.03s and Mac ASan/UBSan caller1/1 in33.60s. Final fixture narrow clang-tidy passes without diagnostics; temporary stack printing is removed. Prior Linux Debug20 and Release19 unaffected cases remain settled. Remaining Linux ASan runs the20 affected owner/native/launcher cases. Debug source-gate build uses two local workers while the fleet uses four, with at most six total; the final installed hook will own all six after fleet completion.
+
+Linux ASan storage qualification finds a fixture forwarding defect: its strong pthread_create interposer calls libc via RTLD_NEXT, skipping the statically linked ASan interceptor/registry. The first real worker join aborts with ASan Joining already joined thread. Actual compiler-rt18 archive symbols show __interceptor_pthread_create linked into the executable; Linux forwarding now selects that existing interceptor via RTLD_DEFAULT when present, preserving actual thread tracking and the real EAGAIN launch-failure injection. Unsanitized/Mac libc forwarding remains the existing fallback. No production source, sanitizer suppression, thread oracle or launch assertion changes. Linux storage ASan direct recheck follows; unaffected19 cases finish their original run.
+
+The corrected Linux ASan storage run passes actual joins/cold concurrent cleanup (all four independently observed closes1/EBADF) and progresses through the large journal/saved-state cases into the twentieth native fixture, enumeration, before CTest truncates the expanded29-group fixture at its initial60-second watchdog. The whole-group property now matches operation_raw's120-second watchdog. Native fault, pipe readiness, process-state and actual Terminal deadlines/assertions are unchanged. This is not a campaign timer or a behavioral deadline extension. The direct whole storage ASan recheck must finish all existing oracles to establish completion, rather than infer success from progress. Preserved failure: context/linux/run-_cutdyxd/checks.log.
+
+Installed source hook returns103/110 native passes in179.81s, before static/Lua, exposing seven older integration fixtures: turn_raw, raw_context, observations, observations_cli, raw_authored, command_raw and raw_command_wake. Candidate remains uncommitted/unpublished. Metadata owns the same semantic bank/caller integration fixes and direct oracles with two workers; root owns operation/observations and authored fixture corrections with up to four. No new review or broad profile campaign.
+
+Operation17 reviewed subplan explicitly removes scalar operation time/duration metadata while retaining old packet/readback fields. Observations fixtures now require actual provider result/attempt/doctrine linkage and absence of newly produced projected timing; a literal old timing packet must remain readable/plotable after actual reopen. Real Git CLI still checks exact hashes/dates/samples, immutable repository bytes and uncertainty, and now requires no operation-projected point. No producer transforms or new consumer/trajectory feature is added. raw_authored actual SIGABRT backtrace identifies generations_and_sources' ordinary program_config/tool calls refusing their65536 DATA fixture before effect because operation originals now prepay encoder capacity. That ordinary-call fixture selects the existing launcher256MiB DATA/1MiB CONTROL capacities. Separate authored32768 DATA refusal and full-DATA finalizer cuts stay unchanged.
+
+Operation/observations/authored integration corrections pass Debug3/3 in4.66s, Mac Release3/3 in6.04s and Mac ASan/UBSan3/3 in12.54s. Both changed fixture TUs pass narrow clang-tidy without diagnostics. The reviewed operation plan, not a new behavior choice, supplies the projected-timing removal; exact old-format readback after reopen is newly explicit. Semantic fixture repairs remain within the same failed-gate recheck. Remaining four sources are stabilizing for their direct/profile checks before the installed source hook rerun.
+
+
+2026-10-13 — The required source hook caught four older fixture assumptions
+while integration was otherwise green. SAME semantic unit corrections change
+fixtures only: selected operation original admission needs16MiB, so turn's4MiB
+and selected exec's2MiB DATA setups must admit the operation before their real
+fault/cancellation cuts. Wake preserves its exact2MiB original and parks actual
+admission by holding all larger-lane credit with the recorder stopped; unused
+custody pipe ends are closed. Exact native fatal/EOF/alias custody remains.
+Context now independently expects three(276+52)-byte native region withdrawals
+under actual cancellation/full ordinary CONTROL. Command's synthetic four-
+observation region declares three extra observations, preserving its existing
+four432-byte bursts/1728 bank; both real canceled cuts emit four caller prepaid
+regions, with joined-worker settlement only for the real launched command.
+The old policy-child assertion expected unpaid receipt failure to block Root;
+it now independently checks the actual retained interrupted/ECANCELED receipt,
+Root live state and unchanged held turn terminal. Strict links and affected
+Debug4/4 pass8.16s; no production change, deadline weakening or new review.

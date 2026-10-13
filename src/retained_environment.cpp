@@ -78,37 +78,48 @@ Result<JournalCapacity> capacity_from(RetainedCapacityDeclaration wire,
              : Result<JournalCapacity>::failure({ErrorCode::corrupt});
 }
 Result<JournalHeader> inspect_header(JournalDirectory &directory,
-                                     AuditStreamId identity, EnvironmentBounds bounds) {
-  const auto name = journal_name(identity);
-  auto opened =
-      directory.open_existing({name.data(), name.size()}, FileAccess::read_only);
-  if (!opened.has_value())
-    return Result<JournalHeader>::failure(opened.error());
-  auto file = std::move(opened).value();
-  std::array<std::byte, journal_header_size> bytes{};
-  std::size_t done = 0;
-  unsigned int interruptions = 0;
-  while (done < bytes.size()) {
-    const auto result = file->read_at(done, MutableByteView{bytes}.subspan(done));
-    if (!result.has_value()) {
-      if (result.error().code == ErrorCode::interrupted && ++interruptions < 8)
-        continue;
-      return Result<JournalHeader>::failure(result.error());
+                                     AuditStreamId identity, EnvironmentBounds bounds,
+                                     const RawRetainedOrigin &raw_origin) {
+  RawRetainedFields arguments;
+  arguments.add(identity.bytes());
+  RawRetainedPair trace{raw_origin, {3264, 3265}, 187, arguments.view()};
+  auto answer = trace.run([&]() -> Result<JournalHeader> {
+    const auto name = journal_name(identity);
+    auto opened =
+        directory.open_existing({name.data(), name.size()}, FileAccess::read_only);
+    if (!opened.has_value())
+      return Result<JournalHeader>::failure(opened.error());
+    auto file = std::move(opened).value();
+    std::array<std::byte, journal_header_size> bytes{};
+    std::size_t done = 0;
+    unsigned int interruptions = 0;
+    while (done < bytes.size()) {
+      const auto result = file->read_at(done, MutableByteView{bytes}.subspan(done));
+      if (!result.has_value()) {
+        if (result.error().code == ErrorCode::interrupted && ++interruptions < 8)
+          continue;
+        return Result<JournalHeader>::failure(result.error());
+      }
+      if (result.value() == 0 || result.value() > bytes.size() - done)
+        return Result<JournalHeader>::failure({ErrorCode::incomplete});
+      done += result.value();
+      interruptions = 0;
     }
-    if (result.value() == 0 || result.value() > bytes.size() - done)
-      return Result<JournalHeader>::failure({ErrorCode::incomplete});
-    done += result.value();
-    interruptions = 0;
-  }
-  auto header = decode_journal_header(bytes);
-  if (!header.has_value())
+    auto header = decode_journal_header(bytes);
+    if (!header.has_value())
+      return header;
+    if (header.value().journal != identity)
+      return Result<JournalHeader>::failure({ErrorCode::conflict});
+    if (header.value().limits.max_payload > bounds.framing.max_payload ||
+        header.value().limits.max_batch_bytes > bounds.framing.max_batch_bytes)
+      return Result<JournalHeader>::failure({ErrorCode::capacity});
     return header;
-  if (header.value().journal != identity)
-    return Result<JournalHeader>::failure({ErrorCode::conflict});
-  if (header.value().limits.max_payload > bounds.framing.max_payload ||
-      header.value().limits.max_batch_bytes > bounds.framing.max_batch_bytes)
-    return Result<JournalHeader>::failure({ErrorCode::capacity});
-  return header;
+  });
+  RawRetainedFields returned;
+  if (answer.has_value())
+    returned.header(answer.value());
+  trace.result(answer, returned.view());
+  return answer;
 }
 struct BusyGuard {
   explicit BusyGuard(bool &busy) : busy_(busy) { busy_ = true; }
@@ -124,254 +135,372 @@ private:
 Result<std::unique_ptr<RetainedEnvironment>>
 RetainedEnvironment::create(std::unique_ptr<JournalDirectory> directory,
                             JournalHeader root, JournalCapacity root_capacity,
-                            EnvironmentBounds bounds) {
-  const auto valid = validate(root, root_capacity, bounds);
-  if (!valid.has_value())
-    return Result<std::unique_ptr<RetainedEnvironment>>::failure(valid.error());
-  try {
-    auto prepared =
-        EnvironmentHead::prepare(std::move(directory), root, SyncStrength::full);
-    if (!prepared.has_value())
-      return Result<std::unique_ptr<RetainedEnvironment>>::failure(prepared.error());
-    auto owner = std::unique_ptr<RetainedEnvironment>{new RetainedEnvironment{
-        std::move(prepared).value(), root, root_capacity, bounds}};
-    const auto name = journal_name(root.journal);
-    auto semantic = RetainedState::create(
-        std::make_unique<BorrowedDirectory>(owner->head_->directory()),
-        {name.data(), name.size()}, root, root_capacity);
-    if (!semantic.has_value())
-      return Result<std::unique_ptr<RetainedEnvironment>>::failure(semantic.error());
-    owner->semantic_ = std::move(semantic).value();
-    owner->semantic_->max_history_entries_ = bounds.max_history_entries;
-    const auto published = owner->head_->publish_initial(SyncStrength::full);
-    if (!published.has_value())
-      return Result<std::unique_ptr<RetainedEnvironment>>::failure(published.error());
-    return Result<std::unique_ptr<RetainedEnvironment>>::success(std::move(owner));
-  } catch (const std::bad_alloc &) {
-    return Result<std::unique_ptr<RetainedEnvironment>>::failure(
-        {ErrorCode::allocation});
-  }
+                            EnvironmentBounds bounds,
+                            RawProductStorageOwner raw_owner) {
+  RawRetainedOrigin raw_origin;
+  raw_origin.owner = raw_owner;
+  raw_origin.selected = raw_owner.enabled();
+  RawRetainedFields arguments;
+  arguments.header(root);
+  arguments.native(root_capacity.max_file_bytes);
+  arguments.native(root_capacity.max_records);
+  arguments.native(bounds.framing.max_payload);
+  arguments.native(bounds.framing.max_batch_bytes);
+  arguments.native(bounds.segment.max_file_bytes);
+  arguments.native(bounds.segment.max_records);
+  arguments.native(bounds.max_segments);
+  arguments.native(bounds.max_history_entries);
+  arguments.native(bounds.max_capture_bytes);
+  RawRetainedPair trace{raw_origin, {3260, 3261}, 326, arguments.view()};
+  auto answer = trace.run([&]() -> Result<std::unique_ptr<RetainedEnvironment>> {
+    const auto valid = validate(root, root_capacity, bounds);
+    if (!valid.has_value())
+      return Result<std::unique_ptr<RetainedEnvironment>>::failure(valid.error());
+    try {
+      auto prepared = EnvironmentHead::prepare(std::move(directory), root,
+                                               SyncStrength::full, trace.child());
+      if (!prepared.has_value())
+        return Result<std::unique_ptr<RetainedEnvironment>>::failure(prepared.error());
+      auto owner = std::unique_ptr<RetainedEnvironment>{new RetainedEnvironment{
+          std::move(prepared).value(), root, root_capacity, bounds, trace.child()}};
+      const auto name = journal_name(root.journal);
+      auto semantic = RetainedState::create(
+          std::make_unique<BorrowedDirectory>(owner->head_->directory()),
+          {name.data(), name.size()}, root, root_capacity, raw_owner);
+      if (!semantic.has_value())
+        return Result<std::unique_ptr<RetainedEnvironment>>::failure(semantic.error());
+      owner->semantic_ = std::move(semantic).value();
+      owner->semantic_->max_history_entries_ = bounds.max_history_entries;
+      const auto published = owner->head_->publish_initial(SyncStrength::full);
+      if (!published.has_value())
+        return Result<std::unique_ptr<RetainedEnvironment>>::failure(published.error());
+      return Result<std::unique_ptr<RetainedEnvironment>>::success(std::move(owner));
+    } catch (const std::bad_alloc &) {
+      return Result<std::unique_ptr<RetainedEnvironment>>::failure(
+          {ErrorCode::allocation});
+    }
+  });
+  RawRetainedFields returned;
+  if (answer.has_value()) {
+    const auto current = answer.value()->cursor();
+    const auto state = answer.value()->state();
+    returned.cursor(current);
+    returned.native(state);
+    returned.selector(answer.value()->head_->selection());
+    returned.native(answer.value()->busy_);
+    returned.native(answer.value()->continuation_required_);
+    trace.result(answer, returned.view());
+  } else
+    trace.result(answer);
+  return answer;
 }
 Result<std::unique_ptr<RetainedEnvironment>>
 RetainedEnvironment::open(std::unique_ptr<JournalDirectory> directory,
                           JournalHeader root, JournalCapacity root_capacity,
-                          EnvironmentBounds bounds) {
-  const auto valid = validate(root, root_capacity, bounds);
-  if (!valid.has_value())
-    return Result<std::unique_ptr<RetainedEnvironment>>::failure(valid.error());
-  try {
-    auto opened = EnvironmentHead::open(std::move(directory), root, SyncStrength::full);
-    if (!opened.has_value())
-      return Result<std::unique_ptr<RetainedEnvironment>>::failure(opened.error());
-    auto owner = std::unique_ptr<RetainedEnvironment>{new RetainedEnvironment{
-        std::move(opened).value(), root, root_capacity, bounds}};
-    const auto loaded = owner->load_selected();
-    if (!loaded.has_value())
-      return Result<std::unique_ptr<RetainedEnvironment>>::failure(loaded.error());
-    return Result<std::unique_ptr<RetainedEnvironment>>::success(std::move(owner));
-  } catch (const std::bad_alloc &) {
-    return Result<std::unique_ptr<RetainedEnvironment>>::failure(
-        {ErrorCode::allocation});
-  }
+                          EnvironmentBounds bounds,
+                          const RawProductStorageOwner &raw_owner) {
+  RawRetainedOrigin raw_origin;
+  raw_origin.owner = raw_owner;
+  raw_origin.selected = raw_owner.enabled();
+  RawRetainedFields arguments;
+  arguments.header(root);
+  arguments.native(root_capacity.max_file_bytes);
+  arguments.native(root_capacity.max_records);
+  arguments.native(bounds.framing.max_payload);
+  arguments.native(bounds.framing.max_batch_bytes);
+  arguments.native(bounds.segment.max_file_bytes);
+  arguments.native(bounds.segment.max_records);
+  arguments.native(bounds.max_segments);
+  arguments.native(bounds.max_history_entries);
+  arguments.native(bounds.max_capture_bytes);
+  RawRetainedPair trace{raw_origin, {3260, 3261}, 326, arguments.view()};
+  auto answer = trace.run([&]() -> Result<std::unique_ptr<RetainedEnvironment>> {
+    const auto valid = validate(root, root_capacity, bounds);
+    if (!valid.has_value())
+      return Result<std::unique_ptr<RetainedEnvironment>>::failure(valid.error());
+    try {
+      auto opened = EnvironmentHead::open(std::move(directory), root,
+                                          SyncStrength::full, trace.child());
+      if (!opened.has_value())
+        return Result<std::unique_ptr<RetainedEnvironment>>::failure(opened.error());
+      auto owner = std::unique_ptr<RetainedEnvironment>{new RetainedEnvironment{
+          std::move(opened).value(), root, root_capacity, bounds, trace.child()}};
+      const auto loaded = owner->load_selected();
+      if (!loaded.has_value())
+        return Result<std::unique_ptr<RetainedEnvironment>>::failure(loaded.error());
+      return Result<std::unique_ptr<RetainedEnvironment>>::success(std::move(owner));
+    } catch (const std::bad_alloc &) {
+      return Result<std::unique_ptr<RetainedEnvironment>>::failure(
+          {ErrorCode::allocation});
+    }
+  });
+  RawRetainedFields returned;
+  if (answer.has_value()) {
+    const auto current = answer.value()->cursor();
+    const auto state = answer.value()->state();
+    returned.cursor(current);
+    returned.native(state);
+    returned.selector(answer.value()->head_->selection());
+    returned.native(answer.value()->busy_);
+    returned.native(answer.value()->continuation_required_);
+    trace.result(answer, returned.view());
+  } else
+    trace.result(answer);
+  return answer;
 }
 Result<void> RetainedEnvironment::stage_original(RetainedState::Snapshot &snapshot,
                                                  ProvisionalOriginal original,
                                                  const JournalHeader &origin,
                                                  JournalCapacity policy) {
-  auto packet = decode_retained_proposal(original.bytes, bounds_.max_capture_bytes);
-  if (!packet.has_value())
-    return Result<void>::failure(packet.error());
-  const auto &proposal = packet.value();
-  const bool ordinary = original.capture.purpose == CapturePurpose::ordinary_submission;
-  if (ordinary &&
-      (proposal.expected.journal != origin.journal ||
-       proposal.expected.sequence == UINT64_MAX ||
-       proposal.expected.sequence + 1 != original.capture.first_sequence ||
-       (proposal.sources.empty() && proposal.events.empty()) ||
-       proposal.sources.size() > policy.max_records ||
-       proposal.events.size() > policy.max_records - proposal.sources.size()))
-    return Result<void>::failure({ErrorCode::conflict});
-  std::uint64_t batch_bytes = 56;
-  const auto fits = [&](std::size_t size) {
-    if (size > origin.limits.max_payload || size > origin.limits.max_batch_bytes - 32 ||
-        batch_bytes > origin.limits.max_batch_bytes - 32 - size)
-      return false;
-    batch_bytes += 32 + size;
-    return true;
-  };
-  if (ordinary) {
-    for (const auto &source : proposal.sources)
-      if (!fits(source.size()))
-        return Result<void>::failure({ErrorCode::conflict});
-    if (proposal.sources.size() > UINT64_MAX - original.capture.first_sequence ||
-        proposal.events.size() >
-            UINT64_MAX - original.capture.first_sequence - proposal.sources.size())
-      return Result<void>::failure({ErrorCode::overflow});
-  }
-  for (std::size_t index = 0; index < proposal.events.size(); ++index) {
-    const auto &bytes = proposal.events[index];
-    auto decoded = decode_retained_event(bytes, origin.limits.max_payload);
-    if (!decoded.has_value())
-      return Result<void>::failure(decoded.error());
-    if (!ordinary)
-      continue;
-    if (!fits(bytes.size()) ||
-        std::holds_alternative<RecoveryChoiceEvent>(decoded.value().body) ||
-        std::holds_alternative<ProvisionalCaptureEvent>(decoded.value().body))
+  const auto capture = original.capture;
+  RawRetainedFields arguments;
+  arguments.reference(original.marker);
+  arguments.add(capture.origin.bytes());
+  arguments.native(capture.first_sequence);
+  arguments.native(capture.proposal_length);
+  arguments.native(capture.purpose);
+  arguments.header(origin);
+  arguments.native(policy.max_file_bytes);
+  arguments.native(policy.max_records);
+  RawRetainedPair trace{raw_origin_, {3269, 3270}, 261, arguments.view()};
+  RawRetainedOriginScope origin_scope{raw_origin_, trace.child()};
+  RawRetainedOriginScope semantic_scope{semantic_->raw_origin_, trace.child()};
+  auto answer = trace.run([&]() -> Result<void> {
+    auto packet = decode_retained_proposal(original.bytes, bounds_.max_capture_bytes);
+    if (!packet.has_value())
+      return Result<void>::failure(packet.error());
+    const auto &proposal = packet.value();
+    const bool ordinary =
+        original.capture.purpose == CapturePurpose::ordinary_submission;
+    if (ordinary &&
+        (proposal.expected.journal != origin.journal ||
+         proposal.expected.sequence == UINT64_MAX ||
+         proposal.expected.sequence + 1 != original.capture.first_sequence ||
+         (proposal.sources.empty() && proposal.events.empty()) ||
+         proposal.sources.size() > policy.max_records ||
+         proposal.events.size() > policy.max_records - proposal.sources.size()))
       return Result<void>::failure({ErrorCode::conflict});
-    // Attempt-related capture indexing requires the complete checked-set and
-    // custody collector. Until that next integration step, refuse explicitly.
-    if (std::holds_alternative<AttemptAdmissionEvent>(decoded.value().body) ||
-        std::holds_alternative<AttemptOpenEvent>(decoded.value().body) ||
-        std::holds_alternative<AttemptObservationEvent>(decoded.value().body) ||
-        std::holds_alternative<AdapterReceiptEvent>(decoded.value().body))
-      return Result<void>::failure({ErrorCode::unsupported});
-    const RecordReference predicted{origin.journal, original.capture.first_sequence +
-                                                        proposal.sources.size() +
-                                                        index};
-    std::optional<RetainedFact> known;
-    if (RetainedState::has_identity(decoded.value())) {
-      known = semantic_->existing(snapshot, decoded.value(), origin.issuer_namespace);
-    } else {
-      for (const auto &fact : snapshot.facts)
-        if (fact.record == predicted) {
-          known = fact;
-          break;
-        }
+    std::uint64_t batch_bytes = 56;
+    const auto fits = [&](std::size_t size) {
+      if (size > origin.limits.max_payload ||
+          size > origin.limits.max_batch_bytes - 32 ||
+          batch_bytes > origin.limits.max_batch_bytes - 32 - size)
+        return false;
+      batch_bytes += 32 + size;
+      return true;
+    };
+    if (ordinary) {
+      for (const auto &source : proposal.sources)
+        if (!fits(source.size()))
+          return Result<void>::failure({ErrorCode::conflict});
+      if (proposal.sources.size() > UINT64_MAX - original.capture.first_sequence ||
+          proposal.events.size() >
+              UINT64_MAX - original.capture.first_sequence - proposal.sources.size())
+        return Result<void>::failure({ErrorCode::overflow});
     }
-    if (known) {
-      if (known->event != decoded.value())
+    for (std::size_t index = 0; index < proposal.events.size(); ++index) {
+      const auto &bytes = proposal.events[index];
+      auto decoded =
+          decode_retained_event(bytes, origin.limits.max_payload, &raw_origin_);
+      if (!decoded.has_value())
+        return Result<void>::failure(decoded.error());
+      if (!ordinary)
+        continue;
+      if (!fits(bytes.size()) ||
+          std::holds_alternative<RecoveryChoiceEvent>(decoded.value().body) ||
+          std::holds_alternative<ProvisionalCaptureEvent>(decoded.value().body))
         return Result<void>::failure({ErrorCode::conflict});
-      continue;
-    }
-    const auto *uncertain = semantic_->existing_uncertain(snapshot, decoded.value(),
-                                                          origin.issuer_namespace);
-    if (uncertain && RetainedState::has_identity(decoded.value())) {
-      if (uncertain->event != decoded.value())
-        return Result<void>::failure({ErrorCode::conflict});
-      continue;
+      // Attempt-related capture indexing requires the complete checked-set and
+      // custody collector. Until that next integration step, refuse explicitly.
+      if (std::holds_alternative<AttemptAdmissionEvent>(decoded.value().body) ||
+          std::holds_alternative<AttemptOpenEvent>(decoded.value().body) ||
+          std::holds_alternative<AttemptObservationEvent>(decoded.value().body) ||
+          std::holds_alternative<AdapterReceiptEvent>(decoded.value().body))
+        return Result<void>::failure({ErrorCode::unsupported});
+      const RecordReference predicted{origin.journal, original.capture.first_sequence +
+                                                          proposal.sources.size() +
+                                                          index};
+      std::optional<RetainedFact> known;
+      if (RetainedState::has_identity(decoded.value())) {
+        known = semantic_->existing(snapshot, decoded.value(), origin.issuer_namespace);
+      } else {
+        for (const auto &fact : snapshot.facts)
+          if (fact.record == predicted) {
+            known = fact;
+            break;
+          }
+      }
+      if (known) {
+        if (known->event != decoded.value())
+          return Result<void>::failure({ErrorCode::conflict});
+        continue;
+      }
+      const auto *uncertain = semantic_->existing_uncertain(snapshot, decoded.value(),
+                                                            origin.issuer_namespace);
+      if (uncertain && RetainedState::has_identity(decoded.value())) {
+        if (uncertain->event != decoded.value())
+          return Result<void>::failure({ErrorCode::conflict});
+        continue;
+      }
+      if (!semantic_->has_room(snapshot, 1))
+        return Result<void>::failure({ErrorCode::capacity});
+      snapshot.uncertain_facts.push_back(
+          {predicted, std::move(decoded).value(), RetainedEvidence::uncertain});
     }
     if (!semantic_->has_room(snapshot, 1))
       return Result<void>::failure({ErrorCode::capacity});
-    snapshot.uncertain_facts.push_back(
-        {predicted, std::move(decoded).value(), RetainedEvidence::uncertain});
+    snapshot.provisional_originals.push_back(std::move(original));
+    return Result<void>::success();
+  });
+  RawRetainedFields returned;
+  if (answer.has_value()) {
+    returned.native(capture.first_sequence);
+    returned.native(capture.proposal_length);
   }
-  if (!semantic_->has_room(snapshot, 1))
-    return Result<void>::failure({ErrorCode::capacity});
-  snapshot.provisional_originals.push_back(std::move(original));
-  return Result<void>::success();
+  trace.result(answer, returned.view());
+  return answer;
 }
 Result<RetainedEnvironment::MaintenanceReplay> RetainedEnvironment::replay_maintenance(
     RetainedState::Snapshot &snapshot, FramedJournal &journal,
     const JournalHeader &origin, JournalCapacity origin_policy,
     RetainedEvent choice_event) {
-  const auto *choice = std::get_if<RecoveryChoiceEvent>(&choice_event.body);
-  if (!choice)
-    return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
-  if (!choice->checked_attempts.empty())
-    return Result<MaintenanceReplay>::failure({ErrorCode::unsupported});
-  MaintenanceReplay result;
-  const auto records = journal.staged_records();
-  std::vector<RetainedFact> markers;
-  std::vector<ProvisionalCaptureEvent> seen;
-  std::size_t index = 1;
-  for (std::size_t count = 0; count < choice->required_captures.size(); ++count) {
-    const auto first = index;
-    while (index < records.size() && records[index].kind == FrameKind::source)
-      ++index;
-    if (index == first || index == records.size() ||
-        records[index].kind != FrameKind::semantic)
+  RawRetainedFields arguments;
+  arguments.header(origin);
+  arguments.native(origin_policy.max_file_bytes);
+  arguments.native(origin_policy.max_records);
+  RawRetainedPair trace{raw_origin_, {3267, 3268}, 231, arguments.view()};
+  RawRetainedOriginScope origin_scope{raw_origin_, trace.child()};
+  RawRetainedOriginScope semantic_scope{semantic_->raw_origin_, trace.child()};
+  RawRetainedOriginScope journal_scope{journal.raw_origin_, trace.child()};
+  auto answer = trace.run([&]() -> Result<MaintenanceReplay> {
+    const auto *choice = std::get_if<RecoveryChoiceEvent>(&choice_event.body);
+    if (!choice)
       return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
-    auto payload = journal.read_payload(records[index]);
-    if (!payload.has_value())
-      return Result<MaintenanceReplay>::failure(payload.error());
-    auto event =
-        decode_retained_event(payload.value(), journal.header().limits.max_payload);
-    if (!event.has_value())
-      return Result<MaintenanceReplay>::failure(event.error());
-    const auto *capture = std::get_if<ProvisionalCaptureEvent>(&event.value().body);
-    if (!capture || capture->origin != origin.journal ||
-        std::find(choice->required_captures.begin(), choice->required_captures.end(),
-                  *capture) == choice->required_captures.end() ||
-        std::find(seen.begin(), seen.end(), *capture) != seen.end() ||
-        event.value().dependencies.size() != index - first)
-      return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
-    for (const auto &old : snapshot.provisional_originals)
-      if (old.capture == *capture)
+    if (!choice->checked_attempts.empty())
+      return Result<MaintenanceReplay>::failure({ErrorCode::unsupported});
+    MaintenanceReplay result;
+    const auto records = journal.staged_records();
+    std::vector<RetainedFact> markers;
+    std::vector<ProvisionalCaptureEvent> seen;
+    std::size_t index = 1;
+    for (std::size_t count = 0; count < choice->required_captures.size(); ++count) {
+      const auto first = index;
+      while (index < records.size() && records[index].kind == FrameKind::source)
+        ++index;
+      if (index == first || index == records.size() ||
+          records[index].kind != FrameKind::semantic)
         return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
-    auto remaining = bounds_.max_capture_bytes;
-    for (const auto &old : snapshot.provisional_originals) {
-      if (old.bytes.size() > remaining)
-        return Result<MaintenanceReplay>::failure({ErrorCode::capacity});
-      remaining -= old.bytes.size();
-    }
-    if (capture->proposal_length > remaining)
-      return Result<MaintenanceReplay>::failure({ErrorCode::capacity});
-    ProvisionalOriginal original{
-        {journal.header().journal, records[index].sequence}, *capture, {}};
-    original.bytes.reserve(static_cast<std::size_t>(capture->proposal_length));
-    for (std::size_t chunk = first; chunk < index; ++chunk) {
-      const SourceReference reference{records[chunk].journal, records[chunk].sequence};
-      if (event.value().dependencies[chunk - first] != reference ||
-          records[chunk].payload_size >
-              capture->proposal_length - original.bytes.size())
-        return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
-      auto bytes = journal.read_payload(records[chunk]);
-      if (!bytes.has_value())
-        return Result<MaintenanceReplay>::failure(bytes.error());
-      original.bytes.insert(original.bytes.end(), bytes.value().begin(),
-                            bytes.value().end());
-      result.capture_only.push_back(reference);
-    }
-    if (original.bytes.size() != capture->proposal_length)
-      return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
-    const auto staged =
-        stage_original(snapshot, std::move(original), origin, origin_policy);
-    if (!staged.has_value())
-      return Result<MaintenanceReplay>::failure(staged.error());
-    seen.push_back(*capture);
-    result.end = records[index].sequence;
-    markers.push_back({{journal.header().journal, result.end},
-                       std::move(event).value(),
-                       RetainedEvidence::recovered_pending});
-    ++index;
-  }
-  // Extra maintenance anywhere in the suffix refuses activation. Ordinary
-  // malformed payloads remain the shared replay validator's batch-level concern.
-  for (; index < records.size(); ++index) {
-    if (records[index].kind != FrameKind::semantic)
-      continue;
-    auto payload = journal.read_payload(records[index]);
-    if (!payload.has_value())
-      return Result<MaintenanceReplay>::failure(payload.error());
-    auto event =
-        decode_retained_event(payload.value(), journal.header().limits.max_payload);
-    if (!event.has_value()) {
-      if (event.error().code == ErrorCode::allocation)
+      auto payload = journal.read_payload(records[index]);
+      if (!payload.has_value())
+        return Result<MaintenanceReplay>::failure(payload.error());
+      auto event = decode_retained_event(
+          payload.value(), journal.header().limits.max_payload, &raw_origin_);
+      if (!event.has_value())
         return Result<MaintenanceReplay>::failure(event.error());
-      continue;
+      const auto *capture = std::get_if<ProvisionalCaptureEvent>(&event.value().body);
+      if (!capture || capture->origin != origin.journal ||
+          std::find(choice->required_captures.begin(), choice->required_captures.end(),
+                    *capture) == choice->required_captures.end() ||
+          std::find(seen.begin(), seen.end(), *capture) != seen.end() ||
+          event.value().dependencies.size() != index - first)
+        return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
+      for (const auto &old : snapshot.provisional_originals)
+        if (old.capture == *capture)
+          return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
+      auto remaining = bounds_.max_capture_bytes;
+      for (const auto &old : snapshot.provisional_originals) {
+        if (old.bytes.size() > remaining)
+          return Result<MaintenanceReplay>::failure({ErrorCode::capacity});
+        remaining -= old.bytes.size();
+      }
+      if (capture->proposal_length > remaining)
+        return Result<MaintenanceReplay>::failure({ErrorCode::capacity});
+      ProvisionalOriginal original{
+          {journal.header().journal, records[index].sequence}, *capture, {}};
+      original.bytes.reserve(static_cast<std::size_t>(capture->proposal_length));
+      for (std::size_t chunk = first; chunk < index; ++chunk) {
+        const SourceReference reference{records[chunk].journal,
+                                        records[chunk].sequence};
+        if (event.value().dependencies[chunk - first] != reference ||
+            records[chunk].payload_size >
+                capture->proposal_length - original.bytes.size())
+          return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
+        const auto chunk_offset = original.bytes.size();
+        RawRetainedFields selected;
+        selected.reference(original.marker);
+        selected.native(chunk_offset);
+        selected.native(records[chunk].payload_size);
+        selected.native(capture->purpose);
+        (void)raw_retained_event(raw_origin_, {3271, 82}, selected.view());
+        auto bytes = journal.read_payload(records[chunk]);
+        if (!bytes.has_value())
+          return Result<MaintenanceReplay>::failure(bytes.error());
+        original.bytes.insert(original.bytes.end(), bytes.value().begin(),
+                              bytes.value().end());
+        result.capture_only.push_back(reference);
+      }
+      if (original.bytes.size() != capture->proposal_length)
+        return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
+      const auto staged =
+          stage_original(snapshot, std::move(original), origin, origin_policy);
+      if (!staged.has_value())
+        return Result<MaintenanceReplay>::failure(staged.error());
+      seen.push_back(*capture);
+      result.end = records[index].sequence;
+      markers.push_back({{journal.header().journal, result.end},
+                         std::move(event).value(),
+                         RetainedEvidence::recovered_pending});
+      ++index;
     }
-    if (std::holds_alternative<RecoveryChoiceEvent>(event.value().body) ||
-        std::holds_alternative<ProvisionalCaptureEvent>(event.value().body))
-      return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
-  }
-  for (const auto &fact : snapshot.facts) {
-    if (const auto *admission = std::get_if<AttemptAdmissionEvent>(&fact.event.body)) {
-      const auto prior = semantic_->attempt(admission->attempt);
-      if (!prior.has_value())
-        return Result<MaintenanceReplay>::failure(prior.error());
-      if (prior.value().reconciliation_required)
+    // Extra maintenance anywhere in the suffix refuses activation. Ordinary
+    // malformed payloads remain the shared replay validator's batch-level concern.
+    for (; index < records.size(); ++index) {
+      if (records[index].kind != FrameKind::semantic)
+        continue;
+      auto payload = journal.read_payload(records[index]);
+      if (!payload.has_value())
+        return Result<MaintenanceReplay>::failure(payload.error());
+      auto event = decode_retained_event(
+          payload.value(), journal.header().limits.max_payload, &raw_origin_);
+      if (!event.has_value()) {
+        if (event.error().code == ErrorCode::allocation)
+          return Result<MaintenanceReplay>::failure(event.error());
+        continue;
+      }
+      if (std::holds_alternative<RecoveryChoiceEvent>(event.value().body) ||
+          std::holds_alternative<ProvisionalCaptureEvent>(event.value().body))
         return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
     }
-  }
-  if (!semantic_->has_room(snapshot, markers.size() + 1))
-    return Result<MaintenanceReplay>::failure({ErrorCode::capacity});
-  snapshot.facts.push_back({{journal.header().journal, 1},
-                            std::move(choice_event),
-                            RetainedEvidence::recovered_pending});
-  for (auto &marker : markers)
-    snapshot.facts.push_back(std::move(marker));
-  return Result<MaintenanceReplay>::success(std::move(result));
+    for (const auto &fact : snapshot.facts) {
+      if (const auto *admission =
+              std::get_if<AttemptAdmissionEvent>(&fact.event.body)) {
+        const auto prior = semantic_->attempt(admission->attempt);
+        if (!prior.has_value())
+          return Result<MaintenanceReplay>::failure(prior.error());
+        if (prior.value().reconciliation_required)
+          return Result<MaintenanceReplay>::failure({ErrorCode::conflict});
+      }
+    }
+    if (!semantic_->has_room(snapshot, markers.size() + 1))
+      return Result<MaintenanceReplay>::failure({ErrorCode::capacity});
+    snapshot.facts.push_back({{journal.header().journal, 1},
+                              std::move(choice_event),
+                              RetainedEvidence::recovered_pending});
+    for (auto &marker : markers)
+      snapshot.facts.push_back(std::move(marker));
+    return Result<MaintenanceReplay>::success(std::move(result));
+  });
+  RawRetainedFields returned;
+  if (answer.has_value()) {
+    const auto captures = answer.value().capture_only.size();
+    returned.native(answer.value().end);
+    returned.native(captures);
+    returned.page(snapshot.query_root);
+    returned.native(snapshot.counter);
+    trace.result(answer, returned.view());
+  } else
+    trace.result(answer);
+  return answer;
 }
 Result<std::optional<ProposalSubmission>>
 RetainedEnvironment::existing_proposal(JournalCursor expected,
@@ -432,7 +561,7 @@ Result<void> RetainedEnvironment::load_selected() {
   headers.reserve(static_cast<std::size_t>(selection.generation));
   auto identity = selection.active;
   for (;;) {
-    auto inspected = inspect_header(head_->directory(), identity, bounds_);
+    auto inspected = inspect_header(head_->directory(), identity, bounds_, raw_origin_);
     if (!inspected.has_value())
       return Result<void>::failure(inspected.error());
     const auto header = inspected.value();
@@ -458,18 +587,33 @@ Result<void> RetainedEnvironment::load_selected() {
   if (!allocated.has_value())
     return Result<void>::failure(allocated.error());
   semantic_ = std::move(allocated).value();
+  semantic_->raw_storage_owner_ = raw_origin_.owner;
+  semantic_->raw_origin_ = raw_origin_;
+  semantic_->raw_origin_.root = semantic_.get();
+  auto end = RawRetainedOwnerEnd::prepare(raw_origin_.owner, raw_origin_.parent);
+  if (!end.has_value())
+    return Result<void>::failure(end.error());
   semantic_->max_history_entries_ = bounds_.max_history_entries;
   semantic_->historical_.reserve(headers.size() - 1);
   for (std::size_t i = 0; i < headers.size(); ++i) {
     const auto name = journal_name(headers[i].journal);
     auto segment = FramedJournal::open(head_->directory(), {name.data(), name.size()},
-                                       headers[i], bounds_.segment);
+                                       headers[i], bounds_.segment, SyncStrength::full,
+                                       true, {}, {}, semantic_->raw_origin_);
     if (!segment.has_value())
       return Result<void>::failure(segment.error());
     if (i + 1 < headers.size()) {
       const auto &predecessor = headers[i + 1].predecessor;
       if (!predecessor)
         return Result<void>::failure({ErrorCode::corrupt});
+      RawRetainedFields selected;
+      selected.header(headers[i]);
+      selected.native(bounds_.segment.max_file_bytes);
+      selected.native(bounds_.segment.max_records);
+      selected.add(predecessor->journal.bytes());
+      selected.native(predecessor->validated_sequence);
+      selected.native(predecessor->validated_end_offset);
+      (void)raw_retained_event(raw_origin_, {3266, 169}, selected.view());
       const auto restricted = segment.value()->select_recovered_prefix(*predecessor);
       if (!restricted.has_value())
         return restricted;
@@ -501,8 +645,8 @@ Result<void> RetainedEnvironment::load_selected() {
       auto payload = journal->read_payload(records[0]);
       if (!payload.has_value())
         return Result<void>::failure(payload.error());
-      auto decoded =
-          decode_retained_event(payload.value(), headers[i].limits.max_payload);
+      auto decoded = decode_retained_event(payload.value(),
+                                           headers[i].limits.max_payload, &raw_origin_);
       if (!decoded.has_value())
         return Result<void>::failure(decoded.error());
       const auto *choice = std::get_if<RecoveryChoiceEvent>(&decoded.value().body);
@@ -543,6 +687,7 @@ Result<void> RetainedEnvironment::load_selected() {
       return Result<void>::failure({ErrorCode::capacity});
   }
   semantic_->capacity_ = policy;
+  semantic_->raw_end_ = std::move(end).value();
   return Result<void>::success();
 }
 
@@ -557,68 +702,99 @@ Result<ProposalSubmission>
 RetainedEnvironment::submit_proposal(JournalCursor expected,
                                      std::span<const ByteView> sources,
                                      std::span<const RetainedEvent> events) {
-  if (busy_)
-    return Result<ProposalSubmission>::failure({ErrorCode::busy});
-  if (!head_->healthy() || continuation_required_)
-    return Result<ProposalSubmission>::failure({ErrorCode::audit_unavailable});
-  try {
-    auto captured = existing_proposal(expected, sources, events);
-    if (!captured.has_value())
-      return Result<ProposalSubmission>::failure(captured.error());
-    auto &matching_proposal = captured.value();
-    if (matching_proposal.has_value())
-      return Result<ProposalSubmission>::success(std::move(*matching_proposal));
-    if (sources.size() > bounds_.segment.max_records ||
-        events.size() > bounds_.segment.max_records - sources.size())
-      return Result<ProposalSubmission>::failure({ErrorCode::capacity});
-    ProposalSubmission result{cursor(), false, std::nullopt, {}};
-    result.events.reserve(events.size());
-    // Stage result ownership before append acknowledgement; first semantic
-    // matches preserve input order even when physical duplicate frames remain.
-    const auto first = cursor().sequence + sources.size() + 1;
-    if (first < cursor().sequence || events.size() > UINT64_MAX - first)
-      return Result<ProposalSubmission>::failure({ErrorCode::overflow});
-    for (std::size_t i = 0; i < events.size(); ++i) {
-      const auto previous = semantic_->existing(semantic_->visible(), events[i]);
-      if (previous && previous->event == events[i]) {
-        result.events.push_back({true, previous->record, previous->evidence});
-        continue;
-      }
-      const auto *uncertain =
-          semantic_->existing_uncertain(semantic_->visible(), events[i]);
-      if (uncertain && uncertain->event == events[i]) {
-        result.events.push_back({true, uncertain->record, RetainedEvidence::uncertain});
-        continue;
-      }
-      std::size_t ordinal = i;
-      for (std::size_t j = 0; j < i; ++j)
-        if (events[j] == events[i] && RetainedState::has_identity(events[i])) {
-          ordinal = j;
-          break;
-        }
-      result.events.push_back(
-          {ordinal != i, {cursor().journal, first + ordinal}, RetainedEvidence::live});
-    }
-    if (sources.empty() && !events.empty() &&
-        expected.journal == result.cursor.journal &&
-        expected.sequence == result.cursor.sequence &&
-        expected.end_offset == result.cursor.end_offset &&
-        std::all_of(result.events.begin(), result.events.end(),
-                    [](const auto &event) { return event.existing; })) {
-      result.existing = true;
-      return Result<ProposalSubmission>::success(std::move(result));
-    }
-    if (state() != JournalWriterState::live)
+  const auto source_count = sources.size(), event_count = events.size();
+  RawRetainedFields arguments;
+  arguments.cursor(expected);
+  arguments.native(source_count);
+  arguments.native(event_count);
+  RawRetainedPair trace{raw_origin_, {3262, 3263}, 214, arguments.view()};
+  RawRetainedOriginScope origin_scope{raw_origin_, trace.child()};
+  RawRetainedOriginScope semantic_scope{semantic_->raw_origin_, trace.child()};
+  auto answer = trace.run([&]() -> Result<ProposalSubmission> {
+    if (busy_)
+      return Result<ProposalSubmission>::failure({ErrorCode::busy});
+    if (!head_->healthy() || continuation_required_)
       return Result<ProposalSubmission>::failure({ErrorCode::audit_unavailable});
-    BusyGuard guard{busy_};
-    const auto written = semantic_->append(expected, sources, events);
-    if (!written.has_value())
-      return Result<ProposalSubmission>::failure(written.error());
-    result.cursor = written.value();
-    return Result<ProposalSubmission>::success(std::move(result));
-  } catch (const std::bad_alloc &) {
-    return Result<ProposalSubmission>::failure({ErrorCode::allocation});
-  }
+    try {
+      auto captured = existing_proposal(expected, sources, events);
+      if (!captured.has_value())
+        return Result<ProposalSubmission>::failure(captured.error());
+      auto &matching_proposal = captured.value();
+      if (matching_proposal.has_value())
+        return Result<ProposalSubmission>::success(std::move(*matching_proposal));
+      if (sources.size() > bounds_.segment.max_records ||
+          events.size() > bounds_.segment.max_records - sources.size())
+        return Result<ProposalSubmission>::failure({ErrorCode::capacity});
+      ProposalSubmission result{cursor(), false, std::nullopt, {}};
+      result.events.reserve(events.size());
+      // Stage result ownership before append acknowledgement; first semantic
+      // matches preserve input order even when physical duplicate frames remain.
+      const auto first = cursor().sequence + sources.size() + 1;
+      if (first < cursor().sequence || events.size() > UINT64_MAX - first)
+        return Result<ProposalSubmission>::failure({ErrorCode::overflow});
+      for (std::size_t i = 0; i < events.size(); ++i) {
+        const auto previous = semantic_->existing(semantic_->visible(), events[i]);
+        if (previous && previous->event == events[i]) {
+          result.events.push_back({true, previous->record, previous->evidence});
+          continue;
+        }
+        const auto *uncertain =
+            semantic_->existing_uncertain(semantic_->visible(), events[i]);
+        if (uncertain && uncertain->event == events[i]) {
+          result.events.push_back(
+              {true, uncertain->record, RetainedEvidence::uncertain});
+          continue;
+        }
+        std::size_t ordinal = i;
+        for (std::size_t j = 0; j < i; ++j)
+          if (events[j] == events[i] && RetainedState::has_identity(events[i])) {
+            ordinal = j;
+            break;
+          }
+        result.events.push_back({ordinal != i,
+                                 {cursor().journal, first + ordinal},
+                                 RetainedEvidence::live});
+      }
+      if (sources.empty() && !events.empty() &&
+          expected.journal == result.cursor.journal &&
+          expected.sequence == result.cursor.sequence &&
+          expected.end_offset == result.cursor.end_offset &&
+          std::all_of(result.events.begin(), result.events.end(),
+                      [](const auto &event) { return event.existing; })) {
+        result.existing = true;
+        return Result<ProposalSubmission>::success(std::move(result));
+      }
+      if (state() != JournalWriterState::live)
+        return Result<ProposalSubmission>::failure({ErrorCode::audit_unavailable});
+      BusyGuard guard{busy_};
+      const auto written = semantic_->append(expected, sources, events);
+      if (!written.has_value())
+        return Result<ProposalSubmission>::failure(written.error());
+      result.cursor = written.value();
+      return Result<ProposalSubmission>::success(std::move(result));
+    } catch (const std::bad_alloc &) {
+      return Result<ProposalSubmission>::failure({ErrorCode::allocation});
+    }
+  });
+  RawRetainedFields returned;
+  if (answer.has_value()) {
+    const auto &value = answer.value();
+    const bool captured = value.capture.has_value();
+    const auto returned_events = value.events.size();
+    returned.cursor(value.cursor);
+    returned.native(value.existing);
+    returned.native(captured);
+    if (captured) {
+      returned.add(value.capture->origin.bytes());
+      returned.native(value.capture->first_sequence);
+      returned.native(value.capture->proposal_length);
+      returned.native(value.capture->purpose);
+    }
+    returned.native(returned_events);
+    trace.result(answer, returned.view());
+  } else
+    trace.result(answer);
+  return answer;
 }
 Result<DispatchReport> RetainedEnvironment::dispatch(OperationAttemptId identity,
                                                      EffectBoundary &boundary) {
@@ -662,26 +838,62 @@ RetainedEnvironment::read_original_range(AuditStreamId identity, std::uint64_t o
                  : Result<ObservedJournalBytes>::failure({ErrorCode::stale_handle});
 }
 Result<void> RetainedEnvironment::confirm_recovery() {
-  if (busy_)
-    return Result<void>::failure({ErrorCode::busy});
-  if (!head_->healthy() || continuation_required_ ||
-      semantic_->state() != JournalWriterState::recovery_pending ||
-      !semantic_->prepared_)
-    return Result<void>::failure({ErrorCode::audit_unavailable});
-  BusyGuard guard{busy_};
-  for (const auto &journal : semantic_->historical_) {
-    const auto confirmed = journal->confirm_recovery();
-    if (!confirmed.has_value())
-      return confirmed;
-  }
-  return semantic_->confirm_recovery();
+  const auto current = cursor();
+  const auto writer_state = state();
+  RawRetainedFields arguments;
+  arguments.cursor(current);
+  arguments.native(writer_state);
+  RawRetainedPair trace{raw_origin_, {3272, 3273}, 157, arguments.view()};
+  RawRetainedOriginScope origin_scope{raw_origin_, trace.child()};
+  RawRetainedOriginScope semantic_scope{semantic_->raw_origin_, trace.child()};
+  auto answer = trace.run([&]() -> Result<void> {
+    if (busy_)
+      return Result<void>::failure({ErrorCode::busy});
+    if (!head_->healthy() || continuation_required_ ||
+        semantic_->state() != JournalWriterState::recovery_pending ||
+        !semantic_->prepared_)
+      return Result<void>::failure({ErrorCode::audit_unavailable});
+    BusyGuard guard{busy_};
+    for (const auto &journal : semantic_->historical_) {
+      const auto confirmed = journal->confirm_recovery();
+      if (!confirmed.has_value())
+        return confirmed;
+    }
+    return semantic_->confirm_recovery();
+  });
+  const auto selected_cursor = cursor();
+  const bool healthy = head_->healthy();
+  RawRetainedFields returned;
+  returned.cursor(selected_cursor);
+  returned.native(healthy);
+  returned.native(continuation_required_);
+  trace.result(answer, returned.view());
+  return answer;
 }
 Result<void> RetainedEnvironment::reconcile(CustodyVerifier &verifier) {
-  if (busy_)
-    return Result<void>::failure({ErrorCode::busy});
-  if (!head_->healthy() || continuation_required_)
-    return Result<void>::failure({ErrorCode::audit_unavailable});
-  BusyGuard guard{busy_};
-  return semantic_->reconcile(verifier);
+  const auto current = cursor();
+  const auto writer_state = state();
+  RawRetainedFields arguments;
+  arguments.cursor(current);
+  arguments.native(writer_state);
+  RawRetainedPair trace{raw_origin_, {3272, 3273}, 157, arguments.view()};
+  RawRetainedOriginScope origin_scope{raw_origin_, trace.child()};
+  RawRetainedOriginScope semantic_scope{semantic_->raw_origin_, trace.child()};
+  auto answer = trace.run([&]() -> Result<void> {
+    if (busy_)
+      return Result<void>::failure({ErrorCode::busy});
+    if (!head_->healthy() || continuation_required_)
+      return Result<void>::failure({ErrorCode::audit_unavailable});
+    BusyGuard guard{busy_};
+    return semantic_->reconcile(verifier);
+  });
+  const auto selected_cursor = cursor();
+  const bool healthy = head_->healthy();
+  RawRetainedFields returned;
+  returned.cursor(selected_cursor);
+  returned.native(healthy);
+  returned.native(continuation_required_);
+  trace.result(answer, returned.view());
+  return answer;
 }
 } // namespace blackbird

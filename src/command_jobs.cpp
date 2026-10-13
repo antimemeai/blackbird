@@ -3,6 +3,7 @@
 #include "blackbird/json.hpp"
 #include "blackbird/local_timing.hpp"
 #include "blackbird/process_lifetime.hpp"
+#include "blackbird/raw_retained.hpp"
 #include "blackbird/tools.hpp"
 #include <algorithm>
 #include <array>
@@ -307,6 +308,8 @@ struct CommandJobs::Impl {
     std::string id;
     Launch launch;
     RawThreadHandle raw_context;
+    std::unique_ptr<RawRetainedJobLoan> retained_loan;
+    bool retained_loan_used = false;
     std::optional<RawControlToken> worker_credit, retry_credit, semantic_credit,
         caller_stop_credit;
     RawEventRef request, launch_ref, terminal_ref;
@@ -332,6 +335,12 @@ struct CommandJobs::Impl {
     bool resize_pending = false;
     // Joined before the wake, its claims, and its producer are destroyed.
     std::jthread worker;
+    ~Job() {
+      if (worker.joinable())
+        worker.join();
+      if (retained_loan)
+        retained_loan->joined();
+    }
   };
   mutable std::mutex mutex;
   std::condition_variable condition;
@@ -1076,7 +1085,8 @@ CommandJobs::~CommandJobs() {
     }
   }
 }
-void CommandJobs::start(const std::string &id, const Value &arguments) {
+void CommandJobs::start(const std::string &id, const Value &arguments,
+                        RawRetainedExec *admission) {
   const auto id_size = id.size();
   const std::uint8_t operation = 1, owner_present = 0;
   auto admission_credit = raw_command_claim(66);
@@ -1103,6 +1113,8 @@ void CommandJobs::start(const std::string &id, const Value &arguments) {
     if (prepare_cleanup)
       cleanup_candidate = unwrap(raw_prepare_thread());
     job->raw_context = unwrap(raw_prepare_thread());
+    if (admission)
+      job->retained_loan = unwrap(admission->prepare_job(job->raw_context));
     {
       RawThreadBinding binding{job->raw_context};
       job->stop_wake.emplace(RawCommandWake::Mode::one_shot);
@@ -1152,9 +1164,13 @@ void CommandJobs::start(const std::string &id, const Value &arguments) {
     }
     impl_->jobs.emplace(id, job);
     try {
+      if (job->retained_loan)
+        job->retained_loan->started();
       job->stop_wake->publish();
       job->worker = std::jthread([state = impl_.get(), job] { state->run(job); });
     } catch (...) {
+      if (job->retained_loan)
+        job->retained_loan->never_started();
       job->stop_wake->retire();
       impl_->jobs.erase(id);
       throw;
@@ -1269,6 +1285,8 @@ Value CommandJobs::wait(const std::string &id, JobWaitOptions options,
           }
           if (stopped->worker.joinable())
             stopped->worker.join();
+          if (stopped->retained_loan)
+            stopped->retained_loan->joined();
           // Cleanup progresses independently of capture backpressure; now retain
           // that command's actual terminal before propagating turn cancellation.
           for (unsigned pass = 0; pass < 4; ++pass)
@@ -1470,6 +1488,8 @@ Value CommandJobs::control(const Value &arguments) {
       lock.unlock();
       if (retained->worker.joinable())
         retained->worker.join();
+      if (retained->retained_loan)
+        retained->retained_loan->joined();
       ownership(1);
       auto result = Value::object({{"archived", Value{true}}, {"job_id", Value{id}}});
       trace.finish(1, 0, true, false);
@@ -1799,6 +1819,10 @@ void CommandJobs::capture_failed(const std::string &id) {
 }
 void CommandJobs::settlement(const JobEvent &event,
                              const std::function<void()> &append) {
+  settlement(event, [&](RawRetainedJobLoan *) { append(); });
+}
+void CommandJobs::settlement(const JobEvent &event,
+                             const std::function<void(RawRetainedJobLoan *)> &append) {
   std::shared_ptr<Impl::Job> job;
   {
     const std::lock_guard lock{impl_->mutex};
@@ -1809,6 +1833,13 @@ void CommandJobs::settlement(const JobEvent &event,
   }
   if (job->worker.joinable())
     job->worker.join();
+  if (job->retained_loan) {
+    job->retained_loan->joined();
+    if (job->retained_loan_used)
+      job->retained_loan = unwrap(job->retained_loan->renew());
+  }
+  // Prepare the final business projection before the authoritative append.
+  auto staged_result = event.result;
   RawThreadBinding binding{job->raw_context};
   auto credit = std::move(job->semantic_credit);
   job->semantic_credit.reset();
@@ -1827,10 +1858,28 @@ void CommandJobs::settlement(const JobEvent &event,
       credit ? &*credit : nullptr);
   std::uint8_t branch = 1;
   Error error{};
+  struct Leave {
+    RawRetainedJobLoan *loan;
+    ~Leave() {
+      if (loan)
+        loan->leave();
+    }
+  } leave{job->retained_loan.get()};
+  const auto accept = [&]() noexcept {
+    const std::lock_guard lock{impl_->mutex};
+    job->terminal.swap(staged_result);
+    job->terminal_retained = true;
+  };
   try {
-    append();
-    settled(event.job_id, event.result);
+    if (job->retained_loan) {
+      job->retained_loan_used = true;
+      job->retained_loan->enter(request);
+    }
+    append(job->retained_loan.get());
+    accept();
   } catch (const Error &failure) {
+    if (job->retained_loan && job->retained_loan->accepted())
+      accept();
     branch = 2;
     error = failure;
     (void)raw_command_linked(2036, request,
@@ -1840,6 +1889,8 @@ void CommandJobs::settlement(const JobEvent &event,
                              credit ? &*credit : nullptr);
     throw;
   } catch (...) {
+    if (job->retained_loan && job->retained_loan->accepted())
+      accept();
     branch = 3;
     error = {ErrorCode::allocation};
     (void)raw_command_linked(2036, request,
@@ -1897,6 +1948,8 @@ void CommandJobs::shutdown() noexcept {
     (void)id;
     if (job->worker.joinable())
       job->worker.join();
+    if (job->retained_loan)
+      job->retained_loan->joined();
     if (job->custody != Impl::Custody::pending)
       continue;
     RawThreadBinding binding{job->raw_context};

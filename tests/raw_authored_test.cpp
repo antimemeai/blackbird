@@ -495,9 +495,11 @@ old=setmetatable({}, {__gc=function()blackbird.emit(7,70)end});return true
                              "m==blackbird.module('sample'));assert(blackbird.call('"
                              "authored_tool',{})==72);blackbird.emit(7,73);return true";
   {
-    auto runtime = take(RawRuntime::open(fixture.directory.name.data(),
-                                         identity<EnvironmentId>(51),
-                                         {{65536, 32768, 8192}, 8192}));
+    auto runtime = take(
+        RawRuntime::open(fixture.directory.name.data(), identity<EnvironmentId>(51),
+                         // Ordinary calls also admit the operation
+                         // result-original bank before effects.
+                         {{256 * 1024 * 1024, 1024 * 1024, 8192}, 8192}));
     const auto original = take(runtime->prepare_thread()),
                successor = take(runtime->prepare_thread());
     std::thread initial{[&] {

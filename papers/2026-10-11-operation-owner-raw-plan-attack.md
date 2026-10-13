@@ -77,3 +77,9 @@ Source-derived arithmetic disposition: the actual57-byte identity record,
 51-byte encoder Error variant and66-byte present region link give ONE fixed
 3183-byte owner bank. The whole subplan/table and native source use these exact
 member widths. This corrects the same literal arithmetic finding; no new panel.
+
+
+The actual outer Root.dispatch request/Result correction selects native2420
+56-byte request and2421 51-byte qualified Error/return, before an acquired2408
+report. Root accepted this source-derived boundary correction within the whole
+unit: the ONE current fixed bank is3290, with no invented absent-report flags.

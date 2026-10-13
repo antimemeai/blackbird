@@ -52,7 +52,12 @@ Resolution: persistent stop protection is a COMPLETE semantic+physical bundle.
 OLD and NEW remain held before refresh acceptance; refusal preserves OLD and
 releases NEW; success swaps noexcept then releases OLD on its actual issuer.
 Per-turn10544 (including Context2286 and regions6912) remains held once; refresh
-constructs no second RawTurnTrace. Core SAME-issuer CONTROL793773 and DATA138922468,
+constructs no second RawTurnTrace. Core SAME-issuer CONTROL794488 and DATA138922517,
+including the same source-derived ordinary-exec catalog retarget correction
+148*3=444. The bound uses the actual checked checkpoint catalog capacity
+max_records*6 capped at UINT32_MAX before admission; each callback restores
+selection onto the actual new resource before the next loan-owned acquisition.
+Diagnostic children do not run optional maintenance. Stop/Job no_new unchanged,
 with other actual live holds still checked before effect. Main-only1MiB/256MiB is
 accepted as configured initialization; general defaults unchanged and actual main
 workload qualification remains mandatory.

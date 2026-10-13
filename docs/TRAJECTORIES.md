@@ -1,10 +1,13 @@
 # Instrumentation, evaluations and trajectories
 
-Operator AFK scope2026-10-09 authorizes instrumentation plus c54/05n bugs.
-Evaluation selection and execution wait for operator discussion. nls.2 is held
-with one lint finding at its declared hardening bound; bug fixes are independently
-checkpointed. [Actual disposition](NLS_AFK_SUBPLAN.md). Earlier evaluator proposals
-below are not selected; steering and further trajectory views stay deferred.
+Current instrumentation architecture and owner delivery are in
+[INSTRUMENTATION](INSTRUMENTATION.md). Operation hooks emit native clock fields;
+operation admission/result metadata no longer contains projected time or duration.
+The existing reader still reads old timing metadata. `/correlate` plots existing
+Git/doctrine/variable points; deriving current operation timing from preserved raw
+events belongs to later consumer work. nls.2 remains open. Evaluation selection
+and execution wait for operator discussion; steering and further trajectory views
+stay deferred. Earlier timing/SDK/evaluator proposals below are historical.
 
 Operator authorized this campaign after provider-auth integration on2026-10-09.
 Own the implementation. No telemetry SDK, evaluation framework or Entire runtime

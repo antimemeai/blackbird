@@ -60,15 +60,15 @@ and failure credit, a raw audit segment family and tertiary transforms. It inclu
 the complete raw source census and direct implementation/test plan, older C/source
 studies, one design review with corrections, and small Mac/Linux producer/crash
 probes. The operator approved implementation on2026-10-11 and excludes host power
-loss. The first source unit is on master: named-memory transport, separate
-supervisor/recorder, raw disk preservation/recovery and initial startup, retained,
-command, terminal and provider-owner hooks. Application capture starts before
-retained-state creation/recovery and drains on clean shutdown. The source gate
-passed 89 debug tests and all owned C++/Lua lint; actual launcher capture/reopen
-passed Linux debug, release and ASan/UBSan. Earlier probes alone do not qualify
-this source. The [completion plan](INSTRUMENTATION_COMPLETION.md) lists remaining
-owner designs/integrations, runtime fault checks, native/Lua emission, read-only
-consumption and cost/capacity measurements. nls.2 remains open; logical-clock
+loss. The delivered source includes named-memory transport, separate
+supervisor/recorder, raw disk preservation/recovery, provider and command native
+boundaries, participants, Context, turn/task/audit-query owners, independent
+sampling and native/Lua authored events. The operation/storage/retained segment
+adds original result preservation, physical I/O and retained/index emission,
+prepaid terminal/cleanup banks and explicit main/worker transfer. Actual launcher
+capture/reopen checks native storage and Root lifecycle; inspection creates no
+capture run. The [completion plan](INSTRUMENTATION_COMPLETION.md) records owner
+checks and remaining census/workload measurements. nls.2 remains open; logical-clock
 nls.9 and P0 audit completeness nls.10 remain separate. No evaluator was selected
 or run. Existing operator executable replacement, multiplayer, steering and
 further trajectory views remain separate.

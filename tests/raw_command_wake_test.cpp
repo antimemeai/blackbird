@@ -618,10 +618,14 @@ void fatal_native_failure(std::string_view executable) {
   const auto owner = ::fork();
   require(owner >= 0, "fork isolated real production owner");
   if (owner == 0) {
+    require(::close(custody.fds[0]) == 0, "close owner's unused custody observer");
     custody.fds[0] = -1;
     constexpr std::size_t pressure_bytes = 2 * 1024 * 1024;
+    constexpr std::uint64_t data_credit = 64 * 1024 * 1024;
+    // The actual exec reaches its child only after operation17's16MiB original
+    // admission. The unrelated waiter holds this whole larger lane's credit.
     auto runtime = unwrap(RawRuntime::open(directory.path.string(), environment(),
-                                           {{pressure_bytes, 64 * 1024, 4096}, 4096}));
+                                           {{data_credit, 256 * 1024, 4096}, 4096}));
     auto context = unwrap(runtime->prepare_thread());
     RawThreadBinding binding{context};
     auto retained = unwrap(RetainedState::create(
@@ -664,7 +668,7 @@ void fatal_native_failure(std::string_view executable) {
     std::optional<RawCapacityClaim> pressure;
     {
       RawThreadBinding producer_owner{producer};
-      pressure.emplace(unwrap(raw_claim_data(pressure_bytes)));
+      pressure.emplace(unwrap(raw_claim_data(data_credit)));
     }
     const auto runtime_status = unwrap(runtime->status());
     require(::kill(runtime_status.recorder, SIGSTOP) == 0,
@@ -689,6 +693,8 @@ void fatal_native_failure(std::string_view executable) {
     interrupt.wake().notify();
     ::_exit(99);
   }
+  require(::close(custody.fds[1]) == 0, "close parent's unused custody activation");
+  custody.fds[1] = -1;
   pid_t custody_ids[3]{-1, -1, -1};
   require(::read(custody.fds[0], custody_ids, sizeof(custody_ids)) ==
                   sizeof(custody_ids) &&

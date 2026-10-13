@@ -5,6 +5,7 @@
 #include "blackbird/process_lifetime.hpp"
 #include "blackbird/raw_command.hpp"
 #include "blackbird/raw_runtime.hpp"
+#include "blackbird/retained_state.hpp"
 #include "blackbird/sprite.hpp"
 #include "blackbird/task_view.hpp"
 #include "blackbird/tools.hpp"
@@ -1229,7 +1230,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                      std::filesystem::path state_path,
                      const std::function<void()> &idle_work,
                      std::shared_ptr<CommandJobs> commands, int interrupt_fd,
-                     const std::function<Result<void>()> &reset_interrupt) {
+                     const std::function<Result<void>()> &reset_interrupt,
+                     RetainedState *raw_root) {
   (void)std::setlocale(LC_CTYPE, "");
   TerminalMode mode;
   ChatOutput output;
@@ -1291,7 +1293,27 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   };
   RawRegion first_frame{raw_regions::terminal_first_frame};
   Composer composer;
+  std::unique_ptr<RawRetainedTransfer> transfer;
   std::jthread worker;
+  struct WorkerCustody {
+    std::jthread &worker;
+    std::unique_ptr<RawRetainedTransfer> &transfer;
+    RawCommandWake &wake;
+    int interrupt;
+    Result<void> join() {
+      if (worker.joinable())
+        worker.join();
+      if (!transfer)
+        return Result<void>::success();
+      // Preserve the child's actual cancellation endpoint until fresh owner
+      // admission succeeds or truthfully leaves joined-child debt in Root.
+      RawWaitScope wait{{{interrupt, wake.read_fd()}, {}}};
+      auto result = transfer->joined();
+      transfer.reset();
+      return result;
+    }
+    ~WorkerCustody() { (void)join(); }
+  } custody{worker, transfer, turn_cancel, interrupt_fd};
   struct StopOnExit {
     std::atomic_bool &flag;
     RawCommandWake &wake;
@@ -1474,8 +1496,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   bool wake_refused = false;
   auto start = [&](const std::string &source) {
     welcoming = false;
-    if (worker.joinable())
-      worker.join();
+    (void)custody.join();
     turn_cancel.retire();
     cancelled.store(false);
     auto reset = turn_cancel.clear();
@@ -1495,12 +1516,16 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       prompt = source;
       context = unwrap(raw_prepare_thread());
       dispatch = raw_worker_dispatch();
+      if (raw_root)
+        transfer = unwrap(raw_root->prepare_raw_transfer(context, dispatch));
     } catch (...) {
       cancelled.store(true);
       wake_refused = true;
       notice("Turn admission refused; prompt retained.");
       return false;
     }
+    if (transfer)
+      transfer->stage_before_launch();
     busy = true;
     tool_active = false;
     turn_failed = false;
@@ -1514,15 +1539,24 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     // the UI lane and ordinal; neither producer nor region migrates threads.
     turn_cancel.publish();
     try {
+      auto *borrowed_transfer = transfer.get();
       worker = std::jthread([&, context = std::move(context), dispatch,
-                             prompt = std::move(prompt)]() mutable {
+                             borrowed_transfer, prompt = std::move(prompt)]() mutable {
         try {
           RawWaitScope wait{{{interrupt_fd, turn_cancel.read_fd()}, {}}};
           RawThreadBinding binding{std::move(context)};
           raw_worker_started(dispatch);
           RawRegion command{raw_regions::command_perform};
           try {
-            perform(prompt);
+            RawStorageAuthorityScope authority{
+                borrowed_transfer ? borrowed_transfer->handoff() : nullptr,
+                {raw_lane_epoch(), command.begin_ordinal()}};
+            try {
+              perform(prompt);
+            } catch (const Error &error) {
+              authority.error(error);
+              throw;
+            }
             command.outcome(RawRegionOutcome::returned);
           } catch (const Error &error) {
             command.error(error);
@@ -1545,7 +1579,13 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         }
         post(Kind::complete, {});
       });
+      if (transfer)
+        transfer->commit_launch();
     } catch (...) {
+      if (transfer) {
+        transfer->rollback_launch();
+        transfer.reset();
+      }
       turn_cancel.retire();
       cancelled.store(true);
       busy = false;
@@ -1688,8 +1728,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       if (message.kind == Kind::title)
         title_ = message.text;
       if (message.kind == Kind::complete) {
-        if (worker.joinable())
-          worker.join();
+        const auto restored = custody.join();
+        if (!restored.has_value()) {
+          wake_refused = true;
+          notice(std::string{"Product owner admission refused: "} +
+                 error_name(restored.error().code));
+        }
         turn_cancel.retire();
         busy = false;
         tool_active = false;
@@ -1707,7 +1751,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       }
       redraw = true;
     }
-    if (!busy && idle_work)
+    if (!busy && idle_work && (!raw_root || !raw_root->raw_owner_blocked()))
       idle_work();
     if (commands) {
       pollfd child_input_ready{STDIN_FILENO, POLLIN, 0};

@@ -104,13 +104,19 @@ struct RawRegionLinkage {
 enum class RawRegionEnd : std::uint8_t { explicit_finish = 1, scope_exit = 2 };
 struct RawRegionOptions {
   bool cpu = true;
+  std::size_t retained_sources = 0, retained_events = 0;
 };
+
+Result<std::uint64_t> raw_retained_region_credit(std::size_t sources,
+                                                 std::size_t events) noexcept;
+RawControlClaim *raw_region_prepaid_bank() noexcept;
 
 // A joined command worker lends its fixed settlement bank only to retained_append.
 // Nested scopes restore the previous selection. No claim or wait occurs here.
 class RawRegionPrepaidScope {
 public:
   explicit RawRegionPrepaidScope(RawControlClaim &bank) noexcept;
+  explicit RawRegionPrepaidScope(RawControlClaim *bank) noexcept;
   ~RawRegionPrepaidScope();
   RawRegionPrepaidScope(const RawRegionPrepaidScope &) = delete;
   RawRegionPrepaidScope &operator=(const RawRegionPrepaidScope &) = delete;

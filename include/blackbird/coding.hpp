@@ -15,6 +15,7 @@
 #include <memory>
 namespace blackbird {
 class RawTurnTrace;
+class RawOperationTrace;
 class RawPolicyTrace;
 class CodingProvider {
 public:
@@ -117,6 +118,7 @@ private:
   using CommandTaskMap = std::map<std::string, CommandTaskActivity>;
   bool turn_running_ = false, backstop_claimed_ = false;
   RawTurnTrace *turn_trace_ = nullptr;
+  RawOperationTrace *operation_trace_ = nullptr;
   std::optional<Error> failed_turn_;
   Value workflow_result_;
   std::optional<Value> operator_arguments_;
@@ -186,11 +188,11 @@ private:
   std::unique_ptr<Runtime> runtime_;
   Value request(Value options = Value::object({}));
   Value call(std::string name, Value arguments);
-  Value operation(
-      std::string_view name, const Value &input,
-      const std::function<Value(OperationAttemptId, InvocationId,
-                                DefinitionGenerationId, CommandTaskActivity *)> &body,
-      RawProviderOperationContext *provider_operation = nullptr);
+  Value operation(std::string_view name, const Value &input,
+                  const std::function<
+                      Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
+                            CommandTaskActivity *, RawRetainedExec *)> &body,
+                  RawProviderOperationContext *provider_operation = nullptr);
   friend struct Runtime;
 };
 } // namespace blackbird

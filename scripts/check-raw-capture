@@ -51,6 +51,46 @@ def region(found, base, outcome):
     assert linked == begin and actual in outcome, (base, actual)
 
 
+def product_storage(found, audit, reopened):
+    def one(site):
+        selected = [(lane, ordinal, body) for lane, current, ordinal, body in found
+                    if current == site]
+        assert len(selected) == 1, (site, len(selected))
+        return selected[0]
+
+    def ref(lane, ordinal):
+        return lane + struct.pack("<Q", ordinal)
+
+    startup_lane, startup_ordinal, _ = one(1000)
+    owner_lane, owner_ordinal, owner_body = one(3000)
+    assert owner_body == b"\x01" + ref(startup_lane, startup_ordinal) + b"\x01"
+    _, _, owner_return = one(3001)
+    assert owner_return == ref(owner_lane, owner_ordinal) + b"\x00"
+    factory_lane, factory_ordinal, factory_body = one(3104)
+    assert factory_body[:24] == ref(owner_lane, owner_ordinal)
+    header = audit.read_bytes()[:112]
+    assert factory_body[24:64] == header[8:48], "factory emitted different native identities"
+    assert factory_body[64:72] == header[84:92], "factory emitted different native limits"
+    capacity = struct.pack("<QQB", 512 * 1024 * 1024, 200000, 2 if reopened else 1)
+    assert factory_body[72:90] == b"\x00" + capacity
+    if reopened:
+        assert factory_body[90:] == struct.pack("<BBQ", 0, 1, 64 * 1024 * 1024)
+    else:
+        assert len(factory_body) == 90
+    _, _, factory_return = one(3105)
+    assert factory_return[:24] == ref(factory_lane, factory_ordinal)
+    assert len(factory_return) == 61 and factory_return[-1] == 0
+    assert factory_return[24:40] == header[24:40]
+    end_lane, end_ordinal, end_body = one(3108)
+    assert end_body[:24] == ref(factory_lane, factory_ordinal)
+    assert len(end_body) == 56 and end_body[24:40] == header[24:40]
+    _, _, ended = one(3109)
+    assert ended[:24] == ref(end_lane, end_ordinal) and len(ended) == 28
+    assert ended[24:] == bytes(4), "owner exited with pending/failed state"
+    assert any(site == 3100 for lane, site, ordinal, body in found)
+    assert any(site == 3017 for lane, site, ordinal, body in found)
+
+
 with tempfile.TemporaryDirectory(prefix="blackbird-raw-capture-") as temporary:
     session = Path(temporary) / "session"
     for index in range(2):
@@ -66,6 +106,7 @@ with tempfile.TemporaryDirectory(prefix="blackbird-raw-capture-") as temporary:
         assert (current / "closed").exists(), "launcher failed to drain its recorder"
         found = records(current)
         region(found, 1000, {1})  # startup ready
+        product_storage(found, session / "audit", bool(index))
         assert any(site == 1090 for lane, site, ordinal, body in found)
         if index:
             region(found, 1010, {2, 3})  # compact recovery or full replay
@@ -76,4 +117,4 @@ with tempfile.TemporaryDirectory(prefix="blackbird-raw-capture-") as temporary:
     assert snapshot == {str(path): path.read_bytes()
                         for path in (session / "raw").rglob("*") if path.is_file()}, \
         "read-only inspection changed the metric stream"
-print("Launcher raw capture: ready, retained append, reopen and inspection pass")
+print("Launcher raw capture: ready, exact product storage owner/factory/end, reopen and inspection pass")

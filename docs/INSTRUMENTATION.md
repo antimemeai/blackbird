@@ -32,20 +32,18 @@ published records through process failure until the separate recorder writes and
 synchronizes them; only then may the producer reuse their space. Return does not
 wait for disk. Interrupted acquisition before publication remains unresolved.
 
-The first implementation unit adds channel, raw audit, recorder lifecycle and
-native region hooks at startup, retained append, command admission/worker, terminal
-and provider owner boundaries. See the
-[runtime implementation note](../papers/2026-10-11-raw-runtime-implementation.md).
-Actual adapter wire send/stream hooks and external-process hooks are still open,
-as are the remaining census integrations and full-path performance measurements.
+The implementation includes the owned channel, raw audit, separate recorder and
+supervisor, independent sampler, native/Lua authored emission, and the delivered
+provider, command, participant, Context, turn, task and audit-query owners. The
+current operation/storage/retained segment adds exact result capture, native I/O
+and semantic retained/index hooks with prepaid finite cleanup and explicit
+main/worker ownership. See the [completion plan](INSTRUMENTATION_COMPLETION.md)
+for each delivered unit, its direct/profile checks and remaining census work.
 Application capture starts before retained-state creation/recovery and drains on
 clean shutdown. Read-only audit inspection does not create a metric stream.
-The launcher oracle reads preserved records and checks linked startup endpoints,
-ready/recovery outcomes and retained append across actual launch/reopen.
-The installed source gate passes all 89 debug tests, all 125 owned C++ translation
-units and the owned Lua checks. Launcher capture also passes Linux debug, release
-and ASan/UBSan; earlier component/process-failure results and their limits remain
-in the implementation notes.
+The launcher oracle checks actual native storage setup, Root factory/teardown,
+linked startup outcomes, native journal calls, reopen and unchanged inspection.
+Full-path workload rates, costs and capacity measurements remain open.
 
 nls.2 remains open; logical clocks nls.9 and audit completeness nls.10 are separate
 unfinished work. Evals, multiplayer and steering/trajectory implementation remain

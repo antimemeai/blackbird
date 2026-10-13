@@ -162,20 +162,50 @@ Mac release2/2:2.06s and ASan2/2:10.72s. The corrected mandatory source gate
 passes105/105 debug cases in125.85s, all155 selected owned C++ translation units,
 and owned Lua checks before the `ab23278` commit and push. These findings
 do not require production changes or another review panel.
-[Physical storage](../papers/2026-10-11-product-storage-owner-raw-subplan.md)
-has an accepted whole plan for native prefix capture, explicit TUI authority
-handoff and separately held, serialized cleanup after surviving readers outlive
-the root. Its genuine published-source baseline acquires4096 bytes before EIO
-and loses that prefix from raw recording. The [semantic retained/index whole plan](../papers/2026-10-11-retained-index-owner-raw-subplan.md)
-resolves its ONE plan attack, including acknowledged record extents, saved-state
-allocation before publication and one main/TUI transfer transaction. Genuine
-published-source reds precede its implementation. Combined OLD+NEW stop/exec
-grants require793773 CONTROL and138922468 DATA bytes at the declared core bounds;
-main-only1MiB/256MiB capacities are selected pending real caller/workload checks.
-Main activation remains pending. The UI starts turns on a separately registered
-worker, then joins it before returning to main-thread idle work; file creator
-identity alone cannot authorize that worker's ordinary native storage calls.
-Neither owner is active by implication. Remaining program/workflow/bridge owners,
+The fourth completion segment implements
+[operation17](../papers/2026-10-11-operation-owner-raw-subplan.md),
+[physical storage](../papers/2026-10-11-product-storage-owner-raw-subplan.md), and
+[semantic retained/index emission](../papers/2026-10-11-retained-index-owner-raw-subplan.md).
+Operation emission preserves actual acquired result packets before projection and
+records dispatch requests and returned/thrown outcomes separately. Native storage
+preserves partial reads, original writes and actual errors; explicitly authorized
+workers acquire resources, and a separate serialized producer emits prepaid
+unlock/close records after cold readers outlive Root. Semantic hooks cover native
+frames, acknowledged append metadata, identity/state changes, recovery, saved
+slots, index/catalog access and owner teardown. Saved-state allocations occur
+before publication; accepted disk/live selection changes require only nonthrowing
+moves afterward. TerminalUI and Root share one main/worker launch/join transfer.
+
+Real exec, generic adapter receipt/terminal, joined Job and turn rollback callers
+hold finite raw banks before admission. Ordinary bodies keep their own admission.
+Paid original capture does not promise later business result retention succeeds:
+actual retention failure emits its truthful raw error and whole-operation outcome.
+A capacity fallback terminal is bounded; it never invents an accepted result locator.
+
+The composed OLD+NEW stop/exec core requires794488 CONTROL and138922517 DATA
+bytes at its declared maximums, including retarget pairs and native frame headers.
+Generic receipt adds76551 CONTROL; generic terminal adds242440 at its formal
+maximum (318991 together). These are different simultaneous caller obligations: their full formal
+sum is **not** claimed to fit1MiB. Actual session catalog limits reduce the native
+probe bound, and real nested Lua→exec is directly exercised. Deeper ordinary
+recursion may refuse before effects. The launcher selects256MiB DATA/1MiB CONTROL/
+128KiB FAILURE per prepared producer; other runtime callers retain64MiB/256KiB/
+128KiB defaults. These are intentional finite grants, not measured workload sizing
+or an RSS claim. Raw recorder/reader storage and read-only inspection stay opt-out.
+
+Each owner has its one code/oracle review and finding-driven direct repairs.
+Operation OP1/OP2, physical P1–P4 and semantic S1–S4 are recorded in their
+[operation](../papers/2026-10-11-operation-owner-raw-code-attack.md),
+[storage](../papers/2026-10-13-product-storage-owner-raw-code-attack.md), and
+[retained/index](../papers/2026-10-13-retained-index-owner-raw-code-attack.md)
+reports. The semantic repairs deny unbudgeted public inspection, end terminal
+loans before callbacks, validate issuer before reading mutable Root state, and
+emit the direct checked-read writer state on actual Error. Actual launch/reopen, cold lifetime/concurrent cleanup, retarget refusal,
+result/cancellation and positive native-read boundary tests qualify the stated
+paths. Supported-profile and final source-gate results are recorded below when
+complete; no further review panel is introduced.
+
+Remaining program/workflow/bridge owners,
 [file47–48](../papers/2026-10-11-file-owner-raw-subplan.md)/Beads/decision/Git callers, session/UI/station/backstop and measured workloads
 remain open. Task hooks cover30–31; authored/VM hooks and authorization hooks
 cover their stated subplans only. No completed subset closes the60-row census.

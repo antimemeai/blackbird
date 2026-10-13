@@ -7,10 +7,13 @@
 #include "blackbird/raw_authored.hpp"
 #include "blackbird/raw_command.hpp"
 #include "blackbird/raw_context.hpp"
+#include "blackbird/raw_operation.hpp"
 #include "blackbird/raw_participants.hpp"
 #include "blackbird/raw_provider.hpp"
 #include "blackbird/raw_query.hpp"
+#include "blackbird/raw_retained.hpp"
 #include "blackbird/raw_sampler.hpp"
+#include "blackbird/raw_storage.hpp"
 #include "blackbird/raw_tasks.hpp"
 #include "blackbird/raw_turn.hpp"
 
@@ -449,6 +452,9 @@ void write_descriptions(const std::string &path) {
   write_description(file.value, raw_query_description());
   write_description(file.value, raw_turn_description());
   write_description(file.value, raw_context_description());
+  write_description(file.value, raw_operation_description());
+  write_description(file.value, raw_storage_description());
+  write_description(file.value, raw_retained_description());
   for (unsigned code = 0; code <= static_cast<unsigned>(ErrorCode::provider_rate_limit);
        ++code) {
     const auto value = static_cast<ErrorCode>(code);

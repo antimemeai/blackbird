@@ -1,10 +1,10 @@
 # Physical product-storage acquisition and retention
 
-2026-10-11. Complete reviewed subplan; no production storage implementation.
+2026-10-11. Complete reviewed subplan; physical owner candidate implemented.
 Root reserves3000–3099. Its ONE whole plan attack accepted S1/S2, the same TUI
 authority/cleanup finding and finite positive-read/scope quotas. The existing-API
 prefix baseline qualifies published source ab23278 before implementation.
-Whole-main activation remains held for semantic callers and composed capacities. This unit closes the native physical part of census53/systemB
+Whole-main activation remains held for semantic callers and composed capacities. This unit covers the native physical part of census53/systemB
 and the mechanical part of systemC, including nls.10 diagnostic partial reads.
 The existing query owner describes its logical operation; it cannot describe a
 positive native prefix which its callee destroys before returning an error.
@@ -303,6 +303,35 @@ binding/unlocks, then releases the raw handle OUTSIDE the mutex. This ordering i
 required because RawThreadContext::~RawThreadContext can drain/wait. No claim or
 binding retaining this handle survives the final state release. Native fields
 used by a resource destructor stay live through its held publication.
+
+Selected RetainedState construction additionally prepays its existing semantic
+teardown3108/3109 bank125 on this same producer. A private typed
+RawRetainedOwnerEnd wrapper holds it; final Root destruction copies the actual
+cursor, writer state, pending and prepared flags before member drops, then the
+wrapper emits those native fields under this cleanup mutex. It runs no Root
+queries on the cleanup lane. Partial failed factories release unused credit and
+emit no completed owner teardown. Each successful live Root therefore adds125
+to the cleanup held floor; no new lane, thread, registry or authority is added.
+
+Each accepted protected-settlement Scope additionally holds its existing semantic
+release3128/3129 bank90 on this same cleanup producer. The typed
+RawRetainedSettlementEnd wrapper is prepared before acceptance, records the actual
+protection requestR and reached release result, and releases under the same mutex
+and explicit binding. A failed candidate only releases its unused bank. A live
+Root with one protected Scope adds125+90=215 to the cleanup held floor; the native
+resource close/unlock banks and cleanup END50 remain separate.
+
+Process and OS-thread custody are both explicit. The authority retains its actual
+creating process PID; a forked child inherits TLS addresses and handles but gains
+no root acquisition or cleanup permission. Cleanup rejects inherited process use
+before taking the copied mutex. An ordinary loan also retains its actual original
+issuing process and TLS thread, allowing legal OLDmain bank retirement after a
+launched child has already entered authority; that release proof does not grant
+ordinary I/O or scope activation. Never-started child and actual joined borrowers
+use their separate explicit lifecycle proof. Wrong-thread/live bank destruction
+exits74 before claim member destruction; it emits an ingest-failure fence only
+when independently proved exclusive current producer custody makes that write
+safe. An unrelated thread's rebind of a still-live producer exits directly.
 
 The final cleanup-owner END marks the actual end of this retained ownership,
 not aggregate native cleanup success. Each failed close/unlock retains its own
@@ -934,15 +963,17 @@ validated maximum probe count P, actual protected write bytes F, original
 positive-read admission quotas B/N and the selected kind's scope quota S, the
 complete physical bank is:
 
-* Linux CONTROL =222+189S+1047K+810O+303J+271(GP+N).
-* Mac CONTROL =222+189S+1015K+774O+303J+271(GP+N).
+* Linux CONTROL =222+189S+1047K+810O+303J+271(GP+N), plus148O for selected exec.
+* Mac CONTROL =222+189S+1015K+774O+303J+271(GP+N), plus148O for selected exec.
 * DATA =F+86J+145GP+B+49N.
 
 Here J=ceil(F/16MiB)+K-1. The fixed terms are actual extent envelopes
 270(3K+3O)/258(3K+3O), sync237K/241K and lifecycle222+189S. Each catalog probe
 has its96-byte positive body plus49-byte prefix; its native call envelope271
-is the same CONTROL maximum as an admitted positioned read. If archive is
-absent, P=0; otherwise P=min(bit_width(A)+1,33) from actual validated capacity.
+is the same CONTROL maximum as an admitted positioned read. P=min(bit_width(A)+1,33)
+from the admitted business catalog capacity, with P=0 only when A=0 and no catalog
+can become selected during this loan. An initially absent catalog does not erase
+the prepayment required for a future checkpoint-selected catalog.
 These are physical API admission calculations, never emitted derived metrics.
 
 The semantic owner's selected first Job terminal K4/O1/G7 gives fixed
@@ -951,7 +982,7 @@ payload size I gives B=I+176 and N=2+ceil((32+I)/16MiB): real admission frame88,
 open frame56 and invocation frame32+I. The initial successful terminal has no
 previous observation. Its seventh-find allowance covers actual logical rejection.
 
-Selected full exec K12/O3/G24/S3 gives fixed15783 Linux/15291 Mac plus303J+
+Selected full exec K12/O3/G24/S3 gives fixed16227 Linux/15735 Mac plus303J+
 6504P+271N. Its actual write bound F=1324 comes from Open24, Receipt36 and
 terminal<=112 plus their three existing rejection envelopes384 each. Its
 positive dependency frame union B=504+3I+D and N=5+3ceil((32+I)/16MiB)+
@@ -970,6 +1001,21 @@ failure; exhausted scope quota refuses before new arguments/native acquisition,
 with no fabricated fourth request/return or new cancellation grant. Unused scopes
 are never emitted. Claims never move to another issuer or gain credit on reuse.
 No new count field/event or duplicate semantic-loan telemetry is introduced.
+
+Ordinary exec maintenance may replace the catalog inside one scope. A typed
+RawStorageLoanPause reserves one retarget pair before that callback, detaches
+borrowed native pointers, and retains the old files through restoration. At most
+O outer callbacks occur: diagnostic child appends skip optional maintenance.
+3048 records actual scopeR, journal-present/[journalR], archive-present/[archiveR]
+and actual current native catalog count. Its maximum98 plus3049 maximum50 costs
+148; the exec loan prepays148O, hence lifecycle1233 for O3, while its scope quota
+stays3. The callback's fresh native effects use its ordinary caller. Restoration
+records actual refusal before any new selected-file acquisition if the current
+count exceeds the checked admitted capacity min(UINT32_MAX,max_records*6), or
+the selected root/issuer/files mismatch. A failed restoration leaves pointers
+detached and propagates its Error; an original callback failure remains primary
+and its independent restore result is still emitted. Stop/job no_new never run
+that callback or consume retarget credit. Unused retargets are not emitted.
 
 Context stop includes semantic history_snapshot/archive_reader creation without
 any physical payload read; it therefore keeps B=N=0. Those semantic costs do not
@@ -1157,8 +1203,20 @@ raw run before the final missing-prefix assertion failed. Native fixture retaine
 at /tmp/blackbird-storage-prefix-red-wphbEq; build/log/binary under context/
 storage-diagnostic-prefix-red*. Preserve these before candidate migration.
 
-Targeted native Mac debug and changed-file tidy after implementation; root ONE
+Targeted native Mac debug and changed-file tidy qualify the candidate; root ONE
 whole code/oracle attack, finding fix/recheck, then supported Linux debug/release/
 ASan and Mac profiles under root integration. No duplicate assurance panel or
-full suite during this study. Root registers helper/descriptions/CMake; coordinate
+full suite during this owner pass. Root registers helper/descriptions/CMake; coordinate
 main with Metadata and leave Context/retained semantic-index windows untouched.
+
+The final whole twenty-one-group native fixture passed against the matching
+strict debug executable, including real stopped recorder holders/full ordinary
+DATA and CONTROL, native death/recovery, finite short/EINTR cuts, combined
+transfer/cleanup grants, actual Terminal normal/canceled/failed launch, and catalog
+replacement/refusal. Six changed owned translation units passed narrow tidy.
+The strengthened zero-read retarget oracle initially counted legitimate earlier
+checkpoint reads; it now compares actual same-lane ordinals after the refused
+selection, with exact linked capacity outcome. Original failed run and source
+remain in ignored context. Main activation, positive command semantic composition, root's ONE
+code/oracle attack, and supported-profile qualification remain open; these native
+runs do not establish census53 completion.

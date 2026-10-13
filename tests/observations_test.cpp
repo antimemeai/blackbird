@@ -52,6 +52,9 @@ int main() {
     const JournalCapacity cap{32 * 1024 * 1024, 20000};
     Value frozen;
     std::size_t end = 0;
+    std::size_t legacy_record = 0;
+    const auto legacy_time =
+        Value::object({{"utc_ns", num(2000)}, {"clock_id", Value{"legacy.fixture"}}});
     {
       auto root =
           unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(unwrap(
@@ -141,17 +144,29 @@ int main() {
                                         {"cursor", num(0)},
                                         {"count", num(64)},
                                         {"scan", num(256)}}));
-      bool found_doctrine = false, found_duration = false;
+      bool found_doctrine = false, found_result = false;
       for (const auto &row : field(linked, "events").array()) {
         if (row.find("variable"))
           found_doctrine = true;
-        if (row.find("duration_ns")) {
-          check(std::stoll(field(row, "duration_ns").number().text()) >= 0,
-                "negative duration");
-          found_duration = true;
+        if (const auto *label = row.find("label");
+            label && *label == Value{"operation.result"}) {
+          check(string_field(row, "operation") == "provider" &&
+                    string_field(field(row, "metadata"), "attempt") == source_attempt,
+                "actual operation result lost its request/source link");
+          check(!row.find("time") && !row.find("duration_ns"),
+                "operation producer writes projected time or duration");
+          found_result = true;
         }
       }
-      check(found_doctrine && found_duration, "timed operation/source links absent");
+      check(found_doctrine && found_result, "actual operation/source links absent");
+      // Preserve the old packet layout solely as a compatibility fixture. New
+      // operation hooks emit native clocks; the existing reader still reads old
+      // scalar timing fields after reopen.
+      log.original({"operation.result", unwrap(encode_packet_string(Value{true})),
+                    Value::object({{"operation", Value{"legacy.fixture"}},
+                                   {"time", legacy_time},
+                                   {"duration_ns", num(17)}})});
+      legacy_record = root->fact_count() - 1;
       const auto exact_end = root->fact_count();
       const auto shared = engine.operator_call(
           "variables_read",
@@ -196,6 +211,15 @@ int main() {
                                                         {"scan", num(256)},
                                                         {"end", num(end)}}));
       check(pinned == frozen, "variable history changed on reopen");
+      const auto legacy = log.trajectory(Value::object(
+          {{"cursor", num(legacy_record)}, {"count", num(1)}, {"scan", num(1)}}));
+      const auto &rows = field(legacy, "events").array();
+      check(rows.size() == 1 && field(rows.front(), "time") == legacy_time &&
+                field(rows.front(), "duration_ns") == num(17) &&
+                string_field(rows.front(), "operation") == "legacy.fixture" &&
+                correlation_plot(legacy).find("work.legacy.fixture |") !=
+                    std::string::npos,
+            "legacy timing metadata is no longer readable after reopen");
     }
     std::filesystem::remove_all(directory);
     return 0;

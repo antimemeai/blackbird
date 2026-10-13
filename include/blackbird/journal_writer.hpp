@@ -1,5 +1,7 @@
 #pragma once
 
+#include "blackbird/raw_retained.hpp"
+
 #include "blackbird/journal.hpp"
 #include "blackbird/journal_storage.hpp"
 #include <algorithm>
@@ -15,17 +17,6 @@ struct JournalCapacity {
 struct JournalDraft {
   FrameKind kind;
   ByteView payload;
-};
-struct PhysicalJournalRecord {
-  EnvironmentId environment;
-  AuditStreamId journal;
-  FrameKind kind;
-  std::uint64_t sequence;
-  std::uint64_t batch_first;
-  std::uint64_t payload_offset;
-  std::uint32_t payload_size;
-  std::uint32_t frame_checksum = 0;
-  bool operator==(const PhysicalJournalRecord &) const = default;
 };
 struct JournalCursor {
   AuditStreamId journal;
@@ -93,7 +84,8 @@ class FramedJournal {
 public:
   static Result<std::unique_ptr<FramedJournal>>
   create(JournalDirectory &directory, std::string_view name, JournalHeader header,
-         JournalCapacity capacity, SyncStrength strength = SyncStrength::full);
+         JournalCapacity capacity, SyncStrength strength = SyncStrength::full,
+         const RawRetainedOrigin &raw_origin = {});
   using ResumeSelector =
       std::function<Result<std::optional<JournalResume>>(FramedJournal &)>;
   static Result<std::unique_ptr<FramedJournal>>
@@ -101,7 +93,7 @@ public:
        JournalCapacity capacity, SyncStrength strength = SyncStrength::full,
        bool use_scan_checkpoint = false,
        std::optional<JournalResume> resume = std::nullopt,
-       const ResumeSelector &selector = {});
+       const ResumeSelector &selector = {}, const RawRetainedOrigin &raw_origin = {});
   // Optional physical hint only: no semantic snapshot or admission permission.
   Result<void> publish_scan_checkpoint();
   using PayloadReader = std::function<Result<std::vector<std::byte>>()>;
@@ -127,8 +119,9 @@ public:
   // U3/RetainedState verifies actual living resource custody before this call.
   Result<void> resume_after_reconciliation();
   Result<std::vector<std::byte>> read_payload(const PhysicalJournalRecord &record);
-  Result<ObservedJournalBytes> read_original_range(std::uint64_t offset,
-                                                   std::size_t length);
+  Result<ObservedJournalBytes>
+  read_original_range(std::uint64_t offset, std::size_t length,
+                      const RawRetainedOrigin *origin = nullptr);
   const JournalHeader &header() const noexcept { return header_; }
   JournalWriterState state() const noexcept { return state_; }
   JournalCursor cursor() const noexcept { return cursor_; }
@@ -145,7 +138,11 @@ public:
   }
 
 private:
+  friend class RawRetainedScope;
   friend class RetainedState;
+  friend class RetainedEnvironment;
+  std::shared_ptr<RawRetainedReadOrigin> raw_reader_origin_;
+  RawRetainedOrigin &raw_origin_;
   using ArchiveReader =
       std::function<Result<std::vector<std::byte>>(const PhysicalJournalRecord &)>;
   ArchiveReader archive_reader(JournalCursor boundary) const;
@@ -156,11 +153,11 @@ private:
   Result<std::vector<std::byte>>
   read_checked_payload(const PhysicalJournalRecord &record);
   FramedJournal(JournalDirectory &directory, JournalHeader header,
-                JournalCapacity capacity, SyncStrength strength);
-  static Result<std::unique_ptr<FramedJournal>> allocate(JournalDirectory &directory,
-                                                         JournalHeader header,
-                                                         JournalCapacity capacity,
-                                                         SyncStrength strength);
+                JournalCapacity capacity, SyncStrength strength,
+                RawRetainedOrigin raw_origin);
+  static Result<std::unique_ptr<FramedJournal>>
+  allocate(JournalDirectory &directory, JournalHeader header, JournalCapacity capacity,
+           SyncStrength strength, RawRetainedOrigin raw_origin);
   struct ScanCheckpoint {
     JournalCursor cursor;
     std::vector<PhysicalJournalRecord> records;

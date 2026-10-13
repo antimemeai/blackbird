@@ -47,7 +47,8 @@ with tempfile.TemporaryDirectory(prefix="blackbird-variables-") as tmp:
     after = {str(p.relative_to(repo)): p.read_bytes() for p in repo.rglob("*") if p.is_file()}
     assert before == after, "observation changed Git files"
     plot = run('/correlate {"cursor":0,"scan":256,"count":64}')
-    assert "git.head |" in plot and "git.commit |" in plot and "work.git_observe |" in plot
+    assert "git.head |" in plot and "git.commit |" in plot
+    assert "work.git_observe |" not in plot, "operation producer projected a timed point"
     assert "synchronization unknown" in plot and "no intervals inferred" in plot
     variables = run('/variables {"variable":"git.head"}')
     assert "git.head |" in variables and head in variables

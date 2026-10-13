@@ -1,6 +1,7 @@
 #pragma once
 #include "blackbird/journal.hpp"
 #include "blackbird/journal_storage.hpp"
+#include "blackbird/raw_retained.hpp"
 #include <functional>
 
 namespace blackbird {
@@ -23,8 +24,9 @@ struct RecoveryIndexEntry {
 class RecoveryIndex {
 public:
   static constexpr std::size_t page_size = 16384;
-  static Result<std::unique_ptr<RecoveryIndex>> open(std::unique_ptr<JournalFile> file,
-                                                     std::uint64_t max_bytes);
+  static Result<std::unique_ptr<RecoveryIndex>>
+  open(std::unique_ptr<JournalFile> file, std::uint64_t max_bytes,
+       const RawRetainedOrigin &raw_origin = {});
   Result<std::optional<std::uint64_t>> find(RecoveryPageRef root,
                                             const RecoveryKey &key) const;
   Result<RecoveryPageRef> put(RecoveryPageRef root, RecoveryKey key,
@@ -37,6 +39,7 @@ public:
   std::uint64_t bytes() const noexcept { return end_; }
 
 private:
+  friend class RetainedState;
   struct Node {
     bool leaf = true;
     std::vector<RecoveryIndexEntry> entries;
@@ -48,8 +51,9 @@ private:
     RecoveryPageRef right;
   };
   RecoveryIndex(std::unique_ptr<JournalFile> file, std::uint64_t end,
-                std::uint64_t max_bytes)
-      : file_(std::move(file)), end_(end), max_bytes_(max_bytes) {}
+                std::uint64_t max_bytes, RawRetainedOrigin raw_origin)
+      : raw_origin_(std::move(raw_origin)), file_(std::move(file)), end_(end),
+        max_bytes_(max_bytes) {}
   Result<Node> read(RecoveryPageRef ref) const;
   Result<RecoveryPageRef> write(const Node &node);
   Result<Change> insert(RecoveryPageRef root, RecoveryKey key, std::uint64_t value,
@@ -57,6 +61,7 @@ private:
   Result<bool> walk(RecoveryPageRef root, const RecoveryKey &lower, std::size_t &left,
                     const std::function<Result<bool>(RecoveryIndexEntry)> &visit,
                     std::size_t depth) const;
+  mutable RawRetainedOrigin raw_origin_;
   std::unique_ptr<JournalFile> file_;
   std::uint64_t end_;
   std::uint64_t max_bytes_;

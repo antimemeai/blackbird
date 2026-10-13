@@ -31,6 +31,17 @@ enum class FrameKind : std::uint16_t {
   raw = 4,
   commit = 65535
 };
+struct PhysicalJournalRecord {
+  EnvironmentId environment;
+  AuditStreamId journal;
+  FrameKind kind;
+  std::uint64_t sequence;
+  std::uint64_t batch_first;
+  std::uint64_t payload_offset;
+  std::uint32_t payload_size;
+  std::uint32_t frame_checksum = 0;
+  bool operator==(const PhysicalJournalRecord &) const = default;
+};
 struct JournalFrameView {
   FrameKind kind;
   std::uint64_t sequence;

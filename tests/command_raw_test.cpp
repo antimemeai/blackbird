@@ -228,10 +228,10 @@ void canceled_exec_receipt(std::string_view fixture, const std::filesystem::path
   const auto journal = unwrap(AuditStreamId::from_bytes(identity));
   IdentityBytes caller_lane{};
   {
-    const std::uint64_t data_capacity =
-        after_admission ? 32 * 1024 * 1024 : 2 * 1024 * 1024;
-    auto runtime = unwrap(RawRuntime::open(session.string(), environment,
-                                           {{data_capacity, 64 * 1024, 4096}, 4096}));
+    // Reach the native cancellation cut after operation17's original/region
+    // admission; the former2MiB lane refused before any selected exec effect.
+    auto runtime = unwrap(RawRuntime::open(
+        session.string(), environment, {{64 * 1024 * 1024, 256 * 1024, 4096}, 4096}));
     RawThreadBinding binding{unwrap(runtime->prepare_thread())};
     caller_lane = raw_lane_epoch();
     auto retained = unwrap(RetainedState::create(
@@ -280,6 +280,9 @@ void canceled_exec_receipt(std::string_view fixture, const std::filesystem::path
       try {
         engine.turn({"", program});
       } catch (const Error &error) {
+        std::cerr << "canceled exec phase=" << after_admission
+                  << " actual Error=" << error_name(error.code) << ':' << error.detail
+                  << " canceled=" << canceled << '\n';
         interrupted = error.code == ErrorCode::interrupted;
       }
     }
@@ -341,9 +344,16 @@ void canceled_exec_receipt(std::string_view fixture, const std::filesystem::path
       ++successful_settlements;
     }
   }
-  require(caller_receipt_regions == (after_admission ? 3u : 2u) &&
+  std::cerr << "phase=" << after_admission
+            << " caller prepaid regions=" << caller_receipt_regions
+            << " worker settlements=" << successful_settlements << '\n';
+  // The current operation pays its ordered admission/open as well as the
+  // actual later caller appends. Both cuts emit four caller CONTROL regions;
+  // only the launched command has a distinct joined-worker terminal settlement.
+  require(caller_receipt_regions == 4 &&
               successful_settlements == (after_admission ? 0u : 1u),
-          "receipt uses caller prepaid region; command terminal uses worker lane");
+          "admission/open/receipt use caller prepaid regions; command terminal uses "
+          "worker lane");
   if (after_admission) {
     for (const auto &[key, record] : all) {
       (void)key;
@@ -573,7 +583,9 @@ void raw_oracles(std::string_view fixture, const std::filesystem::path &root) {
       stage = "canceled semantic settlement";
       jobs.settlement(terminal, [] {
         for (unsigned n = 0; n < 4; ++n) {
-          RawRegion region{raw_regions::retained_append};
+          // One fixed observation plus these three declared event observations
+          // keeps each existing held burst exactly432 bytes on supportedABIs.
+          RawRegion region{raw_regions::retained_append, {.retained_events = 3}};
           for (unsigned observation = 0; observation < 4; ++observation)
             region.observe({RawObservationKind::journal_state, n, observation, n});
           region.error({ErrorCode::io, EIO});

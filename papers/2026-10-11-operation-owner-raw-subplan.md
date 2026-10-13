@@ -158,6 +158,8 @@ the enclosing C++ types. R in each body is the exact whole-operation request.
 |2416 callback return|R,u8 kind,u8 native absent/returned/Error/alloc/length/std/nonstd,[actual cancelled bool on its return OR native Error]; actual return/throw|51 CONTROL, at most7|
 |2417 terminal|R,u8 returned/refused/Error/alloc/length/std/nonstd,u8 reached stage,bool Error,[Error],bool actual disposition,[AttemptDisposition:u8],Clock|111 CONTROL|
 |2418 encoder return|R,u8 input/primary/fallback,u8 actual branch,[size_t actual encoded bytes OR native Error]; after immediate body publication or actual error|51 CONTROL, at most3|
+|2420 dispatch call request|R,actual attempt ID; immediately before Root.dispatch|56 CONTROL|
+|2421 dispatch outcome|R,u8 actual exception or returned Result,bool Error,[actual Error]; returned failure keeps returned branch; thrown Error keeps exception branch; before unwrap or acquired report publication|51 CONTROL|
 |2419 encoder request|R,u8 role,actual ValueLimits bytes/nodes/depth; before existing encoder|65 CONTROL, at most3|
 
 2412 maximum is16+24+1+3+1+9=54 (not a larger guessed54-byte payload).
@@ -175,9 +177,9 @@ retention calls are result and that existing capacity message. A terminal-capaci
 fallback changes the existing returned Value but does not introduce a second
 output encoder which the old operation did not run.
 
-The fixed owner credit is3183:
+The fixed owner credit is3290:
 124+5*57+(81+74)+(112+51)+61+(4*86+66)+2*(89+66)+54+
-2*(68+67)+7*(42+51)+111+3*(65+51)+102+139.
+2*(68+67)+7*(42+51)+111+3*(65+51)+102+139+56+51.
 Descriptions/source use this exact sizeof-derived sum; inactive variants omit
 fields and release unused credit. The provider selected result additionally
 keeps its existing phase/link credit206, not a second operation bank.
@@ -187,7 +189,7 @@ and bounded operation proposals BEFORE the effect. The original13*432 plan was
 incorrect: retain_rejection creates diagnostic chunk/group/marker appends, and a
 single region can emit more than three source/event observations. ONE plan attack
 finding O1 replaces that fixed bank, rather than adding a second reserve or review.
-The owner record credit3183 is unchanged; whole CONTROL is3183+A below, with the
+The owner record credit3290 is unchanged; whole CONTROL is3290+A below, with the
 provider's existing206 additional. Claims and raw-current-thread lifetime precede
 publication and outlive their last uses. Nested or unusually small-payload journals
 may require more finite CONTROL than a configured lane has; refuse before effect,
@@ -268,8 +270,8 @@ It includes all thirteen direct upper calls AND all possible diagnostic child
 regions, all their source/event observations, error/outcome/end records and
 partially written/rejected prefix paths. Before-effect budgets use immutable
 limits; later native current remaining journal space can only lower actual work.
-For example M256/N344/J100000 gives A13848, whole generic17031; M1MiB/N(M+88)/
-J1e9 gives A16196, whole19379. These illustrate the arithmetic, not new source
+For example M256/N344/J100000 gives A13848, whole generic17138; M1MiB/N(M+88)/
+J1e9 gives A16196, whole19486. These illustrate the arithmetic, not new source
 constants or changed journal defaults. Physical capacity refusal remains native.
 
 ### Direct loan isolation and maintenance
@@ -425,3 +427,11 @@ original/locator/fallback/capacity branches. Variable topology prepayment and
 direct loan suspension resolve the fixed-bank finding. Genuine baseline reds
 may proceed; production coding/local_timing/retained_state changes await the
 Context/turn attack and source checkpoint. No additional plan panel is needed.
+
+
+The actual Root.dispatch call may refuse before acquiring a DispatchReport.
+Source review adds2420/2421 as native request/outcome boundaries:56+51=107 bytes,
+so ONE current fixed bank is3290 (the corrected3183 owner sites plus107).
+2408 copies a report only when that actual Result contains one; outer Error
+contains no fabricated dispatched/effect/recording bools. This is the accepted
+source-derived owner-boundary correction within this whole unit.

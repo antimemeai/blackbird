@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 namespace blackbird {
+class RetainedState;
 enum class InputAction {
   none,
   submit,
@@ -111,7 +112,8 @@ public:
            std::filesystem::path state_path = {},
            const std::function<void()> &idle_work = {},
            std::shared_ptr<CommandJobs> commands = {}, int interrupt_fd = -1,
-           const std::function<Result<void>()> &reset_interrupt = {});
+           const std::function<Result<void>()> &reset_interrupt = {},
+           RetainedState *raw_root = nullptr);
 
 private:
   enum class Kind {

@@ -6,6 +6,7 @@
 #include "blackbird/provider_auth.hpp"
 #include "blackbird/raw_authored.hpp"
 #include "blackbird/raw_command.hpp"
+#include "blackbird/raw_operation.hpp"
 #include "blackbird/raw_provider.hpp"
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/raw_turn.hpp"
@@ -1734,13 +1735,15 @@ void CodingEngine::poll_commands() {
                     field(event.result, "exit_code") == Value{Number{0}}
                 ? AttemptDisposition::success
                 : AttemptDisposition::failure;
-        command_jobs_->settlement(event, [&] {
+        command_jobs_->settlement(event, [&](RawRetainedJobLoan *loan) {
           const auto submitted = unwrap(log_.root().submit_settlement(
               {{},
                AttemptObservationEvent{parse_id<OperationAttemptId>(event.job_id),
                                        AttemptPhase::terminal,
                                        disposition,
-                                       {encoded.begin(), encoded.end()}}}));
+                                       {encoded.begin(), encoded.end()}}},
+              loan ? loan->acknowledgment() : std::span<PhysicalJournalRecord>{},
+              loan ? loan->acknowledged_flag() : nullptr));
           if (submitted.evidence == RetainedEvidence::uncertain ||
               submitted.evidence == RetainedEvidence::recovered_pending)
             throw Error{ErrorCode::audit_unavailable};
@@ -1951,458 +1954,829 @@ void CodingEngine::protect_workflow(const Value::Array &entries, const Value &pr
 Value CodingEngine::operation(
     std::string_view name, const Value &input,
     const std::function<Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
-                              CommandTaskActivity *)> &body,
+                              CommandTaskActivity *, RawRetainedExec *)> &body,
     RawProviderOperationContext *provider_operation) {
-  poll_commands();
-  std::string task_id;
-  if (const auto *binding = input.find("task_id"); name == "exec" && binding) {
-    task_id = binding->string();
-    if (!tasks_.state().item(task_id))
-      throw Error{ErrorCode::invalid_range};
-  }
-  if (!pumping_commands_ && cancelled && cancelled())
-    throw Error{ErrorCode::interrupted};
-  if (effect_policy)
-    effect_policy(name, input);
-  if (capacity_stopped_ || operation_depth_ >= 16) {
-    capacity_stopped_ = true;
-    throw Error{ErrorCode::capacity};
-  }
-  ++operation_depth_;
-  struct Depth {
-    std::size_t &value;
-    ~Depth() { --value; }
-  } depth{operation_depth_};
-  if (log_.root().protected_settlement())
-    protect_workflow(field(context_.view(), "entries").array(),
-                     context_.pending_proposal());
-  const auto began = std::chrono::steady_clock::now();
-  const auto began_time = observations_->time();
-  if (operation_started)
-    operation_started(name);
-  if (status) {
-    std::string description{name};
-    for (const auto key : {"path", "command", "argv"}) {
-      const auto *value = input.find(key);
-      if (value) {
-        description += " · " + unwrap(format_value(*value));
-        break;
-      }
-    }
-    status(description);
-  }
-  // Pay for open, adapter receipt and a no-child cancellation terminal before
-  // publishing an attempt that must be closed even if the owner stops now.
-  auto exec_settlement_credit =
-      name == "exec" ? raw_command_claim(3 * raw_command_region_credit) : std::nullopt;
-  std::optional<RawProviderPhase> provider_result;
-  std::optional<ProviderOriginalLease> provider_original;
-  if (provider_operation) {
-    provider_result.emplace(provider_link_credit);
-    provider_original.emplace(
-        ProviderOriginalRequest{ProviderOriginalRole::upstream_packet,
-                                ProviderOriginalMode::codec_adopt,
-                                ValueLimits{}.bytes,
-                                {}},
-        RawEventRef{});
-  }
-  RawRegion admission{raw_regions::command_admission};
   auto &root = log_.root();
-  const auto decision = unwrap(root.issue<DecisionId>());
-  const auto invocation = unwrap(root.issue<InvocationId>());
-  const auto admitted_generation = generation_;
-  const auto attempt = unwrap(root.issue<OperationAttemptId>());
-  const auto exec_id = name == "exec" ? hex_identity(attempt.bytes()) : std::string{};
-  const auto serialized = unwrap(encode_packet_string(input));
-  const auto raw = std::as_bytes(std::span{serialized.data(), serialized.size()});
-  const ImmutableBytes bytes{raw.begin(), raw.end()};
-  const auto context = parse_id<ContextRevisionId>(context_.head());
-  const auto meta =
-      Value::object({{"operation", Value{std::string{name}}},
-                     {"input_binding", Value{"invocation-v1"}},
-                     {"input_encoding", Value{"bbm2"}},
-                     {"invocation", Value{hex_identity(invocation.bytes())}},
-                     {"revision", Value{context_.head()}},
-                     {"time", began_time},
-                     {"generation", Value{hex_identity(admitted_generation.bytes())}}});
-  const auto continuation_bytes = unwrap(encode_packet(meta));
-  CommandTaskMap staged_tasks;
-  CommandTaskMap::node_type task_node;
-  if (!task_id.empty()) {
-    staged_tasks.try_emplace(exec_id, task_activity, std::move(task_id), attempt,
-                             exec_id, std::string{name});
-    task_node = staged_tasks.extract(exec_id);
-  }
-  struct TaskRun {
-    CommandTaskActivity *activity;
-    bool transferred = false;
-    ~TaskRun() {
-      if (activity && !transferred)
-        activity->emit(3);
+  RawOperationTrace trace{root};
+  std::optional<RawEventRef> parent;
+  if (operation_trace_ && operation_trace_->reference().ordinal)
+    parent = operation_trace_->reference();
+  else if (provider_operation && provider_operation->parent &&
+           provider_operation->parent->ordinal)
+    parent = provider_operation->parent;
+  else if (turn_trace_ && turn_trace_->reference().ordinal)
+    parent = turn_trace_->reference();
+  trace.start(parent, generation_, operation_depth_, pumping_commands_,
+              capacity_stopped_);
+  auto *previous_trace = operation_trace_;
+  operation_trace_ = &trace;
+  struct RestoreOperation {
+    RawOperationTrace *&selection;
+    RawOperationTrace *previous;
+    ~RestoreOperation() { selection = previous; }
+  } restore_operation{operation_trace_, previous_trace};
+  return trace.run([&]() -> Value {
+    trace.stage(1);
+    trace.name(name);
+    poll_commands();
+    std::string task_id;
+    if (const auto *binding = input.find("task_id"); name == "exec" && binding) {
+      task_id = binding->string();
+      if (!tasks_.state().item(task_id))
+        throw Error{ErrorCode::invalid_range};
     }
-  } task_run{task_node.empty() ? nullptr : &task_node.mapped()};
-  if (task_run.activity) {
-    task_run.activity->pending_node = &task_node;
-    task_run.activity->transferred = &task_run.transferred;
-  }
-  // Fresh identities: one ordered batch, no authoritative partial admission.
-  const std::array<RetainedEvent, 3> admitted{
-      RetainedEvent{
-          {},
-          DecisionEvent{decision,
-                        identity_.actor,
-                        identity_.conversation,
-                        identity_.workflow,
-                        admitted_generation,
-                        context,
-                        {invocation},
-                        {continuation_bytes.begin(), continuation_bytes.end()}}},
-      RetainedEvent{{},
-                    InvocationEvent{invocation, decision, admitted_generation, bytes}},
-      RetainedEvent{{},
-                    AttemptAdmissionEvent{attempt, invocation, decision, bytes, true}}};
-  admission.linkage({raw_text(context_.head()), attempt.bytes()});
-  try {
-    (void)unwrap(root.append(root.cursor(), {}, admitted));
-  } catch (const Error &error) {
-    admission.error(error);
-    admission.outcome(RawRegionOutcome::rejected);
-    throw;
-  } catch (...) {
-    admission.outcome(RawRegionOutcome::exception);
-    throw;
-  }
-  admission.outcome(RawRegionOutcome::admitted);
-  admission.finish();
-  if (task_run.activity) {
-    task_run.activity->bind({raw_lane_epoch(), admission.begin_ordinal()});
-    task_run.activity->emit(0);
-  }
-  if (provider_operation) {
-    provider_operation->owner = {
-        attempt.bytes(), invocation.bytes(), admitted_generation.bytes(), {}};
-    const RawAdapterContext attempt_context{&provider_operation->owner,
-                                            provider_operation->parent, nullptr,
-                                            &provider_operation->receipt};
-    provider_operation->attempt_phase->start(3, &attempt_context);
-    provider_operation->attempt_phase->stage(22);
-  }
-  struct Boundary final : EffectBoundary {
-    const std::function<Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
-                              CommandTaskActivity *)> &fn;
-    InvocationId invocation;
-    DefinitionGenerationId generation;
-    CommandTaskActivity *activity;
-    Value result;
-    std::optional<Error> error;
-    std::optional<RawControlToken> receipt_credit;
-    std::optional<RawRegionPrepaidScope> receipt_scope;
-    bool dispatched = false;
-    Boundary(
-        const std::function<Value(OperationAttemptId, InvocationId,
-                                  DefinitionGenerationId, CommandTaskActivity *)> &f,
-        InvocationId actual_invocation, DefinitionGenerationId actual_generation,
-        std::optional<RawControlToken> credit, CommandTaskActivity *task)
-        : fn(f), invocation(actual_invocation), generation(actual_generation),
-          activity(task), receipt_credit(std::move(credit)) {}
-    Result<void> dispatch(const EffectIntent &intent) override {
-      // The prepaid open append has finished. Native body admission remains
-      // interruptible and never borrows the caller's settlement region bank.
-      receipt_scope.reset();
-      dispatched = true;
-      try {
-        result = fn(intent.attempt, invocation, generation, activity);
-      } catch (const Error &e) {
-        error = e;
-      } catch (const std::bad_alloc &) {
-        error = Error{ErrorCode::allocation};
-      } catch (const std::exception &) {
-        error = Error{ErrorCode::external_unknown};
+    if (trace.callback(0, !pumping_commands_ && static_cast<bool>(cancelled),
+                       [&] { return cancelled(); }))
+      throw Error{ErrorCode::interrupted};
+    trace.callback(1, static_cast<bool>(effect_policy),
+                   [&] { effect_policy(name, input); });
+    if (capacity_stopped_ || operation_depth_ >= 16) {
+      capacity_stopped_ = true;
+      throw Error{ErrorCode::capacity};
+    }
+    ++operation_depth_;
+    struct Depth {
+      std::size_t &value;
+      ~Depth() { --value; }
+    } depth{operation_depth_};
+    if (log_.root().protected_settlement())
+      protect_workflow(field(context_.view(), "entries").array(),
+                       context_.pending_proposal());
+    const auto began = operation_completed || operation_outcome
+                           ? std::chrono::steady_clock::now()
+                           : std::chrono::steady_clock::time_point{};
+    trace.callback(2, static_cast<bool>(operation_started),
+                   [&] { operation_started(name); });
+    trace.callback(3, static_cast<bool>(status), [&] {
+      std::string description{name};
+      for (const auto key : {"path", "command", "argv"}) {
+        const auto *value = input.find(key);
+        if (value) {
+          description += " · " + unwrap(format_value(*value));
+          break;
+        }
       }
-      // dispatch writes its zero-source, one-event adapter receipt after this
-      // return. Only that bounded append borrows this caller's prepaid bank.
-      if (receipt_credit)
-        receipt_scope.emplace(*receipt_credit);
-      return error ? Result<void>::failure(*error) : Result<void>::success();
-    }
-  } boundary{body, invocation, admitted_generation, std::move(exec_settlement_credit),
-             task_run.activity};
-  auto interrupted_terminal = [&](std::string_view message) {
-    std::optional<RawRegionPrepaidScope> terminal_scope;
-    if (boundary.receipt_credit)
-      terminal_scope.emplace(*boundary.receipt_credit);
-    const auto bytes = std::as_bytes(std::span{message.data(), message.size()});
-    (void)unwrap(root.submit_settlement(
-        {{},
-         AttemptObservationEvent{attempt,
-                                 AttemptPhase::terminal,
-                                 AttemptDisposition::unknown,
-                                 {bytes.begin(), bytes.end()}}}));
-  };
-  const auto report = [&] {
-    struct ClearReceiptScope {
-      Boundary &owner;
-      ~ClearReceiptScope() { owner.receipt_scope.reset(); }
-    } clear{boundary};
-    if (boundary.receipt_credit)
-      boundary.receipt_scope.emplace(*boundary.receipt_credit);
-    const auto dispatched = root.dispatch(attempt, boundary);
-    if (!dispatched.has_value() && name == "exec" && !boundary.dispatched &&
-        dispatched.error().code == ErrorCode::interrupted) {
-      interrupted_terminal(
-          "exec interrupted before adapter dispatch; no effect replayed");
-    }
-    return unwrap(dispatched);
-  }();
-  unwrap(report.recording);
-  if (!report.dispatched)
-    throw Error{ErrorCode::conflict};
-  if (name == "exec" && boundary.error &&
-      boundary.error->code == ErrorCode::interrupted &&
-      !command_jobs_->contains(exec_id)) {
-    interrupted_terminal("exec adapter interrupted before command registration; "
-                         "outcome unknown; no replay");
-    throw *boundary.error;
-  }
-  Value result =
-      boundary.error ? error_value(*boundary.error) : std::move(boundary.result);
-  if (name == "program_config" && boundary.error) {
-    result.object().emplace_back(
-        "message",
-        Value{boundary.error->code == ErrorCode::conflict
-                  ? "Registration conflict: duplicate workflow name, alias, bare name "
-                    "or powerword, built-in command collision, or stale base revision. "
-                    "No candidate was staged."
-                  : "Invalid program configuration: require modules/model/effort and "
-                    "optional workflows/workflow_prefix. Workflow definitions require "
-                    "name, description, source (Lua body with args), aliases, bare and "
-                    "powerwords. No candidate was staged."});
-  }
-  if (name == "read_file" && boundary.error &&
-      boundary.error->code == ErrorCode::invalid_range) {
-    result.object().emplace_back(
-        "message",
-        Value{"Use one range object with mode lines or bytes and optional "
-              "start/end; omit range for the whole file. Lines are one-based "
-              "inclusive, bytes zero-based half-open. Do not combine range "
-              "with legacy byte_/line_ fields. Endpoints must be nonnegative "
-              "integers, line start >=1, end >=start."});
-    const auto *path = input.find("path");
-    result.object().emplace_back(
-        "example",
-        Value::object({{"path", path ? *path : Value{"file"}},
-                       {"range", Value::object({{"mode", Value{"lines"}},
-                                                {"start", Value{Number{"1"}}},
-                                                {"end", Value{Number{"20"}}}})}}));
-  }
-  if ((name == "tasks_read" || name == "tasks_edit") && boundary.error)
-    result.object().emplace_back(
-        "message",
-        Value{"Require an object query or edit {op_id,ops}. add/move/archive/list need "
-              "current list base; set/move/archive need the read item version. Exactly "
-              "tasks and one level of subtasks. States "
-              "queued/active/blocked/done/dropped. "
-              "Read tasks_read for current IDs and versions. Batch limit64, page "
-              "limit64; "
-              "titles512 bytes, notes2048 bytes. No changes accepted for an invalid "
-              "batch."});
-
-  bool adapter_capacity = name == "process" && boundary.error &&
-                          boundary.error->code == ErrorCode::capacity;
-  const bool timed_out = (boundary.error && boundary.error->code == ErrorCode::io &&
-                          boundary.error->detail == ETIMEDOUT) ||
-                         (name == "exec" && result.find("timed_out") &&
-                          field(result, "timed_out") == Value{true});
-  const bool persistent_command = name == "exec" && command_jobs_->contains(exec_id);
-  if (name == "exec" && !result.find("output_ref")) {
-    result.object().emplace_back("output_ref", Value{hex_identity(attempt.bytes())});
-    if (timed_out) {
-      result.object().emplace_back("timed_out", Value{true});
-      result.object().emplace_back("effect_outcome", Value{"unknown"});
-    }
-  }
-  std::string output;
-  if (provider_original && provider_result) {
-    output = provider_result->run([&] {
-      const RawAdapterContext context{&provider_operation->owner, std::nullopt, nullptr,
-                                      &provider_operation->receipt};
-      provider_result->start(9, &context);
-      provider_result->stage(24);
-      if (provider_operation->receipt.response)
-        provider_result->link(*provider_operation->receipt.response);
-      provider_original->source(provider_result->reference());
-      provider_original->adopt(unwrap(encode_packet_string(result)));
-      provider_operation->result = provider_original->reference();
-      return provider_original->response_body();
+      status(description);
     });
-  } else
-    output = unwrap(encode_packet_string(result));
-  const auto observed_time = observations_->time();
-  const auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    trace.stage(2);
+    std::optional<RawProviderPhase> provider_result;
+    if (provider_operation)
+      provider_result.emplace(provider_link_credit);
+    auto encode_original = [&](const Value &value, RawOperationOriginal role,
+                               RawCapacityClaim *data,
+                               std::optional<RawEventRef> provider = {}) {
+      const ValueLimits limits{};
+      const auto native_role = static_cast<std::uint8_t>(role);
+      const std::array request{raw_native(native_role), raw_native(limits.bytes),
+                               raw_native(limits.nodes), raw_native(limits.depth)};
+      trace.event(2419, request);
+      auto encoder_return = [&](RawOperationBranch branch, const Error *error,
+                                const std::size_t *length) {
+        std::array<ByteView, 4> fields{
+            raw_native(native_role), raw_native(branch), {}, {}};
+        std::size_t n = 2;
+        if (error) {
+          fields[n++] = raw_native(error->code);
+          fields[n++] = raw_native(error->detail);
+        }
+        if (length)
+          fields[n++] = raw_native(*length);
+        trace.event(2418, std::span{fields}.first(n));
+      };
+      auto encoded = [&] {
+        try {
+          return unwrap(encode_packet(value));
+        } catch (const Error &error) {
+          encoder_return(RawOperationBranch::error, &error, nullptr);
+          throw;
+        } catch (const std::bad_alloc &) {
+          encoder_return(RawOperationBranch::allocation, nullptr, nullptr);
+          throw;
+        } catch (const std::length_error &) {
+          encoder_return(RawOperationBranch::length, nullptr, nullptr);
+          throw;
+        } catch (const std::exception &) {
+          encoder_return(RawOperationBranch::standard, nullptr, nullptr);
+          throw;
+        } catch (...) {
+          encoder_return(RawOperationBranch::nonstandard, nullptr, nullptr);
+          throw;
+        }
+      }();
+      const auto original = trace.original(role, encoded, data, provider);
+      if (provider_operation && provider)
+        provider_operation->result = original;
+      trace.source(role, original);
+      const auto length = encoded.size();
+      encoder_return(RawOperationBranch::returned, nullptr, &length);
+      return encoded;
+    };
+    const auto issue = [&]<class T>() {
+      RawRegionPrepaidScope paid{trace.retained_bank()};
+      return unwrap(root.issue<T>());
+    };
+    RawRegion admission{raw_regions::command_admission};
+    trace.region({raw_lane_epoch(), admission.begin_ordinal()});
+    const auto decision = issue.template operator()<DecisionId>();
+    trace.identity(0, decision.bytes());
+    const auto invocation = issue.template operator()<InvocationId>();
+    trace.identity(1, invocation.bytes());
+    const auto admitted_generation = generation_;
+    trace.identity(3, admitted_generation.bytes());
+    const auto attempt = issue.template operator()<OperationAttemptId>();
+    trace.identity(2, attempt.bytes());
+    const auto exec_id = name == "exec" ? hex_identity(attempt.bytes()) : std::string{};
+    std::optional<RawCapacityClaim> input_data, result_data;
+    if (trace.enabled())
+      input_data.emplace(unwrap(raw_claim_data(49 + ValueLimits{}.bytes)));
+    auto encoded_input = encode_original(input, RawOperationOriginal::input,
+                                         input_data ? &*input_data : nullptr);
+    input_data.reset();
+    const ImmutableBytes bytes{std::move(encoded_input)};
+    if (trace.enabled())
+      result_data.emplace(unwrap(raw_claim_data(49 + ValueLimits{}.bytes)));
+    const auto context = parse_id<ContextRevisionId>(context_.head());
+    trace.identity(4, context.bytes());
+    const auto meta = Value::object(
+        {{"operation", Value{std::string{name}}},
+         {"input_binding", Value{"invocation-v1"}},
+         {"input_encoding", Value{"bbm2"}},
+         {"invocation", Value{hex_identity(invocation.bytes())}},
+         {"revision", Value{context_.head()}},
+         {"generation", Value{hex_identity(admitted_generation.bytes())}}});
+    const auto continuation_bytes = unwrap(encode_packet(meta));
+    CommandTaskMap staged_tasks;
+    CommandTaskMap::node_type task_node;
+    if (!task_id.empty()) {
+      staged_tasks.try_emplace(exec_id, task_activity, std::move(task_id), attempt,
+                               exec_id, std::string{name});
+      task_node = staged_tasks.extract(exec_id);
+    }
+    struct TaskRun {
+      CommandTaskActivity *activity;
+      bool transferred = false;
+      ~TaskRun() {
+        if (activity && !transferred)
+          activity->emit(3);
+      }
+    } task_run{task_node.empty() ? nullptr : &task_node.mapped()};
+    if (task_run.activity) {
+      task_run.activity->pending_node = &task_node;
+      task_run.activity->transferred = &task_run.transferred;
+    }
+    // Fresh identities: one ordered batch, no authoritative partial admission.
+    const std::array<RetainedEvent, 3> admitted{
+        RetainedEvent{
+            {},
+            DecisionEvent{decision,
+                          identity_.actor,
+                          identity_.conversation,
+                          identity_.workflow,
+                          admitted_generation,
+                          context,
+                          {invocation},
+                          {continuation_bytes.begin(), continuation_bytes.end()}}},
+        RetainedEvent{
+            {}, InvocationEvent{invocation, decision, admitted_generation, bytes}},
+        RetainedEvent{
+            {}, AttemptAdmissionEvent{attempt, invocation, decision, bytes, true}}};
+    admission.linkage({raw_text(context_.head()), attempt.bytes()});
+    trace.stage(3);
+    const auto expected_admission = root.cursor();
+    const std::uint8_t admission_kind = 0;
+    const auto admission_count = admitted.size();
+    const std::array admission_request{
+        raw_native(admission_kind), ByteView{expected_admission.journal.bytes()},
+        raw_native(expected_admission.sequence),
+        raw_native(expected_admission.end_offset), raw_native(admission_count)};
+    trace.event(2404, admission_request);
+    std::optional<RawRetainedExec> exec_admission;
+    exec_admission.emplace(root, trace.reference(),
+                           name == "exec" ? RawRetainedExec::Kind::selected_exec
+                                          : RawRetainedExec::Kind::adapter_receipt);
+    try {
+      const auto written = [&] {
+        RawRegionPrepaidScope paid{trace.retained_bank()};
+        return unwrap(exec_admission ? root.append_exec(expected_admission, admitted,
+                                                        *exec_admission)
+                                     : root.append(expected_admission, {}, admitted));
+      }();
+      const auto branch = RawOperationBranch::returned;
+      const std::array fields{raw_native(admission_kind), raw_native(branch),
+                              ByteView{written.journal.bytes()},
+                              raw_native(written.sequence),
+                              raw_native(written.end_offset)};
+      trace.event(2405, fields);
+    } catch (const Error &error) {
+      const auto branch = RawOperationBranch::error;
+      const std::array fields{raw_native(admission_kind), raw_native(branch),
+                              raw_native(error.code), raw_native(error.detail)};
+      trace.event(2405, fields);
+      admission.error(error);
+      admission.outcome(RawRegionOutcome::rejected);
+      throw;
+    } catch (const std::bad_alloc &) {
+      const auto branch = RawOperationBranch::allocation;
+      const std::array fields{raw_native(admission_kind), raw_native(branch)};
+      trace.event(2405, fields);
+      admission.outcome(RawRegionOutcome::exception);
+      throw;
+    } catch (const std::length_error &) {
+      const auto branch = RawOperationBranch::length;
+      const std::array fields{raw_native(admission_kind), raw_native(branch)};
+      trace.event(2405, fields);
+      admission.outcome(RawRegionOutcome::exception);
+      throw;
+    } catch (const std::exception &) {
+      const auto branch = RawOperationBranch::standard;
+      const std::array fields{raw_native(admission_kind), raw_native(branch)};
+      trace.event(2405, fields);
+      admission.outcome(RawRegionOutcome::exception);
+      throw;
+    } catch (...) {
+      const auto branch = RawOperationBranch::nonstandard;
+      const std::array fields{raw_native(admission_kind), raw_native(branch)};
+      trace.event(2405, fields);
+      admission.outcome(RawRegionOutcome::exception);
+      throw;
+    }
+    admission.outcome(RawRegionOutcome::admitted);
+    admission.finish();
+    if (task_run.activity) {
+      task_run.activity->bind({raw_lane_epoch(), admission.begin_ordinal()});
+      task_run.activity->emit(0);
+    }
+    if (provider_operation) {
+      provider_operation->owner = {
+          attempt.bytes(), invocation.bytes(), admitted_generation.bytes(), {}};
+      const RawAdapterContext attempt_context{&provider_operation->owner,
+                                              provider_operation->parent, nullptr,
+                                              &provider_operation->receipt};
+      provider_operation->attempt_phase->start(3, &attempt_context);
+      provider_operation->attempt_phase->stage(22);
+    }
+    Value result;
+    std::string output;
+    bool adapter_capacity = false, timed_out = false, persistent_command = false;
+    auto prepare = [&](Value adapter_result, const std::optional<Error> &effect_error) {
+      result = effect_error ? error_value(*effect_error) : std::move(adapter_result);
+      if (name == "program_config" && effect_error) {
+        result.object().emplace_back(
+            "message",
+            Value{
+                effect_error->code == ErrorCode::conflict
+                    ? "Registration conflict: duplicate workflow name, alias, bare "
+                      "name "
+                      "or powerword, built-in command collision, or stale base "
+                      "revision. "
+                      "No candidate was staged."
+                    : "Invalid program configuration: require modules/model/effort and "
+                      "optional workflows/workflow_prefix. Workflow definitions "
+                      "require "
+                      "name, description, source (Lua body with args), aliases, bare "
+                      "and "
+                      "powerwords. No candidate was staged."});
+      }
+      if (name == "read_file" && effect_error &&
+          effect_error->code == ErrorCode::invalid_range) {
+        result.object().emplace_back(
+            "message",
+            Value{"Use one range object with mode lines or bytes and optional "
+                  "start/end; omit range for the whole file. Lines are one-based "
+                  "inclusive, bytes zero-based half-open. Do not combine range "
+                  "with legacy byte_/line_ fields. Endpoints must be nonnegative "
+                  "integers, line start >=1, end >=start."});
+        const auto *path = input.find("path");
+        result.object().emplace_back(
+            "example",
+            Value::object({{"path", path ? *path : Value{"file"}},
+                           {"range", Value::object({{"mode", Value{"lines"}},
+                                                    {"start", Value{Number{"1"}}},
+                                                    {"end", Value{Number{"20"}}}})}}));
+      }
+      if ((name == "tasks_read" || name == "tasks_edit") && effect_error)
+        result.object().emplace_back(
+            "message",
+            Value{
+                "Require an object query or edit {op_id,ops}. add/move/archive/list "
+                "need "
+                "current list base; set/move/archive need the read item version. "
+                "Exactly "
+                "tasks and one level of subtasks. States "
+                "queued/active/blocked/done/dropped. "
+                "Read tasks_read for current IDs and versions. Batch limit64, page "
+                "limit64; "
+                "titles512 bytes, notes2048 bytes. No changes accepted for an invalid "
+                "batch."});
+
+      adapter_capacity = name == "process" && effect_error &&
+                         effect_error->code == ErrorCode::capacity;
+      timed_out = (effect_error && effect_error->code == ErrorCode::io &&
+                   effect_error->detail == ETIMEDOUT) ||
+                  (name == "exec" && result.find("timed_out") &&
+                   field(result, "timed_out") == Value{true});
+      persistent_command = name == "exec" && command_jobs_->contains(exec_id);
+      if (name == "exec" && !result.find("output_ref")) {
+        result.object().emplace_back("output_ref",
+                                     Value{hex_identity(attempt.bytes())});
+        if (timed_out) {
+          result.object().emplace_back("timed_out", Value{true});
+          result.object().emplace_back("effect_outcome", Value{"unknown"});
+        }
+      }
+      auto encode = [&] {
+        auto encoded = encode_original(result, RawOperationOriginal::primary,
+                                       result_data ? &*result_data : nullptr,
+                                       provider_result
+                                           ? std::optional{provider_result->reference()}
+                                           : std::nullopt);
+        result_data.reset();
+        output.assign(reinterpret_cast<const char *>(encoded.data()), encoded.size());
+      };
+      if (provider_result) {
+        provider_result->run([&] {
+          const RawAdapterContext source_context{&provider_operation->owner,
+                                                 std::nullopt, nullptr,
+                                                 &provider_operation->receipt};
+          provider_result->start(9, &source_context);
+          provider_result->stage(24);
+          if (provider_operation->receipt.response)
+            provider_result->link(*provider_operation->receipt.response);
+          encode();
+        });
+      } else
+        encode();
+    };
+    struct Boundary final : EffectBoundary {
+      const std::function<Value(OperationAttemptId, InvocationId,
+                                DefinitionGenerationId, CommandTaskActivity *,
+                                RawRetainedExec *)> &fn;
+      decltype(prepare) &prepare_result;
+      RawOperationTrace &trace;
+      InvocationId invocation;
+      DefinitionGenerationId generation;
+      CommandTaskActivity *activity;
+      RawRetainedExec *raw_exec;
+      Value result;
+      std::optional<Error> error;
+      std::exception_ptr deferred;
+      std::optional<RawRegionPrepaidScope> receipt_scope;
+      bool dispatched = false;
+      Boundary(decltype(fn) body_fn, decltype(prepare) &preparation,
+               RawOperationTrace &owner, InvocationId actual_invocation,
+               DefinitionGenerationId actual_generation, CommandTaskActivity *task,
+               RawRetainedExec *actual_exec)
+          : fn(body_fn), prepare_result(preparation), trace(owner),
+            invocation(actual_invocation), generation(actual_generation),
+            activity(task), raw_exec(actual_exec) {}
+      Result<void> dispatch(const EffectIntent &intent) override {
+        receipt_scope.reset();
+        if (raw_exec)
+          raw_exec->suspend();
+        trace.stage(4);
+        const auto input_bytes = intent.input.size();
+        const std::array request{
+            ByteView{intent.environment.bytes()}, ByteView{intent.actor.bytes()},
+            ByteView{intent.invocation.bytes()}, ByteView{intent.attempt.bytes()},
+            raw_native(input_bytes)};
+        trace.event(2406, request);
+        dispatched = true;
+        auto returned = [&](RawOperationBranch branch,
+                            const Error *native_error = nullptr) {
+          const bool failed = native_error != nullptr;
+          std::array<ByteView, 4> fields{
+              raw_native(branch), raw_native(failed), {}, {}};
+          std::size_t n = 2;
+          if (native_error) {
+            fields[n++] = raw_native(native_error->code);
+            fields[n++] = raw_native(native_error->detail);
+          }
+          trace.event(2407, std::span{fields}.first(n));
+        };
+        RawOperationBranch actual_branch = RawOperationBranch::returned;
+        std::optional<Error> native_error;
+        try {
+          result = fn(intent.attempt, invocation, generation, activity, raw_exec);
+        } catch (const Error &e) {
+          error = e;
+          native_error = e;
+          actual_branch = RawOperationBranch::error;
+        } catch (const std::bad_alloc &) {
+          error = Error{ErrorCode::allocation};
+          actual_branch = RawOperationBranch::allocation;
+        } catch (const std::length_error &) {
+          error = Error{ErrorCode::external_unknown};
+          actual_branch = RawOperationBranch::length;
+        } catch (const std::exception &) {
+          error = Error{ErrorCode::external_unknown};
+          actual_branch = RawOperationBranch::standard;
+        } catch (...) {
+          error = Error{ErrorCode::external_unknown};
+          deferred = std::current_exception();
+          actual_branch = RawOperationBranch::nonstandard;
+        }
+        returned(actual_branch, native_error ? &*native_error : nullptr);
+        if (raw_exec)
+          raw_exec->resume();
+        trace.stage(5);
+        if (!deferred) {
+          try {
+            prepare_result(std::move(result), error);
+          } catch (...) {
+            deferred = std::current_exception();
+          }
+        }
+        // The real adapter receipt preserves the actual effect Result even if the
+        // existing result preparation failed; no post-effect DATA admission occurs.
+        receipt_scope.emplace(trace.retained_bank());
+        return error ? Result<void>::failure(*error) : Result<void>::success();
+      }
+    } boundary{body,
+               prepare,
+               trace,
+               invocation,
+               admitted_generation,
+               task_run.activity,
+               exec_admission ? &*exec_admission : nullptr};
+    auto settle = [&](const RetainedEvent &event, bool settlement, bool fallback) {
+      const auto &observation = std::get<AttemptObservationEvent>(event.body);
+      const auto observation_bytes = observation.observation.size();
+      const std::array request{raw_native(settlement),
+                               raw_native(fallback),
+                               ByteView{attempt.bytes()},
+                               raw_native(observation.phase),
+                               raw_native(observation.disposition),
+                               raw_native(observation_bytes)};
+      trace.event(2413, request);
+      const auto recorded = [&] {
+        RawRegionPrepaidScope paid{trace.retained_bank()};
+        if (exec_admission)
+          exec_admission->enter_terminal(trace.reference());
+        return settlement ? root.submit_settlement(event) : root.submit(event);
+      }();
+      if (recorded.has_value()) {
+        const auto branch = RawOperationBranch::returned;
+        const auto &actual = recorded.value();
+        const std::array fields{raw_native(branch), raw_native(actual.existing),
+                                ByteView{actual.record.journal.bytes()},
+                                raw_native(actual.record.sequence),
+                                raw_native(actual.evidence)};
+        trace.event(2414, fields);
+      } else {
+        const auto branch = RawOperationBranch::error;
+        const std::array fields{raw_native(branch), raw_native(recorded.error().code),
+                                raw_native(recorded.error().detail)};
+        trace.event(2414, fields);
+      }
+      return recorded;
+    };
+    auto interrupted_terminal = [&](std::string_view message) {
+      const auto bytes = std::as_bytes(std::span{message.data(), message.size()});
+      const RetainedEvent event{{},
+                                AttemptObservationEvent{attempt,
+                                                        AttemptPhase::terminal,
+                                                        AttemptDisposition::unknown,
+                                                        {bytes.begin(), bytes.end()}}};
+      (void)unwrap(settle(event, true, false));
+    };
+    const auto report = [&] {
+      struct EndExecScope {
+        RawRetainedExec *loan;
+        ~EndExecScope() {
+          if (loan)
+            loan->leave();
+        }
+      } end{exec_admission ? &*exec_admission : nullptr};
+      if (exec_admission && exec_admission->full_exec())
+        exec_admission->enter(trace.reference(), RawRetainedOrigin::Input::ordinary);
+      struct ClearReceiptScope {
+        Boundary &owner;
+        ~ClearReceiptScope() { owner.receipt_scope.reset(); }
+      } clear{boundary};
+      boundary.receipt_scope.emplace(trace.retained_bank());
+      const std::array dispatch_request{ByteView{attempt.bytes()}};
+      trace.event(2420, dispatch_request);
+      const auto returned = [&](RawOperationBranch branch,
+                                const Error *error = nullptr) {
+        const bool failed = error != nullptr;
+        std::array<ByteView, 4> fields{raw_native(branch), raw_native(failed), {}, {}};
+        std::size_t count = 2;
+        if (error) {
+          fields[count++] = raw_native(error->code);
+          fields[count++] = raw_native(error->detail);
+        }
+        trace.event(2421, std::span{fields}.first(count));
+      };
+      const auto dispatched = [&] {
+        try {
+          return root.dispatch(attempt, boundary,
+                               exec_admission ? &*exec_admission : nullptr);
+        } catch (const Error &error) {
+          returned(RawOperationBranch::error, &error);
+          throw;
+        } catch (const std::bad_alloc &) {
+          returned(RawOperationBranch::allocation);
+          throw;
+        } catch (const std::length_error &) {
+          returned(RawOperationBranch::length);
+          throw;
+        } catch (const std::exception &) {
+          returned(RawOperationBranch::standard);
+          throw;
+        } catch (...) {
+          returned(RawOperationBranch::nonstandard);
+          throw;
+        }
+      }();
+      returned(RawOperationBranch::returned,
+               dispatched.has_value() ? nullptr : &dispatched.error());
+      if (!dispatched.has_value() && name == "exec" && !boundary.dispatched &&
+          dispatched.error().code == ErrorCode::interrupted) {
+        interrupted_terminal(
+            "exec interrupted before adapter dispatch; no effect replayed");
+      }
+      auto actual = unwrap(dispatched);
+      const bool effect_ok = actual.effect.has_value(),
+                 recording_ok = actual.recording.has_value();
+      std::array<ByteView, 7> fields{raw_native(actual.dispatched),
+                                     raw_native(effect_ok),
+                                     raw_native(recording_ok),
+                                     {},
+                                     {},
+                                     {},
+                                     {}};
+      std::size_t n = 3;
+      if (!effect_ok) {
+        fields[n++] = raw_native(actual.effect.error().code);
+        fields[n++] = raw_native(actual.effect.error().detail);
+      }
+      if (!recording_ok) {
+        fields[n++] = raw_native(actual.recording.error().code);
+        fields[n++] = raw_native(actual.recording.error().detail);
+      }
+      trace.event(2408, std::span{fields}.first(n));
+      return actual;
+    }();
+    trace.stage(6);
+    unwrap(report.recording);
+    if (boundary.deferred)
+      std::rethrow_exception(boundary.deferred);
+    if (!report.dispatched)
+      throw Error{ErrorCode::conflict};
+    if (name == "exec" && boundary.error &&
+        boundary.error->code == ErrorCode::interrupted &&
+        !command_jobs_->contains(exec_id)) {
+      interrupted_terminal("exec adapter interrupted before command registration; "
+                           "outcome unknown; no replay");
+      throw *boundary.error;
+    }
+    trace.stage(7);
+    auto retain = [&](std::uint8_t kind, OriginalCapture capture) {
+      const auto identity = issue.template operator()<ApplicationRecordId>();
+      const auto expected = root.cursor();
+      const std::array request{raw_native(kind), ByteView{identity.bytes()},
+                               ByteView{expected.journal.bytes()},
+                               raw_native(expected.sequence),
+                               raw_native(expected.end_offset)};
+      trace.event(2410, request);
+      std::optional<SourceReference> source;
+      try {
+        RawRegionPrepaidScope paid{trace.retained_bank()};
+        source = log_.original(identity, std::move(capture));
+      } catch (const Error &error) {
+        const auto branch = RawOperationBranch::error;
+        const std::array fields{raw_native(kind), raw_native(branch),
+                                raw_native(error.code), raw_native(error.detail)};
+        trace.event(2411, fields);
+        throw;
+      } catch (const std::bad_alloc &) {
+        const auto branch = RawOperationBranch::allocation;
+        const std::array fields{raw_native(kind), raw_native(branch)};
+        trace.event(2411, fields);
+        throw;
+      } catch (const std::length_error &) {
+        const auto branch = RawOperationBranch::length;
+        const std::array fields{raw_native(kind), raw_native(branch)};
+        trace.event(2411, fields);
+        throw;
+      } catch (const std::exception &) {
+        const auto branch = RawOperationBranch::standard;
+        const std::array fields{raw_native(kind), raw_native(branch)};
+        trace.event(2411, fields);
+        throw;
+      } catch (...) {
+        const auto branch = RawOperationBranch::nonstandard;
+        const std::array fields{raw_native(kind), raw_native(branch)};
+        trace.event(2411, fields);
+        throw;
+      }
+      const auto branch = RawOperationBranch::returned;
+      if (!source)
+        throw Error{ErrorCode::incomplete};
+      const std::array fields{raw_native(kind), raw_native(branch),
+                              ByteView{source->journal.bytes()},
+                              raw_native(source->sequence)};
+      trace.event(2411, fields);
+      return identity;
+    };
+    std::string result_id;
+    std::size_t result_record = 0;
+    try {
+      const auto identity =
+          retain(0, {"operation.result", output,
+                     Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
+                                    {"source_encoding", Value{"bbm2"}},
+                                    {"operation", Value{std::string{name}}}})});
+      result_id = hex_identity(identity.bytes());
+      result_record = root.fact_count() - 1;
+    } catch (const Error &e) {
+      if (e.code != ErrorCode::capacity)
+        throw;
+      capacity_stopped_ = true;
+      unretained_bytes_ += output.size();
+      boundary.error = e;
+      adapter_capacity = false;
+      if (command_jobs_->active()) {
+        command_failure_ = e;
+        const auto registry = command_jobs_->read(Value::object({}));
+        for (const auto &job : field(registry, "jobs").array())
+          if (string_field(job, "state") != "completed")
+            command_jobs_->capture_failed(string_field(job, "job_id"));
+        command_jobs_->shutdown();
+      }
+      result = error_value(e);
+      auto fallback = encode_original(result, RawOperationOriginal::fallback, nullptr);
+      output.assign(reinterpret_cast<const char *>(fallback.data()), fallback.size());
+    }
+    if (boundary.error && boundary.error->code == ErrorCode::capacity &&
+        !adapter_capacity) {
+      capacity_stopped_ = true;
+      RetainedState::MaintenanceScope maintenance{root};
+      constexpr std::string_view message =
+          "effect outcome unknown; no replay; earlier originals retained, rejected "
+          "bytes not retained";
+      const auto original = trace.original(RawOperationOriginal::capacity_message,
+                                           raw_text(message), nullptr);
+      trace.source(RawOperationOriginal::capacity_message, original);
+      (void)retain(
+          1, {"capacity.stop", message,
+              Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
+                             {"unretained_bytes", Value{Number{unretained_bytes_}}}})});
+    }
+    // The result original is already retained. Settlement carries its locator,
+    // not another complete response. On capture refusal retain the bounded error.
+    const auto observed = unwrap(encode_packet(
+        result_id.empty()
+            ? result
+            : Value::object({{"result_id", Value{result_id}},
+                             {"result_record", Value{Number{result_record}}}})));
+    auto disposition =
+        boundary.error ? AttemptDisposition::failure : AttemptDisposition::success;
+    if (boundary.error && !adapter_capacity &&
+        (boundary.error->code == ErrorCode::capacity || name == "provider" ||
+         name == "exec" || name == "beads" || name == "colleague" ||
+         name == "decision_model") &&
+        (boundary.error->code == ErrorCode::capacity ||
+         boundary.error->code == ErrorCode::interrupted ||
+         boundary.error->code == ErrorCode::io ||
+         boundary.error->code == ErrorCode::incomplete ||
+         boundary.error->code == ErrorCode::allocation ||
+         boundary.error->code == ErrorCode::external_unknown ||
+         boundary.error->code == ErrorCode::provider_transport))
+      disposition = AttemptDisposition::unknown;
+    if (boundary.error && name == "beads" && beads_.mutation_may_have_started())
+      disposition = AttemptDisposition::unknown;
+    if (!boundary.error && name == "exec" && result.find("exit_code") &&
+        field(result, "exit_code").number().text() != "0")
+      disposition = AttemptDisposition::failure;
+    if (!boundary.error && persistent_command && result.find("effect_outcome") &&
+        string_field(result, "effect_outcome") == "unknown")
+      disposition = AttemptDisposition::unknown;
+    if (!boundary.error && name == "beads") {
+      const auto state = string_field(result, "status");
+      disposition = state == "unknown" ? AttemptDisposition::unknown
+                    : (state == "ok" || state == "configured" || state == "cached")
+                        ? AttemptDisposition::success
+                        : AttemptDisposition::failure;
+    }
+    if (!boundary.error && name == "colleague") {
+      const auto state = string_field(result, "status");
+      const auto remote = string_field(result, "remote_disposition");
+      disposition = remote == "unknown"    ? AttemptDisposition::unknown
+                    : state == "completed" ? AttemptDisposition::success
+                                           : AttemptDisposition::failure;
+    }
+    trace.disposition(disposition);
+    const bool has_error = boundary.error.has_value();
+    std::array<ByteView, 7> disposition_fields{raw_native(disposition),
+                                               raw_native(timed_out),
+                                               raw_native(persistent_command),
+                                               raw_native(adapter_capacity),
+                                               raw_native(has_error),
+                                               {},
+                                               {}};
+    std::size_t disposition_count = 5;
+    if (boundary.error) {
+      disposition_fields[disposition_count++] = raw_native(boundary.error->code);
+      disposition_fields[disposition_count++] = raw_native(boundary.error->detail);
+    }
+    trace.event(2412, std::span{disposition_fields}.first(disposition_count));
+    trace.stage(8);
+
+    RetainedEvent terminal{{},
+                           AttemptObservationEvent{attempt,
+                                                   AttemptPhase::terminal,
+                                                   disposition,
+                                                   {observed.begin(), observed.end()}}};
+    if (!persistent_command) {
+      struct EndTerminalScope {
+        RawRetainedExec *loan;
+        ~EndTerminalScope() {
+          if (loan)
+            loan->leave();
+        }
+      } end{exec_admission ? &*exec_admission : nullptr};
+      auto recorded = settle(terminal, boundary.error.has_value(), false);
+      if (!recorded.has_value() && recorded.error().code == ErrorCode::capacity) {
+        capacity_stopped_ = true;
+        boundary.error = recorded.error();
+        result = error_value(*boundary.error);
+        const std::string bounded =
+            "capacity stop after dispatch; outcome unknown; no replay";
+        const auto bounded_raw =
+            std::as_bytes(std::span{bounded.data(), bounded.size()});
+        disposition = AttemptDisposition::unknown;
+        trace.disposition(disposition);
+        recorded =
+            settle({{},
+                    AttemptObservationEvent{attempt,
+                                            AttemptPhase::terminal,
+                                            disposition,
+                                            {bounded_raw.begin(), bounded_raw.end()}}},
+                   true, true);
+      }
+      (void)unwrap(std::move(recorded));
+    }
+    if (task_run.activity && !task_run.transferred) {
+      auto branch = disposition == AttemptDisposition::unknown   ? std::uint8_t{3}
+                    : disposition == AttemptDisposition::failure ? std::uint8_t{2}
+                                                                 : std::uint8_t{1};
+      const Value *task_exit = nullptr;
+      if (name == "exec" && !boundary.error && branch == 2)
+        task_exit = result.find("exit_code");
+      task_run.activity->emit(branch, task_exit);
+    }
+    if (operation_completed || operation_outcome) {
+      const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                                std::chrono::steady_clock::now() - began)
                                .count();
-  std::string result_id;
-  std::size_t result_record = 0;
-  try {
-    result_id =
-        log_.original({"operation.result", output,
-                       Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
-                                      {"time", observed_time},
-                                      {"source_encoding", Value{"bbm2"}},
-                                      {"duration_ns", Value{Number{duration_ns}}},
-                                      {"operation", Value{std::string{name}}}})});
-    result_record = root.fact_count() - 1;
-  } catch (const Error &e) {
-    if (e.code != ErrorCode::capacity)
-      throw;
-    capacity_stopped_ = true;
-    unretained_bytes_ += output.size();
-    boundary.error = e;
-    adapter_capacity = false;
-    if (command_jobs_->active()) {
-      command_failure_ = e;
-      const auto registry = command_jobs_->read(Value::object({}));
-      for (const auto &job : field(registry, "jobs").array())
-        if (string_field(job, "state") != "completed")
-          command_jobs_->capture_failed(string_field(job, "job_id"));
-      command_jobs_->shutdown();
+      const auto outcome =
+          persistent_command && !boundary.error && !result.find("exit_code")
+              ? "backgrounded"
+          : timed_out && name == "exec"                ? "timed out; outcome unknown"
+          : disposition == AttemptDisposition::success ? "completed"
+          : disposition == AttemptDisposition::unknown ? "stopped; outcome unknown"
+          : boundary.error && boundary.error->code == ErrorCode::interrupted
+              ? "interrupted (recorded failure)"
+              : "failed";
+      const auto completion =
+          std::string{name} + " " + outcome + " · " + std::to_string(elapsed) + "ms";
+      trace.callback(4, static_cast<bool>(operation_outcome),
+                     [&] { operation_outcome(completion, disposition); });
+      trace.callback(5, static_cast<bool>(operation_completed),
+                     [&] { operation_completed(completion); });
     }
-    result = error_value(e);
-    output = unwrap(encode_packet_string(result));
-  }
-  if (boundary.error && boundary.error->code == ErrorCode::capacity &&
-      !adapter_capacity) {
-    capacity_stopped_ = true;
-    RetainedState::MaintenanceScope maintenance{root};
-    log_.original(
-        {"capacity.stop",
-         "effect outcome unknown; no replay; earlier originals retained, rejected "
-         "bytes not retained",
-         Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
-                        {"unretained_bytes", Value{Number{unretained_bytes_}}}})});
-  }
-  // The result original is already retained. Settlement carries its locator,
-  // not another complete response. On capture refusal retain the bounded error.
-  const auto observed = unwrap(encode_packet(
-      result_id.empty()
-          ? result
-          : Value::object({{"result_id", Value{result_id}},
-                           {"result_record", Value{Number{result_record}}}})));
-  auto disposition =
-      boundary.error ? AttemptDisposition::failure : AttemptDisposition::success;
-  if (boundary.error && !adapter_capacity &&
-      (boundary.error->code == ErrorCode::capacity || name == "provider" ||
-       name == "exec" || name == "beads" || name == "colleague" ||
-       name == "decision_model") &&
-      (boundary.error->code == ErrorCode::capacity ||
-       boundary.error->code == ErrorCode::interrupted ||
-       boundary.error->code == ErrorCode::io ||
-       boundary.error->code == ErrorCode::incomplete ||
-       boundary.error->code == ErrorCode::allocation ||
-       boundary.error->code == ErrorCode::external_unknown ||
-       boundary.error->code == ErrorCode::provider_transport))
-    disposition = AttemptDisposition::unknown;
-  if (boundary.error && name == "beads" && beads_.mutation_may_have_started())
-    disposition = AttemptDisposition::unknown;
-  if (!boundary.error && name == "exec" && result.find("exit_code") &&
-      field(result, "exit_code").number().text() != "0")
-    disposition = AttemptDisposition::failure;
-  if (!boundary.error && persistent_command && result.find("effect_outcome") &&
-      string_field(result, "effect_outcome") == "unknown")
-    disposition = AttemptDisposition::unknown;
-  if (!boundary.error && name == "beads") {
-    const auto state = string_field(result, "status");
-    disposition = state == "unknown" ? AttemptDisposition::unknown
-                  : (state == "ok" || state == "configured" || state == "cached")
-                      ? AttemptDisposition::success
-                      : AttemptDisposition::failure;
-  }
-  if (!boundary.error && name == "colleague") {
-    const auto state = string_field(result, "status");
-    const auto remote = string_field(result, "remote_disposition");
-    disposition = remote == "unknown"    ? AttemptDisposition::unknown
-                  : state == "completed" ? AttemptDisposition::success
-                                         : AttemptDisposition::failure;
-  }
-  RetainedEvent terminal{{},
-                         AttemptObservationEvent{attempt,
-                                                 AttemptPhase::terminal,
-                                                 disposition,
-                                                 {observed.begin(), observed.end()}}};
-  if (!persistent_command) {
-    auto recorded =
-        boundary.error ? root.submit_settlement(terminal) : root.submit(terminal);
-    if (!recorded.has_value() && recorded.error().code == ErrorCode::capacity) {
-      capacity_stopped_ = true;
-      boundary.error = recorded.error();
-      result = error_value(*boundary.error);
-      const std::string bounded =
-          "capacity stop after dispatch; outcome unknown; no replay";
-      const auto bounded_raw = std::as_bytes(std::span{bounded.data(), bounded.size()});
-      disposition = AttemptDisposition::unknown;
-      recorded = root.submit_settlement(
-          {{},
-           AttemptObservationEvent{attempt,
-                                   AttemptPhase::terminal,
-                                   disposition,
-                                   {bounded_raw.begin(), bounded_raw.end()}}});
+    trace.stage(9);
+    trace.callback(
+        6, boundary.error && name != "provider" && static_cast<bool>(process_output),
+        [&] {
+          process_output("\n[" + std::string{name} + ": " +
+                         error_name(boundary.error->code) + "]\n");
+        });
+    if (command_failure_ && boundary.error &&
+        boundary.error->code == ErrorCode::capacity) {
+      try {
+        poll_commands();
+      } catch (const Error &error) {
+        if (error.code != ErrorCode::capacity)
+          throw;
+      }
     }
-    (void)unwrap(std::move(recorded));
-  }
-  if (task_run.activity && !task_run.transferred) {
-    auto branch = disposition == AttemptDisposition::unknown   ? std::uint8_t{3}
-                  : disposition == AttemptDisposition::failure ? std::uint8_t{2}
-                                                               : std::uint8_t{1};
-    const Value *task_exit = nullptr;
-    if (name == "exec" && !boundary.error && branch == 2)
-      task_exit = result.find("exit_code");
-    task_run.activity->emit(branch, task_exit);
-  }
-  if (operation_completed || operation_outcome) {
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             std::chrono::steady_clock::now() - began)
-                             .count();
-    const auto outcome =
-        persistent_command && !boundary.error && !result.find("exit_code")
-            ? "backgrounded"
-        : timed_out && name == "exec"                ? "timed out; outcome unknown"
-        : disposition == AttemptDisposition::success ? "completed"
-        : disposition == AttemptDisposition::unknown ? "stopped; outcome unknown"
-        : boundary.error && boundary.error->code == ErrorCode::interrupted
-            ? "interrupted (recorded failure)"
-            : "failed";
-    const auto completion =
-        std::string{name} + " " + outcome + " · " + std::to_string(elapsed) + "ms";
-    if (operation_outcome)
-      operation_outcome(completion, disposition);
-    if (operation_completed)
-      operation_completed(completion);
-  }
-  if (boundary.error && name != "provider" && process_output)
-    process_output("\n[" + std::string{name} + ": " + error_name(boundary.error->code) +
-                   "]\n");
-  if (command_failure_ && boundary.error &&
-      boundary.error->code == ErrorCode::capacity) {
-    try {
-      poll_commands();
-    } catch (const Error &error) {
-      if (error.code != ErrorCode::capacity)
-        throw;
+    if (boundary.error &&
+        ((boundary.error->code == ErrorCode::capacity && !adapter_capacity) ||
+         boundary.error->code == ErrorCode::interrupted ||
+         (name == "provider" || name == "workflow_execute") ||
+         root.state() != JournalWriterState::live))
+      throw *boundary.error;
+    if (name == "beads") {
+      const auto *stopped = result.find("interrupted");
+      if (stopped && std::get<bool>(stopped->value()))
+        throw Error{ErrorCode::interrupted};
     }
-  }
-  if (boundary.error &&
-      ((boundary.error->code == ErrorCode::capacity && !adapter_capacity) ||
-       boundary.error->code == ErrorCode::interrupted ||
-       (name == "provider" || name == "workflow_execute") ||
-       root.state() != JournalWriterState::live))
-    throw *boundary.error;
-  if (name == "beads") {
-    const auto *stopped = result.find("interrupted");
-    if (stopped && std::get<bool>(stopped->value()))
-      throw Error{ErrorCode::interrupted};
-  }
-  return result;
+    return result;
+  });
 }
+
 Value CodingEngine::execute_workflow(const WorkflowContinuation &invocation) {
   try {
     if (workflow_depth_ >= 8 || ++workflow_invocations_ > 64)
@@ -2410,7 +2784,7 @@ Value CodingEngine::execute_workflow(const WorkflowContinuation &invocation) {
     return operation(
         "workflow_execute", invocation.arguments,
         [&](OperationAttemptId attempt, InvocationId, DefinitionGenerationId,
-            CommandTaskActivity *) {
+            CommandTaskActivity *, RawRetainedExec *) {
           const auto metadata = Value::object(
               {{"name", field(invocation.definition, "name")},
                {"revision", Value{invocation.revision}},
@@ -2700,7 +3074,7 @@ Value CodingEngine::request(Value options) {
             return operation(
                 "provider", request,
                 [&](OperationAttemptId attempt, InvocationId, DefinitionGenerationId,
-                    CommandTaskActivity *) {
+                    CommandTaskActivity *, RawRetainedExec *) {
                   const auto admission = unwrap(log_.root().attempt(attempt));
                   const auto *instructions = request.find("instructions");
                   if (instructions &&
@@ -2956,7 +3330,8 @@ Value CodingEngine::call(std::string name, Value arguments) {
   return operation(
       name, arguments,
       [&](OperationAttemptId attempt, InvocationId invocation,
-          DefinitionGenerationId admitted_generation, CommandTaskActivity *activity) {
+          DefinitionGenerationId admitted_generation, CommandTaskActivity *activity,
+          RawRetainedExec *raw_exec) {
         if (name == "exec") {
           const auto id = hex_identity(attempt.bytes());
           const auto limits = log_.root().journal_limits();
@@ -2978,7 +3353,7 @@ Value CodingEngine::call(std::string name, Value arguments) {
             options.max_output = static_cast<std::size_t>(
                 command_number(arguments, "output_max_bytes", 16 * 1024 * 1024));
           options.stop_on_cancel = true;
-          command_jobs_->start(id, arguments);
+          command_jobs_->start(id, arguments, raw_exec);
           if (activity) {
             if (!activity->pending_node || !activity->transferred)
               throw Error{ErrorCode::conflict};
@@ -3678,6 +4053,10 @@ void CodingEngine::turn(TurnInput input) {
       stage = 4;
       state(stage);
       RetainedState::MaintenanceScope maintenance{root};
+      std::optional<RawRetainedScope> stop;
+      if (auto *bundle = root.raw_stop_bundle(); bundle && bundle->semantic)
+        stop.emplace(root, *bundle->semantic, bundle->physical.get(),
+                     trace.reference());
       if (workflow_began)
         (void)context_.finish_workflow(false, empty, stop_origin);
       restart_note_.reset();

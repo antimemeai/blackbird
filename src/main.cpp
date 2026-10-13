@@ -6,6 +6,7 @@
 #include "blackbird/provider_auth.hpp"
 #include "blackbird/raw_command.hpp"
 #include "blackbird/raw_runtime.hpp"
+#include "blackbird/raw_storage.hpp"
 #include "blackbird/sprite.hpp"
 #include "blackbird/station.hpp"
 #include "blackbird/terminal.hpp"
@@ -211,16 +212,23 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
     std::unique_ptr<RawRuntime> instrumentation;
     std::optional<RawThreadBinding> instrumentation_binding;
     std::optional<RawRegion> startup;
+    RawProductStorageOwner raw_storage_owner;
+    std::unique_ptr<NativeJournalDirectory> directory;
     const auto start_instrumentation = [&](EnvironmentId environment) {
-      if (inspect)
-        return;
-      instrumentation = unwrap(RawRuntime::open(session.string(), environment));
-      instrumentation_binding.emplace(unwrap(instrumentation->prepare_thread()));
-      startup.emplace(raw_regions::startup_initialize);
+      if (!inspect) {
+        RawRuntimeOptions options;
+        options.producer_capacities = {256 * 1024 * 1024, 1024 * 1024, 128 * 1024};
+        instrumentation =
+            unwrap(RawRuntime::open(session.string(), environment, options));
+        instrumentation_binding.emplace(unwrap(instrumentation->prepare_thread()));
+        startup.emplace(raw_regions::startup_initialize);
+        raw_storage_owner = unwrap(RawProductStorageOwner::prepare(
+            RawEventRef{startup->lane_epoch(), startup->begin_ordinal()}));
+      }
+      directory = std::make_unique<NativeJournalDirectory>(
+          unwrap(NativeJournalDirectory::open(session.string(), raw_storage_owner)));
     };
     std::unique_ptr<RetainedState> root;
-    auto directory = std::make_unique<NativeJournalDirectory>(
-        unwrap(NativeJournalDirectory::open(session.string())));
     if (std::filesystem::exists(path)) {
       if (!seed_path.empty())
         throw Error{ErrorCode::conflict};
@@ -247,7 +255,7 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
                      "records); uncertain operations will not be retried.\n";
       RawRegion restoration{raw_regions::startup_restore};
       auto opened = RetainedState::open(std::move(directory), "audit", header, capacity,
-                                        false, true, replay_limit);
+                                        false, true, replay_limit, raw_storage_owner);
       if (!opened.has_value() && opened.error().code == ErrorCode::unsupported &&
           !rebuild_session) {
         std::cerr << "Session needs full recovery: saved state is missing, invalid, or "
@@ -294,8 +302,8 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
                            {32 * 1024 * 1024, 96 * 1024 * 1024},
                            std::nullopt};
       start_instrumentation(header.environment);
-      root = unwrap(
-          RetainedState::create(std::move(directory), "audit", header, capacity));
+      root = unwrap(RetainedState::create(std::move(directory), "audit", header,
+                                          capacity, raw_storage_owner));
     }
     if (inspect) {
       const auto usage = root->journal_usage();
@@ -1037,7 +1045,7 @@ int run_session(int argc, char **argv, std::vector<std::string> &next_session,
             }
           },
           engine.command_jobs(), interrupt_wake.read_fd(),
-          [&] { return interrupt_owner.reset(); });
+          [&] { return interrupt_owner.reset(); }, root.get());
       return finish_interactive();
     }
     if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blackbird/journal_writer.hpp"
+#include "blackbird/raw_retained.hpp"
 #include "blackbird/recovery_index.hpp"
 #include "blackbird/retained_events.hpp"
 #include "blackbird/shared_sequence.hpp"
@@ -9,6 +10,7 @@
 namespace blackbird {
 struct SavedState;
 struct RawEventRef;
+class RawCapacityClaim;
 class ArchiveCatalog;
 struct RecordReference {
   AuditStreamId journal;
@@ -62,11 +64,13 @@ class RetainedState {
 public:
   static Result<std::unique_ptr<RetainedState>>
   create(std::unique_ptr<JournalDirectory> directory, std::string_view name,
-         JournalHeader header, JournalCapacity capacity);
+         JournalHeader header, JournalCapacity capacity,
+         RawProductStorageOwner raw_owner = {});
   static Result<std::unique_ptr<RetainedState>>
   open(std::unique_ptr<JournalDirectory> directory, std::string_view name,
        JournalHeader header, JournalCapacity capacity, bool use_scan_checkpoint = false,
-       bool allow_full_replay = true, std::uint64_t max_full_replay_bytes = UINT64_MAX);
+       bool allow_full_replay = true, std::uint64_t max_full_replay_bytes = UINT64_MAX,
+       RawProductStorageOwner raw_owner = {});
   Result<void> publish_scan_checkpoint() {
     if (state() != JournalWriterState::live || in_transaction_ || prepared_ ||
         !reconciled_)
@@ -81,6 +85,12 @@ public:
   // archive-locator migration covers all semantic predicates.
   const SavedState *saved_state() const noexcept { return saved_.get(); }
   Result<void> save_current_state(const Value &context);
+  RawStorageSelection raw_storage_selection() const noexcept;
+  Result<std::unique_ptr<RawRetainedTransfer>>
+  prepare_raw_transfer(const RawThreadHandle &child, RawWorkerDispatch dispatch);
+  RawRetainedStopBundle *raw_stop_bundle() noexcept { return raw_stop_.get(); }
+  bool raw_owner_blocked() const noexcept { return raw_owner_blocked_; }
+
   Result<void> store_diagnostic(std::string_view name, ByteView bytes,
                                 std::uint64_t now) {
     return directory_->store_diagnostic(name, bytes, now);
@@ -114,6 +124,8 @@ public:
     friend class RetainedState;
     explicit SettlementScope(RetainedState &owner) : owner_(owner) {}
     RetainedState &owner_;
+    std::unique_ptr<RawRetainedSettlementEnd> raw_end_;
+    bool accepted_ = false;
   };
   Result<std::unique_ptr<SettlementScope>> protect_settlement(JournalCapacity credit);
   Result<void> refresh_settlement(JournalCapacity credit);
@@ -122,14 +134,24 @@ public:
   }
   // Only receipts and terminal observations. Exact successful cost consumes credit.
   // Without a scope this is an ordinary submission, never extra physical capacity.
-  Result<Submission> submit_settlement(const RetainedEvent &event);
+  Result<Submission>
+  submit_settlement(const RetainedEvent &event,
+                    std::span<PhysicalJournalRecord> acknowledged = {},
+                    bool *proposed_batch_acknowledged = nullptr);
   // Exact submit duplicates are zero-cost; append is a physical batch, including
   // repeated events. Removing drafts would invalidate caller source sequences.
   Result<Submission> submit(const RetainedEvent &event);
   Result<JournalCursor> append(JournalCursor expected,
                                std::span<const ByteView> sources,
-                               std::span<const RetainedEvent> events);
+                               std::span<const RetainedEvent> events,
+                               std::span<PhysicalJournalRecord> acknowledged = {},
+                               bool *proposed_batch_acknowledged = nullptr);
   Result<DispatchReport> dispatch(OperationAttemptId attempt, EffectBoundary &boundary);
+  Result<DispatchReport> dispatch(OperationAttemptId attempt, EffectBoundary &boundary,
+                                  RawRetainedExec *raw_exec);
+  Result<JournalCursor> append_exec(JournalCursor expected,
+                                    std::span<const RetainedEvent> events,
+                                    RawRetainedExec &raw_exec);
   Result<AttemptState> attempt(OperationAttemptId identity) const;
   Result<std::vector<AttemptState>> unresolved_attempts() const;
   Result<DecisionEvent> decision(DecisionId identity) const;
@@ -153,6 +175,7 @@ public:
   }
   JournalCursor cursor() const noexcept { return journal_->cursor(); }
   JournalLimits journal_limits() const noexcept { return journal_->header().limits; }
+  JournalCapacity journal_capacity() const noexcept { return capacity_; }
   JournalUsage journal_usage() const {
     auto result = journal_->usage();
     result.state = state();
@@ -177,6 +200,7 @@ public:
   struct FactHistory {
     std::size_t count = 0;
     std::function<Result<RetainedFact>(std::size_t)> read;
+    std::shared_ptr<RawRetainedReadOrigin> raw_origin = {};
     Result<std::vector<RetainedFact>> page(std::size_t first, std::size_t limit) const;
   };
   // Owns immutable derived-file/byte readers, never the custodian or a lease.
@@ -205,6 +229,10 @@ public:
   }
 
 private:
+  friend class RawRetainedScope;
+  friend class RawRetainedTransfer;
+  friend class RawRetainedExec;
+  friend class RawRetainedJobLoan;
   friend class RetainedEnvironment;
   friend class CodingEngine;
   friend class ContextStore;
@@ -220,6 +248,16 @@ private:
     RetainedState &owner_;
     bool previous_;
   };
+  RawProductStorageOwner raw_storage_owner_;
+  std::unique_ptr<RawRetainedOwnerEnd> raw_end_;
+  mutable RawRetainedOrigin raw_origin_;
+  std::unique_ptr<RawRetainedStopBundle> raw_stop_;
+  RawThreadHandle raw_joined_owner_;
+  bool raw_owner_blocked_ = false;
+  Result<std::unique_ptr<RawRetainedStopBundle>>
+  prepare_raw_stop(JournalCapacity credit, RawStorageHandoff *handoff = nullptr,
+                   RawThreadHandle issuer = {});
+  Result<void> restore_raw_owner();
   std::shared_ptr<void> lifetime_ = std::make_shared<int>(0);
   std::function<Result<void>(const RawEventRef &)> maintenance_checkpoint_;
   std::optional<Error> maintenance_error_;
@@ -262,12 +300,18 @@ private:
   Result<JournalCursor> append_impl(JournalCursor expected,
                                     std::span<const ByteView> sources,
                                     std::span<const RetainedEvent> events,
-                                    bool diagnostic, bool settlement = false);
-  Result<Submission> submit_impl(const RetainedEvent &event, bool settlement);
+                                    bool diagnostic, bool settlement = false,
+                                    std::span<PhysicalJournalRecord> acknowledged = {},
+                                    bool *proposed_batch_acknowledged = nullptr,
+                                    RawRetainedExec *raw_exec = nullptr);
+  Result<Submission> submit_impl(const RetainedEvent &event, bool settlement,
+                                 std::span<PhysicalJournalRecord> acknowledged = {},
+                                 bool *proposed_batch_acknowledged = nullptr);
   Result<void> retain_rejection(JournalCursor expected,
                                 std::span<const ByteView> sources,
                                 std::span<const std::vector<std::byte>> events,
-                                Error reason, const RetainedEvent *conflict);
+                                Error reason, const RetainedEvent *conflict,
+                                RawCapacityClaim *raw_bank);
   std::optional<RetainedFact>
   existing(const Snapshot &snapshot, const RetainedEvent &event,
            std::optional<std::uint64_t> issuer_namespace = std::nullopt,

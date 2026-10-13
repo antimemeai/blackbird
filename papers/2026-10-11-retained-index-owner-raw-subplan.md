@@ -131,9 +131,9 @@ release unused capacity normally. Missing fields are not emitted.
 |3156/3157 unresolved attempts|request actualcursor32; return result.size8/branch1/ownedError9|72+58=130|
 |3158/3159 invocation getter|request ID16; return threeIDs48/input.size8/branch1/ownedError9|56+106=162|
 |3160/3161 framed append|drafts.size8/currentcursor32/state1; return actualcursor32/state1/branch1/ownedError9|81+83=164|
-|3162 actual prepared frame|already-owned PhysicalJournalRecord66|106|
+|3162 actual prepared/parsed/hint frame|already-owned PhysicalJournalRecord66|106|
 |3163 actual commit|existing first8/drafts.size8/encoded.size8/actualbusinesscrc4|68|
-|3164/3165 actual checked packet|record66/boundary32/method1; return actualacquiredvector.size8/state1/branch1/ownedError9|139+59=198|
+|3164/3165 actual checked packet|record66/boundary32/method1; direct return acquiredvector.size8 only on success, ownedstate1 on both Result branches; archive/lazy omit unowned state; branch1/ownedError9|139+59=198|
 |3166/3167 Framed create/open|request create Header81/cap16/strength1/method1; open also use_scan1/resumepresence1/ownedresume(cursor32/indexed_records8/crc4)/selectorpresence1; return cursor32/state1/usedhint1/archived_records8/branch1/ownedError9|maximum186+92=278|
 |FramedJournal scan/restage3168/3169|actualcursor32/propagatenativereaderrors1/inrestage1; return actualcursor32/state1/diagnostic_offset8/available_end8/problem presence1/problem9|74+109=183 plus actual frame reads/parse selections|
 |selected recovered prefix3170/3171|actualpredecessor32; result actualcursor32/state1/branch1/error9|72+83=155|
@@ -162,7 +162,7 @@ release unused capacity normally. Missing fields are not emitted.
 |saved root selection3226|actualboundary32/slot4/factcount8/issuer8/unresolved.size8|100, at actual selection before native in-memory swap/retirement|
 |saved unresolved record3227|actual factRef24/evidence1|65, in existing selected unresolved loop only|
 |scan checkpoint load3228/3229|actualslot4; result actualcursor32/records.size8/slot4/branch1/error9|44+94=138; actual record children106 at existing parse loop|
-|scan checkpoint publish3230/3231|actualcursor32/records.size8/checkpoint_attempt8/slot4/strength1; return actualcursor32/used1/checkpoint_attempt8/slot4/branch1/error9|93+95=188 plus bounded existing records/native publication|
+|scan checkpoint publish3230/3231|actualcursor32/records.size8/checkpoint_attempt8/strength1; selected slot is not yet owned at entry, omitted; return actualcursor32/used1/checkpoint_attempt8/[actual selectedslot4]/branch1/error9|93+95=188 plus bounded existing records/native publication|
 |3232/3233 actual resident retirement|BEFORE actual clear: boundary32/facts.size8/sources.size8/physicalrecords.size8; AFTER actual clear: archived_facts8/archived_records8/journal_archived_records8/tail_facts.size8/tail_sources.size8/physicalrecords.size8|96 before /88 after|
 |head prepare/open3240/3241|actualHeader81/strength1; result actualselector56/healthy1/initialprepared1/attempted1/branch1/error9|122+109=231|
 |head publish-initial3242/3243|actualselector56/strength1; same reached return fields|97+109=206|
@@ -176,8 +176,8 @@ release unused capacity normally. Missing fields are not emitted.
 |environment selected segment/header3264/3265|actualjournalID16; result actualHeader81/branch1/error9|56+131=187 plus native header inspection|
 |environment selected continuation3266|actualoriginHeader81/originpolicy16/selectedpredecessor32|169, copy values existing selected load logic already owns|
 |environment maintenance replay3267/3268|actualHeader81/originpolicy16; return actualend8/captureonly.size8/queryroot20/counter8/branch1/error9|137+94=231 plus selected children|
-|environment stage original3269/3270|actualmarkerRef24/ProvisionalCapture34/originHeader81/policy16; return actualnativecapturefirst8/end8/branch1/error9|195+66=261 plus actual selected capture chunks|
-|environment provisional capture3271|actualcaptureRef24/actualnativeoffset8/selectedlength8/actualpurpose2|82, at existing chunk selection, bytes are physical acquired originals|
+|environment stage original3269/3270|actualmarkerRef24/ProvisionalCapture34/originHeader81/policy16; return actualnativecapturefirst8/length8/branch1/error9|195+66=261 plus actual selected capture chunks|
+|environment provisional capture3271|actualcaptureRef24/actualnativeoffset8/nativepayload_size4/actualpurpose2|82, at existing chunk selection, bytes are physical acquired originals|
 |environment confirm/reconcile3272/3273|actualcursor32/state1; result actualcursor32/headhealthy1/continuationrequired1/branch1/error9|73+84=157 plus historical journals/verifier/semanticchildren|
 |3286 actual selected AttemptState/verifier input|native82-byte maximum state, copied in actual existing loop, no extra iteration|122|
 Codec selection is an internal actual native header observation, not another codec
@@ -317,6 +317,7 @@ therefore retain real diagnostic children while its proposed_ack stays false.
 |Context stop|16/8/8/8/4/4/8/2/8/56/8/264/0|78536 (incl2*(history171+archivecreation124)=590)|
 |Joined Job terminal|4/2/2/2/1/1/2/0/7/14/7/231/3|55741|
 |Adapter receipt alone|4/2/2/2/1/1/2/0/4/14/4/132/1|33887|
+|Generic terminal primary/capacity-fallback|4/2/3/2/2/1/2/0/14/28/14/462/6|107639|
 |Fresh exec prebody+receipt+no-child union|12/6/6/6/3/3/6/0/24/42/24/792/9|188868 (inclattempt188+dispatch127=315)|
 
 Context existing2286+RawRegion6912=9198 remains separate; parent turn existing
@@ -504,11 +505,19 @@ commit56 => each actual Context obligation<=16MiB+222. Two obligations+8192floor
 Debt_locked counts one unresolved Job; max_records256, operation_depth<=16, largest
 extra expression(depth+debt+2)*8192 => maximum actual protectedF35,807,676.
 AtFmax: stopJ18/P33 LinuxCONTROL97401/DATA35847504.
-Full legalI16MiB+60/D16MiB+128: execB67109676/N12, physicalCONTROL237303/
-DATA67227460. Core same-main/TUI peak including OLD+NEW stop loans:
+Ordinary exec admits the actual checked checkpoint catalog capacity
+min(max_records*6,UINT32_MAX) before effects. Its three submission phases may
+retarget at most once each after optional maintenance; diagnostic children never
+run that callback. Each held148 request/return pair names the actual current scope,
+new journal/catalog resources and reached catalog count before attachment. Refusal
+leaves old scope pointers detached and preserves the original callback outcome.
+Stop and joined Job no_new scopes do not run optional maintenance or retarget.
 
-CONTROL=2*78536+188868+2*97401+237303+10544+5184=793773.
-DATA=2*35847504+67227460=138922468 (~132.49MiB).
+Full legalI16MiB+60/D16MiB+128: execB67109676/N13, physicalCONTROL238018/
+DATA67227509. Core same-main/TUI peak including OLD+NEW stop loans:
+
+CONTROL=2*78536+188868+2*97401+238018+10544+5184=794488.
+DATA=2*35847504+67227509=138922517 (~132.49MiB).
 
 The semantic Context stop allowance and its physical stop loan form ONE persistent
 bundle owned with actual settlement protection. They survive ordinary protected
@@ -620,7 +629,7 @@ supported Linux/Darwin debug/release/ASan/fullgate. No duplicate panel/test camp
    rather than current defaults that cannot fit mandatory selectedfullbounds.
 2. Accept one real physical grant lifecycle (1/1/3scopes), no duplicate semantic
    scaffolding telemetry; remaining3280–3285 stays unused.
-3. Reader shared authority/CleanupState and physical loan411/789/B,N seam must land
+3. Reader shared authority/CleanupState and physical loan411/1233/B,N seam must land
    before wholemain product opt-in. Currentrootcaller Context/turn, exec/Job,
    Provider operation17 scope restore and Terminal wholeperform must be integrated
    as SAME units; no cancel fallback fresh claims or file-creator issuer equality.
@@ -632,3 +641,83 @@ The ONE whole plan attack is resolved in the companion attack paper. Genuine
 published-header/old-library reds are preserved below. Implementation proceeds
 under coordinated source ownership; actual main capacity/workload qualification
 and whole-main activation are still required.
+
+## Current implementation checks
+
+The literal owner hooks and native helper compile. Narrow static analysis passes
+for the ten changed semantic translation units and their native fixture; formatter
+and diff checks pass. The two focused native cases pass in the debug profile
+(0.55 seconds). Every emitted prepared physical frame is compared with independent
+CRC-valid journal bytes; checks also compare exact source bytes/offsets, actual
+append success/refusal arguments, prepared/published custody, issuer request/return
+references, and independently reopened retained facts. The optional caller metadata
+span is implemented: actual outer acknowledgment fills it without allocating;
+accepted diagnostic children leave the rejected outer proposal's flag false.
+
+Actual canceled Context finish(false), view and stop.linkage append run under their
+held semantic/physical banks while fresh admission refuses sticky socket EOF.
+Environment create/reopen and head transaction fields agree with independently
+decoded CRC-valid head bytes. The SavedState checks preserve the measured old
+postpublication-allocation red, verify zero allocation after acknowledgment, cut
+the real prepublication allocation, and compare exact disk/live selected boundaries.
+
+The selected exec carrier, joined CommandJobs terminal and production turn stop
+borrowing are implemented. The carrier prepares from the already-owned codec
+buffers before the ordered admission and couples its actual acknowledged
+Admission.attempt to dispatch. Launched exec reaches prebody and receipt scopes;
+its joined Job owns terminal settlement. No-child exec uses the third main scope.
+Generic receipt and terminal have the separate finite banks described below.
+Whole caller Debug native checks pass, including actual nested Lua-to-exec,
+large result locators, source-capacity refusal and canceled/fullCONTROL receipt.
+The exact16MiB Invocation native case compares its CRC-valid disk frame with
+3033 B/N and three actual16MiB+32 positive acquisitions through archived
+dispatch/receipt/terminal. Narrow static passes for the changed production TUs and final fixture;
+ONE whole code/oracle review and supported-profile
+qualification remain the current completion boundary. Main activation is a
+candidate qualified by its real CLI oracle, pending the integrated source gate.
+
+### Generic adapter receipt caller
+
+Before the ordered Decision/Invocation/Admission append, the caller prepares the
+separate 33887-byte semantic receipt bank. Its physical loan selects
+adapter_receipt, F420/K4/O1/G4/S1, B56/N1: the actual Receipt codec permits36
+bytes and its diagnostic rejection envelope384; the sole positive dependency is
+the actual Open frame32+payload24. Catalog capacity is the checked business
+maximum, not the present count. At P33/J4 this holds42664 CONTROL/20009 DATA
+on Linux,76551 CONTROL including semantic capture. Root.dispatch activates its
+one no_new receipt scope after the actual body returns and destroys it before
+its enclosing native dispatch origin. The body and reentrant work borrow none
+of this credit. Failure to activate preserves the actual effect in DispatchReport
+and records receipt refusal without fresh postbody admission. The later terminal
+observation is a distinct operation and does not reuse this exhausted receipt
+loan. Nested Lua-to-exec composition includes the still-held outer receipt bank;
+a deeper nesting that cannot fit configured capacity refuses before its ordered
+admission rather than promising that arbitrary nesting fits.
+
+### Generic terminal observation caller
+
+Coding's terminal observation carries the retained result locator. Its sole
+result_id-empty path first replaces the result with the actual capacity Error;
+other retention errors throw before terminal construction, preserving the paid raw
+result and actual operation failure without claiming a business locator. The
+existing operation-slot8192 bound plus384 diagnostic envelope therefore admits
+F8576. The actual two calls are primary terminal submit and, only on capacity,
+the existing bounded fallback settlement. Capacity can occur after candidate
+apply, so the first may acquire Admission/Invocation/Open before refusing, but
+capacity branches retain no rejection children and write no frames. One lexical
+scope spans both calls. K4 covers the two original attempts and fallback's two
+possible diagnostic children; O2/G14 and B=2*(I+176),
+N=2*(2+ceil((I+32)/16MiB)) pay both reached positive dependency traversals.
+The literal semantic row is K4/S2/E3/D2/U2/Q1/sourceGroups2/I0/L14/X28/
+A14/P462/H6,107639 CONTROL. E3 covers both terminal attempts and a diagnostic
+marker; first capacity never creates diagnostic children. Joined Job remains
+its one-attempt55741/max_payload+384 contract. Physical kind adapter_terminal
+selects one ordinary-issuer scope with no joined handoff or retarget permission.
+At formalP33/Imax its physical bank is134801 CONTROL/33631206 DATA. With
+generic receipt this adds318991 CONTROL, which does not fit alongside the
+advertised worst core794488 in1MiB. Main's actual200000-record catalog capacity
+is1200000/P22; each additional actual nested holder must admit before effects or
+refuse. Real nested Lua-to-exec qualification is required; arbitrary recursive
+maximum workloads are not promised. Primary result retention keeps its actual
+interrupted/native failure path and already-paid raw original; this grant does
+not authorize another full output-retention operation.

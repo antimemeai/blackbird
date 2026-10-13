@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 namespace blackbird {
+class RawRetainedExec;
+class RawRetainedJobLoan;
 struct JobWaitOptions {
   std::optional<std::uint64_t> yield_ms;
   std::size_t max_output = 16 * 1024 * 1024;
@@ -27,7 +29,8 @@ public:
   ~CommandJobs();
   CommandJobs(const CommandJobs &) = delete;
   CommandJobs &operator=(const CommandJobs &) = delete;
-  void start(const std::string &id, const Value &arguments);
+  void start(const std::string &id, const Value &arguments,
+             RawRetainedExec *admission = nullptr);
   Value wait(const std::string &id, JobWaitOptions options,
              const std::function<void()> &tick, const std::function<bool()> &cancelled);
   Value read(const Value &arguments) const;
@@ -41,6 +44,8 @@ public:
   void capture_failed_all();
   // Joins before binding the retained worker producer for one semantic attempt.
   void settlement(const JobEvent &event, const std::function<void()> &append);
+  void settlement(const JobEvent &event,
+                  const std::function<void(RawRetainedJobLoan *)> &append);
   void settled(const std::string &id, const Value &result);
   bool contains(const std::string &id) const;
   bool active() const;

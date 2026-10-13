@@ -8,6 +8,7 @@
 #include <utility>
 
 namespace blackbird {
+struct RawRetainedOrigin;
 
 struct DecisionTag;
 struct ComplaintTag;
@@ -248,8 +249,11 @@ RetainedKind retained_kind(const RetainedBody &body) noexcept;
 // Owned, exact wire records. Successful decoding does not validate a ledger
 // transition or authorize a source dependency. RetainedState owns root checks;
 // the selected-chain owner alone validates maintenance placement and capture sets.
-Result<std::vector<std::byte>> encode_retained_event(const RetainedEvent &event,
-                                                     std::uint32_t max_payload);
-Result<RetainedEvent> decode_retained_event(ByteView bytes, std::uint32_t max_payload);
+Result<std::vector<std::byte>>
+encode_retained_event(const RetainedEvent &event, std::uint32_t max_payload,
+                      const RawRetainedOrigin *raw_origin = nullptr);
+Result<RetainedEvent>
+decode_retained_event(ByteView bytes, std::uint32_t max_payload,
+                      const RawRetainedOrigin *raw_origin = nullptr);
 
 } // namespace blackbird

@@ -25,10 +25,12 @@ class RetainedEnvironment {
 public:
   static Result<std::unique_ptr<RetainedEnvironment>>
   create(std::unique_ptr<JournalDirectory> directory, JournalHeader root,
-         JournalCapacity root_capacity, EnvironmentBounds bounds);
+         JournalCapacity root_capacity, EnvironmentBounds bounds,
+         RawProductStorageOwner raw_owner = {});
   static Result<std::unique_ptr<RetainedEnvironment>>
   open(std::unique_ptr<JournalDirectory> directory, JournalHeader root,
-       JournalCapacity root_capacity, EnvironmentBounds bounds);
+       JournalCapacity root_capacity, EnvironmentBounds bounds,
+       const RawProductStorageOwner &raw_owner = {});
   RetainedEnvironment(const RetainedEnvironment &) = delete;
   RetainedEnvironment &operator=(const RetainedEnvironment &) = delete;
   Result<Submission> submit(const RetainedEvent &event);
@@ -99,10 +101,12 @@ private:
   existing_proposal(JournalCursor expected, std::span<const ByteView> sources,
                     std::span<const RetainedEvent> events) const;
   RetainedEnvironment(std::unique_ptr<EnvironmentHead> head, JournalHeader root,
-                      JournalCapacity root_capacity, EnvironmentBounds bounds)
-      : head_(std::move(head)), root_(root), root_capacity_(root_capacity),
-        bounds_(bounds) {}
+                      JournalCapacity root_capacity, EnvironmentBounds bounds,
+                      RawRetainedOrigin raw_origin)
+      : raw_origin_(std::move(raw_origin)), head_(std::move(head)), root_(root),
+        root_capacity_(root_capacity), bounds_(bounds) {}
   Result<void> load_selected();
+  mutable RawRetainedOrigin raw_origin_;
   std::unique_ptr<EnvironmentHead> head_; // Outlives all borrowed segments.
   std::unique_ptr<RetainedState> semantic_;
   JournalHeader root_;

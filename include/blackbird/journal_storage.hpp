@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blackbird/foundation.hpp"
+#include "blackbird/raw_storage.hpp"
 
 #include <memory>
 #include <string>
@@ -12,6 +13,14 @@ enum class FileAccess : std::uint8_t { read_only, read_write };
 class JournalFile : public Storage {
 public:
   virtual Result<void> lock_writer() = 0;
+  virtual RawStorageResource *raw_storage_resource() noexcept { return nullptr; }
+  virtual Result<void> begin_write_batch(std::size_t, RawStorageWriteContinuation &) {
+    return Result<void>::success();
+  }
+  virtual Result<std::size_t> write_at_continuing(std::uint64_t offset, ByteView input,
+                                                  RawStorageWriteContinuation &) {
+    return write_at(offset, input);
+  }
   // Memory adapters have no lease; descriptor decorators must forward release.
   // Reader references retain storage ownership, not writer ownership.
   virtual void release_writer() noexcept {}
@@ -63,17 +72,29 @@ public:
   Result<void> synchronize(SyncStrength strength) override;
   Result<void> lock_writer() override;
   void release_writer() noexcept override;
+  RawStorageResource *raw_storage_resource() noexcept override { return raw_.get(); }
+  Result<void> begin_write_batch(std::size_t bytes,
+                                 RawStorageWriteContinuation &continuation) override;
+  Result<std::size_t>
+  write_at_continuing(std::uint64_t offset, ByteView input,
+                      RawStorageWriteContinuation &continuation) override;
 
 private:
   friend class NativeJournalDirectory;
-  explicit NativeJournalFile(int descriptor) : descriptor_(descriptor) {}
+  explicit NativeJournalFile(int descriptor,
+                             std::unique_ptr<RawStorageResource> raw = {})
+      : descriptor_(descriptor), raw_(std::move(raw)) {}
   int descriptor_;
+  std::unique_ptr<RawStorageResource> raw_;
 };
 class NativeJournalDirectory final : public JournalDirectory {
 public:
-  static Result<NativeJournalDirectory> open(std::string_view path);
+  static Result<NativeJournalDirectory> open(std::string_view path,
+                                             const RawProductStorageOwner &owner = {});
   // Opens one child relative to a caller-held directory. No symlink traversal.
-  static Result<NativeJournalDirectory> open_at(int directory, std::string_view name);
+  static Result<NativeJournalDirectory>
+  open_at(int directory, std::string_view name,
+          const RawProductStorageOwner &owner = {});
   // Caller owns the returned read-only directory fd. The child must share the
   // owner; its mode may be wider inside this already-private directory.
   Result<int> open_child_directory(std::string_view name) const;
@@ -108,10 +129,15 @@ private:
   void *cleanup_stream_ = nullptr;
   std::string cleanup_journal_;
   ScratchCleanup cleanup_status_;
-  explicit NativeJournalDirectory(int descriptor) : descriptor_(descriptor) {}
-  Result<std::unique_ptr<JournalFile>> open_file(std::string_view name, int flags);
+  explicit NativeJournalDirectory(int descriptor,
+                                  std::unique_ptr<RawStorageResource> raw = {})
+      : descriptor_(descriptor), raw_(std::move(raw)) {}
+  Result<std::unique_ptr<JournalFile>>
+  open_file(std::string_view name, int flags, RawStorageActionKind kind,
+            std::span<const ByteView> arguments = {});
   int descriptor_;
   std::shared_ptr<DiagnosticStore> diagnostics_;
+  std::unique_ptr<RawStorageResource> raw_, cleanup_raw_;
 };
 
 } // namespace blackbird

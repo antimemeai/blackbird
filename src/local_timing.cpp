@@ -5,6 +5,7 @@
 #include <array>
 #include <cerrno>
 #include <exception>
+#include <limits>
 #include <span>
 
 namespace blackbird {
@@ -73,10 +74,25 @@ void require_data_admission(std::span<const ByteView> fields) {
 } // namespace
 
 RawRegionPrepaidScope::RawRegionPrepaidScope(RawControlToken &bank) noexcept
+    : RawRegionPrepaidScope(&bank) {}
+RawRegionPrepaidScope::RawRegionPrepaidScope(RawControlToken *bank) noexcept
     : previous_(prepaid_region_bank) {
-  prepaid_region_bank = &bank;
+  prepaid_region_bank = bank;
 }
 RawRegionPrepaidScope::~RawRegionPrepaidScope() { prepaid_region_bank = previous_; }
+RawControlClaim *raw_region_prepaid_bank() noexcept { return prepaid_region_bank; }
+Result<std::uint64_t> raw_retained_region_credit(std::size_t sources,
+                                                 std::size_t events) noexcept {
+  constexpr auto observation = raw_envelope_size + sizeof(std::uint64_t) +
+                               sizeof(RawObservationKind) + 2 * sizeof(std::size_t) +
+                               sizeof(std::uint64_t);
+  constexpr auto fixed = begin_record_bytes + end_record_bytes + outcome_record_bytes +
+                         error_record_bytes + observation;
+  if (events > UINT64_MAX - sources ||
+      sources + events > (UINT64_MAX - fixed) / observation)
+    return Result<std::uint64_t>::failure({ErrorCode::overflow});
+  return Result<std::uint64_t>::success(fixed + observation * (sources + events));
+}
 
 RawRegion::RawRegion(const RawRegionSites &sites, RawRegionOptions options)
     : sites_(&sites), options_(options) {
@@ -85,7 +101,11 @@ RawRegion::RawRegion(const RawRegionSites &sites, RawRegionOptions options)
     return;
   prepaid_ = prepaid_region_bank != nullptr &&
              sites.begin == raw_regions::retained_append.begin;
-  auto held = prepaid_ ? prepaid_region_bank->split(432)
+  const auto credit =
+      raw_retained_region_credit(options.retained_sources, options.retained_events);
+  if (!credit.has_value())
+    throw credit.error();
+  auto held = prepaid_ ? prepaid_region_bank->split(credit.value())
                        : raw_claim_control(end_record_bytes + outcome_record_bytes +
                                            error_record_bytes);
   if (!held.has_value()) {

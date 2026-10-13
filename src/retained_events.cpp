@@ -1,4 +1,5 @@
 #include "blackbird/retained_events.hpp"
+#include "blackbird/raw_retained.hpp"
 
 #include <algorithm>
 #include <type_traits>
@@ -376,8 +377,9 @@ RetainedKind retained_kind(const RetainedBody &body) noexcept {
       },
       body);
 }
-Result<std::vector<std::byte>> encode_retained_event(const RetainedEvent &event,
-                                                     std::uint32_t max_payload) {
+Result<std::vector<std::byte>>
+encode_retained_event(const RetainedEvent &event, std::uint32_t max_payload,
+                      const RawRetainedOrigin *raw_origin) {
   if (!valid_body(event.body) ||
       (std::holds_alternative<RecoveryChoiceEvent>(event.body) &&
        !event.dependencies.empty()) ||
@@ -391,9 +393,19 @@ Result<std::vector<std::byte>> encode_retained_event(const RetainedEvent &event,
   try {
     Encoder encoder{max_payload};
     const auto *admission = std::get_if<AttemptAdmissionEvent>(&event.body);
-    encoder.number<2>(admission && admission->input_from_invocation ? 2 : 1);
-    encoder.number<2>(static_cast<std::uint16_t>(retained_kind(event.body)));
-    encoder.count(event.dependencies.size());
+    const std::uint64_t schema = admission && admission->input_from_invocation ? 2 : 1;
+    const auto kind = retained_kind(event.body);
+    const auto dependency_count = event.dependencies.size();
+    if (raw_origin) {
+      RawRetainedFields fields;
+      fields.native(kind);
+      fields.native(schema);
+      fields.native(dependency_count);
+      (void)raw_retained_event(*raw_origin, {3112, 58}, fields.view());
+    }
+    encoder.number<2>(schema);
+    encoder.number<2>(static_cast<std::uint16_t>(kind));
+    encoder.count(dependency_count);
     for (const auto &reference : event.dependencies) {
       encoder.identity(reference.journal);
       encoder.number<8>(reference.sequence);
@@ -407,7 +419,8 @@ Result<std::vector<std::byte>> encode_retained_event(const RetainedEvent &event,
   }
 }
 
-Result<RetainedEvent> decode_retained_event(ByteView bytes, std::uint32_t max_payload) {
+Result<RetainedEvent> decode_retained_event(ByteView bytes, std::uint32_t max_payload,
+                                            const RawRetainedOrigin *raw_origin) {
   if (bytes.size() > max_payload) {
     return Result<RetainedEvent>::failure({ErrorCode::capacity});
   }
@@ -416,6 +429,13 @@ Result<RetainedEvent> decode_retained_event(ByteView bytes, std::uint32_t max_pa
     const auto schema = decoder.number(2);
     const auto kind = decoder.number(2);
     const auto count = decoder.number(4);
+    if (raw_origin) {
+      RawRetainedFields fields;
+      fields.native(schema);
+      fields.native(kind);
+      fields.native(count);
+      (void)raw_retained_event(*raw_origin, {3113, 64}, fields.view());
+    }
     if (decoder.failed() || count > decoder.remaining() / 24) {
       return Result<RetainedEvent>::failure({ErrorCode::corrupt});
     }

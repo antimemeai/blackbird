@@ -192,7 +192,9 @@ struct Fixture {
                             "audit", header, {64 * 1024 * 1024, 8192}));
   AuditLog log{*root};
   Unused provider;
-  RawRuntimeOptions options{{4 * 1024 * 1024, 1024 * 1024, 4096}, 4096};
+  // Each selected operation preclaims a16MiB native original before its
+  // encoder, independently of this fixture's smaller business journal limits.
+  RawRuntimeOptions options{{32 * 1024 * 1024, 1024 * 1024, 4096}, 4096};
   RawRuntimeStatus holders{-1, -1, false};
   std::vector<ClockFact> observed;
   template <class F> std::vector<Record> capture(F &&action) {
@@ -441,6 +443,9 @@ void policy_case(BoundaryCut cut) {
       pin_root = nullptr;
       failed = true;
     } catch (const Error &error) {
+      std::cerr << "boundary cut=" << static_cast<unsigned>(cut)
+                << " actual Error=" << error_name(error.code) << ':' << error.detail
+                << '\n';
       require(cut == BoundaryCut::prepublication && error == Error{ErrorCode::io, EIO},
               "actual prepublication protection refusal");
       failed = true;
@@ -745,11 +750,22 @@ void policy_child_refusal_case() {
                   body(proposal->reference, std::uint8_t{2}, ErrorCode::interrupted,
                        std::int64_t{ECANCELED}),
           "native parent validation and held interrupted terminal remain exact");
-  // The existing operation receipt is unpaid on this path; its refusal closes
-  // semantic admission. The child Error and the final caller Error are distinct.
-  if (!caller_error || *caller_error != Error{ErrorCode::audit_unavailable})
-    throw std::runtime_error{
-        "actual unpaid operation receipt closes semantic admission"};
+  if (!caller_error)
+    throw std::runtime_error{"actual refused child returns an owned caller Error"};
+  require(caller_error ==
+                  std::optional<Error>{Error{ErrorCode::interrupted, ECANCELED}} &&
+              fixture.root->state() == JournalWriterState::live,
+          "paid operation receipt preserves actual child interruption and live audit");
+  unsigned receipts = 0;
+  for (std::size_t ordinal = 0; ordinal < fixture.root->fact_count(); ++ordinal) {
+    const auto fact = unwrap(fixture.root->fact(ordinal));
+    if (const auto *receipt = std::get_if<AdapterReceiptEvent>(&fact.event.body)) {
+      require(receipt->failure == caller_error,
+              "independent retained receipt records the actual child Error");
+      ++receipts;
+    }
+  }
+  require(receipts == 1, "one paid native receipt after policy child refusal");
   const auto &turn = only(records, 1900);
   const auto &terminal = only(records, 1906, turn.reference);
   ByteView ended{terminal.bytes};

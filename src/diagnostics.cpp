@@ -23,61 +23,114 @@ std::optional<std::uint64_t> expiration(std::string_view name) {
     return {};
   return result;
 }
-bool private_file(const struct stat &s) {
-  return S_ISREG(s.st_mode) && s.st_uid == geteuid() && !(s.st_mode & 0077) &&
-         s.st_nlink == 1;
+bool private_file(RawStorageAction &action, const struct stat &s) {
+  return S_ISREG(s.st_mode) && s.st_uid == RawStorageNative::uid(action) &&
+         !(s.st_mode & 0077) && s.st_nlink == 1;
 }
+RawProductStorageOwner owner_of(RawStorageResource *resource) {
+  return resource ? resource->owner() : RawProductStorageOwner{};
+}
+std::string_view cstring(const std::string &value) {
+  return {value.c_str(), value.size() + 1};
+}
+template <class R, class F>
+R capture(RawStorageResource *resource, RawStorageActionKind kind,
+          std::span<const ByteView> arguments, F &&body) {
+  try {
+    RawStorageAction action{owner_of(resource), kind, resource, arguments};
+    try {
+      auto result = body(action);
+      action.finish(result.has_value() ? std::optional<Error>{} : result.error());
+      return result;
+    } catch (const Error &error) {
+      action.finish(error);
+      return R::failure(error);
+    } catch (const std::bad_alloc &) {
+      action.finish(Error{ErrorCode::allocation});
+      return R::failure({ErrorCode::allocation});
+    }
+  } catch (const Error &error) {
+    return R::failure(error);
+  } catch (const std::bad_alloc &) {
+    return R::failure({ErrorCode::allocation});
+  }
+}
+struct FileGuard {
+  int descriptor = -1;
+  std::unique_ptr<RawStorageResource> raw;
+  explicit FileGuard(const RawProductStorageOwner &owner)
+      : raw(RawStorageResource::prepare(owner)) {}
+  ~FileGuard() { close(); }
+  void close() noexcept {
+    if (raw)
+      raw->close();
+    else if (descriptor >= 0)
+      ::close(descriptor);
+    descriptor = -1;
+  }
+};
 } // namespace
 class DiagnosticStore {
 public:
   int fd = -1;
   DIR *scan = nullptr;
-  explicit DiagnosticStore(int descriptor) : fd(descriptor) {}
+  std::unique_ptr<RawStorageResource> raw, scan_raw;
+  explicit DiagnosticStore(const RawProductStorageOwner &owner)
+      : raw(RawStorageResource::prepare(owner)) {}
   ~DiagnosticStore() {
-    if (scan)
-      closedir(scan);
-    if (fd >= 0)
-      close(fd);
+    if (scan && !scan_raw)
+      ::closedir(scan);
+    if (fd >= 0 && !raw)
+      ::close(fd);
   }
-  static Result<std::shared_ptr<DiagnosticStore>> open(int parent) {
-    if (mkdirat(parent, "diagnostics", 0700) < 0 && errno != EEXIST)
+  static Result<std::shared_ptr<DiagnosticStore>>
+  open(RawStorageAction &action, int parent, const RawProductStorageOwner &owner) {
+    if (RawStorageNative::mkdir(action, parent, {"diagnostics", 12}, mode_t{0700}) <
+            0 &&
+        errno != EEXIST)
       return Result<std::shared_ptr<DiagnosticStore>>::failure({ErrorCode::io, errno});
-    const int descriptor =
-        openat(parent, "diagnostics", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
-    if (descriptor < 0)
+    auto result = std::make_shared<DiagnosticStore>(owner);
+    result->fd =
+        RawStorageNative::open(action, result->raw.get(), parent, {"diagnostics", 12},
+                               O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (result->fd < 0)
       return Result<std::shared_ptr<DiagnosticStore>>::failure({ErrorCode::io, errno});
     struct stat s{};
-    if (fstat(descriptor, &s) < 0 || !S_ISDIR(s.st_mode) || s.st_uid != geteuid() ||
-        (s.st_mode & 0077)) {
-      close(descriptor);
+    if (RawStorageNative::stat(action, result->fd, s) < 0)
+      return Result<std::shared_ptr<DiagnosticStore>>::failure({ErrorCode::io, errno});
+    if (!S_ISDIR(s.st_mode) || s.st_uid != RawStorageNative::uid(action) ||
+        (s.st_mode & 0077))
       return Result<std::shared_ptr<DiagnosticStore>>::failure({ErrorCode::io, EPERM});
-    }
-    try {
-      return Result<std::shared_ptr<DiagnosticStore>>::success(
-          std::make_shared<DiagnosticStore>(descriptor));
-    } catch (const std::bad_alloc &) {
-      close(descriptor);
-      return Result<std::shared_ptr<DiagnosticStore>>::failure({ErrorCode::allocation});
-    }
+    return Result<std::shared_ptr<DiagnosticStore>>::success(std::move(result));
   }
-  Result<ScratchCleanup> purge(std::uint64_t now) {
+  Result<ScratchCleanup> purge(RawStorageAction &action, std::uint64_t now) {
     if (!scan) {
-      const int separate = openat(fd, ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+      scan_raw = RawStorageResource::prepare(owner_of(raw.get()), true);
+      action.use(raw.get());
+      const int separate = RawStorageNative::open(action, scan_raw.get(), fd, {".", 2},
+                                                  O_RDONLY | O_DIRECTORY | O_CLOEXEC);
       if (separate < 0)
         return Result<ScratchCleanup>::failure({ErrorCode::io, errno});
-      scan = fdopendir(separate);
+      scan = RawStorageNative::directory(action, scan_raw.get(), separate);
       if (!scan) {
-        close(separate);
-        return Result<ScratchCleanup>::failure({ErrorCode::io, errno});
+        const int error = errno;
+        if (scan_raw)
+          scan_raw.reset();
+        else
+          ::close(separate);
+        return Result<ScratchCleanup>::failure({ErrorCode::io, error});
       }
     }
     ScratchCleanup result;
     while (result.scanned < 128 && result.removed < 16) {
-      errno = 0;
-      auto *entry = readdir(scan);
+      action.use(scan_raw.get());
+      auto *entry = RawStorageNative::next(action, scan);
       if (!entry) {
         const int error = errno;
-        closedir(scan);
+        if (scan_raw)
+          scan_raw.reset();
+        else
+          ::closedir(scan);
         scan = nullptr;
         if (error)
           return Result<ScratchCleanup>::failure({ErrorCode::io, error});
@@ -88,15 +141,18 @@ public:
       const auto expires = expiration(entry->d_name);
       if (!expires || *expires > now)
         continue;
+      const std::string_view name{entry->d_name,
+                                  std::char_traits<char>::length(entry->d_name) + 1};
+      action.use(raw.get());
       struct stat s{};
-      if (fstatat(fd, entry->d_name, &s, AT_SYMLINK_NOFOLLOW) < 0) {
+      if (RawStorageNative::stat_at(action, fd, name, s, AT_SYMLINK_NOFOLLOW) < 0) {
         if (errno == ENOENT)
           continue;
         return Result<ScratchCleanup>::failure({ErrorCode::io, errno});
       }
-      if (!private_file(s))
+      if (!private_file(action, s))
         continue;
-      if (unlinkat(fd, entry->d_name, 0) < 0) {
+      if (RawStorageNative::unlink(action, fd, name, 0) < 0) {
         if (errno == ENOENT)
           continue;
         return Result<ScratchCleanup>::failure({ErrorCode::io, errno});
@@ -107,93 +163,119 @@ public:
   }
 };
 Result<ScratchCleanup> NativeJournalDirectory::expire_diagnostics(std::uint64_t now) {
-  if (!diagnostics_) {
-    auto opened = DiagnosticStore::open(descriptor_);
-    if (!opened.has_value())
-      return Result<ScratchCleanup>::failure(opened.error());
-    diagnostics_ = std::move(opened).value();
-  }
-  return diagnostics_->purge(now);
+  const std::array fields{detail::raw_native_field(now)};
+  return capture<Result<ScratchCleanup>>(
+      raw_.get(), RawStorageActionKind::expire_diagnostics, fields,
+      [&](RawStorageAction &action) {
+        if (!diagnostics_) {
+          auto opened =
+              DiagnosticStore::open(action, descriptor_, owner_of(raw_.get()));
+          if (!opened.has_value())
+            return Result<ScratchCleanup>::failure(opened.error());
+          diagnostics_ = std::move(opened).value();
+        }
+        return diagnostics_->purge(action, now);
+      });
 }
 Result<void> NativeJournalDirectory::store_diagnostic(std::string_view name,
                                                       ByteView bytes,
                                                       std::uint64_t now) {
-  const auto expires = expiration(name);
-  if (!expires || *expires <= now || *expires - now != 30ULL * 24 * 60 * 60 ||
-      bytes.size() > 65536)
-    return Result<void>::failure({ErrorCode::invalid_range});
-  auto purged = expire_diagnostics(now);
-  if (!purged.has_value())
-    return Result<void>::failure(purged.error());
-  const std::string filename{name};
-  const int file = openat(diagnostics_->fd, filename.c_str(),
-                          O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
-  if (file < 0)
-    return Result<void>::failure({ErrorCode::io, errno});
-  std::size_t offset = 0;
-  Error error{ErrorCode::io};
-  while (offset < bytes.size()) {
-    const auto n = write(file, bytes.data() + offset, bytes.size() - offset);
-    if (n < 0) {
-      if (errno == EINTR)
-        continue;
-      error.detail = errno;
-      break;
-    }
-    if (!n)
-      break;
-    offset += static_cast<std::size_t>(n);
-  }
-  close(file); // Optional diagnostics: no durability sync or authoritative dependency.
-  if (offset != bytes.size()) {
-    unlinkat(diagnostics_->fd, filename.c_str(), 0);
-    return Result<void>::failure(error);
-  }
-  return Result<void>::success();
+  const auto size = bytes.size();
+  const std::array fields{detail::raw_native_field(now),
+                          detail::raw_native_field(size)};
+  return capture<Result<void>>(
+      raw_.get(), RawStorageActionKind::store_diagnostic, fields,
+      [&](RawStorageAction &action) {
+        action.operand(1, detail::raw_string_field(name));
+        const auto expires = expiration(name);
+        if (!expires || *expires <= now || *expires - now != 30ULL * 24 * 60 * 60 ||
+            bytes.size() > 65536)
+          return Result<void>::failure({ErrorCode::invalid_range});
+        auto purged = expire_diagnostics(now);
+        if (!purged.has_value())
+          return Result<void>::failure(purged.error());
+        const std::string filename{name};
+        action.use(diagnostics_->raw.get());
+        RawStorageDiagnosticUnlink failure_unlink{action, diagnostics_->fd,
+                                                  cstring(filename)};
+        FileGuard file{owner_of(raw_.get())};
+        action.use(diagnostics_->raw.get());
+        file.descriptor = RawStorageNative::open(
+            action, file.raw.get(), diagnostics_->fd, cstring(filename),
+            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, mode_t{0600});
+        if (file.descriptor < 0)
+          return Result<void>::failure({ErrorCode::io, errno});
+        std::size_t offset = 0;
+        Error error{ErrorCode::io};
+        while (offset < bytes.size()) {
+          const auto n =
+              RawStorageNative::write(action, file.descriptor, bytes.subspan(offset));
+          if (n < 0) {
+            if (errno == EINTR)
+              continue;
+            error.detail = errno;
+            break;
+          }
+          if (!n)
+            break;
+          offset += static_cast<std::size_t>(n);
+        }
+        file.close();
+        if (offset != bytes.size()) {
+          failure_unlink.run();
+          return Result<void>::failure(error);
+        }
+        return Result<void>::success();
+      });
 }
 Result<std::vector<std::byte>>
 NativeJournalDirectory::read_diagnostic(std::string_view name, std::uint64_t now) {
-  const auto expires = expiration(name);
-  if (!expires)
-    return Result<std::vector<std::byte>>::failure({ErrorCode::invalid_range});
-  if (*expires <= now)
-    return Result<std::vector<std::byte>>::failure({ErrorCode::stale_handle});
-  if (!diagnostics_) {
-    auto opened = DiagnosticStore::open(descriptor_);
-    if (!opened.has_value())
-      return Result<std::vector<std::byte>>::failure(opened.error());
-    diagnostics_ = std::move(opened).value();
-  }
-  const std::string filename{name};
-  const int file =
-      openat(diagnostics_->fd, filename.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-  if (file < 0)
-    return Result<std::vector<std::byte>>::failure(
-        {errno == ENOENT ? ErrorCode::stale_handle : ErrorCode::io, errno});
-  struct stat s{};
-  if (fstat(file, &s) < 0 || !private_file(s) || s.st_size < 0 || s.st_size > 65536) {
-    close(file);
-    return Result<std::vector<std::byte>>::failure({ErrorCode::io, EPERM});
-  }
-  try {
-    std::vector<std::byte> result(static_cast<std::size_t>(s.st_size));
-    std::size_t offset = 0;
-    while (offset < result.size()) {
-      auto n = read(file, result.data() + offset, result.size() - offset);
-      if (n < 0 && errno == EINTR)
-        continue;
-      if (n <= 0) {
-        const int e = errno;
-        close(file);
-        return Result<std::vector<std::byte>>::failure({ErrorCode::io, e});
-      }
-      offset += static_cast<std::size_t>(n);
-    }
-    close(file);
-    return Result<std::vector<std::byte>>::success(std::move(result));
-  } catch (const std::bad_alloc &) {
-    close(file);
-    return Result<std::vector<std::byte>>::failure({ErrorCode::allocation});
-  }
+  using R = Result<std::vector<std::byte>>;
+  const std::array fields{detail::raw_native_field(now)};
+  return capture<R>(
+      raw_.get(), RawStorageActionKind::read_diagnostic, fields,
+      [&](RawStorageAction &action) {
+        action.operand(1, detail::raw_string_field(name));
+        const auto expires = expiration(name);
+        if (!expires)
+          return R::failure({ErrorCode::invalid_range});
+        if (*expires <= now)
+          return R::failure({ErrorCode::stale_handle});
+        if (!diagnostics_) {
+          auto opened =
+              DiagnosticStore::open(action, descriptor_, owner_of(raw_.get()));
+          if (!opened.has_value())
+            return R::failure(opened.error());
+          diagnostics_ = std::move(opened).value();
+        }
+        const std::string filename{name};
+        FileGuard file{owner_of(raw_.get())};
+        action.use(diagnostics_->raw.get());
+        file.descriptor = RawStorageNative::open(action, file.raw.get(),
+                                                 diagnostics_->fd, cstring(filename),
+                                                 O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+        if (file.descriptor < 0)
+          return R::failure(
+              {errno == ENOENT ? ErrorCode::stale_handle : ErrorCode::io, errno});
+        struct stat s{};
+        if (RawStorageNative::stat(action, file.descriptor, s) < 0)
+          return R::failure({ErrorCode::io, errno});
+        if (!private_file(action, s) || s.st_size < 0 || s.st_size > 65536)
+          return R::failure({ErrorCode::io, EPERM});
+        std::vector<std::byte> result(static_cast<std::size_t>(s.st_size));
+        std::size_t offset = 0;
+        while (offset < result.size()) {
+          const auto n = RawStorageNative::read(action, file.descriptor,
+                                                std::span{result}.subspan(offset));
+          if (n < 0 && errno == EINTR)
+            continue;
+          if (n <= 0)
+            return R::failure({ErrorCode::io, n < 0 ? errno : 0});
+          // Each exact acquired prefix was already emitted by the native helper.
+          offset += static_cast<std::size_t>(n);
+        }
+        file.close();
+        return R::success(std::move(result));
+      });
 }
 } // namespace blackbird
