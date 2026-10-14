@@ -8321,3 +8321,10 @@ No 131-test/all194-TU or whole Lua run repeated. Scoped bugs834/90u/bho/iva/fir/
 Owned native/static workers complete and retained Linux scratch is removed.
 Checkpoint/push this repair branch with the operator-authorized per-command hook
 override. No new main integration is inferred from the repair request.
+
+
+Repair checkpoint ee4efc6 is pushed. The staged diff check flagged CSV CRLF
+line endings, but the command sequence incorrectly continued to the commit.
+Normalize the report CSV to LF and recheck in this text-only followup; preserve
+all measurements and do not repeat any native/static gate. Source tests and
+changed-TU diagnostics above remain their exact already-completed results.
