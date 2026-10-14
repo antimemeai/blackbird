@@ -1,4 +1,14 @@
-# Current Blackbird stock 2026 10 10
+# Current Blackbird stock
+
+Latest watch: **2026-10-14**. Read [the handoff](HANDOFF.md) for exact source/
+branch state, qualification results, open defects and next discussion. The
+[performance notes](../papers/2026-10-14-performance-tuning-notes.md) track five
+new investigation beads. Named owner source is integrated on master; subsequent
+qualification repairs and measured reports are pushed on work/nls2-qualification-state
+and are not merged into master. Missing actual File dispatch context remains
+arconaut-4by; nls.2 stays in progress. No optimization starts during handoff.
+The broad inventory below records the earlier October 10 stock; the handoff and
+linked completion/repair/performance records supply the subsequent changes.
 
 The default main line is `master`. On October10 the operator directed integration
 of the pending branches. Master fast-forwards through `command-jobs` at `2ac0635`,

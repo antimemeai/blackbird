@@ -8412,3 +8412,36 @@ emit and inspected runs have zero1510–1514 payloads. That API's full cost rema
 unmeasured by the last round. Add source-grounded follow-up to performance report;
 context/event-production-counts retains readback. Text-only checks/checkpoint;
 no optimization, source change, full suite or new coverage guarantee.
+
+
+## 2026-10-14 — end-of-watch tuning notes, beads and handoff
+
+Operator ends our watch and requests plausible tuning notes and handoff, then
+explicitly requests opening beads too. Re-read current doctrine, repo guidance,
+source/branch state, reports and live issue stock. Record five distinct P2
+investigations: nls.11 complete owner waits/tails; nls.12 recorder backlog/page
+costs; nls.13 cost of unchanged high-volume events; nls.14 Linux native reopen;
+nls.15 complete native/Lua authored emission. Their descriptions state observed
+costs, unproven hypotheses, source study, preserved contracts and direct checks.
+Reuse File dispatch defect4by and stream-capture bzn rather than duplicating
+those units. Append current preservation/no-loss scope and handoff notes to
+existing related beads; no old diagnostic-expiry/discard permission revived.
+
+Save papers/2026-10-14-performance-tuning-notes.md and docs/HANDOFF.md; point the
+current-state entry at this exact newer snapshot without rewriting historical
+October10 stock. Handoff distinguishes master33e78d1/integrated owner200fc5e
+from unmerged repair ee4efc6 and measured source66547c6 on the pushed work branch.
+Record exact 56 affected checks versus older full source gate, finite performance
+scope and initial failed-oracle limits, actual wiring/event volume, authored API
+gap, where local ignored evidence and tracked snapshots live, tool profiles,
+open correctness/broader/deferred work and a proposed next operator discussion.
+No new implementation/optimization/tests/campaign, main merge, live executable
+replacement or unrelated cleanup. Current compiler/native process inspection
+finds no owned work; all active-tree child agents are completed. Preserve art,
+stash and historical worktrees. Linux owned scratch was already removed after
+all artifact captures; raw/owner/interactive archives remain locally.
+
+Only relevant text/diff/link and bead-state checks run. Supported bd backup,
+checked documentation-only commit with the existing authorized per-command hook
+override, and work-branch push finish the watch. New tasks stay open as optional
+investigation stock; nls.2 stays in progress. No owned implementation, testing or profiling work continues in the background.
