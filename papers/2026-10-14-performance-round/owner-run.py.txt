@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+"""Finite, serial native owner workloads. No product/provider network calls."""
+import csv
+import pathlib
+import subprocess
+import sys
+
+base = pathlib.Path(sys.argv[1]).resolve()
+executable = pathlib.Path(sys.argv[2]).resolve()
+phase = sys.argv[3] if len(sys.argv) > 3 else "round"
+modes = ("file-read", "file-write", "operator", "lua", "request", "session", "station")
+sizes = (64,) if phase == "smoke" else (64, 256, 4096)
+count = 3 if phase == "smoke" else 100
+summary = []
+for m, mode in enumerate(modes):
+    for s, size in enumerate(sizes):
+        order = (1,) if phase == "smoke" else ((m + s) % 2, 1 - (m + s) % 2)
+        for active in order:
+            directory = base / f"{phase}-{mode}-{size}-c{active}"
+            command = [str(executable), mode, "on" if active else "off", str(size), str(count), str(directory)]
+            prior = base / f"{directory.name}.stdout"
+            if prior.exists() and prior.read_text().strip():
+                result = subprocess.CompletedProcess(command, 0, prior.read_text(), "")
+            else:
+                if directory.exists():
+                    directory.rename(directory.with_name(directory.name + "-failed-file-expectation"))
+                    stderr = base / f"{directory.name}.stderr"
+                    if stderr.exists():
+                        stderr.rename(base / f"{directory.name}.failed.stderr")
+                result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            (base / f"{directory.name}.stdout").write_text(result.stdout)
+            (base / f"{directory.name}.stderr").write_text(result.stderr)
+            if result.returncode:
+                print(f"FAIL {directory.name}: {result.stderr.strip()}", flush=True)
+                sys.exit(result.returncode)
+            rows = list(csv.DictReader(result.stdout.splitlines()))
+            assert len(rows) == 1, "one direct native measurement row"
+            summary.extend(rows)
+            with (base / f"{phase}-results.csv").open("w", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=list(summary[0]), lineterminator="\n")
+                writer.writeheader()
+                writer.writerows(summary)
+            print(f"PASS {directory.name}: median {rows[0]['median_us']} us, p99 {rows[0]['p99_us']} us", flush=True)

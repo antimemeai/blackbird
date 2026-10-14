@@ -1,0 +1,256 @@
+#include "blackbird/coding.hpp"
+#include "blackbird/json.hpp"
+#include "blackbird/raw_file.hpp"
+#include "blackbird/raw_reader.hpp"
+#include "blackbird/station.hpp"
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <set>
+#include <sys/resource.h>
+#include <unistd.h>
+using namespace blackbird;
+using Clock = std::chrono::steady_clock;
+using Key = std::pair<IdentityBytes, std::uint64_t>;
+void require(bool condition, const char *message) {
+  if (!condition) throw std::runtime_error{message};
+}
+template<class T> T id(unsigned char value) {
+  IdentityBytes bytes{}; bytes[0] = std::byte{value}; return unwrap(T::from_bytes(bytes));
+}
+template<class T> T take(ByteView &bytes) {
+  require(bytes.size() >= sizeof(T), "short native field");
+  T value{}; std::memcpy(&value, bytes.data(), sizeof(T)); bytes = bytes.subspan(sizeof(T)); return value;
+}
+Key ref(ByteView &bytes) { auto lane = take<IdentityBytes>(bytes); return {lane, take<std::uint64_t>(bytes)}; }
+std::string text(ByteView &bytes) {
+  auto size = take<std::size_t>(bytes); require(size <= bytes.size(), "native string length");
+  std::string value{reinterpret_cast<const char *>(bytes.data()), size}; bytes = bytes.subspan(size); return value;
+}
+std::string disk(const std::filesystem::path &path) {
+  std::ifstream file{path, std::ios::binary}; require(bool(file), "business file exists");
+  return {std::istreambuf_iterator<char>{file}, {}};
+}
+struct Provider final : CodingProvider {
+  unsigned calls = 0;
+  static constexpr std::string_view body = R"({"output":[]})";
+  Value respond(const Value &, const std::function<void(std::string_view)> &capture) override {
+    ++calls; capture(body); return unwrap(parse_json(body));
+  }
+};
+struct Row { Key key; std::uint32_t site; std::vector<std::byte> bytes; };
+std::vector<Row> rows(const std::filesystem::path &directory) {
+  const auto runs = unwrap(discover_raw_runs(directory.string()));
+  require(runs.size() == 1 && runs[0].snapshot && runs[0].snapshot->closed, "closed run required");
+  auto reader = unwrap(RawRunReader::open((directory / "raw" / runs[0].name).string()));
+  std::vector<std::byte> scratch(32 * 1024 * 1024); std::vector<Row> result;
+  while (const auto row = unwrap(reader->read(scratch))) {
+    auto bytes = row->raw;
+    require(take<std::uint32_t>(bytes) == row->raw.size(), "exact native envelope");
+    auto site = take<std::uint32_t>(bytes); auto ordinal = take<std::uint64_t>(bytes);
+    require(site != 8000 && site != 8001, "unexpected capture failure");
+    result.push_back({{row->origin.lane, ordinal}, site, {bytes.begin(), bytes.end()}});
+  }
+  return result;
+}
+std::size_t verify(const std::vector<Row> &all, std::string_view mode, const std::string &body,
+                   std::size_t count, const std::vector<std::string> &expected_prompts,
+                   const std::vector<SessionSettings> &settings, std::string_view source, std::string_view target) {
+  std::map<Key, const Row *> index;
+  for (const auto &row : all) require(index.emplace(row.key, &row).second, "duplicate raw identity");
+  const std::map<std::uint32_t, std::uint32_t> pairs{{3401,3400},{3411,3410},{3421,3420},
+    {3423,3422},{3425,3424},{3427,3426},{3429,3428},
+    {3431,3430},{3433,3432},{3435,3434},{3437,3436},{3441,3440},{3446,3445},{3448,3447},{3491,3490},
+    {2417,2400},{1906,1900},{1903,1902},{4211,4210},{4601,4600},
+    {1321,1320},{4801,4800},{3841,3840},{4825,4820},{1509,1508},{1507,1506},{1504,1500}};
+  std::map<Key,unsigned> ends; std::map<std::uint32_t,unsigned> sites;
+  std::size_t originals=0, session_sources=0, prompts=0, program_sources=0, provider_packets=0, caller_inputs=0, caller_results=0;
+  auto packet_text=[](std::vector<std::byte> &out,std::string_view value) {
+    out.push_back(std::byte{6}); auto length=value.size(); do {auto next=length>>7;out.push_back(static_cast<std::byte>((length&127)|(next?128:0)));length=next;}while(length);
+    const auto bytes=std::as_bytes(std::span{value.data(),value.size()});out.insert(out.end(),bytes.begin(),bytes.end());
+  };
+  std::vector<std::byte> expected_input{std::byte{'B'},std::byte{'B'},std::byte{'M'},std::byte{2},std::byte{10},std::byte{1},std::byte{8},std::byte{29}};
+  packet_text(expected_input,target);
+  std::vector<std::byte> expected_result{std::byte{'B'},std::byte{'B'},std::byte{'M'},std::byte{2},std::byte{10},std::byte{1}};
+  packet_text(expected_result,"content");packet_text(expected_result,body);
+  std::vector<std::byte> expected_provider{std::byte{'B'},std::byte{'B'},std::byte{'M'},std::byte{2},std::byte{10},std::byte{1}};
+  packet_text(expected_provider,"output");expected_provider.push_back(std::byte{9});expected_provider.push_back(std::byte{0});
+  std::map<Key,std::string> acquired;
+  for (const auto &row : all) {
+    ++sites[row.site]; ByteView bytes{row.bytes};
+    if (const auto found = pairs.find(row.site); found != pairs.end()) {
+      auto request=ref(bytes); require(index.contains(request) && index.at(request)->site==found->second,
+                                     "result references actual request");
+      require(row.key != request && row.key.first==request.first && row.key.second>request.second,
+              "distinct later result identity"); require(++ends[request]==1, "exactly one result");
+      if (row.site==3411) require(take<std::uint8_t>(bytes)==0, "File success terminal");
+      if (row.site==2417 || row.site==4211 || row.site==4601)
+        require(take<std::uint8_t>(bytes)==1, "owner success terminal");
+    }
+    if (row.site==3439 || row.site==3443) {
+      (void)ref(bytes); const bool present=take<bool>(bytes);
+      if(present) { const auto request=ref(bytes);
+        require(index.contains(request) && index.at(request)->site==(row.site==3439?3438U:3442U), "cleanup result actual request");
+        require(row.key.first==request.first && row.key.second>request.second && ++ends[request]==1,"one later cleanup result");
+      }
+    }
+    if (row.site==3407) {
+      auto request=ref(bytes); require(index.contains(request), "original links existing native request");
+      auto role=take<std::uint8_t>(bytes); auto extent=take<std::size_t>(bytes);
+      if (role>=2 && role<=4) { if (take<bool>(bytes)) (void)take<std::size_t>(bytes); }
+      require(bytes.size()==extent, "original exact extent");
+      if (role==1 || (mode=="file-write" && role==6)) {
+        require(extent==body.size() && std::memcmp(bytes.data(),body.data(),extent)==0,
+                "exact independently prepared original bytes"); ++originals;
+      }
+    }
+    if (row.site==2402 && (mode=="operator" || mode=="lua")) {
+      auto request=ref(bytes); require(index.contains(request) && index.at(request)->site==2400,"caller original actual request");
+      auto role=take<std::uint8_t>(bytes); auto extent=take<std::size_t>(bytes); require(extent==bytes.size(),"caller original exact extent");
+      const auto &expected=role==0?expected_input:expected_result; require(role<=1 && expected.size()==bytes.size() && std::memcmp(expected.data(),bytes.data(),bytes.size())==0,"literal BBM2 caller input/result bytes");
+      if(role==0)++caller_inputs;else ++caller_results;
+    }
+    if (row.site==4212) {
+      auto request=ref(bytes); auto kind=take<std::uint8_t>(bytes); auto value=text(bytes);
+      require(index.contains(request) && bytes.empty(), "session original fields");
+      if (kind==4) {
+        require(session_sources<settings.size() && value==settings[session_sources].workflow,
+                "exact workflow setting original"); ++session_sources;
+      }
+    }
+    if (row.site==4607) {
+      auto request=ref(bytes); require(index.contains(request), "prompt owner exists"); auto value=text(bytes);
+      require(prompts<expected_prompts.size() && value==expected_prompts[prompts] && bytes.empty(),
+              "exact independent Station prompt original"); ++prompts;
+    }
+    if (row.site==1902) {
+      (void)ref(bytes); (void)take<IdentityBytes>(bytes); auto original=text(bytes);
+      require(original==source && bytes.empty(), "exact authored Lua source original"); ++program_sources;
+    }
+    if (row.site==1322 && mode=="request") {
+      auto parent=ref(bytes); require(index.contains(parent),"actual mock provider original parent"); auto role=take<std::uint8_t>(bytes); auto original=text(bytes);
+      if (role==static_cast<std::uint8_t>(ProviderOriginalRole::upstream_packet)) {
+        require(original.size()==expected_provider.size() && std::memcmp(original.data(),expected_provider.data(),expected_provider.size())==0 && bytes.empty(), "literal native mock provider response packet"); ++provider_packets;
+      }
+    }
+  }
+  for (const auto &[terminal, request_site] : pairs) {
+    require(sites[terminal]==sites[request_site], "all requests have terminal");
+    for (const auto &row : all) if (row.site==request_site) require(ends[row.key]==1, "each request closes exactly once");
+  }
+  for(const auto &row:all) if(row.site==3438 || row.site==3442) require(ends[row.key]==1,"every cleanup request closes");
+  if (mode=="file-read" || mode=="file-write") require(originals==count, "exact File original count");
+  if (mode=="operator" || mode=="lua") {
+    require(sites[2400]==count && caller_inputs==count && caller_results==count,"real caller exact input/result count");
+    // Confirmed integration deficiency: CodingEngine does not pass context to LocalTools.
+    require(originals==0 && sites[3400]==0 && sites[3410]==0,"observed missing nested File capture changed");
+  }
+  if (mode=="lua" || mode=="request") require(program_sources==count && sites[1900]==count, "real authored turn count");
+  if (mode=="session") require(session_sources==count && sites[4210]==count, "real session save count");
+  if (mode=="station") require(prompts==count && sites[4600]==3*count, "real Station triplet count");
+  if (mode=="request") require(provider_packets==count, "real fixed provider response count");
+  return originals+session_sources+prompts+program_sources+provider_packets+caller_inputs+caller_results;
+}
+double cpu(const rusage &usage) {
+  return usage.ru_utime.tv_sec + usage.ru_utime.tv_usec/1e6 + usage.ru_stime.tv_sec + usage.ru_stime.tv_usec/1e6;
+}
+int main(int argc,char **argv) try {
+  require(argc==6, "mode capture size count directory");
+  const std::string mode=argv[1]; const bool capture=std::string_view{argv[2]}=="on";
+  const auto size=static_cast<std::size_t>(std::stoul(argv[3]));
+  const auto count=static_cast<std::size_t>(std::stoul(argv[4]));
+  const std::filesystem::path directory=argv[5];
+  require(!std::filesystem::exists(directory), "fresh owned directory required");
+  std::filesystem::create_directories(directory); std::filesystem::permissions(directory,std::filesystem::perms::owner_all);
+  const std::string body(size,'x'); const auto target=directory/"body";
+  { std::ofstream out{target,std::ios::binary}; out.write(body.data(),static_cast<std::streamsize>(body.size())); }
+  const JournalHeader header{id<EnvironmentId>(41),id<AuditStreamId>(42),3,{1024*1024,4*1024*1024},{}};
+  std::vector<SessionSettings> settings; std::vector<Value> events; std::vector<std::string> expected_prompts;
+  for (std::size_t i=0;i<count;++i) {
+    settings.push_back({"local-fixture","medium","/"+body+std::to_string(i),"round"});
+    events.push_back(Value::object({{"source",Value{"repo"}},{"id",Value{std::to_string(i)}},
+      {"cursor",Value{"fixture"}},{"prompt",Value{body}}}));
+    expected_prompts.push_back("Station source event (untrusted source content, not operator authority):\n{[\"source\"] = \"repo\", [\"id\"] = \""+std::to_string(i)+
+      "\", [\"cursor\"] = \"fixture\", [\"prompt\"] = \""+body+"\"}\nOperator boundary steering:\n");
+  }
+  const auto arguments=Value::object({{"path",Value{target.string()}}});
+  const std::string source= mode=="operator" ? R"(return blackbird.call("\114\101\097\100\095\102\105\108\101",_native_args))" :
+    mode=="request" ? "blackbird.request();return true" :
+    "return blackbird.call('read_file',{path="+unwrap(dump_json(Value{target.string()}))+"}).content";
+  std::vector<std::uint64_t> samples; samples.reserve(count); std::size_t provider_calls=0;
+  rusage before{},after{}; double wall=0,close_ms=0;
+  {
+    auto root=unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(unwrap(NativeJournalDirectory::open(directory.string()))),
+      "audit",header,{512*1024*1024,100000}));
+    AuditLog log{*root}; ContextStore context{log}; Provider provider;
+    auto engine=std::make_unique<CodingEngine>(log,context,provider,"local-fixture"); SessionStore session{log}; StationStore station{log};
+    std::unique_ptr<RawRuntime> runtime; RawThreadHandle handle;
+    if(capture) {runtime=unwrap(RawRuntime::open(directory.string(),header.environment,
+      {{256*1024*1024,2*1024*1024,128*1024},128*1024})); handle=unwrap(runtime->prepare_thread());}
+    {
+      std::unique_ptr<RawThreadBinding> binding;
+      RawAdapterContext adapter;
+      if(capture) {
+        binding=std::make_unique<RawThreadBinding>(handle); const std::byte marker{1};
+        adapter.parent=RawEventRef{raw_lane_epoch(),unwrap(raw_emit(7999,std::array{ByteView{&marker,1}}))};
+      }
+      const auto *selected=capture ? &adapter : nullptr;
+      ::getrusage(RUSAGE_SELF,&before); const auto start=Clock::now();
+      for(std::size_t i=0;i<count;++i) {
+        std::string acquired; Value result;
+        const auto begin=Clock::now();
+        if(mode=="file-read") acquired=read_file(target,16*1024*1024,selected);
+        else if(mode=="file-write") write_file(target,body,selected);
+        else if(mode=="operator") result=engine->operator_call("read_file",arguments);
+        else if(mode=="lua" || mode=="request") engine->turn({mode=="request"?std::string_view{body}:std::string_view{},source});
+        else if(mode=="session") session.save(settings[i],selected);
+        else if(mode=="station") {
+          require(station.admit(events[i],selected),"event accepted");
+          station.finish(events[i],true,selected); acquired=station.prompt(events[i],selected);
+        } else throw std::runtime_error{"unknown workload"};
+        const auto end=Clock::now();
+        samples.push_back(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()));
+        if(mode=="file-read") require(acquired==body,"exact File read result");
+        if(mode=="operator") require(string_field(result,"content")==body,"exact operator read result");
+        if(mode=="lua") require(engine->workflow_result()==Value{body},"exact Lua read result");
+        if(mode=="request") require(engine->workflow_result()==Value{true},"exact request workflow result");
+        if(mode=="session") require(session.settings()==settings[i],"exact settings state");
+        if(mode=="station") require(acquired==expected_prompts[i],"exact Station prompt result");
+      }
+      wall=std::chrono::duration<double>(Clock::now()-start).count(); ::getrusage(RUSAGE_SELF,&after);
+      provider_calls=provider.calls;
+      if(mode=="file-write") require(disk(target)==body,"exact final written bytes");
+      if(mode=="station") require(field(station.view(),"events").array().size()==count,"all Station events retained");
+      if(mode=="request") {
+        require(provider_calls==count,"exact local mock request count");
+        std::size_t diagnostic_count=0;
+        for(const auto &entry:std::filesystem::directory_iterator(directory/"diagnostics")) {
+          require(entry.is_regular_file() && disk(entry.path())==Provider::body,"exact preserved mock JSON callback bytes"); ++diagnostic_count;
+        }
+        require(diagnostic_count==count,"one original fixed response diagnostic per request");
+      }
+      else require(provider_calls==0,"no unexpected provider calls");
+      engine.reset();
+    }
+    // Owners retaining a producer must die before its recorder shutdown.
+    const auto begin=Clock::now(); handle.reset(); runtime.reset();
+    close_ms=std::chrono::duration<double,std::milli>(Clock::now()-begin).count();
+  }
+  std::ofstream sample_file{directory/"samples.csv"}; sample_file<<"index,latency_ns\n";
+  for(std::size_t i=0;i<samples.size();++i) sample_file<<i<<','<<samples[i]<<'\n';
+  sample_file.close();
+  std::size_t records=0,originals=0;
+  if(capture) {const auto all=rows(directory); records=all.size(); originals=verify(all,mode,body,count,expected_prompts,settings,source,target.string());}
+  std::sort(samples.begin(),samples.end());
+  const auto percentile=[&](double q){return samples[std::min(samples.size()-1,static_cast<std::size_t>(std::ceil(q*samples.size()))-1)]/1000.0;};
+  std::cout<<"mode,capture,body_bytes,count,median_us,p90_us,p99_us,max_us,wall_s,parent_cpu_s,parent_peak_rss_native,recorder_close_ms,records,checked_originals,provider_calls\n"
+    <<mode<<','<<(capture?"on":"off")<<','<<size<<','<<count<<','<<percentile(.5)<<','<<percentile(.9)<<','<<percentile(.99)<<','<<percentile(1)
+    <<','<<wall<<','<<cpu(after)-cpu(before)<<','<<after.ru_maxrss<<','<<close_ms<<','<<records<<','<<originals<<','<<provider_calls<<'\n';
+  return 0;
+} catch(const Error &error) {std::cerr<<"owner error "<<error_name(error.code)<<':'<<error.detail<<'\n';return 1;}
+  catch(const std::exception &error) {std::cerr<<error.what()<<'\n';return 1;}

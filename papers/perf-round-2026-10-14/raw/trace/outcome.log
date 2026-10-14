@@ -1,0 +1,3 @@
+PERF_EMIT_BEGIN
+PERF_EMIT_END
+mode=syscalls size=256 count=10000 loop_ns=16906494 final_ack_ns=23982149 last_emit_ack_observed_ns=7075731 recorder_cpu_ticks=1 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk

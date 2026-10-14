@@ -8328,3 +8328,69 @@ line endings, but the command sequence incorrectly continued to the commit.
 Normalize the report CSV to LF and recheck in this text-only followup; preserve
 all measurements and do not repeat any native/static gate. Source tests and
 changed-TU diagnostics above remain their exact already-completed results.
+
+
+## 2026-10-14 — one full performance round on repaired source
+
+Operator explicitly requests one full performance round. Study the existing
+startup, raw-runtime and command-PTY observers and actual owner APIs; retain the
+written plan in context/perf-round-2026-10-14/PLAN.md and the tracked interactive
+selection. Reuse one raw transport unit and one shared owner driver, delegated
+as independent conceptual units. Build repaired source 66547c6 Release/OFF with
+qualified macOS LLVM23 and Linux Clang18; at most six aggregate compiler workers,
+one Ninja writer per tree. Serialize native timing lanes per host. No production
+changes, optimization, dependency adoption, external provider/eval request or
+whole correctness gate. Existing operator/system work is uncontrolled.
+
+Raw transport: 31 cases per host, 62 total; 1,039,144 exact events, plus 10,000
+in a separate Linux producer syscall trace. Pressure and launcher grants cover
+three body sizes, burst repetitions, paced preservation, concurrent reader,
+actual stopped-recorder full/refusal/resume, finite 128 MiB streams and separate
+producer C++ new censuses. All closed-disk lane/partition/site/ordinal/source/
+body/count oracles pass. Allocation census is zero C++ new calls/bytes over
+40,000 claim/emit pairs, not whole-owner or malloc allocation. Direct trace
+observes 56 producer syscalls, not fixed per-event wake/copy/RMW costs. Launcher
+streams preserve 282.45 MB/s macOS and 154.16 MB/s Linux, with 396.28/641.45 ms final
+observed ACK lag. No capacity choice or causal tuning claim.
+
+Interactive: 90 macOS and 60 Linux starts, every frame/marker/normal-exit oracle
+passes. Fresh median 124.849/31.458 ms, 100-call local-tool-history reopen median
+145.414/173.807 ms, typing median 2.643/1.216 ms. Actual native control sessions on
+both hosts pass one-PID/launch, effects, byte order, resize, Ctrl-C, task/composer
+ownership, saturation control and quit/reap/modes. Direct closed disk originals
+equal all 319,234/348,282 physically transferred keyboard bytes. Control endpoint
+observations use terminal readiness and at-most 5 ms file/PID polling; one session
+per host does not establish tails. Root artifact extraction initially used a
+Python-version-unavailable tar filter parameter; after verifying owned relative
+regular-file/directory entries, extract without it. No native workload rerun.
+
+Owners: 42 final datasets per host, 8,400 actual calls, 458,952 closed raw records
+and 7,200 selected exact originals. Matched actual File/operator/Lua/local mocked
+provider/session/Station calls retain all final samples and outliers. macOS 256 B
+operator off/on medians 33.593/35.919 ms, mock request 51.677/61.410 ms; operator-on
+maximum 456.122 ms. Owner setup/construction excluded and CONTROL 2 MiB differs
+from launcher 1 MiB; these are existing-path observations, not universal hook costs.
+
+Initial oracle finds genuine CodingEngine LocalTools missing raw context on both
+hosts: nested File events absent while whole-call originals/turn/bridge remain.
+Bug arconaut-4by open with source/context/capacity plan and actual-dispatch tests.
+Final performance checks independently prepared literal native caller bytes and
+business effects; missing nested File remains failed coverage, not qualified.
+Three driver expectations are corrected from actual source: escaped operator
+wrapper, mock decoded-native-result versus raw JSON diagnostic bytes, and empty
+Station steering separator. Resume only affected unsettled cases; keep successful
+case measurements. Early failed attempts retain raw audits but lack per-call CSV
+samples because those were written after the oracle; final cases save them before
+post-call disk checks. Provisional failures remain separate from final datasets.
+
+Assessment and detailed raw/interactive/owner reports, source/runner snapshots,
+all selected CSVs and hashes are saved in papers; full native audits/PTY output/
+per-event samples and copied Linux archives remain in ignored context. After all
+three owners confirm capture, remove only owned /tmp/arconaut-linux-perf-roim27Vb.
+Nls.2 remains in progress; no logical-clock/audit-completeness/eval/trajectory/
+multiplayer or standalone SystemA implementation added. Document/link/CSV/Python snapshot syntax checks and bead backup pass. Staged
+checks first reject trailing display whitespace in four report-log selections;
+normalize only tracked presentation copies, preserve context originals, then
+checkpoint/push this text-only work
+branch using the existing operator-authorized hook override. No main integration
+is inferred from the request to measure. Discuss results before optimization.

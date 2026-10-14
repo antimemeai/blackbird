@@ -1,0 +1,22 @@
+from pathlib import Path
+import struct,json,sys
+seed=Path(sys.argv[1]);out=Path(sys.argv[2]);records={}
+runs=list((seed/'raw').iterdir());assert len(runs)==1 and (runs[0]/'closed').is_file()
+for seg in runs[0].glob('events.*'):
+ b=seg.read_bytes();assert b[:8]==b'ARCOJ001';at=112
+ while at<len(b):
+  magic,version,kind,seq,first,n,crc=struct.unpack_from('<4sHHQQII',b,at);assert magic==b'ARJ1' and version==1 and at+32+n<=len(b)
+  p=b[at+32:at+32+n]
+  if kind==4:
+   partition,reserved,source=struct.unpack_from('<IIQ',p,16);extent,site,ordinal=struct.unpack_from('<IIQ',p,32)
+   assert not reserved and extent==len(p)-32 and site not in (8000,8001)
+   key=(p[:16],ordinal);assert key not in records;records[key]=(site,p[48:])
+  at+=32+n
+ assert at==len(b)
+for request,terminal,count in [(3815,3816,100),(4800,4801,101)]:
+ requests={k for k,v in records.items() if v[0]==request};terminals=[v[1] for v in records.values() if v[0]==terminal]
+ assert len(requests)==count and len(terminals)==count
+ parents=[(b[:16],struct.unpack_from('=Q',b,16)[0]) for b in terminals]
+ assert len(set(parents))==count and set(parents)==requests
+out.write_text(json.dumps({'oracle':'one_closed_run_exact_workflow_and_bridge_request_result_links','workflow_registry_calls':100,'bridge_calls_including_print':101,'total_unique_events':len(records)},indent=2)+'\n')
+print(out.read_text())

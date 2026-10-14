@@ -1,0 +1,14 @@
+from pathlib import Path
+import os,subprocess,json,hashlib,time
+root=Path('/tmp/arconaut-linux-perf-roim27Vb');out=root/'perf-root';os.chdir(root)
+subprocess.run(['python3',str(out/'linux-seed.py')],check=True)
+subprocess.run(['python3',str(out/'seed-oracle.py'),str(out/'seed'),str(out/'seed-oracle.json')],check=True)
+env=dict(os.environ,PERF_SOURCE_COMMIT='66547c60582c160b71d6ae1eb71227adfffc1393',PERF_WORKSPACE=str(root))
+with (out/'startup.log').open('w') as f:
+ subprocess.run(['python3',str(out/'startup.py'),str(out/'startup-spec.json'),str(out/'startup'),'--count','30'],env=env,stdout=f,stderr=subprocess.STDOUT,check=True)
+print('Linux60startup/input cases passed.',flush=True)
+with (out/'control.log').open('w') as f:
+ subprocess.run(['python3',str(out/'command-control.py'),str(root/'build/release/blackbird'),'--log-dir',str(out/'control')],env=env,stdout=f,stderr=subprocess.STDOUT,check=True)
+metadata={'source_commit':env['PERF_SOURCE_COMMIT'],'host':list(os.uname()),'native_sha256':hashlib.sha256((root/'build/release/blackbird').read_bytes()).hexdigest(),'driver_sha256':hashlib.sha256((out/'command-control.py').read_bytes()).hexdigest(),'observed_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'measurement':'Parent monotonic immediately before real command/input/WINCH to rendered lease, actual child effect/reap or completed local Lua. Child-file/PID polling at most5ms before scheduling; terminal readiness event-driven. One native session; exact PID/effect/all transferred keyboard-byte disk oracles. Graphics off for control, on for startup.'}
+(out/'control/metadata.json').write_text(json.dumps(metadata,indent=2)+'\n')
+print('Linux commandcontrol exactoracles passed.',flush=True)

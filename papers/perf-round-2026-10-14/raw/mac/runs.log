@@ -1,0 +1,123 @@
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '64', '40000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-burst-64-1', '1']
+exit=0
+mode=burst size=64 count=40000 loop_ns=11666833 final_ack_ns=15712542 last_emit_ack_observed_ns=4045750 recorder_cpu_ticks=326720 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-burst-256-1', '1']
+exit=0
+mode=burst size=256 count=20000 loop_ns=14001958 final_ack_ns=16588958 last_emit_ack_observed_ns=2587042 recorder_cpu_ticks=333208 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '4096', '5000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-burst-4096-1', '1']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=105113500 final_ack_ns=112773083 last_emit_ack_observed_ns=7659708 recorder_cpu_ticks=2069954 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '64', '40000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-burst-64-2', '1']
+exit=0
+mode=burst size=64 count=40000 loop_ns=32905750 final_ack_ns=47387041 last_emit_ack_observed_ns=14481333 recorder_cpu_ticks=951628 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-burst-256-2', '1']
+exit=0
+mode=burst size=256 count=20000 loop_ns=43464958 final_ack_ns=52478291 last_emit_ack_observed_ns=9013500 recorder_cpu_ticks=1106428 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '4096', '5000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-burst-4096-2', '1']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=231822750 final_ack_ns=240021667 last_emit_ack_observed_ns=8198959 recorder_cpu_ticks=4181301 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '64', '40000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-burst-64-3', '1']
+exit=0
+mode=burst size=64 count=40000 loop_ns=55590500 final_ack_ns=69087708 last_emit_ack_observed_ns=13497542 recorder_cpu_ticks=1080555 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-burst-256-3', '1']
+exit=0
+mode=burst size=256 count=20000 loop_ns=45779833 final_ack_ns=65896000 last_emit_ack_observed_ns=20116459 recorder_cpu_ticks=1113047 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '4096', '5000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-burst-4096-3', '1']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=198192708 final_ack_ns=206087708 last_emit_ack_observed_ns=7895125 recorder_cpu_ticks=3480384 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'idle', '64', '30', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-idle-64-1', '1']
+exit=0
+mode=idle size=64 count=30 loop_ns=199403084 final_ack_ns=199403125 last_emit_ack_observed_ns=1080625 recorder_cpu_ticks=439333 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'idle', '256', '30', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-idle-256-1', '1']
+exit=0
+mode=idle size=256 count=30 loop_ns=203106625 final_ack_ns=203106875 last_emit_ack_observed_ns=942833 recorder_cpu_ticks=488421 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'idle', '4096', '30', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-idle-4096-1', '1']
+exit=0
+mode=idle size=4096 count=30 loop_ns=221157791 final_ack_ns=221157833 last_emit_ack_observed_ns=1883917 recorder_cpu_ticks=729152 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'reader', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-reader-256-1', '1']
+exit=0
+mode=reader size=256 count=20000 loop_ns=19222459 final_ack_ns=23453292 last_emit_ack_observed_ns=4230875 recorder_cpu_ticks=446000 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=20000 reader_snapshots=7 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'full', '256', '1', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-full-256-1', '1']
+exit=0
+mode=full size=256 count=3856 loop_ns=1868416 final_ack_ns=5139583 last_emit_ack_observed_ns=3271292 recorder_cpu_ticks=89405 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=1 resumed_claim_emit_ns=927917 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'sustained', '4096', '32768', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-sustained-4096-1', '1']
+exit=0
+mode=sustained size=4096 count=32768 loop_ns=346777458 final_ack_ns=349182125 last_emit_ack_observed_ns=2404708 recorder_cpu_ticks=7119910 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'alloc', '256', '10000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/1MiB-alloc-256-1', '1']
+exit=0
+mode=alloc size=256 count=10000 loop_ns=5551875 final_ack_ns=8040334 last_emit_ack_observed_ns=2488500 recorder_cpu_ticks=167407 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '64', '40000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-burst-64-1', '256']
+exit=0
+mode=burst size=64 count=40000 loop_ns=5891833 final_ack_ns=14828625 last_emit_ack_observed_ns=8936833 recorder_cpu_ticks=318859 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-burst-256-1', '256']
+exit=0
+mode=burst size=256 count=20000 loop_ns=4657458 final_ack_ns=20154583 last_emit_ack_observed_ns=15497166 recorder_cpu_ticks=409926 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '4096', '5000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-burst-4096-1', '256']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=9461125 final_ack_ns=67379875 last_emit_ack_observed_ns=57918875 recorder_cpu_ticks=1346295 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '64', '40000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-burst-64-2', '256']
+exit=0
+mode=burst size=64 count=40000 loop_ns=6052917 final_ack_ns=17606459 last_emit_ack_observed_ns=11553709 recorder_cpu_ticks=348198 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-burst-256-2', '256']
+exit=0
+mode=burst size=256 count=20000 loop_ns=4818000 final_ack_ns=21952625 last_emit_ack_observed_ns=17134666 recorder_cpu_ticks=406859 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '4096', '5000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-burst-4096-2', '256']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=14363833 final_ack_ns=84150958 last_emit_ack_observed_ns=69787167 recorder_cpu_ticks=1512256 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '64', '40000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-burst-64-3', '256']
+exit=0
+mode=burst size=64 count=40000 loop_ns=7425042 final_ack_ns=22253333 last_emit_ack_observed_ns=14828333 recorder_cpu_ticks=399040 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-burst-256-3', '256']
+exit=0
+mode=burst size=256 count=20000 loop_ns=6809500 final_ack_ns=32524750 last_emit_ack_observed_ns=25715292 recorder_cpu_ticks=618943 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'burst', '4096', '5000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-burst-4096-3', '256']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=12217625 final_ack_ns=86360917 last_emit_ack_observed_ns=74143334 recorder_cpu_ticks=1614970 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'idle', '64', '30', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-idle-64-1', '256']
+exit=0
+mode=idle size=64 count=30 loop_ns=207522292 final_ack_ns=207522333 last_emit_ack_observed_ns=591125 recorder_cpu_ticks=510910 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'idle', '256', '30', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-idle-256-1', '256']
+exit=0
+mode=idle size=256 count=30 loop_ns=204324167 final_ack_ns=204324250 last_emit_ack_observed_ns=858500 recorder_cpu_ticks=479745 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'idle', '4096', '30', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-idle-4096-1', '256']
+exit=0
+mode=idle size=4096 count=30 loop_ns=202915042 final_ack_ns=202915083 last_emit_ack_observed_ns=907916 recorder_cpu_ticks=513706 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'reader', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-reader-256-1', '256']
+exit=0
+mode=reader size=256 count=20000 loop_ns=5573125 final_ack_ns=49961459 last_emit_ack_observed_ns=44388375 recorder_cpu_ticks=617270 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=20000 reader_snapshots=5 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'sustained', '4096', '32768', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-sustained-4096-1', '256']
+exit=0
+mode=sustained size=4096 count=32768 loop_ns=78903000 final_ack_ns=475187542 last_emit_ack_observed_ns=396284584 recorder_cpu_ticks=9148341 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/probe', 'alloc', '256', '10000', '/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/raw/mac/256MiB-alloc-256-1', '256']
+exit=0
+mode=alloc size=256 count=10000 loop_ns=2436083 final_ack_ns=10698875 last_emit_ack_observed_ns=8262875 recorder_cpu_ticks=200022 cpu_numer=125 cpu_denom=3 cpu_unit=mach_absolute_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk

@@ -386,3 +386,38 @@ No optimization or capacity tuning. Seven scoped bugs close; nls.2 remains in
 progress for the existing census/cost/sizing and implementation boundaries.
 
 See [repairs and every affected result](../papers/2026-10-14-qualification-repair-results.md).
+
+
+## Performance round after repairs, 2026-10-14
+
+One operator-authorized finite round measures repaired source 66547c6 in
+Release/OFF on macOS ARM64 and Linux x86_64. All 150 startup/input trials and
+both actual native command-control sessions complete. The 62 raw workload cases
+preserve 1,039,144 exact-byte events, with another 10,000 events checked in a
+separate Linux syscall trace. The 84 matched owner cases measure 8,400 calls and
+check the existing paths' exact business effects, originals and request/result
+links. No product code changes, optimization or whole correctness gate rerun.
+
+Fresh startup medians are 124.849 ms macOS and 31.458 ms Linux; reopening a real
+100-call local-tool-history seed measures 145.414 ms and 173.807 ms. Launcher-grant
+128 MiB streams preserve at 282.45 MB/s and 154.16 MB/s, with observed final-event
+ACK lags of 396.28 ms and 641.45 ms. Complete owner costs and their large observed
+tails are separate from prepaid emitter costs. These finite observations do not
+select capacities or establish production tail limits.
+
+The actual CodingEngine operator/Lua integration omits RawAdapterContext at its
+LocalTools dispatch. Whole-call input/result and turn/bridge records remain, but
+nested File events are absent. The initial owner oracle rejects that missing
+surface; existing-path measurements subsequently check literal native caller
+originals and exact effects while recording the gap. Bug **arconaut-4by** stays
+open. The final owner datasets do not qualify missing File hooks. Native mock
+provider results and diagnostic originals are checked separately; there is no
+external provider/network performance measurement.
+
+See [complete round assessment](../papers/2026-10-14-performance-round.md),
+[raw transport](../papers/2026-10-14-raw-transport-perf-round.md),
+[interactive paths](../papers/2026-10-14-interactive-perf-round.md) and
+[owner paths](../papers/2026-10-14-performance-owner-round.md).
+Nls.2 remains in progress, including the discovered File integration gap and
+previously documented broader boundaries. Discuss these measurements before
+performance optimization; no evaluator, trajectory or multiplayer work starts.

@@ -1,0 +1,66 @@
+{
+  "count_per_tool": 30,
+  "order": "round robin, serial",
+  "terminal": "110x35 PTY; Ghostty identity; consumer drains bytes and answers terminal queries",
+  "cache": "ordinary OS caches; private APFS-cloned macOS state or copied Linux state; setup excluded",
+  "measurement": "parent monotonic clock before spawn to input frame, then unsubmitted marker rendered",
+  "inference_prompts_submitted": 0,
+  "driver_sha256": "2f044b99e5b4ceeba7f2cbe5116aea52c4ba1bda216ef10adb4164aeb1b6afa7",
+  "source_commit": "66547c60582c160b71d6ae1eb71227adfffc1393",
+  "started_utc": "2026-10-14T10:41:41Z",
+  "host_load_before": [
+    3.494140625,
+    5.89404296875,
+    5.736328125
+  ],
+  "tools": {
+    "previous-segment": {
+      "command": [
+        "/Users/patrickbeam/projects/blackbird/scripts/blackbird",
+        "--session",
+        "{run}/session"
+      ],
+      "ready_text": [
+        "Enter send"
+      ],
+      "frame_end": "\\x1b[?2026l",
+      "notes": "Retained previous segment Release, recorded sourceca6747b/e550adc sha; not exact parent of final segment",
+      "launcher_sha256": "f6508629cfa2bb84e91648ed465cf8266074a5635ad9dd36f4c069ed48533bd3",
+      "native_executable_sha256": "e550adcbbb7369066ff948feec3e82d4897557ed8b3ec9481d76fef8b12b6cd5"
+    },
+    "repaired-fresh": {
+      "command": [
+        "/Users/patrickbeam/projects/blackbird/scripts/blackbird",
+        "--session",
+        "{run}/session"
+      ],
+      "ready_text": [
+        "Enter send"
+      ],
+      "frame_end": "\\x1b[?2026l",
+      "notes": "Repaired source66547c6, fresh session, no external provider calls.",
+      "launcher_sha256": "f6508629cfa2bb84e91648ed465cf8266074a5635ad9dd36f4c069ed48533bd3",
+      "native_executable_sha256": "cda70d9a5537374ee694f394d295bff0f79fb46b925a34d310e1463178eae84f"
+    },
+    "repaired-reopened": {
+      "command": [
+        "/Users/patrickbeam/projects/blackbird/scripts/blackbird",
+        "--session",
+        "{run}/state"
+      ],
+      "ready_text": [
+        "Enter send"
+      ],
+      "frame_end": "\\x1b[?2026l",
+      "notes": "Private copy of native session with100actual workflow_registry calls in one Lua turn; ordinary local-tool history, no provider calls.",
+      "launcher_sha256": "f6508629cfa2bb84e91648ed465cf8266074a5635ad9dd36f4c069ed48533bd3",
+      "native_executable_sha256": "cda70d9a5537374ee694f394d295bff0f79fb46b925a34d310e1463178eae84f"
+    }
+  },
+  "finished_utc": "2026-10-14T10:42:12Z",
+  "host_load_after": [
+    5.75732421875,
+    6.20703125,
+    5.85400390625
+  ]
+}

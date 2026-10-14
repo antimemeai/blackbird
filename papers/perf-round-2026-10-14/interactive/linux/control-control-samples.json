@@ -1,0 +1,46 @@
+[
+  {
+    "endpoint": "foreground-command-to-rendered-lease-pipe",
+    "observed_ns": 57350388
+  },
+  {
+    "endpoint": "foreground-command-to-rendered-lease-pty",
+    "observed_ns": 52052523
+  },
+  {
+    "endpoint": "pty-keyboard-to-first-child-effect",
+    "observed_ns": 10879469
+  },
+  {
+    "endpoint": "background-chord-plus-local-lua-to-result",
+    "observed_ns": 47861468
+  },
+  {
+    "endpoint": "foreground-command-to-rendered-lease-pty",
+    "observed_ns": 59189530
+  },
+  {
+    "endpoint": "outer-winch-to-child-size-file",
+    "observed_ns": 13888771
+  },
+  {
+    "endpoint": "pty-keyboard-to-second-child-effect",
+    "observed_ns": 11302399
+  },
+  {
+    "endpoint": "foreground-command-to-rendered-lease-pty",
+    "observed_ns": 57299718
+  },
+  {
+    "endpoint": "foreground-command-to-rendered-lease-pty",
+    "observed_ns": 68638524
+  },
+  {
+    "endpoint": "saturated-background-chord-plus-local-lua-to-result",
+    "observed_ns": 308505060
+  },
+  {
+    "endpoint": "saturated-stop-command-to-child-reap",
+    "observed_ns": 22491676
+  }
+]

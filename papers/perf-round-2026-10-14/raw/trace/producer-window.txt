@@ -1,0 +1,56 @@
+sendto(4, "\1", 1, MSG_DONTWAIT|MSG_NOSIGNAL, NULL, 0) = 1
+recvfrom(4, 0x7ffea6c57640, 256, MSG_DONTWAIT, NULL, NULL) = -1 EAGAIN (Resource temporarily unavailable)
+read(3, "\1", 1)                        = 1
+sendto(7, "\0", 1, MSG_DONTWAIT, NULL, 0) = 1
+poll([{fd=7, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=7, revents=POLLIN}])
+recvmsg(7, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="\301\334\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", iov_len=40}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 40
+write(8, "\1", 1)                       = 1
+poll([{fd=4, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=4, revents=POLLIN}])
+recvfrom(4, "\1", 256, MSG_DONTWAIT, NULL, NULL) = 1
+recvfrom(4, 0x7ffea6c57640, 256, MSG_DONTWAIT, NULL, NULL) = -1 EAGAIN (Resource temporarily unavailable)
+read(3, "\1", 1)                        = 1
+sendto(7, "\0", 1, MSG_DONTWAIT, NULL, 0) = 1
+poll([{fd=7, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=7, revents=POLLIN}])
+recvmsg(7, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="\301\334\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", iov_len=40}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 40
+write(8, "\1", 1)                       = 1
+poll([{fd=4, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=4, revents=POLLIN}])
+recvfrom(4, "\1", 256, MSG_DONTWAIT, NULL, NULL) = 1
+recvfrom(4, 0x7ffea6c57640, 256, MSG_DONTWAIT, NULL, NULL) = -1 EAGAIN (Resource temporarily unavailable)
+read(3, "\1", 1)                        = 1
+sendto(7, "\0", 1, MSG_DONTWAIT, NULL, 0) = 1
+poll([{fd=7, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=7, revents=POLLIN}])
+recvmsg(7, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="\301\334\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", iov_len=40}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 40
+write(8, "\1", 1)                       = 1
+poll([{fd=4, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=4, revents=POLLIN}])
+recvfrom(4, "\1", 256, MSG_DONTWAIT, NULL, NULL) = 1
+recvfrom(4, 0x7ffea6c57640, 256, MSG_DONTWAIT, NULL, NULL) = -1 EAGAIN (Resource temporarily unavailable)
+read(3, "\1", 1)                        = 1
+sendto(7, "\0", 1, MSG_DONTWAIT, NULL, 0) = 1
+poll([{fd=7, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=7, revents=POLLIN}])
+recvmsg(7, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="\301\334\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", iov_len=40}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 40
+write(8, "\1", 1)                       = 1
+poll([{fd=4, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=4, revents=POLLIN}])
+recvfrom(4, "\1", 256, MSG_DONTWAIT, NULL, NULL) = 1
+recvfrom(4, 0x7ffea6c57640, 256, MSG_DONTWAIT, NULL, NULL) = -1 EAGAIN (Resource temporarily unavailable)
+read(3, "\1", 1)                        = 1
+sendto(7, "\0", 1, MSG_DONTWAIT, NULL, 0) = 1
+poll([{fd=7, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=7, revents=POLLIN}])
+recvmsg(7, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="\301\334\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", iov_len=40}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 40
+write(8, "\1", 1)                       = 1
+poll([{fd=4, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=4, revents=POLLIN}])
+recvfrom(4, "\1", 256, MSG_DONTWAIT, NULL, NULL) = 1
+recvfrom(4, 0x7ffea6c57640, 256, MSG_DONTWAIT, NULL, NULL) = -1 EAGAIN (Resource temporarily unavailable)
+read(3, "\1", 1)                        = 1
+sendto(7, "\0", 1, MSG_DONTWAIT, NULL, 0) = 1
+poll([{fd=7, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=7, revents=POLLIN}])
+recvmsg(7, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="\301\334\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", iov_len=40}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 40
+write(8, "\1", 1)                       = 1
+poll([{fd=4, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=4, revents=POLLIN}])
+recvfrom(4, "\1", 256, MSG_DONTWAIT, NULL, NULL) = 1
+recvfrom(4, 0x7ffea6c57640, 256, MSG_DONTWAIT, NULL, NULL) = -1 EAGAIN (Resource temporarily unavailable)
+read(3, "\1", 1)                        = 1
+sendto(7, "\0", 1, MSG_DONTWAIT, NULL, 0) = 1
+poll([{fd=7, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=7, revents=POLLIN}])
+recvmsg(7, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="\301\334\26\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\16\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", iov_len=40}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 40
+write(8, "\1", 1)                       = 1
+poll([{fd=4, events=POLLIN}, {fd=11, events=POLLIN|POLLHUP}], 2, -1) = 1 ([{fd=4, revents=POLLIN}])

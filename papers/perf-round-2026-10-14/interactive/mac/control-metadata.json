@@ -1,0 +1,15 @@
+{
+  "source_commit": "66547c60582c160b71d6ae1eb71227adfffc1393",
+  "source_product_repair": "ee4efc6",
+  "host": [
+    "Darwin",
+    "Patricks-MacBook-Pro.local",
+    "25.6.0",
+    "Darwin Kernel Version 25.6.0: Sat Jul 11 15:27:27 PDT 2026; root:xnu-12377.161.13~4/RELEASE_ARM64_T6041",
+    "arm64"
+  ],
+  "observed_utc": "2026-10-14T10:44:42Z",
+  "native_sha256": "cda70d9a5537374ee694f394d295bff0f79fb46b925a34d310e1463178eae84f",
+  "driver_sha256": "793fa3a268768adf010f6f86d7ac06951e398fa409ef5a98c56245ef61580bd0",
+  "measurement": "Parent monotonic clock immediately before actual command/chord/keyboard/WINCH to rendered lease, actual child effect/reap, or completed local Lua result. Child-file/PID polling interval at most5ms before OS scheduling; terminal-output observations event-driven. One real session, no distribution/tail claim. Full exact original-keyboard byte and PID/effect oracles unchanged. Graphics off for control test, on for startup."
+}

@@ -1,0 +1,16 @@
+started=2026-10-14T06:40:27-0400
+platform=macOS-26.6-arm64-arm-64bit
+source=66547c60582c160b71d6ae1eb71227adfffc1393
+processor=arm cpu_count=16
+probe_source_sha256=1012b7c000ea1c8f7d048e946844484e058bb47dbc2c4bb9d9e9dbb017597cf5
+runner_source_sha256=eca577f5471b6551411e7c6a039c28753f3763f43efb02f3663e6182bb9a01e3
+binary_sha256=0a784f9ab05de2017259ebbba59d39dd2c27b200ace205f8358e613a1b81fda8
+foundation_sha256=0953e008909bdd4d17d2882cb0a4151b4b02e5ed8fd00d1d2c2b837a62551e24
+load_before=(3.17626953125, 6.59765625, 5.9541015625)
+compiler=LLVM23.1.2 ReleaseOFF O3 ARM64
+pressure DATA=1048576 CONTROL=4096 FAILURE=4096 recorder_failure=4096
+launcher DATA=268435456 CONTROL=1048576 FAILURE=131072 recorder_failure=131072
+Actual RawRuntime full-sync separate recorder; no affinity/cache flush/discarded samples.
+No optimization/provider calls; allocation census separate from ordinary latency runs.
+load_after=(3.28369140625, 6.45361328125, 5.9130859375)
+completed=2026-10-14T06:40:37-0400

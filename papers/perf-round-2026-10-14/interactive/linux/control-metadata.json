@@ -1,0 +1,14 @@
+{
+  "source_commit": "66547c60582c160b71d6ae1eb71227adfffc1393",
+  "host": [
+    "Linux",
+    "neuroses",
+    "6.8.0-146-generic",
+    "#146-Ubuntu SMP PREEMPT_DYNAMIC Thu Sep  3 16:12:30 UTC 2026",
+    "x86_64"
+  ],
+  "native_sha256": "bfce89e74d228ce459d735c68921c7209496410714f95af36a528e49e98680d2",
+  "driver_sha256": "793fa3a268768adf010f6f86d7ac06951e398fa409ef5a98c56245ef61580bd0",
+  "observed_utc": "2026-10-14T10:49:09Z",
+  "measurement": "Parent monotonic immediately before real command/input/WINCH to rendered lease, actual child effect/reap or completed local Lua. Child-file/PID polling at most5ms before scheduling; terminal readiness event-driven. One native session; exact PID/effect/all transferred keyboard-byte disk oracles. Graphics off for control, on for startup."
+}

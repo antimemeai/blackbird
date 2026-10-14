@@ -1,0 +1,123 @@
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '64', '40000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-burst-64-1', '1']
+exit=0
+mode=burst size=64 count=40000 loop_ns=28436948 final_ack_ns=37558929 last_emit_ack_observed_ns=9122033 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '256', '20000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-burst-256-1', '1']
+exit=0
+mode=burst size=256 count=20000 loop_ns=33349135 final_ack_ns=39395670 last_emit_ack_observed_ns=6046612 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '4096', '5000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-burst-4096-1', '1']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=120780293 final_ack_ns=126708904 last_emit_ack_observed_ns=5928679 recorder_cpu_ticks=7 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '64', '40000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-burst-64-2', '1']
+exit=0
+mode=burst size=64 count=40000 loop_ns=29652471 final_ack_ns=39706239 last_emit_ack_observed_ns=10053824 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '256', '20000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-burst-256-2', '1']
+exit=0
+mode=burst size=256 count=20000 loop_ns=30943009 final_ack_ns=36974602 last_emit_ack_observed_ns=6031658 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '4096', '5000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-burst-4096-2', '1']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=116396257 final_ack_ns=121056145 last_emit_ack_observed_ns=4659956 recorder_cpu_ticks=7 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '64', '40000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-burst-64-3', '1']
+exit=0
+mode=burst size=64 count=40000 loop_ns=29015655 final_ack_ns=39360549 last_emit_ack_observed_ns=10344953 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '256', '20000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-burst-256-3', '1']
+exit=0
+mode=burst size=256 count=20000 loop_ns=36570388 final_ack_ns=44064085 last_emit_ack_observed_ns=7493762 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '4096', '5000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-burst-4096-3', '1']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=125422560 final_ack_ns=130600067 last_emit_ack_observed_ns=5177581 recorder_cpu_ticks=7 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'idle', '64', '30', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-idle-64-1', '1']
+exit=0
+mode=idle size=64 count=30 loop_ns=184043663 final_ack_ns=184043956 last_emit_ack_observed_ns=1136170 recorder_cpu_ticks=1 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'idle', '256', '30', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-idle-256-1', '1']
+exit=0
+mode=idle size=256 count=30 loop_ns=184739735 final_ack_ns=184740061 last_emit_ack_observed_ns=1449385 recorder_cpu_ticks=1 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'idle', '4096', '30', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-idle-4096-1', '1']
+exit=0
+mode=idle size=4096 count=30 loop_ns=183732340 final_ack_ns=183732517 last_emit_ack_observed_ns=1116298 recorder_cpu_ticks=1 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'reader', '256', '20000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-reader-256-1', '1']
+exit=0
+mode=reader size=256 count=20000 loop_ns=33421933 final_ack_ns=39259393 last_emit_ack_observed_ns=5837508 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=20000 reader_snapshots=13 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'full', '256', '1', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-full-256-1', '1']
+exit=0
+mode=full size=256 count=3856 loop_ns=5300490 final_ack_ns=11038739 last_emit_ack_observed_ns=5738448 recorder_cpu_ticks=0 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=1 resumed_claim_emit_ns=2779909 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'sustained', '4096', '32768', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-sustained-4096-1', '1']
+exit=0
+mode=sustained size=4096 count=32768 loop_ns=930002161 final_ack_ns=940141630 last_emit_ack_observed_ns=10159194 recorder_cpu_ticks=57 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'alloc', '256', '10000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/1MiB-alloc-256-1', '1']
+exit=0
+mode=alloc size=256 count=10000 loop_ns=16262907 final_ack_ns=21913745 last_emit_ack_observed_ns=5650902 recorder_cpu_ticks=0 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '64', '40000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-burst-64-1', '256']
+exit=0
+mode=burst size=64 count=40000 loop_ns=12971330 final_ack_ns=36434717 last_emit_ack_observed_ns=23463452 recorder_cpu_ticks=1 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '256', '20000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-burst-256-1', '256']
+exit=0
+mode=burst size=256 count=20000 loop_ns=13780434 final_ack_ns=39864986 last_emit_ack_observed_ns=26084621 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '4096', '5000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-burst-4096-1', '256']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=36841287 final_ack_ns=125494113 last_emit_ack_observed_ns=88653150 recorder_cpu_ticks=6 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '64', '40000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-burst-64-2', '256']
+exit=0
+mode=burst size=64 count=40000 loop_ns=14589042 final_ack_ns=39221771 last_emit_ack_observed_ns=24632805 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '256', '20000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-burst-256-2', '256']
+exit=0
+mode=burst size=256 count=20000 loop_ns=13348540 final_ack_ns=38304679 last_emit_ack_observed_ns=24956217 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '4096', '5000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-burst-4096-2', '256']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=36166044 final_ack_ns=308120739 last_emit_ack_observed_ns=271954786 recorder_cpu_ticks=6 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '64', '40000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-burst-64-3', '256']
+exit=0
+mode=burst size=64 count=40000 loop_ns=13110960 final_ack_ns=35769103 last_emit_ack_observed_ns=22658213 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '256', '20000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-burst-256-3', '256']
+exit=0
+mode=burst size=256 count=20000 loop_ns=13432879 final_ack_ns=36752142 last_emit_ack_observed_ns=23319336 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'burst', '4096', '5000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-burst-4096-3', '256']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=34091757 final_ack_ns=119124071 last_emit_ack_observed_ns=85032409 recorder_cpu_ticks=6 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'idle', '64', '30', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-idle-64-1', '256']
+exit=0
+mode=idle size=64 count=30 loop_ns=178913010 final_ack_ns=178913790 last_emit_ack_observed_ns=795371 recorder_cpu_ticks=1 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'idle', '256', '30', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-idle-256-1', '256']
+exit=0
+mode=idle size=256 count=30 loop_ns=182148671 final_ack_ns=182149027 last_emit_ack_observed_ns=1275159 recorder_cpu_ticks=1 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'idle', '4096', '30', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-idle-4096-1', '256']
+exit=0
+mode=idle size=4096 count=30 loop_ns=188221160 final_ack_ns=188221320 last_emit_ack_observed_ns=1212693 recorder_cpu_ticks=1 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'reader', '256', '20000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-reader-256-1', '256']
+exit=0
+mode=reader size=256 count=20000 loop_ns=14806574 final_ack_ns=45873883 last_emit_ack_observed_ns=31067382 recorder_cpu_ticks=2 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=20000 reader_snapshots=11 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'sustained', '4096', '32768', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-sustained-4096-1', '256']
+exit=0
+mode=sustained size=4096 count=32768 loop_ns=229184008 final_ack_ns=870631498 last_emit_ack_observed_ns=641450549 recorder_cpu_ticks=55 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/tmp/arconaut-linux-perf-roim27Vb/perf-raw/probe', 'alloc', '256', '10000', '/tmp/arconaut-linux-perf-roim27Vb/perf-raw/linux/256MiB-alloc-256-1', '256']
+exit=0
+mode=alloc size=256 count=10000 loop_ns=8013577 final_ack_ns=23811073 last_emit_ack_observed_ns=15797727 recorder_cpu_ticks=0 cpu_numer=1000000000 cpu_denom=100 cpu_unit=proc_stat_ticks producer_new_calls=0 producer_new_bytes=0 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk

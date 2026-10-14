@@ -1,0 +1,317 @@
+#include "blackbird/raw_reader.hpp"
+#include "blackbird/raw_runtime.hpp"
+#include "blackbird/local_timing.hpp"
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <csignal>
+#include <cstdio>
+#include <cstring>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <cstdlib>
+#include <new>
+#include <sstream>
+#ifdef __APPLE__
+#include <libproc.h>
+#include <mach/mach_time.h>
+#include <sys/proc_info.h>
+#include <sys/proc.h>
+#endif
+#include <stdexcept>
+#include <string>
+#include <thread>
+#include <unistd.h>
+
+using namespace blackbird;
+using Clock = std::chrono::steady_clock;
+constexpr std::uint32_t site = 49000;
+RawRuntimeOptions options{{1024 * 1024, 4096, 4096}, 4096};
+thread_local bool count_allocations=false;
+thread_local std::uint64_t allocation_calls=0, allocation_bytes=0;
+void *allocate(std::size_t size, std::size_t alignment=0) {
+  void *result=nullptr;
+  const auto actual=size == 0 ? 1 : size;
+  if (alignment == 0) result=std::malloc(actual);
+  else if (::posix_memalign(&result,alignment,actual) != 0) result=nullptr;
+  if (!result) throw std::bad_alloc{};
+  if (count_allocations) { ++allocation_calls; allocation_bytes+=size; }
+  return result;
+}
+void *operator new(std::size_t size) { return allocate(size); }
+void *operator new[](std::size_t size) { return allocate(size); }
+void *operator new(std::size_t size, std::align_val_t alignment) { return allocate(size,static_cast<std::size_t>(alignment)); }
+void *operator new[](std::size_t size, std::align_val_t alignment) { return allocate(size,static_cast<std::size_t>(alignment)); }
+void operator delete(void *pointer) noexcept { std::free(pointer); }
+void operator delete[](void *pointer) noexcept { std::free(pointer); }
+void operator delete(void *pointer, std::size_t) noexcept { std::free(pointer); }
+void operator delete[](void *pointer, std::size_t) noexcept { std::free(pointer); }
+void operator delete(void *pointer, std::align_val_t) noexcept { std::free(pointer); }
+void operator delete[](void *pointer, std::align_val_t) noexcept { std::free(pointer); }
+void operator delete(void *pointer, std::size_t, std::align_val_t) noexcept { std::free(pointer); }
+void operator delete[](void *pointer, std::size_t, std::align_val_t) noexcept { std::free(pointer); }
+void check(bool condition, const char *message) {
+  if (!condition) throw std::runtime_error(message);
+}
+template<class T> T need(Result<T> result) {
+  if (!result.has_value()) {
+    std::fprintf(stderr, "native error code=%u detail=%lld\n",
+                 static_cast<unsigned>(result.error().code),
+                 static_cast<long long>(result.error().detail));
+    throw std::runtime_error("native operation failed");
+  }
+  return std::move(result).value();
+}
+std::uint64_t ns(Clock::duration duration) {
+  return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count());
+}
+void pattern(std::span<std::byte> output, std::uint64_t event) {
+  for (std::size_t i = 0; i < output.size(); ++i) {
+    output[i] = std::byte{static_cast<unsigned char>(i < 8 ? (event >> (i * 8)) & 255U : (i * 29 + event * 73 + 17) & 255U)};
+  }
+}
+std::vector<std::byte> expected(std::size_t size, std::uint64_t event) {
+  std::vector<std::byte> result(size + 16);
+  const auto field = [&](std::uint64_t value, std::size_t start, unsigned width) {
+    for (unsigned i = 0; i < width; ++i) result[start+i] = std::byte{static_cast<unsigned char>((value >> (8*i)) & 255U)};
+  };
+  field(size + 16, 0, 4); field(site, 4, 4); field(event, 8, 8);
+  for (std::size_t i=0; i<size; ++i) {
+    const auto value = i < 8 ? (event >> (8*i)) & 255U : (29*i + 73*event + 17) % 256;
+    result[16+i]=std::byte{static_cast<unsigned char>(value)};
+  }
+  return result;
+}
+void verify(const RawRunRead &record, const IdentityBytes &epoch, std::size_t size, std::uint64_t event) {
+  check(record.origin.lane == epoch, "unexpected lane");
+  check(record.origin.partition == RawPartition::data, "unexpected partition");
+  check(record.origin.source_start == (event - 1) * (size + 16), "source offset/order");
+  const auto fixture = expected(size, event);
+  check(record.raw.size() == fixture.size() && std::equal(record.raw.begin(), record.raw.end(), fixture.begin()), "raw bytes/ordinal/site");
+}
+template<class Predicate> void until(Predicate ready) {
+  const auto deadline = Clock::now() + std::chrono::seconds{30};
+  while (!ready()) {
+    check(Clock::now() < deadline, "testcase progress watchdog");
+    std::this_thread::sleep_for(std::chrono::microseconds{100});
+  }
+}
+std::filesystem::path run_path(const std::string &session) {
+  auto entries = std::filesystem::directory_iterator{std::filesystem::path{session} / "raw"};
+  check(entries != std::filesystem::directory_iterator{}, "no run");
+  return entries->path();
+}
+RawChannel observer(const IdentityBytes &epoch) {
+  const char hex[] = "0123456789abcdef";
+  std::string name = "/bb";
+  for (std::size_t i=0; i<12; ++i) {
+    const auto value=std::to_integer<unsigned>(epoch[i]);
+    name.push_back(hex[value >> 4]); name.push_back(hex[value & 15U]);
+  }
+  return need(RawChannel::open(name, epoch, options.producer_capacities));
+}
+struct CpuUnits { std::uint64_t numer, denom; const char *name; };
+CpuUnits cpu_units() {
+#ifdef __APPLE__
+  mach_timebase_info_data_t factor{};
+  check(::mach_timebase_info(&factor) == 0 && factor.denom != 0,"Mach timebase");
+  return {factor.numer,factor.denom,"mach_absolute_ticks"};
+#else
+  const auto ticks=::sysconf(_SC_CLK_TCK);
+  check(ticks > 0,"Linux process clock ticks");
+  return {1000000000,static_cast<std::uint64_t>(ticks),"proc_stat_ticks"};
+#endif
+}
+#ifndef __APPLE__
+std::vector<std::string> proc_stat(pid_t pid) {
+  std::ifstream input{"/proc/"+std::to_string(pid)+"/stat"};
+  std::string line;
+  check(static_cast<bool>(std::getline(input,line)),"process stat read");
+  const auto close=line.rfind(')');
+  check(close != std::string::npos,"process stat comm");
+  std::istringstream fields{line.substr(close+2)};
+  std::vector<std::string> result;
+  std::string field;
+  while (fields >> field) result.push_back(field);
+  check(result.size() > 12,"process stat fields");
+  return result;
+}
+#endif
+std::uint64_t recorder_cpu(pid_t recorder) {
+#ifdef __APPLE__
+  rusage_info_v4 usage{};
+  check(::proc_pid_rusage(recorder, RUSAGE_INFO_V4, reinterpret_cast<rusage_info_t *>(&usage)) == 0, "recorder CPU counter");
+  return usage.ri_user_time + usage.ri_system_time;
+#else
+  const auto fields=proc_stat(recorder);
+  return std::stoull(fields[11])+std::stoull(fields[12]);
+#endif
+}
+void stop_recorder(pid_t recorder) {
+  check(::kill(recorder, SIGSTOP) == 0, "SIGSTOP");
+  until([&] {
+#ifdef __APPLE__
+    proc_bsdinfo status{};
+    check(::proc_pidinfo(recorder, PROC_PIDTBSDINFO, 0, &status, sizeof(status)) == sizeof(status), "recorder state");
+    return status.pbi_status == SSTOP;
+#else
+    const auto fields=proc_stat(recorder);
+    return fields[0] == "T" || fields[0] == "t";
+#endif
+  });
+}
+struct Sample { std::uint64_t claim, emit; };
+struct ReaderState {
+  std::atomic<bool> finish{false};
+  std::uint64_t count=0, snapshots=0;
+  std::exception_ptr error;
+};
+void consume(ReaderState &state, const std::filesystem::path &path, IdentityBytes epoch, std::size_t size) noexcept {
+  try {
+    std::optional<RawRunCursor> cursor;
+    std::vector<std::byte> output(size+16);
+    bool final_snapshot=false;
+    do {
+      auto reader=need(RawRunReader::open(path.string(), cursor));
+      ++state.snapshots;
+      for (;;) {
+        auto record=need(reader->read(output));
+        if (!record) break;
+        verify(*record, epoch, size, ++state.count);
+      }
+      cursor=reader->cursor();
+      if (final_snapshot) break;
+      final_snapshot=state.finish.load();
+      std::this_thread::yield();
+    } while (true);
+  } catch (...) { state.error=std::current_exception(); }
+}
+int main(int argc, char **argv) {
+  pid_t stopped=-1;
+  std::thread consumer;
+  ReaderState consumption;
+  try {
+    if (argc == 3 && std::string{argv[1]} == "clocks") {
+      std::ofstream output{argv[2]};
+      output << "mode,event,ns\n";
+      for (int mode=0; mode<3; ++mode) {
+        for (unsigned event=1; event<=10000; ++event) {
+          const auto before=Clock::now();
+          RawClockSample sample{};
+          if (mode != 0) sample=raw_local_clock(mode == 2);
+          const auto after=Clock::now();
+          if (mode != 0) check(sample.monotonic.result == 0 && (mode != 2 || sample.thread_cpu.result == 0), "raw native clock acquisition");
+          output << mode << ',' << event << ',' << ns(after-before) << '\n';
+        }
+      }
+      std::puts("clock_pairs=30000 native_clock_failures=0");
+      return 0;
+    }
+    check(argc == 6, "usage: probe MODE SIZE COUNT OUTPUT GRANT");
+    const auto grant=std::stoull(argv[5]);
+    check(grant == 1 || grant == 256,"grant must be 1 or 256 MiB");
+    if (grant == 256) options={{256 * 1024 * 1024,1024 * 1024,128 * 1024},128 * 1024};
+    const auto units=cpu_units();
+    const std::string mode=argv[1], output=argv[4];
+    const auto size=static_cast<std::size_t>(std::stoull(argv[2]));
+    auto count=std::stoull(argv[3]);
+    check(size >= 8 && count > 0, "size/count");
+    std::filesystem::create_directories(output);
+    const auto session=output+"/session";
+    check(!std::filesystem::exists(session), "fresh session required");
+    std::filesystem::create_directory(session);
+    IdentityBytes identity{}; identity[0]=std::byte{1};
+    auto runtime=need(RawRuntime::open(session, need(EnvironmentId::from_bytes(identity)), options));
+    auto context=need(runtime->prepare_thread());
+    IdentityBytes epoch{};
+    std::vector<Sample> samples;
+    samples.reserve(static_cast<std::size_t>(count)+1024);
+    std::vector<std::byte> body(size);
+    const std::array<ByteView,1> parts{body};
+    std::uint64_t final_ack_ns=0, loop_ns=0, last_emit_ns=0, cpu_ns=0;
+    bool capacity_refused=false;
+    std::uint64_t resumed_claim_ns=0;
+    {
+      RawThreadBinding binding{context};
+      epoch=raw_lane_epoch();
+      auto channel=observer(epoch);
+      const auto recorder=need(runtime->status()).recorder;
+      struct Resume {
+        pid_t &stopped;
+        ~Resume() { if (stopped > 0) { ::kill(stopped, SIGCONT); stopped=-1; } }
+      } resume{stopped};
+      const auto cpu_start=recorder_cpu(recorder);
+      if (mode == "syscalls") check(::write(STDERR_FILENO,"PERF_EMIT_BEGIN\n",16) == 16,"trace begin marker");
+      const auto started=Clock::now();
+      auto last_emit=started;
+      const auto emit_one=[&](std::uint64_t event) {
+        pattern(body,event);
+        count_allocations=(mode == "alloc");
+        const auto a=Clock::now();
+        auto credit=need(raw_claim_data(size+16));
+        const auto b=Clock::now();
+        check(need(raw_emit(site,parts,RawPartition::data,&credit)) == event, "published ordinal");
+        const auto c=Clock::now();
+        count_allocations=false;
+        samples.push_back({ns(b-a),ns(c-b)});
+        last_emit=c;
+      };
+      if (mode == "full") {
+        stop_recorder(recorder); stopped=recorder;
+        count=options.producer_capacities[0]/(size+16);
+        for (std::uint64_t event=1; event<=count; ++event) emit_one(event);
+        const auto extra=raw_try_claim_data(size+16);
+        check(!extra.has_value() && extra.error().code == ErrorCode::capacity, "full must refuse nonwaiting capacity");
+        capacity_refused=true;
+        check(::kill(recorder,SIGCONT) == 0,"SIGCONT"); stopped=-1;
+        const auto resumed=Clock::now(); emit_one(++count); resumed_claim_ns=ns(Clock::now()-resumed);
+      } else {
+        for (std::uint64_t event=1; event<=count; ++event) {
+          emit_one(event);
+          if (mode == "reader" && event == 1) {
+            until([&] { return need(channel.cursors(RawPartition::data)).acknowledged >= size+16; });
+            consumer=std::thread{consume,std::ref(consumption),run_path(session),epoch,size};
+          }
+          if (mode == "idle") {
+            until([&] { return need(channel.cursors(RawPartition::data)).acknowledged >= event*(size+16); });
+            if (event < count) std::this_thread::sleep_for(std::chrono::milliseconds{5});
+          }
+        }
+      }
+      loop_ns=ns(Clock::now()-started);
+      if (mode == "syscalls") check(::write(STDERR_FILENO,"PERF_EMIT_END\n",14) == 14,"trace end marker");
+      until([&] { return need(channel.cursors(RawPartition::data)).acknowledged == count*(size+16); });
+      const auto preserved=Clock::now();
+      final_ack_ns=ns(preserved-started); last_emit_ns=ns(preserved-last_emit);
+      cpu_ns=recorder_cpu(recorder)-cpu_start;
+      consumption.finish.store(true);
+      if (consumer.joinable()) consumer.join();
+      if (consumption.error) std::rethrow_exception(consumption.error);
+    }
+    context.reset(); runtime.reset();
+    auto reader=need(RawRunReader::open(run_path(session).string()));
+    check(reader->snapshot().closed,"run must close");
+    std::vector<std::byte> disk(size+16);
+    std::uint64_t observed=0;
+    for (;;) {
+      auto record=need(reader->read(disk)); if (!record) break;
+      verify(*record,epoch,size,++observed);
+    }
+    check(observed == count,"disk count");
+    if (mode == "reader") check(consumption.count == count,"concurrent reader count");
+    std::ofstream csv{output+"/latencies.csv"};
+    csv << "event,claim_ns,emit_ns\n";
+    for (std::size_t i=0; i<samples.size(); ++i) csv << i+1 << ',' << samples[i].claim << ',' << samples[i].emit << '\n';
+    std::printf("mode=%s size=%zu count=%llu loop_ns=%llu final_ack_ns=%llu last_emit_ack_observed_ns=%llu recorder_cpu_ticks=%llu cpu_numer=%llu cpu_denom=%llu cpu_unit=%s producer_new_calls=%llu producer_new_bytes=%llu reader_events=%llu reader_snapshots=%llu capacity_refused=%u resumed_claim_emit_ns=%llu oracle=exact_closed_disk\n",mode.c_str(),size,count,static_cast<unsigned long long>(loop_ns),static_cast<unsigned long long>(final_ack_ns),static_cast<unsigned long long>(last_emit_ns),static_cast<unsigned long long>(cpu_ns),static_cast<unsigned long long>(units.numer),static_cast<unsigned long long>(units.denom),units.name,static_cast<unsigned long long>(allocation_calls),static_cast<unsigned long long>(allocation_bytes),static_cast<unsigned long long>(consumption.count),static_cast<unsigned long long>(consumption.snapshots),capacity_refused?1U:0U,static_cast<unsigned long long>(resumed_claim_ns));
+    return 0;
+  } catch (const std::exception &error) {
+    count_allocations=false;
+    if (stopped > 0) ::kill(stopped,SIGCONT);
+    consumption.finish.store(true);
+    if (consumer.joinable()) consumer.join();
+    std::fprintf(stderr,"probe: %s\n",error.what());
+    return 1;
+  }
+}

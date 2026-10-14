@@ -1,0 +1,12 @@
+from pathlib import Path
+import subprocess, os, json
+root=Path('/tmp/arconaut-linux-perf-roim27Vb');out=root/'perf-root';seed=out/'seed'
+seed.mkdir(mode=0o700)
+body="/lua for i=1,100 do local r=blackbird.call('workflow_registry',{}); assert(r.definitions[1].name=='ultracode') end; print('PERF_SEED_'..'100_OK')\n/quit\n"
+c=subprocess.run([str(root/'build/release/blackbird'),'--plain','--session',str(seed)],input=body,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,env=dict(os.environ,BLACKBIRD_GRAPHICS='off'),check=True)
+(out/'seed.log').write_text(c.stdout);assert 'PERF_SEED_100_OK' in c.stdout,c.stdout
+runs=list((seed/'raw').iterdir());assert len(runs)==1 and (runs[0]/'closed').is_file()
+fresh={'workspace':str(root),'command':[str(root/'scripts/blackbird'),'--session','{run}/session'],'ready_text':['Enter send'],'frame_end':'\\x1b[?2026l','env':{'BLACKBIRD_EXECUTABLE':str(root/'build/release/blackbird')},'quit_steps':['15','04'],'notes':'Repaired Release/OFF source66547c6, no external provider calls.'}
+reopened=dict(fresh);reopened['command']=[str(root/'scripts/blackbird'),'--session','{run}/state'];reopened['seeds']={'state':str(seed)};reopened['notes']='Private copied native session with100audited workflow_registry calls in one Lua turn.'
+(out/'startup-spec.json').write_text(json.dumps({'repaired-fresh':fresh,'repaired-reopened':reopened},indent=2)+'\n')
+print('Native100callseed closed; spec ready.')

@@ -1,0 +1,674 @@
+#!/usr/bin/env python3
+"""Actual command foreground/background text interaction; no provider calls.
+
+The outer PTY and Screen inspect Blackbird itself. Independent child PID,
+launch count, input effects and stty observations establish actual execution.
+This deliberately makes no full-screen terminal-emulation claim.
+"""
+import argparse
+import errno
+import fcntl
+import importlib.util
+import json
+import os
+from pathlib import Path
+import pty
+import re
+import select
+import shutil
+import signal
+import struct
+import subprocess
+import sys
+import tempfile
+import termios
+import time
+
+
+def module(name, filename):
+    spec = importlib.util.spec_from_file_location(name, Path(os.environ["PERF_WORKSPACE"]) / "scripts" / filename)
+    loaded = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(loaded)
+    return loaded
+
+
+oracle = module("command_screen", "terminal-screen-oracle.py")
+packets = module("command_packet", "native-packet.py")
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("executable")
+parser.add_argument("--log-dir", type=Path)
+args = parser.parse_args()
+executable = str(Path(args.executable).resolve())
+if args.log_dir:
+    args.log_dir.mkdir(parents=True, exist_ok=True)
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+with tempfile.TemporaryDirectory(prefix="blackbird-command-jobs-pty-") as work:
+    root = Path(work)
+    session = root / "session"
+    fixture = root / "child.sh"
+    fixture.write_text("""#!/bin/sh
+set -u
+kind=$1
+root=$2
+printf '%s\\n' "$$" > "$root/$kind.pid"
+printf '%s\\n' "$$" >> "$root/$kind.launches"
+if [ "$kind" = pipe ]; then
+  printf 'PIPE_READY\\n'
+  while [ ! -f "$root/pipe.release" ]; do sleep 0.05; done
+  printf 'PIPE_FINAL\\n'
+  exit 7
+fi
+if [ "$kind" = pressure ]; then
+  stty raw -echo min 1 time 0
+  printf 'PRESSURE_READY\\n'
+  while :; do sleep 0.1; done
+fi
+exit 90
+""")
+    workflow = root / "local.lua"
+    workflow.write_text("print('UNRELATED_LOCAL_WORKFLOW')\n")
+    interactive = root / "interactive.py"
+    interactive.write_text(r'''import fcntl
+import json
+import os
+from pathlib import Path
+import signal
+import struct
+import sys
+import tempfile
+import termios
+import time
+
+root = Path(sys.argv[1])
+effects_fd = os.open(root / "pty.effects", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+input_fd = os.open(root / "pty.input", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+trace_fd = os.open(root / "pty.trace", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+
+def write_all(fd, data):
+    while data:
+        try:
+            count = os.write(fd, data)
+        except InterruptedError:
+            continue
+        if count <= 0:
+            raise RuntimeError("fixture write made no progress")
+        data = data[count:]
+
+def trace(event, **values):
+    write_all(trace_fd, (json.dumps(dict(event=event, monotonic_ns=time.monotonic_ns(),
+                                       pid=os.getpid(), **values)) + "\n").encode())
+
+def dimensions():
+    return struct.unpack("HHHH", fcntl.ioctl(0, termios.TIOCGWINSZ, b"\0" * 8))[:2]
+
+def save_dimensions(name):
+    value = dimensions()
+    destination = root / name
+    fd, temporary = tempfile.mkstemp(prefix=name + ".", suffix=".tmp", dir=root)
+    try:
+        write_all(fd, ("%s %s\n" % value).encode())
+    finally:
+        os.close(fd)
+    os.replace(temporary, destination)
+    return value
+
+def winch(signum, frame):
+    write_all(effects_fd, b"WINCH\n")
+    rows, columns = save_dimensions("pty.resize-size")
+    trace("winch", rows=rows, columns=columns)
+
+def interrupt(signum, frame):
+    write_all(effects_fd, b"INT\n")
+    trace("interrupt")
+    write_all(1, b"CHILD_INTERRUPT\n")
+
+def terminate(signum, frame):
+    write_all(effects_fd, b"TERM\n")
+    raise SystemExit(0)
+
+attributes = termios.tcgetattr(0)
+attributes[0] = (attributes[0] | termios.ICRNL) & ~(termios.IGNCR | termios.INLCR)
+attributes[3] |= termios.ICANON | termios.ISIG | termios.ECHO
+attributes[6][termios.VINTR] = b"\x03"
+termios.tcsetattr(0, termios.TCSANOW, attributes)
+signal.signal(signal.SIGWINCH, winch)
+signal.signal(signal.SIGINT, interrupt)
+signal.signal(signal.SIGTERM, terminate)
+(root / "pty.pid").write_text(str(os.getpid()) + "\n")
+with (root / "pty.launches").open("a") as launches:
+    launches.write(str(os.getpid()) + "\n")
+save_dimensions("pty.initial-size")
+trace("ready", iflag=attributes[0], lflag=attributes[3], foreground=os.tcgetpgrp(0),
+      pgid=os.getpgrp(), sid=os.getsid(0))
+write_all(1, b"PTY_READY\n")
+pending = bytearray()
+count = 0
+while True:
+    try:
+        data = os.read(0, 4096)
+    except InterruptedError:
+        trace("read_eintr")
+        continue
+    if not data:
+        raise RuntimeError("unexpected private tty EOF")
+    # Observe original post-line-discipline bytes before interpreting a command.
+    write_all(input_fd, data)
+    trace("read", bytes_hex=data.hex())
+    pending.extend(data)
+    while b"\n" in pending:
+        end = pending.index(10)
+        line = bytes(pending[:end])
+        del pending[:end + 1]
+        if line.startswith(b"step-"):
+            count += 1
+            write_all(effects_fd, str(count).encode() + b":" + line + b"\n")
+            write_all(1, ("CHILD_STEP_%s\n" % count).encode())
+        elif line == b"size":
+            rows, columns = save_dimensions("pty.size")
+            trace("size", rows=rows, columns=columns)
+            write_all(1, b"CHILD_SIZE\n")
+        elif line == b"controls":
+            write_all(1, b"\x1b[31mCHILD_ESCAPED\x1b[0m\n")
+        elif line == b"finish":
+            write_all(effects_fd, b"FINISH\n")
+            write_all(1, b"PTY_FINAL\n")
+            raise SystemExit(23)
+        else:
+            write_all(effects_fd, b"OTHER:" + line + b"\n")
+''')
+    master, slave = pty.openpty()
+    before = termios.tcgetattr(slave)
+    size = [32, 120]
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", *size, 0, 0))
+    screen = oracle.Screen()
+    raw = bytearray()
+    keyboard_sent = bytearray()
+    latencies = []
+
+    def record_endpoint(label, started):
+        latencies.append(dict(endpoint=label, observed_ns=time.monotonic_ns()-started))
+    pids = []
+    plain_child = None
+    plain_output = bytearray()
+    child = subprocess.Popen(
+        [executable, "--session", str(session), "--workflow", str(workflow)],
+        stdin=slave, stdout=slave, stderr=slave, start_new_session=True,
+        env=dict(os.environ, BLACKBIRD_GRAPHICS="off"),
+    )
+
+    def read_outer():
+        try:
+            data = os.read(master, 65536)
+        except OSError as error:
+            if error.errno == errno.EIO:
+                return False
+            raise
+        if not data:
+            return False
+        raw.extend(data)
+        screen.feed(data)
+        # Screen intentionally has no resize event. Match the actual
+        # outer viewport so an old offscreen footer cannot acknowledge
+        # a new foreground wait after shrinking the terminal.
+        for key in list(screen.cells):
+            if key[0] >= size[0] or key[1] >= size[1]:
+                del screen.cells[key]
+                screen.styles.pop(key, None)
+        return True
+
+    def drain(seconds=0.05):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            remaining = max(0, deadline - time.monotonic())
+            if select.select([master], [], [], min(0.02, remaining))[0]:
+                if not read_outer():
+                    return
+
+    def wait(predicate, label, seconds=8):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if predicate():
+                return
+            if select.select([master], [], [], min(0.005, max(0, deadline-time.monotonic())))[0]:
+                if not read_outer():
+                    break
+        raise AssertionError(label + "\n" + screen.text())
+
+    def main_text():
+        return "".join((row.split("│", 2)[1] if row.lstrip().startswith("│")
+                        else row.split("│", 1)[0]).strip()
+                       for row in screen.text().splitlines())
+
+    def visible(text):
+        wait(lambda: text in screen.text() or text in main_text(),
+             "missing UI observation: " + text)
+
+    def send(data):
+        if isinstance(data, str):
+            data = data.encode()
+        while data:
+            count = os.write(master, data)
+            assert count > 0, "outer keyboard writer made no progress"
+            keyboard_sent.extend(data[:count])
+            data = data[count:]
+
+    def command(text):
+        send(text + "\r")
+
+    def preserved_keyboard():
+        # The same closed-journal layout used by check-main-input. Read original
+        # ingress records directly; this byte-conservation oracle does not need
+        # whole-run reader snapshot iteration.
+        runs = list((session / "raw").iterdir())
+        assert len(runs) == 1 and (runs[0] / "closed").is_file(), \
+            "keyboard originals belong to one cleanly closed raw run"
+        found = {}
+        selected = {}
+        for segment in sorted(runs[0].glob("events.*")):
+            data = segment.read_bytes()
+            assert data[:8] == b"ARCOJ001" and len(data) >= 112, "raw journal header"
+            offset = 112
+            while offset < len(data):
+                magic, version, kind, sequence, first, length, crc = struct.unpack_from(
+                    "<4sHHQQII", data, offset)
+                assert magic == b"ARJ1" and version == 1 and first <= sequence, \
+                    "raw journal frame header"
+                end = offset + 32 + length
+                assert end <= len(data), "closed run contains a partial frame"
+                if kind == 4:
+                    payload = data[offset + 32:end]
+                    partition, reserved, source = struct.unpack_from("<IIQ", payload, 16)
+                    size, site, ordinal = struct.unpack_from("<IIQ", payload, 32)
+                    assert reserved == 0 and partition in (1, 2, 3), "raw record partition"
+                    assert size == len(payload) - 32 and ordinal > 0, "raw envelope extent"
+                    key = (payload[:16], ordinal)
+                    assert key not in found and site not in (8000, 8001), \
+                        "unique original without transport failure"
+                    found[key] = site
+                    if site in (2040, 2041):
+                        selected[key] = payload[48:]
+                offset = end
+            assert offset == len(data), "closed journal frame extents"
+        reads = sorted((key, body) for key, body in selected.items() if found[key] == 2041)
+        assert reads and len({key[0] for key, _ in reads}) == 1, \
+            "outer keyboard originals have one actual reader lane"
+        original = bytearray()
+        for _, body in reads:
+            parent = (body[:16], struct.unpack_from("=Q", body, 16)[0])
+            assert parent in selected and found[parent] == 2040, \
+                "keyboard return links to its actual read request"
+            assert struct.unpack("=iQ", selected[parent]) == (0, 128), \
+                "keyboard request describes the actual bounded stdin read"
+            count, read_error = struct.unpack_from("=qi", body, 24)
+            literal = body[36:]
+            assert len(literal) == max(0, count), "keyboard original has exact read extent"
+            original.extend(literal)
+        return original
+
+    def effects():
+        path = root / "pty.effects"
+        return path.read_text().splitlines() if path.exists() else []
+
+    def draft():
+        try:
+            return bytes.fromhex(packets.read_packet(session / "ui-state.bbm")["draft"])
+        except (OSError, ValueError, KeyError):
+            return None
+
+    def pid_for(kind):
+        path = root / (kind + ".pid")
+        wait(lambda: path.exists() and path.read_text().strip().isdigit(),
+             "/exec did not launch actual " + kind + " child")
+        pid = int(path.read_text())
+        pids.append(pid)
+        return pid
+
+    def job_id(pid):
+        command("/clear")
+        command("/jobs")
+        found = []
+
+        def extract():
+            # Discard the side pane and display gutters before joining wrapped
+            # JSON; only a fresh /jobs response may satisfy discovery.
+            text = main_text()
+            text = re.sub(r"\s+", "", text)
+            if '"jobs":[' not in text:
+                return False
+            found[:] = [
+                identifier for identifier, observed_pid in re.findall(
+                    r'\{[^{}]*"job_id":"([a-f0-9]{32})"[^{}]*"pid":(\d+)[^{}]*\}', text
+                ) if int(observed_pid) == pid
+            ]
+            return bool(found)
+
+        wait(extract, "job discovery exposes stable launch identity")
+        return found[-1]
+
+    def launch(kind, **options):
+        (root / (kind + ".pid")).unlink(missing_ok=True)
+        command("/exec " + json.dumps(dict(
+            argv=([sys.executable, str(interactive), str(root)] if kind == "pty" else
+                  ["/bin/sh", str(fixture), kind, str(root)]),
+            timeout_seconds=60, **options,
+        )))
+        return pid_for(kind)
+
+    def task_unchanged(marker):
+        middle = len(marker) // 2
+        command("/lua local q=blackbird.tasks.read({id='t1'}); "
+                "assert(q.items[1].status=='queued'); print('" + marker[:middle] +
+                "' .. '" + marker[middle:] + "')")
+        visible(marker)
+
+    def foreground(identifier, interactive=False):
+        started = time.monotonic_ns()
+        command("/fg " + identifier)
+        marker = "PTY input" if interactive else "Foreground command"
+        wait(lambda: any(marker in row and identifier in row
+                         for row in screen.text().splitlines()),
+             "foreground lease acknowledgment: " + marker)
+        record_endpoint("foreground-command-to-rendered-lease-" + ("pty" if interactive else "pipe"), started)
+
+    try:
+        visible("Workflow reloads")
+        command("/tasks add COMMAND_PLAN")
+        visible("t1 COMMAND_PLAN")
+
+        # Background a genuinely synchronous command while it is running.
+        pipe_pid = launch("pipe", task_id="t1")
+        visible("PIPE_READY")
+        send("UNSUBMITTED_DRAFT")
+        wait(lambda: draft() == b"UNSUBMITTED_DRAFT", "busy composer retains draft")
+        send(b"\x02")
+        wait(lambda: "running" in screen.text(), "background preserves runtime activity")
+        assert alive(pipe_pid), "background killed the synchronous command"
+        assert draft() == b"UNSUBMITTED_DRAFT", "background destroyed composer draft"
+        send(b"\x15")
+        command("/lua print('UNRELATED_LUA_' .. 'AFTER_BG')")
+        visible("UNRELATED_LUA_AFTER_BG")
+        assert alive(pipe_pid), "unrelated Lua work lost background custody"
+        pipe_job = job_id(pipe_pid)
+        task_unchanged("TASK_QUEUED_WHILE_COMMAND_RUNNING")
+        foreground(pipe_job)
+        command("/bg " + pipe_job)
+        command("/lua print('EXPLICIT_BG_' .. 'RELEASED_WAIT')")
+        visible("EXPLICIT_BG_RELEASED_WAIT")
+        assert alive(pipe_pid), "explicit background killed existing foreground wait"
+        (root / "pipe.release").touch()
+        # Completion can win the new attachment race; completed jobs return
+        # their retained result without installing a lasting foreground lease.
+        command("/fg " + pipe_job)
+        visible("PIPE_FINAL")
+        wait(lambda: not alive(pipe_pid), "completed pipe command was not reaped")
+        pids.remove(pipe_pid)
+        assert (root / "pipe.launches").read_text().splitlines() == [str(pipe_pid)]
+        task_unchanged("TASK_QUEUED_AFTER_COMMAND_EXIT")
+
+        # A different command starts detached, then returns to the same PTY.
+        pty_pid = launch("pty", pty=True, yield_ms=0, task_id="t1")
+        visible("PTY_READY")
+        pty_job = job_id(pty_pid)
+        assert pty_job != pipe_job, "different launches share job identity"
+        foreground(pty_job, interactive=True)
+        # A marker from the actual reader, not echoed composer text, proves input.
+        started = time.monotonic_ns()
+        send("step-first\r")
+        wait(lambda: "1:step-first" in effects(), "foreground input reached actual PTY")
+        record_endpoint('pty-keyboard-to-first-child-effect', started)
+        visible("CHILD_STEP_1")
+        started = time.monotonic_ns()
+        send(b"\x02")
+        command("/lua print('PTY_DETACHED_' .. 'LOCAL_WORK')")
+        visible("PTY_DETACHED_LOCAL_WORK")
+        record_endpoint('background-chord-plus-local-lua-to-result', started)
+        assert alive(pty_pid), "Ctrl-B killed PTY command"
+        assert draft() == b"", "PTY input leaked into composer draft"
+        request = dict(op="input", job_id=pty_job, request_id="pty-driver-repeat",
+                       bytes="step-delivery\n")
+        command("/process " + json.dumps(request))
+        command("/process " + json.dumps(request))
+        wait(lambda: "2:step-delivery" in effects(), "shared input control reaches detached PTY")
+        # Ordinary local workflow work must remain available between attachments.
+        command("local workflow request")
+        visible("UNRELATED_LOCAL_WORKFLOW")
+
+        foreground(pty_job, interactive=True)
+        size[:] = [28, 100]
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", *size, 0, 0))
+        started = time.monotonic_ns()
+        os.kill(child.pid, signal.SIGWINCH)
+        def child_resized():
+            path = root / "pty.resize-size"
+            return path.exists() and path.read_text().split() == list(map(str, size))
+        wait(child_resized, "actual child WINCH observes resized private terminal")
+        record_endpoint('outer-winch-to-child-size-file', started)
+        send("size\r")
+        wait(lambda: (root / "pty.size").exists() and
+             len((root / "pty.size").read_text().split()) == 2,
+             "resize fixture has complete real tty dimensions")
+        dimensions = tuple(map(int, (root / "pty.size").read_text().split()))
+        assert dimensions == tuple(size), ("resize did not reach selected private PTY", dimensions, size)
+        send("controls\r")
+        visible("CHILD_ESCAPED")
+        assert "\\x1b[31mCHILD_ESCAPED" in screen.text(), \
+            "child ANSI was forwarded raw instead of escaped text"
+        send(b"\x03")
+        wait(lambda: "INT" in effects(), "Ctrl-C reached private terminal foreground group")
+        assert alive(pty_pid), "Ctrl-C unexpectedly cancelled Blackbird job owner"
+        started = time.monotonic_ns()
+        send("step-second\r")
+        wait(lambda: "3:step-second" in effects(), "PTY survives input interruption")
+        record_endpoint('pty-keyboard-to-second-child-effect', started)
+        # Paste delimiters are fragmented; the local detach chord inside paste
+        # must be delivered to the child as data, not change foreground lease.
+        send(b"\x1b[20")
+        send(b"0~step-paste\x02literal")
+        send(b"\x1b[2")
+        send(b"01~\r")
+        wait(lambda: "4:step-paste\x02literal" in effects(), "pasted Ctrl-B is literal child input")
+        # Each UTF-8 byte crosses a distinct outer read/admission boundary.
+        # The private terminal receives originals, not display replacement text.
+        send("step-unicode-")
+        for byte in "☃".encode():
+            send(bytes([byte]))
+            drain(0.07)
+        send(b"\r")
+        wait(lambda: "5:step-unicode-☃" in effects(), "split UTF-8 keyboard originals reach child")
+        send("step-escape-")
+        send(b"\x1b")
+        drain(0.09)
+        send("literal\r")
+        wait(lambda: "6:step-escape-\x1bliteral" in effects(), "standalone ESC prefix is eventually delivered")
+        send(b"\x02")
+        task_unchanged("TASK_QUEUED_AFTER_PTY_INPUT")
+        foreground(pty_job, interactive=True)
+        send("finish\r")
+        wait(lambda: "FINISH" in effects(), "final foreground return reached same child")
+        visible("PTY_FINAL")
+        wait(lambda: not alive(pty_pid), "PTY command was not reaped")
+        pids.remove(pty_pid)
+        assert (root / "pty.launches").read_text().splitlines() == [str(pty_pid)]
+        assert [x for x in effects() if re.match(r"\d+:", x)] == [
+            "1:step-first", "2:step-delivery", "3:step-second", "4:step-paste\x02literal",
+            "5:step-unicode-☃", "6:step-escape-\x1bliteral",
+        ], "foreground transitions repeated or reordered child input"
+        assert (root / "pty.input").read_bytes() == (
+            b"step-first\nstep-delivery\nsize\ncontrols\nstep-second\n"
+            b"step-paste\x02literal\nstep-unicode-" + "☃".encode() +
+            b"\nstep-escape-\x1bliteral\nfinish\n"
+        ), "actual private tty reader lost, duplicated or redirected original bytes"
+        # Reaping the child precedes command-result retention and UI lease
+        # reconciliation. Submit only after the actual composer owns input.
+        wait(lambda: any(row.startswith("╭") and "Enter send" in row
+                         for row in screen.text().splitlines()),
+             "completed PTY releases input to the composer")
+        command("/lua print('COMPOSER_' .. 'RESTORED')")
+        visible("COMPOSER_RESTORED")
+
+        # Drive a non-reading child until actual refusal and outer backpressure
+        # establish full queues. This checks lifecycle progress under saturation,
+        # not a fixed sanitized keyboard-throughput rate.
+        size[:] = [32, 120]
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", *size, 0, 0))
+        os.kill(child.pid, signal.SIGWINCH)
+        pressure_pid = launch("pressure", pty=True, yield_ms=0)
+        visible("PRESSURE_READY")
+        pressure_job = job_id(pressure_pid)
+        foreground(pressure_job, interactive=True)
+        flags = fcntl.fcntl(master, fcntl.F_GETFL)
+        fcntl.fcntl(master, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        pressure_source = b"x" * (512 * 1024)
+        remaining = len(pressure_source)
+        pressure_started = time.monotonic()
+        blocked_writes = 0
+        saturated = False
+        try:
+            deadline = pressure_started + 30
+            while remaining:
+                assert time.monotonic() < deadline, \
+                    "input saturation not established with %s bytes remaining" % remaining
+                try:
+                    at = len(pressure_source) - remaining
+                    written = os.write(master, pressure_source[at:at + min(8192, remaining)])
+                    assert written > 0, "outer pressure writer made no progress"
+                    keyboard_sent.extend(pressure_source[at:at + written])
+                    remaining -= written
+                except BlockingIOError:
+                    blocked_writes += 1
+                    if "PTY input refused:" in main_text():
+                        saturated = True
+                        break
+                    readable, _, _ = select.select(
+                        [master], [master], [], max(0, deadline - time.monotonic()))
+                    if readable:
+                        assert read_outer(), "outer terminal closed during pressure"
+                # Drain ready output without imposing a sleep on successful
+                # writes. The fixture must keep both PTY directions moving.
+                if select.select([master], [], [], 0)[0]:
+                    assert read_outer(), "outer terminal closed during pressure"
+            assert saturated, "pressure source exhausted without observed saturation"
+        finally:
+            (root / "pressure.trace").write_text(json.dumps(dict(
+                requested_bytes=len(pressure_source),
+                written_bytes=len(pressure_source) - remaining,
+                remaining_bytes=remaining, blocked_writes=blocked_writes,
+                elapsed_seconds=time.monotonic() - pressure_started,
+                saturation_observed=saturated,
+            )) + "\n")
+            fcntl.fcntl(master, fcntl.F_SETFL, flags)
+        visible("PTY input refused:")
+        started = time.monotonic_ns()
+        send(b"\x02")
+        command("/lua print('PRESSURE_BG_' .. 'LOCAL_PROGRESS')")
+        visible("PRESSURE_BG_LOCAL_PROGRESS")
+        record_endpoint('saturated-background-chord-plus-local-lua-to-result', started)
+        assert alive(pressure_pid), "pressure background stopped the command"
+        started = time.monotonic_ns()
+        command("/process " + json.dumps(dict(op="stop", job_id=pressure_job)))
+        wait(lambda: not alive(pressure_pid), "stop could not pass full input queues")
+        record_endpoint('saturated-stop-command-to-child-reap', started)
+        pids.remove(pressure_pid)
+        assert (root / "pressure.launches").read_text().splitlines() == [str(pressure_pid)]
+
+        # Quit with another owned job alive must stop/reap, not lose the owner.
+        (root / "pipe.release").unlink()
+        quit_pid = launch("pipe", yield_ms=0)
+        command("/quit")
+        wait(lambda: child.poll() is not None, "quit did not complete job cleanup")
+        assert child.returncode == 0, "Blackbird failed normal quit"
+        wait(lambda: not alive(quit_pid), "owned command survived quit")
+        pids.remove(quit_pid)
+        after = termios.tcgetattr(slave)
+        pending = getattr(termios, "PENDIN", 0)
+        before[3] &= ~pending
+        after[3] &= ~pending
+        assert after == before, ("outer terminal modes were not restored", before, after)
+        # Process exit can precede reading the last outer PTY packets. Drain
+        # shutdown output before requiring a complete terminal-control stream.
+        drain(0.2)
+        assert not screen.pending, "incomplete outer terminal control sequence"
+        assert preserved_keyboard() == keyboard_sent, \
+            "disk originals lost, duplicated or changed transferred outer keyboard bytes"
+
+        # A blocked plain stdin reader must keep pumping the shared owner.
+        # No second line is sent until the actual detached child has completed.
+        plain_root = root / "plain"
+        plain_root.mkdir()
+        plain_child = subprocess.Popen(
+            [executable, "--plain", "--session", str(root / "plain-session"),
+             "--workflow", str(workflow)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            start_new_session=True, env=dict(os.environ, BLACKBIRD_GRAPHICS="off"),
+        )
+        plain_child.stdin.write(("/exec " + json.dumps(dict(
+            argv=["/bin/sh", str(fixture), "pipe", str(plain_root)],
+            timeout_seconds=60, yield_ms=0,
+        )) + "\n").encode())
+        plain_child.stdin.flush()
+
+        def plain_visible(text):
+            def observed():
+                if select.select([plain_child.stdout], [], [], 0)[0]:
+                    plain_output.extend(os.read(plain_child.stdout.fileno(), 65536))
+                return text.encode() in plain_output
+            wait(observed, "plain blocked stdin did not retain/display " + text)
+
+        plain_visible("PIPE_READY")
+        plain_pid = int((plain_root / "pipe.pid").read_text())
+        pids.append(plain_pid)
+        (plain_root / "pipe.release").touch()
+        plain_visible("PIPE_FINAL")
+        wait(lambda: not alive(plain_pid), "plain owner did not reap while stdin blocked")
+        pids.remove(plain_pid)
+        plain_child.stdin.write(b"/quit\n")
+        plain_child.stdin.flush()
+        plain_child.communicate(timeout=5)
+        assert plain_child.returncode == 0, "plain owner failed normal quit"
+        print("Command jobs PTY: one launch/PID; midflight background; independent local work; "
+              "same PTY foreground input/resize/Ctrl-C; task separation; composer; "
+              "input queue pressure background/stop; quit/reap/modes; blocked plain stdin pump passed")
+    finally:
+        if args.log_dir:
+            (args.log_dir / "control-samples.json").write_text(json.dumps(latencies, indent=2)+"\n")
+            if (session / "raw").is_dir():
+                shutil.copytree(session / "raw", args.log_dir / "raw")
+            (args.log_dir / "terminal.raw").write_bytes(raw)
+            (args.log_dir / "keyboard.sent").write_bytes(keyboard_sent)
+            (args.log_dir / "terminal-screen.txt").write_text(screen.text())
+            (args.log_dir / "plain-output.txt").write_bytes(plain_output)
+            if (session / "audit").is_file():
+                (args.log_dir / "audit").write_bytes((session / "audit").read_bytes())
+            for path in root.glob("*.*"):
+                if path.suffix in (".pid", ".effects", ".launches", ".size", ".input", ".trace",
+                                   ".resize-size", ".initial-size"):
+                    (args.log_dir / path.name).write_bytes(path.read_bytes())
+        if child.poll() is None:
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            child.wait(timeout=5)
+        if plain_child is not None and plain_child.poll() is None:
+            try:
+                os.killpg(plain_child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            plain_child.wait(timeout=5)
+        # Save known group identity at spawn; never look it up after root exit.
+        for pid in pids:
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        os.close(master)
+        os.close(slave)

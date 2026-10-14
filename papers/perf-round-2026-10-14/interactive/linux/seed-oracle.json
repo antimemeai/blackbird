@@ -1,0 +1,6 @@
+{
+  "oracle": "one_closed_run_exact_workflow_and_bridge_request_result_links",
+  "workflow_registry_calls": 100,
+  "bridge_calls_including_print": 101,
+  "total_unique_events": 91183
+}

@@ -1,0 +1,65 @@
+{
+  "previous-segment": {
+    "workspace": "/Users/patrickbeam/projects/blackbird",
+    "command": [
+      "/Users/patrickbeam/projects/blackbird/scripts/blackbird",
+      "--session",
+      "{run}/session"
+    ],
+    "ready_text": [
+      "Enter send"
+    ],
+    "frame_end": "\\x1b[?2026l",
+    "env": {
+      "BLACKBIRD_EXECUTABLE": "/Users/patrickbeam/projects/blackbird/build/nls-storage-release/blackbird"
+    },
+    "quit_steps": [
+      "15",
+      "04"
+    ],
+    "notes": "Retained previous segment Release, recorded sourceca6747b/e550adc sha; not exact parent of final segment"
+  },
+  "repaired-fresh": {
+    "workspace": "/Users/patrickbeam/projects/blackbird",
+    "command": [
+      "/Users/patrickbeam/projects/blackbird/scripts/blackbird",
+      "--session",
+      "{run}/session"
+    ],
+    "ready_text": [
+      "Enter send"
+    ],
+    "frame_end": "\\x1b[?2026l",
+    "env": {
+      "BLACKBIRD_EXECUTABLE": "/Users/patrickbeam/projects/blackbird/build/release/blackbird"
+    },
+    "quit_steps": [
+      "15",
+      "04"
+    ],
+    "notes": "Repaired source66547c6, fresh session, no external provider calls."
+  },
+  "repaired-reopened": {
+    "workspace": "/Users/patrickbeam/projects/blackbird",
+    "command": [
+      "/Users/patrickbeam/projects/blackbird/scripts/blackbird",
+      "--session",
+      "{run}/state"
+    ],
+    "ready_text": [
+      "Enter send"
+    ],
+    "frame_end": "\\x1b[?2026l",
+    "env": {
+      "BLACKBIRD_EXECUTABLE": "/Users/patrickbeam/projects/blackbird/build/release/blackbird"
+    },
+    "quit_steps": [
+      "15",
+      "04"
+    ],
+    "notes": "Private copy of native session with100actual workflow_registry calls in one Lua turn; ordinary local-tool history, no provider calls.",
+    "seeds": {
+      "state": "/Users/patrickbeam/projects/blackbird/context/perf-round-2026-10-14/mac-seed"
+    }
+  }
+}

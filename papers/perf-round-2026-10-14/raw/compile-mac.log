@@ -1,0 +1,2 @@
+command=['/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++', '-std=c++20', '-O3', '-DNDEBUG', '-DBLACKBIRD_DEBUG=0', '-arch', 'arm64', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk', '-I', 'include', '-Wall', '-Wextra', '-Wpedantic', '-Werror', 'context/perf-round-2026-10-14/raw/probe.cpp', 'build/release/libblackbird_foundation.a', '-o', 'context/perf-round-2026-10-14/raw/probe']
+exit=0

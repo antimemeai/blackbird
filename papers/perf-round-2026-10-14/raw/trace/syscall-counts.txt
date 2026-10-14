@@ -1,0 +1,10 @@
+producer_trace=syscall.1498303
+window=exclusive PERF_EMIT_BEGIN/END dev markers
+body_events=10000 body_size=256 DATA=1048576
+poll=14
+read=7
+recvfrom=13
+recvmsg=7
+sendto=8
+write=7
+total_syscalls=56

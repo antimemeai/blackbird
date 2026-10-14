@@ -1,0 +1,365 @@
+#!/usr/bin/env python3
+"""Development-only, configured PTY startup and unsubmitted input measurements."""
+import argparse
+import codecs
+import ctypes
+import errno
+import fcntl
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import pty
+import re
+import select
+import shutil
+import signal
+import struct
+import subprocess
+import termios
+import time
+import unicodedata
+
+MARKER = b"BB_BENCH_READY"
+CSI = re.compile(rb"\x1b\[[0-?]*[ -/]*[@-~]")
+OSC = re.compile(rb"\x1b\](?:[^\x1b\x07]|\x1b(?!\\))*(?:\x07|\x1b\\)")
+
+
+def plain(data):
+    return CSI.sub(b"", OSC.sub(b"", data))
+
+
+class InputScreen:
+    """Small VT text observer: track cursor updates so split input renders join.
+
+    This is not a terminal renderer. Color, graphics and keyboard modes are ignored.
+    Retained PTY bytes remain the primary record of what each program emitted.
+    """
+    def __init__(self, commit_cursor=False):
+        self.rows = [[" "] * 110 for _ in range(35)]
+        self.row = self.col = 0
+        self.saved = (0, 0)
+        self.pending = ""
+        self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self.commit_control = (25, "h") if commit_cursor else (2026, "l")
+        self.committed = []
+
+    def feed(self, data):
+        self.pending += self.decoder.decode(data)
+        i = 0
+        while i < len(self.pending):
+            char = self.pending[i]
+            if char == "\x1b":
+                if i + 1 >= len(self.pending):
+                    break
+                kind = self.pending[i + 1]
+                if kind == "[":
+                    match = re.match(r"\x1b\[([0-?]*)([ -/]*)([@-~])", self.pending[i:])
+                    if match is None:
+                        break
+                    self.csi(match.group(1), match.group(3))
+                    i += len(match.group())
+                    continue
+                if kind in "]_P^":
+                    match = re.search(r"\x07|\x1b\\", self.pending[i + 2:])
+                    if match is None:
+                        break
+                    i += 2 + match.end()
+                    continue
+                if kind == "7":
+                    self.saved = (self.row, self.col)
+                elif kind == "8":
+                    self.row, self.col = self.saved
+                if kind in "()":
+                    if i + 2 >= len(self.pending):
+                        break
+                    i += 3
+                else:
+                    i += 2
+                continue
+            if char == "\r":
+                self.col = 0
+            elif char == "\n":
+                self.row += 1
+                if self.row >= 35:
+                    self.rows.pop(0)
+                    self.rows.append([" "] * 110)
+                    self.row = 34
+            elif char == "\b":
+                self.col = max(0, self.col - 1)
+            elif char == "\t":
+                self.col = min(109, (self.col // 8 + 1) * 8)
+            elif char >= " " and char != "\x7f" and not unicodedata.combining(char):
+                if self.col >= 110:
+                    self.col = 0
+                    self.row = min(34, self.row + 1)
+                self.rows[self.row][self.col] = char
+                self.col += 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+            i += 1
+        self.pending = self.pending[i:]
+
+    def csi(self, parameters, operation):
+        private = parameters.startswith("?")
+        values = [int(value) if value.isdigit() else 0 for value in parameters.lstrip("?<>").split(";")]
+        first = values[0] if values else 0
+        amount = first or 1
+        if operation in "Hf":
+            self.row = min(34, max(0, amount - 1))
+            self.col = min(109, max(0, (values[1] or 1) - 1)) if len(values) > 1 else 0
+        elif operation == "A": self.row = max(0, self.row - amount)
+        elif operation == "B": self.row = min(34, self.row + amount)
+        elif operation == "C": self.col = min(109, self.col + amount)
+        elif operation == "D": self.col = max(0, self.col - amount)
+        elif operation == "G": self.col = min(109, amount - 1)
+        elif operation == "d": self.row = min(34, amount - 1)
+        elif operation == "s": self.saved = (self.row, self.col)
+        elif operation == "u" and not private: self.row, self.col = self.saved
+        elif operation == "J":
+            if first in (2, 3): self.rows = [[" "] * 110 for _ in range(35)]
+            elif first == 0:
+                self.rows[self.row][min(110, self.col):] = [" "] * (110 - min(110, self.col))
+                for row in range(self.row + 1, 35): self.rows[row] = [" "] * 110
+        elif operation == "K":
+            start, end = (0, 110) if first == 2 else ((0, min(110, self.col + 1)) if first == 1 else (min(110, self.col), 110))
+            self.rows[self.row][start:end] = [" "] * (end - start)
+        if private and (first, operation) == self.commit_control:
+            self.committed = ["".join(row) for row in self.rows]
+
+    def contains(self, text):
+        return any(text in row for row in self.committed)
+
+
+def clone_tree(source, destination):
+    if os.uname().sysname != "Darwin":
+        shutil.copytree(source, destination, symlinks=False)
+        return
+    libc = ctypes.CDLL(None, use_errno=True)
+    clone = libc.clonefile
+    clone.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+    clone.restype = ctypes.c_int
+    destination.mkdir(mode=0o700)
+    for entry in source.iterdir():
+        target = destination / entry.name
+        if entry.is_symlink():
+            raise RuntimeError("seed symlink is not supported")
+        if entry.is_dir():
+            clone_tree(entry, target)
+        elif entry.is_file():
+            if clone(os.fsencode(entry), os.fsencode(target), 0):
+                raise OSError(ctypes.get_errno(), "clonefile failed")
+        else:
+            raise RuntimeError("unexpected seed entry")
+
+
+class TerminalReplies:
+    """Answer terminal queries, including queries split across PTY reads."""
+    def __init__(self):
+        self.pending = b""
+
+    def feed(self, block, master):
+        self.pending += block
+        queries = [
+            (b"\x1b[6n", b"\x1b[1;1R"),
+            (b"\x1b[c", b"\x1b[?1;2c"),
+            (b"\x1b[>c", b"\x1b[>0;0;0c"),
+            (b"\x1b[?u", b"\x1b[?0u"),
+        ]
+        for number, rgb in ((10, b"ffff/ffff/ffff"), (11, b"0000/0000/0000")):
+            for end in (b"\x07", b"\x1b\\"):
+                queries.append((b"\x1b]" + str(number).encode() + b";?" + end,
+                                b"\x1b]" + str(number).encode() + b";rgb:" + rgb + b"\x1b\\"))
+        for query, reply in queries:
+            while query in self.pending:
+                os.write(master, reply)
+                self.pending = self.pending.replace(query, b"", 1)
+        self.pending = self.pending[-32:]
+
+
+def sample(tool, trial, spec, output):
+    run = output / "runs" / f"{tool}-{trial:03d}"
+    run.mkdir(mode=0o700)
+    for name, source in spec.get("seeds", {}).items():
+        clone_tree(Path(source), run / name)
+    (run / "session").mkdir(mode=0o700)
+    substitutions = {"run": str(run), "workspace": spec["workspace"]}
+    command = [value.format(**substitutions) for value in spec["command"]]
+    env = dict(os.environ, TERM="xterm-256color", TERM_PROGRAM="ghostty", LANG="en_US.UTF-8")
+    for name in spec.get("unset", []):
+        env.pop(name, None)
+    env.update({name: value.format(**substitutions) for name, value in spec.get("env", {}).items()})
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 35, 110, 0, 0))
+    result = {"tool": tool, "trial": trial, "status": "failed"}
+    transcript = bytearray()
+    replies = TerminalReplies()
+    screen = InputScreen(commit_cursor=spec.get("frame_end", "").endswith("?25h"))
+    child = None
+    started = time.monotonic_ns()
+    deadline = time.monotonic() + 30
+    try:
+        child = subprocess.Popen(command, cwd=spec["workspace"], env=env,
+                                 stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
+        os.close(slave)
+        slave = -1
+
+        def read_until(predicate):
+            while time.monotonic() < deadline:
+                if select.select([master], [], [], .05)[0]:
+                    try:
+                        block = os.read(master, 65536)
+                    except OSError as error:
+                        if error.errno == errno.EIO:
+                            break
+                        raise
+                    if not block:
+                        break
+                    transcript.extend(block)
+                    observed = time.monotonic_ns()
+                    replies.feed(block, master)
+                    screen.feed(block)
+                    if predicate(bytes(transcript)):
+                        return observed
+                    if len(transcript) > 16 * 1024 * 1024:
+                        raise RuntimeError("excessive terminal output")
+                elif child.poll() is not None:
+                    break
+            raise RuntimeError("endpoint not reached before exit/deadline")
+
+        def completed_text(data):
+            end = spec.get("frame_end")
+            if end:
+                position = data.rfind(end.encode().decode("unicode_escape").encode("latin1"))
+                if position < 0:
+                    return b""
+                data = data[:position]
+            return plain(data)
+
+        def ready(data):
+            text = completed_text(data)
+            return all(value.encode() in text for value in spec["ready_text"])
+
+        frame = read_until(ready)
+        result["input_frame_ms"] = (frame - started) / 1e6
+        # A raw input widget, not kernel echo from a still-booting program.
+        if termios.tcgetattr(master)[3] & termios.ECHO:
+            raise RuntimeError("terminal is still echoing input")
+        before = len(transcript)
+        sent = time.monotonic_ns()
+        os.write(master, MARKER)  # No Enter: never submits an inference prompt.
+        echo = read_until(lambda data: screen.contains(MARKER.decode())
+                          and bool(completed_text(data[before:])))
+        result["input_echo_ms"] = (echo - started) / 1e6
+        result["input_response_ms"] = (echo - sent) / 1e6
+        result["status"] = "ok"
+        quits = list(spec.get("quit_steps", [spec.get("quit_hex", "03")]))
+        os.write(master, bytes.fromhex(quits.pop(0)))
+        next_quit = time.monotonic() + .15
+        stopping = time.monotonic() + 3
+        while child.poll() is None and time.monotonic() < stopping:
+            if quits and time.monotonic() >= next_quit:
+                os.write(master, bytes.fromhex(quits.pop(0)))
+                next_quit = time.monotonic() + .15
+            if select.select([master], [], [], .05)[0]:
+                try:
+                    block = os.read(master, 65536)
+                    if block:
+                        transcript.extend(block)
+                        replies.feed(block, master)
+                except OSError as error:
+                    if error.errno != errno.EIO:
+                        raise
+        if child.poll() is None:
+            result["forced_shutdown"] = True
+    except Exception as error:
+        result["error"] = str(error)
+    finally:
+        if child is not None:
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                if child.poll() is not None:
+                    break
+                try:
+                    os.killpg(child.pid, sig)
+                except (ProcessLookupError, PermissionError):
+                    if child.poll() is None:
+                        child.send_signal(sig)
+                try:
+                    child.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    continue
+            result["exit_code"] = child.poll()
+        os.close(master)
+        if slave != -1:
+            os.close(slave)
+        result["process_total_ms"] = (time.monotonic_ns() - started) / 1e6
+        (output / "terminal-output" / f"{tool}-{trial:03d}.bin").write_bytes(transcript)
+        shutil.rmtree(run)
+    return result
+
+
+def quantiles(values):
+    values = sorted(values)
+    return {label: values[max(0, math.ceil(fraction * len(values)) - 1)]
+            for label, fraction in (("p30", .3), ("p50", .5), ("p70", .7), ("p90", .9), ("max", 1))}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("spec", type=Path)
+    parser.add_argument("output", type=Path)
+    parser.add_argument("--count", type=int, default=300)
+    args = parser.parse_args()
+    if not 1 <= args.count <= 10000:
+        parser.error("count must be 1..10000")
+    specs = json.loads(args.spec.read_text())
+    output = args.output.resolve()
+    output.mkdir(mode=0o700)
+    (output / "runs").mkdir(mode=0o700)
+    (output / "terminal-output").mkdir(mode=0o700)
+    metadata = {"count_per_tool": args.count, "order": "round robin, serial",
+                "terminal": "110x35 PTY; Ghostty identity; consumer drains bytes and answers terminal queries",
+                "cache": "ordinary OS caches; private APFS-cloned macOS state or copied Linux state; setup excluded",
+                "measurement": "parent monotonic clock before spawn to input frame, then unsubmitted marker rendered",
+                "inference_prompts_submitted": 0,
+                "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                "source_commit": os.environ.get("PERF_SOURCE_COMMIT") or subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+                "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "host_load_before": os.getloadavg(), "tools": {}}
+    for tool, spec in specs.items():
+        metadata["tools"][tool] = {key: spec[key] for key in ("command", "ready_text", "frame_end", "notes") if key in spec}
+        metadata["tools"][tool]["launcher_sha256"] = hashlib.sha256(Path(spec["command"][0]).read_bytes()).hexdigest()
+        native = spec.get("env", {}).get("BLACKBIRD_EXECUTABLE", spec["command"][0])
+        metadata["tools"][tool]["native_executable_sha256"] = hashlib.sha256(Path(native).read_bytes()).hexdigest()
+    (output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    records = []
+    with (output / "samples.jsonl").open("x") as stream:
+        for trial in range(1, args.count + 1):
+            for tool, spec in specs.items():
+                result = sample(tool, trial, spec, output)
+                records.append(result)
+                stream.write(json.dumps(result) + "\n")
+                stream.flush()
+                if result["status"] != "ok" or result.get("forced_shutdown"):
+                    print(json.dumps(result), flush=True)
+            if trial % 10 == 0 or trial == args.count:
+                print(f"{trial}/{args.count} starts per tool recorded", flush=True)
+    summary = {}
+    for tool in specs:
+        selected = [row for row in records if row["tool"] == tool]
+        good = [row for row in selected if row["status"] == "ok"]
+        summary[tool] = {"attempted": len(selected), "successful": len(good), "failed": len(selected)-len(good),
+                         "forced_shutdowns": sum(bool(row.get("forced_shutdown")) for row in selected),
+                         "nonzero_exits": sum(row.get("exit_code") != 0 for row in selected)}
+        if good:
+            for metric in ("input_frame_ms", "input_echo_ms", "input_response_ms"):
+                summary[tool][metric] = quantiles([row[metric] for row in good])
+    metadata.update(finished_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), host_load_after=os.getloadavg())
+    (output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    print(json.dumps(summary, indent=2), flush=True)
+    if any(value["failed"] for value in summary.values()):
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
