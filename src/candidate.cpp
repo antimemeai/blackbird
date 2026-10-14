@@ -7,6 +7,7 @@
 #include "blackbird/raw_session.hpp"
 
 #include "native_process.hpp"
+#include <cstring>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>

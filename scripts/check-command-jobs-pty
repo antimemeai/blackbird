@@ -25,7 +25,7 @@ import time
 
 
 def module(name, filename):
-    spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(filename))
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).parent / filename)
     loaded = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(loaded)
     return loaded
@@ -190,6 +190,7 @@ while True:
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", *size, 0, 0))
     screen = oracle.Screen()
     raw = bytearray()
+    keyboard_sent = bytearray()
     pids = []
     plain_child = None
     plain_output = bytearray()
@@ -199,28 +200,33 @@ while True:
         env=dict(os.environ, BLACKBIRD_GRAPHICS="off"),
     )
 
+    def read_outer():
+        try:
+            data = os.read(master, 65536)
+        except OSError as error:
+            if error.errno == errno.EIO:
+                return False
+            raise
+        if not data:
+            return False
+        raw.extend(data)
+        screen.feed(data)
+        # Screen intentionally has no resize event. Match the actual
+        # outer viewport so an old offscreen footer cannot acknowledge
+        # a new foreground wait after shrinking the terminal.
+        for key in list(screen.cells):
+            if key[0] >= size[0] or key[1] >= size[1]:
+                del screen.cells[key]
+                screen.styles.pop(key, None)
+        return True
+
     def drain(seconds=0.05):
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             remaining = max(0, deadline - time.monotonic())
             if select.select([master], [], [], min(0.02, remaining))[0]:
-                try:
-                    data = os.read(master, 65536)
-                except OSError as error:
-                    if error.errno == errno.EIO:
-                        return
-                    raise
-                if not data:
+                if not read_outer():
                     return
-                raw.extend(data)
-                screen.feed(data)
-                # Screen intentionally has no resize event. Match the actual
-                # outer viewport so an old offscreen footer cannot acknowledge
-                # a new foreground wait after shrinking the terminal.
-                for key in list(screen.cells):
-                    if key[0] >= size[0] or key[1] >= size[1]:
-                        del screen.cells[key]
-                        screen.styles.pop(key, None)
 
     def wait(predicate, label, seconds=8):
         deadline = time.monotonic() + seconds
@@ -245,10 +251,61 @@ while True:
         while data:
             count = os.write(master, data)
             assert count > 0, "outer keyboard writer made no progress"
+            keyboard_sent.extend(data[:count])
             data = data[count:]
 
     def command(text):
         send(text + "\r")
+
+    def preserved_keyboard():
+        # The same closed-journal layout used by check-main-input. Read original
+        # ingress records directly; this byte-conservation oracle does not need
+        # whole-run reader snapshot iteration.
+        runs = list((session / "raw").iterdir())
+        assert len(runs) == 1 and (runs[0] / "closed").is_file(), \
+            "keyboard originals belong to one cleanly closed raw run"
+        found = {}
+        selected = {}
+        for segment in sorted(runs[0].glob("events.*")):
+            data = segment.read_bytes()
+            assert data[:8] == b"ARCOJ001" and len(data) >= 112, "raw journal header"
+            offset = 112
+            while offset < len(data):
+                magic, version, kind, sequence, first, length, crc = struct.unpack_from(
+                    "<4sHHQQII", data, offset)
+                assert magic == b"ARJ1" and version == 1 and first <= sequence, \
+                    "raw journal frame header"
+                end = offset + 32 + length
+                assert end <= len(data), "closed run contains a partial frame"
+                if kind == 4:
+                    payload = data[offset + 32:end]
+                    partition, reserved, source = struct.unpack_from("<IIQ", payload, 16)
+                    size, site, ordinal = struct.unpack_from("<IIQ", payload, 32)
+                    assert reserved == 0 and partition in (1, 2, 3), "raw record partition"
+                    assert size == len(payload) - 32 and ordinal > 0, "raw envelope extent"
+                    key = (payload[:16], ordinal)
+                    assert key not in found and site not in (8000, 8001), \
+                        "unique original without transport failure"
+                    found[key] = site
+                    if site in (2040, 2041):
+                        selected[key] = payload[48:]
+                offset = end
+            assert offset == len(data), "closed journal frame extents"
+        reads = sorted((key, body) for key, body in selected.items() if found[key] == 2041)
+        assert reads and len({key[0] for key, _ in reads}) == 1, \
+            "outer keyboard originals have one actual reader lane"
+        original = bytearray()
+        for _, body in reads:
+            parent = (body[:16], struct.unpack_from("=Q", body, 16)[0])
+            assert parent in selected and found[parent] == 2040, \
+                "keyboard return links to its actual read request"
+            assert struct.unpack("=iQ", selected[parent]) == (0, 128), \
+                "keyboard request describes the actual bounded stdin read"
+            count, read_error = struct.unpack_from("=qi", body, 24)
+            literal = body[36:]
+            assert len(literal) == max(0, count), "keyboard original has exact read extent"
+            original.extend(literal)
+        return original
 
     def effects():
         path = root / "pty.effects"
@@ -433,11 +490,17 @@ while True:
             b"step-paste\x02literal\nstep-unicode-" + "☃".encode() +
             b"\nstep-escape-\x1bliteral\nfinish\n"
         ), "actual private tty reader lost, duplicated or redirected original bytes"
+        # Reaping the child precedes command-result retention and UI lease
+        # reconciliation. Submit only after the actual composer owns input.
+        wait(lambda: any(row.startswith("╭") and "Enter send" in row
+                         for row in screen.text().splitlines()),
+             "completed PTY releases input to the composer")
         command("/lua print('COMPOSER_' .. 'RESTORED')")
         visible("COMPOSER_RESTORED")
 
-        # Exhaust the native input queue and normal mailbox while this child
-        # never reads. Lifecycle control must have independent bounded progress.
+        # Drive a non-reading child until actual refusal and outer backpressure
+        # establish full queues. This checks lifecycle progress under saturation,
+        # not a fixed sanitized keyboard-throughput rate.
         size[:] = [32, 120]
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", *size, 0, 0))
         os.kill(child.pid, signal.SIGWINCH)
@@ -447,18 +510,44 @@ while True:
         foreground(pressure_job, interactive=True)
         flags = fcntl.fcntl(master, fcntl.F_GETFL)
         fcntl.fcntl(master, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        pressure_source = b"x" * (512 * 1024)
+        remaining = len(pressure_source)
+        pressure_started = time.monotonic()
+        blocked_writes = 0
+        saturated = False
         try:
-            remaining = 512 * 1024
-            deadline = time.monotonic() + 30
+            deadline = pressure_started + 30
             while remaining:
-                assert time.monotonic() < deadline, "outer pressure writer stalled"
+                assert time.monotonic() < deadline, \
+                    "input saturation not established with %s bytes remaining" % remaining
                 try:
-                    written = os.write(master, b"x" * min(8192, remaining))
+                    at = len(pressure_source) - remaining
+                    written = os.write(master, pressure_source[at:at + min(8192, remaining)])
+                    assert written > 0, "outer pressure writer made no progress"
+                    keyboard_sent.extend(pressure_source[at:at + written])
                     remaining -= written
                 except BlockingIOError:
-                    pass
-                drain(0.005)
+                    blocked_writes += 1
+                    if "PTY input refused:" in main_text():
+                        saturated = True
+                        break
+                    readable, _, _ = select.select(
+                        [master], [master], [], max(0, deadline - time.monotonic()))
+                    if readable:
+                        assert read_outer(), "outer terminal closed during pressure"
+                # Drain ready output without imposing a sleep on successful
+                # writes. The fixture must keep both PTY directions moving.
+                if select.select([master], [], [], 0)[0]:
+                    assert read_outer(), "outer terminal closed during pressure"
+            assert saturated, "pressure source exhausted without observed saturation"
         finally:
+            (root / "pressure.trace").write_text(json.dumps(dict(
+                requested_bytes=len(pressure_source),
+                written_bytes=len(pressure_source) - remaining,
+                remaining_bytes=remaining, blocked_writes=blocked_writes,
+                elapsed_seconds=time.monotonic() - pressure_started,
+                saturation_observed=saturated,
+            )) + "\n")
             fcntl.fcntl(master, fcntl.F_SETFL, flags)
         visible("PTY input refused:")
         send(b"\x02")
@@ -487,6 +576,8 @@ while True:
         # shutdown output before requiring a complete terminal-control stream.
         drain(0.2)
         assert not screen.pending, "incomplete outer terminal control sequence"
+        assert preserved_keyboard() == keyboard_sent, \
+            "disk originals lost, duplicated or changed transferred outer keyboard bytes"
 
         # A blocked plain stdin reader must keep pumping the shared owner.
         # No second line is sent until the actual detached child has completed.
@@ -528,6 +619,7 @@ while True:
     finally:
         if args.log_dir:
             (args.log_dir / "terminal.raw").write_bytes(raw)
+            (args.log_dir / "keyboard.sent").write_bytes(keyboard_sent)
             (args.log_dir / "terminal-screen.txt").write_text(screen.text())
             (args.log_dir / "plain-output.txt").write_bytes(plain_output)
             if (session / "audit").is_file():

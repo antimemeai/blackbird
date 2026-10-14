@@ -133,6 +133,7 @@ private:
       emission_.close(fields.view());
     } else {
       const ErrnoGuard preserved;
+      const bool failed = native_error_.value_or(0) != 0;
       Fields fields;
       fields.ref(request);
       fields.native(branch);
@@ -141,7 +142,6 @@ private:
       else
         fields.native(count_);
       if (native_error_) {
-        const bool failed = *native_error_ != 0;
         fields.native(failed);
         if (failed)
           fields.native(*native_error_);

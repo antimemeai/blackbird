@@ -539,21 +539,31 @@ void native_long_cwd() {
       expected += component;
     }
     check(::fchdir(directories.back()) == 0, "native deep fchdir");
-    const auto ordinary = fs::canonical(".");
-    check(ordinary.native() == expected, "actual GNU long canonical reference");
+    check(fs::current_path().native() == expected,
+          "actual GNU uncapped current-directory reference");
+    std::error_code ordinary_error;
+    const auto ordinary = fs::canonical(".", ordinary_error);
+    check(ordinary.empty() && ordinary_error.value() == ENAMETOOLONG,
+          "actual GNU canonical rejects the long absolute native pathname");
     {
       auto runtime = unwrap(RawRuntime::open(directory.path.string(), environment(78)));
       auto handle = unwrap(runtime->prepare_thread());
       RawThreadBinding binding{handle};
       const auto parent = RawEventRef{raw_lane_epoch(), unwrap(raw_emit(9210, {}))};
       const RawAdapterContext context{nullptr, parent, nullptr, nullptr};
-      check(::canonical(".", &context).native() == expected,
-            "selected canonical lost native long result");
+      bool rejected = false;
+      try {
+        (void)::canonical(".", &context);
+      } catch (const fs::filesystem_error &error) {
+        rejected = error.code() == ordinary_error && error.path1() == fs::path{"."};
+      }
+      check(rejected, "selected canonical preserves actual GNU long-path error");
     }
     check(::fchdir(saved) == 0, "restore native cwd");
     const auto rows = records(directory.path);
     bool acquired = false, linked = false;
     std::map<Ref, Ref> owners;
+    std::set<Ref> failed_helpers;
     for (const auto &row : rows) {
       ByteView fields{row.body};
       if (row.site == 3410) {
@@ -573,15 +583,25 @@ void native_long_cwd() {
                       std::memcmp(fields.data(), expected.c_str(), extent) == 0;
         }
       }
+      if (row.site == 3411) {
+        const auto owner = reference(fields);
+        check(native<RawFileBranch>(fields) == RawFileBranch::returned &&
+                  native<std::size_t>(fields) == 0 && native<bool>(fields) &&
+                  native<int>(fields) == ENAMETOOLONG && fields.empty(),
+              "long canonical File terminal preserves empty path and native error");
+        failed_helpers.insert(owner);
+      }
       if (row.site == 3939) {
         const auto parent = reference(fields);
-        check(native<std::uint8_t>(fields) == 1, "long canonical caller return");
+        check(native<RawOperationBranch>(fields) == RawOperationBranch::standard,
+              "long canonical standard exception");
         (void)native<std::uint8_t>(fields);
-        check(!native<bool>(fields) && !native<bool>(fields) && native<bool>(fields),
-              "long canonical native returned flags");
-        const auto owner = reference(fields);
-        linked = owners.contains(owner) && owners.at(owner) == parent &&
-                 native<std::size_t>(fields) == expected.size() && fields.empty();
+        check(!native<bool>(fields) && native<bool>(fields) &&
+                  native<int>(fields) == ENAMETOOLONG && !native<bool>(fields) &&
+                  fields.empty(),
+              "long canonical reports native code without invented returned path");
+        linked = owners.size() == 1 && owners.begin()->second == parent &&
+                 failed_helpers.contains(owners.begin()->first);
       }
     }
     check(acquired && linked,

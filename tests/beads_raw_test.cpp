@@ -57,6 +57,7 @@ thread_local bool allocation_armed = false, allocation_hit = false, stack_busy =
 thread_local int selected_allocation = 0;
 thread_local bool selected_allocation_hit = false;
 thread_local std::size_t selected_allocation_size = 0;
+thread_local std::size_t selected_body_allocations = 0;
 void require(bool yes, const char *why) {
   if (!yes)
     throw std::runtime_error{why};
@@ -117,21 +118,12 @@ bool actual_original_stack() noexcept {
   stack_busy = false;
   return found;
 }
-bool selected_allocation_stack(std::size_t size) noexcept {
-  if (!selected_allocation || stack_busy)
+bool selected_body_allocation(std::size_t size) noexcept {
+  if (!selected_allocation || size < 8192)
     return false;
-  stack_busy = true;
-  std::array<void *, 64> frames{};
-  const auto count = ::backtrace(frames.data(), static_cast<int>(frames.size()));
-  bool argv = false;
-  for (int i = 0; i < count; ++i) {
-    Dl_info info{};
-    if (::dladdr(frames[static_cast<std::size_t>(i)], &info) && info.dli_sname)
-      argv = argv || (std::strstr(info.dli_sname, "RawBeadsArgv") &&
-                      std::strstr(info.dli_sname, "push"));
-  }
-  stack_busy = false;
-  return argv && size >= 8192;
+  // First: the body's '-' validation copy. Second: argv body acquisition,
+  // after the five completed prefix elements checked independently on disk.
+  return ++selected_body_allocations == 2;
 }
 template <class T> T id(unsigned char byte) {
   IdentityBytes bytes{};
@@ -1287,10 +1279,10 @@ void allocation_boundaries(const char *executable) {
         input.object().emplace_back("body", Value{std::string(8192, 'b')});
       else
         mode("cache");
-      std::array<void *, 4> warm{};
-      (void)::backtrace(warm.data(), static_cast<int>(warm.size()));
+      const auto calls_before = read_file(fixture.base / "calls");
       selected_allocation = kind;
       selected_allocation_hit = false;
+      selected_body_allocations = 0;
       bool escaped = false;
       try {
         (void)run_adapter(adapter, input, &context);
@@ -1302,6 +1294,8 @@ void allocation_boundaries(const char *executable) {
                 << " bytes=" << selected_allocation_size << '\n';
       require(escaped && selected_allocation_hit,
               "actual selected argv acquisition allocation cut reached");
+      require(read_file(fixture.base / "calls") == calls_before,
+              "failed argv acquisition launches no additional native child");
       if (kind == 1)
         require(!std::filesystem::exists(fixture.base / "effect"),
                 "unacquired argv element prevents mutation child");
@@ -1323,6 +1317,9 @@ void allocation_boundaries(const char *executable) {
                   take<std::size_t>(body) == 5 && body.empty(),
               "failed body acquisition leaves five completed actual elements and no "
               "invented Error");
+      const std::array<std::string, 5> expected{
+          std::filesystem::canonical(executable).string(), "--json",
+          "--actor=native actor;$()", "create", "--title=native title"};
       std::size_t earlier = 0;
       for (const auto &event : events)
         if (event.site == 3511) {
@@ -1330,6 +1327,13 @@ void allocation_boundaries(const char *executable) {
           if (same(reference(fields), prep)) {
             require(event.ref.ordinal < failed->ref.ordinal,
                     "prior argv bytes published before failed terminal");
+            const auto index = take<std::size_t>(fields);
+            const auto length = take<std::size_t>(fields);
+            require(index == earlier && index < expected.size() &&
+                        length == fields.size() &&
+                        std::string_view{reinterpret_cast<const char *>(fields.data()),
+                                         fields.size()} == expected[index],
+                    "five completed argv originals equal independent native literals");
             ++earlier;
           }
         }
@@ -1527,7 +1531,7 @@ extern "C" ssize_t read(int fd, void *bytes, std::size_t capacity) {
   return count;
 }
 void *operator new(std::size_t size) {
-  if (selected_allocation_stack(size)) {
+  if (selected_body_allocation(size)) {
     selected_allocation = 0;
     selected_allocation_hit = true;
     selected_allocation_size = size;

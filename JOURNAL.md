@@ -8259,3 +8259,65 @@ and production sizing remain unmeasured. Broader SystemA hooks remain
 implementation scope. Nls.2 stays in progress; evals, trajectories and multiplayer
 remain deferred. Checkpoint the report branch with relevant text/link checks and
 supported bead backup; do not repeat the source gate for report files.
+
+
+## 2026-10-14 — Repair concrete defects; only affected checks
+
+Operator requests fixes and rerunning just impacted tests. This explicitly
+supersedes the blanket full-suite/source gate for this repair checkpoint. First
+state report0423991 was committed/pushed on work/nls2-qualification-state before
+source edits. Wrote the grounded repair plan; delegated independent native
+fault selection, UI fixture lifetimes and command pressure concepts. Root owns
+File/Candidate and build/static resources. Maximum six compiler/static workers,
+one Ninja writer per tree. No optimization, library adoption, larger watchdog,
+provider/eval call, performance run or unrelated suite repetition.
+
+Production File fix keeps the borrowed failed flag alive until synchronous raw
+publication. Its optional presence, native code/field order, count/flag and errno
+behavior stay intact. Candidate includes <cstring> directly. Independent File
+source review finds no lifetime/conditional/cleanup defect. Native failure
+oracles and ASan verify affected callers, not just a non-crash assertion.
+
+Beads now selects the second actual large body copy, checked by five exact
+independent argv originals, stage/argc, unchanged child-call log and no effect.
+Station first selected an issuer reservation; the existing semantic-record
+assertion rejected it. Corrected selection requires a committed program record,
+with actual formatter allocation count for the separate prompt cut. Original
+native stage, error, state and disk assertions remain. UI TLS aggregate retains
+the issuing context through loan/bank cleanup. Reproduced Linux red and retained
+its executable; addr2line identifies std::get_temporary_buffer's nothrow new
+against the fixture's custom free. Matching nothrow allocation/deallocation
+families fix that test allocator, without suppressions or product changes.
+
+The command fixture must wait for the rendered composer, not merely child reap.
+Readiness-only writes still advance 380,030 of 524,288 bytes in 30 seconds under
+ASan: not a deadlock, and no designed throughput contract. The corrected oracle
+establishes actual refusal and outer backpressure from the same 512 KiB source,
+then tests reserved background/stop/reap. It reports transferred and unwritten
+extents rather than claiming full consumption. An added whole-record reader
+exceeded its own 45-second consumer watchdog after native checks succeeded;
+replace that inadequate mechanism with the existing direct closed-journal
+pattern. All physically transferred keyboard bytes equal independent disk
+originals with exact bounded stdin request/return links. Mac final transferred
+pressure bytes316670/316542; all keyboard bytes319234/319106 checked. Linux
+Release/ASan PTY pass7.15/26.85 seconds. No product persistence or throughput
+optimization, lower fault pressure predicate or watchdog expansion.
+
+Candidate's newly reachable Linux-only deep-CWD fixture wrongly assumed ordinary
+canonical success. Actual libstdc++ returns ENAMETOOLONG, matching prior File
+source study. Test now requires exact ordinary/selected error and literal cwd
+CString including NUL, File terminal and caller exception/no returned path. The
+first rewritten fixture mixed File/caller returned enum tags; named separate
+enums fix that oracle error. Only Candidate is rebuilt/rechecked after correction.
+Independent scoped review finds no remaining lifetime/error/link issue.
+
+Final results combine the last relevant pass for each affected case: fourteen
+cases in each macOS Release/ASan+UBSan and Linux Release/ASan+UBSan profile,
+fifty-six passing outcomes. Provisional failures and corrected source remain in
+reports/logs rather than becoming passes by assertion relaxation. All six changed
+C++ TUs pass clang-tidy/format; final changed Python syntax/diff/link checks pass.
+No 131-test/all194-TU or whole Lua run repeated. Scoped bugs834/90u/bho/iva/fir/
+0oa/ji3 closed; broader nls.2 remains in progress. Supported bead backup captured.
+Owned native/static workers complete and retained Linux scratch is removed.
+Checkpoint/push this repair branch with the operator-authorized per-command hook
+override. No new main integration is inferred from the repair request.

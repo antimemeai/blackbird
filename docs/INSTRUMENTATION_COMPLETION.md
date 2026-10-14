@@ -367,3 +367,22 @@ during this report.
 See [every case, findings and startup results](../papers/2026-10-14-instrumentation-qualification-first-state.md)
 and [raw runtime measurements](../papers/2026-10-14-raw-runtime-workloads.md).
 Nls.2 stays in progress. Evals, trajectories and multiplayer remain deferred.
+
+
+## Affected qualification repairs, 2026-10-14
+
+The concrete first-state defects are repaired. File's borrowed terminal flag
+stays alive through emission; Candidate directly includes <cstring>. Native
+fixture allocation selection/lifetimes and the PTY mode/saturation/disk-original
+oracles are corrected. Candidate's Linux deep-CWD case records the actual GNU
+ENAMETOOLONG outcome and exact uncapped cwd bytes, not an invented successful path.
+
+All fourteen affected cases have final passes in macOS Release/ASan+UBSan and
+Linux Release/ASan+UBSan: fifty-six affected outcomes. Changed C++ TU diagnostics,
+formatting and changed Python syntax pass. Only relevant failed/changed paths
+are rerun, per the operator. Earlier failures remain their historical state;
+no full source gate, broad qualification or performance guarantee is inferred.
+No optimization or capacity tuning. Seven scoped bugs close; nls.2 remains in
+progress for the existing census/cost/sizing and implementation boundaries.
+
+See [repairs and every affected result](../papers/2026-10-14-qualification-repair-results.md).

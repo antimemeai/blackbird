@@ -44,11 +44,27 @@ void *operator new(std::size_t size) {
     return memory;
   throw std::bad_alloc{};
 }
+void *operator new(std::size_t size, const std::nothrow_t &) noexcept {
+  try {
+    return ::operator new(size);
+  } catch (const std::bad_alloc &) {
+    return nullptr;
+  }
+}
 void operator delete(void *memory) noexcept { std::free(memory); }
 void operator delete(void *memory, std::size_t) noexcept { ::operator delete(memory); }
+void operator delete(void *memory, const std::nothrow_t &) noexcept {
+  ::operator delete(memory);
+}
 void *operator new[](std::size_t size) { return ::operator new(size); }
+void *operator new[](std::size_t size, const std::nothrow_t &mode) noexcept {
+  return ::operator new(size, mode);
+}
 void operator delete[](void *memory) noexcept { ::operator delete(memory); }
 void operator delete[](void *memory, std::size_t) noexcept {
+  ::operator delete(memory);
+}
+void operator delete[](void *memory, const std::nothrow_t &) noexcept {
   ::operator delete(memory);
 }
 extern "C" ssize_t write(int descriptor, const void *bytes, std::size_t size) {
@@ -1071,11 +1087,16 @@ void actual_terminal_queue(UiCut cut = UiCut::none) {
             require(::write(ready[1], &byte, 1) == 1, "nativeworkerready");
             if (completion_refusal) {
               // Actual loan split rejects the final complete post on its worker.
-              // TLS owns both holders until that native worker exits.
-              static thread_local std::optional<RawControlToken> exhausted;
-              static thread_local std::optional<RawUiBurst> loan;
-              exhausted.emplace(unwrap(raw_claim_control(0)));
-              loan.emplace(&*exhausted);
+              // Retain the issuing producer until TLS releases its loan/credit.
+              struct CompletionRefusal {
+                RawThreadHandle context;
+                std::optional<RawControlToken> exhausted;
+                std::optional<RawUiBurst> loan;
+              };
+              static thread_local CompletionRefusal refusal;
+              refusal.context = raw_current_thread();
+              refusal.exhausted.emplace(unwrap(raw_claim_control(0)));
+              refusal.loan.emplace(&*refusal.exhausted);
               return;
             }
             char returned;

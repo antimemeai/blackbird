@@ -6,8 +6,6 @@
 #include <array>
 #include <cstdlib>
 #include <cstring>
-#include <dlfcn.h>
-#include <execinfo.h>
 #include <filesystem>
 #include <iostream>
 #include <map>
@@ -16,37 +14,28 @@
 using namespace blackbird;
 namespace cuts {
 thread_local unsigned mode = 0;
-thread_local bool busy = false, hit = false;
+thread_local bool hit = false, count_formatter = false;
 thread_local const RetainedState *root = nullptr;
-thread_local std::size_t before = 0;
-bool selected() noexcept {
-  if (!mode || busy)
+thread_local std::size_t before = 0, formatter_allocations = 0, skip = 0;
+bool program_record_committed() noexcept {
+  if (!root || root->tail_facts().size() <= before)
     return false;
-  busy = true;
-  std::array<void *, 64> frames{};
-  const int count = ::backtrace(frames.data(), static_cast<int>(frames.size()));
-  bool control = false, prompt = false, string = false, tree = false, record = false,
-       formatter = false;
-  for (int index = 0; index < count; ++index) {
-    Dl_info info{};
-    if (::dladdr(frames[static_cast<std::size_t>(index)], &info) && info.dli_sname) {
-      control |= std::strstr(info.dli_sname, "StationStore7control") != nullptr;
-      prompt |= std::strstr(info.dli_sname, "StationStore6prompt") != nullptr;
-      string |= std::strstr(info.dli_sname, "basic_string") != nullptr;
-      tree |= std::strstr(info.dli_sname, "__tree") != nullptr;
-      record |= std::strstr(info.dli_sname, "AuditLog") &&
-                std::strstr(info.dli_sname, "record");
-      formatter |= std::strstr(info.dli_sname, "format_value") != nullptr;
-    }
-  }
-  const bool deny = mode == 1 ? control && tree && !record && root &&
-                                    root->tail_facts().size() > before
-                              : prompt && string && !formatter;
+  const auto *record =
+      std::get_if<ApplicationRecordEvent>(&root->tail_facts().back().event.body);
+  return record && record->channel == ApplicationChannel::program;
+}
+bool selected() noexcept {
+  if (count_formatter)
+    ++formatter_allocations;
+  if (!mode)
+    return false;
+  const bool deny = mode == 1 ? program_record_committed() : skip == 0;
+  if (mode == 2 && skip)
+    --skip;
   if (deny) {
     mode = 0;
     hit = true;
   }
-  busy = false;
   return deny;
 }
 } // namespace cuts
@@ -419,6 +408,7 @@ void native_failure_cuts() {
       failed = true;
     }
     cuts::mode = 0;
+    cuts::root = nullptr;
     require(failed && cuts::hit && !absent.ordinal && !station.paused(),
             "actual set allocation fails after record without accepted return or "
             "applied pause");
@@ -435,6 +425,12 @@ void native_failure_cuts() {
     require(recorded,
             "actual successful semantic record survives native set allocation failure");
     const auto input = event("partial-prompt");
+    cuts::formatter_allocations = 0;
+    cuts::count_formatter = true;
+    const auto formatted = format_value(input);
+    cuts::count_formatter = false;
+    require(formatted.has_value(), "native formatter allocation count completes");
+    cuts::skip = cuts::formatter_allocations;
     cuts::mode = 2;
     cuts::hit = false;
     failed = false;
