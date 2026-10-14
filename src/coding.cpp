@@ -5,9 +5,12 @@
 #include "blackbird/process_lifetime.hpp"
 #include "blackbird/provider_auth.hpp"
 #include "blackbird/raw_authored.hpp"
+#include "blackbird/raw_bridge.hpp"
 #include "blackbird/raw_command.hpp"
+#include "blackbird/raw_complaint.hpp"
 #include "blackbird/raw_operation.hpp"
 #include "blackbird/raw_provider.hpp"
+#include "blackbird/raw_restart.hpp"
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/raw_turn.hpp"
 #include "stream_capture.hpp"
@@ -348,15 +351,19 @@ struct CodingEngine::CommandTaskActivity {
   RawThreadHandle owner;
   RawTaskActivityTrace trace;
   std::function<void(const Value &)> &observer;
+  std::function<void(const Value &, RawTaskPresentation)> &native_observer;
   std::string id, attempt_text, operation;
   OperationAttemptId attempt;
   CommandTaskMap::node_type *pending_node = nullptr;
   bool *transferred = nullptr;
   bool bound = false, ended = false;
-  CommandTaskActivity(std::function<void(const Value &)> &callback, std::string task,
-                      OperationAttemptId actual_attempt, std::string encoded_attempt,
-                      std::string operation_name)
-      : owner(raw_current_thread()), observer(callback), id(std::move(task)),
+  CommandTaskActivity(
+      std::function<void(const Value &)> &callback,
+      std::function<void(const Value &, RawTaskPresentation)> &native_callback,
+      std::string task, OperationAttemptId actual_attempt, std::string encoded_attempt,
+      std::string operation_name)
+      : owner(raw_current_thread()), observer(callback),
+        native_observer(native_callback), id(std::move(task)),
         attempt_text(std::move(encoded_attempt)), operation(std::move(operation_name)),
         attempt(actual_attempt) {}
   CommandTaskActivity(const CommandTaskActivity &) = delete;
@@ -376,8 +383,9 @@ struct CodingEngine::CommandTaskActivity {
       ended = true;
     RawThreadBinding binding{owner};
     const auto activity = trace.activity(branch);
-    const auto notification = trace.notification(activity, bool(observer));
-    if (!observer) {
+    const auto notification =
+        trace.notification(activity, bool(native_observer) || bool(observer));
+    if (!native_observer && !observer) {
       trace.notified(notification, 0);
       return;
     }
@@ -388,10 +396,17 @@ struct CodingEngine::CommandTaskActivity {
                                       : "outcome unknown"};
       if (exit)
         phase += " (exit " + exit->number().text() + ")";
-      observer(Value::object({{"task_id", Value{id}},
-                              {"attempt", Value{attempt_text}},
-                              {"operation", Value{operation}},
-                              {"phase", Value{std::move(phase)}}}));
+      const auto event = Value::object({{"task_id", Value{id}},
+                                        {"attempt", Value{attempt_text}},
+                                        {"operation", Value{operation}},
+                                        {"phase", Value{std::move(phase)}}});
+      if (native_observer)
+        native_observer(
+            event,
+            RawTaskPresentation{
+                activity.ordinal ? std::optional{activity} : std::nullopt, {}, {}});
+      else
+        observer(event);
       trace.notified(notification, 1);
     } catch (const Error &error) {
       trace.notified(notification, 2, error);
@@ -696,19 +711,42 @@ struct CodingEngine::Runtime {
     int lua_status = LUA_ERRRUN;
     bool failed = false;
     Error rejected{ErrorCode::external_unknown};
+    RawAuthoredReference loaded_source{};
+    auto *token = current_module(L);
     {
+      RawCaptureFailureScope capture{self->trace.owner.enabled};
       try {
         auto credit = self->claim(53);
         std::size_t length = 0;
         const char *source = lua_tolstring(L, 1, &length);
-        const char *name = lua_tostring(L, 2);
-        lua_status = self->load(L, {source, length}, name, SourceKind::module,
-                                credit ? &*credit : nullptr)
-                         .lua_status;
+        std::size_t name_size = 0;
+        const char *name = lua_tolstring(L, 2, &name_size);
+        if (token)
+          token->chunk({name, name_size}, {name, std::strlen(name) + 1});
+        capture.require();
+        const auto loaded = self->load(L, {source, length}, name, SourceKind::module,
+                                       credit ? &*credit : nullptr);
+        lua_status = loaded.lua_status;
+        loaded_source = loaded.reference;
+        if (token)
+          (void)token->event({4824, 3}, std::array{ByteView{loaded_source.lane},
+                                                   raw_native(loaded_source.ordinal)});
+        capture.require();
       } catch (const Error &caught_error) {
         self->acquisition_failed(caught_error);
         rejected = caught_error;
         failed = true;
+      } catch (const std::bad_alloc &) {
+        rejected = {ErrorCode::allocation};
+        failed = true;
+      } catch (...) {
+        rejected = {ErrorCode::external_unknown};
+        failed = true;
+      }
+      if (capture.error()) {
+        self->trace.owner.admission_failure = *capture.error();
+        if (token)
+          token->failed(*capture.error());
       }
     }
     if (failed)
@@ -718,8 +756,49 @@ struct CodingEngine::Runtime {
       lua_insert(L, -2);
       return 2;
     }
-    lua_pushvalue(L, 3);
-    (void)lua_setupvalue(L, -2, 1);
+    {
+      RawCaptureFailureScope capture{self->trace.owner.enabled};
+      try {
+        const int index = 1;
+        const void *function = lua_topointer(L, -1), *environment = lua_topointer(L, 3);
+        const auto assignment =
+            token ? token->event({4830, 4},
+                                 std::array{ByteView{loaded_source.lane},
+                                            raw_native(loaded_source.ordinal),
+                                            raw_native(function),
+                                            raw_native(environment), raw_native(index)})
+                  : RawEventRef{};
+        capture.require();
+        lua_pushvalue(L, 3);
+        const char *name = lua_setupvalue(L, -2, index);
+        const bool present = name != nullptr;
+        if (token && present) {
+          const auto size = std::strlen(name) + 1;
+          if (size > 5) {
+            raw_capture_failed({ErrorCode::overflow});
+            throw Error{ErrorCode::overflow};
+          }
+          (void)token->linked(4831, assignment,
+                              std::array{raw_native(present), raw_native(size),
+                                         std::as_bytes(std::span{name, size})});
+        } else if (token)
+          (void)token->linked(4831, assignment, std::array{raw_native(present)});
+        capture.require();
+      } catch (const Error &why) {
+        rejected = why;
+        failed = true;
+      } catch (...) {
+        rejected = {ErrorCode::external_unknown};
+        failed = true;
+      }
+      if (capture.error()) {
+        self->trace.owner.admission_failure = *capture.error();
+        if (token)
+          token->failed(*capture.error());
+      }
+    }
+    if (failed)
+      return authored_raise(L, rejected);
     return 1;
   }
   static int module_call(lua_State *L) {
@@ -730,7 +809,9 @@ struct CodingEngine::Runtime {
     int lua_status = LUA_ERRRUN;
     bool failed = false;
     Error rejected{ErrorCode::external_unknown};
+    auto *token = current_module(L);
     {
+      RawCaptureFailureScope capture{self->trace.owner.enabled};
       try {
         auto credit = self->claim(92);
         const void *function =
@@ -742,8 +823,15 @@ struct CodingEngine::Runtime {
             self->trace.owner.enabled
                 ? raw_authored_publish(1517, fields, credit ? &*credit : nullptr)
                 : RawAuthoredReference{};
+        if (token)
+          (void)token->event({4834, 5}, std::array{ByteView{request.lane},
+                                                   raw_native(request.ordinal),
+                                                   raw_native(function)});
+        capture.require();
         lua_pushvalue(L, 1);
         lua_status = lua_pcall(L, 0, 1, 0);
+        if (token)
+          token->inner_status(lua_status);
         const std::array returned{ByteView{request.lane}, raw_native(request.ordinal),
                                   raw_native(lua_status)};
         if (self->trace.owner.enabled)
@@ -752,6 +840,17 @@ struct CodingEngine::Runtime {
         self->acquisition_failed(caught_error);
         rejected = caught_error;
         failed = true;
+      } catch (const std::bad_alloc &) {
+        rejected = {ErrorCode::allocation};
+        failed = true;
+      } catch (...) {
+        rejected = {ErrorCode::external_unknown};
+        failed = true;
+      }
+      if (capture.error()) {
+        self->trace.owner.admission_failure = *capture.error();
+        if (token)
+          token->failed(*capture.error());
       }
     }
     if (failed)
@@ -761,9 +860,20 @@ struct CodingEngine::Runtime {
     return 2;
   }
   lua_State *state = nullptr;
-  Value scratch;
   std::string error;
   std::optional<Error> failure;
+  struct NativeExceptionFrame {
+    std::exception_ptr primary;
+  };
+  NativeExceptionFrame *native_exception_frame = nullptr;
+  struct ArgumentFrame {
+    const Value *arguments = nullptr;
+    int previous = LUA_NOREF;
+    bool captured = false;
+    std::uint8_t phase = 0;
+  };
+  ArgumentFrame *argument_frame = nullptr;
+  bool argument_restore_failed = false;
   std::array<char, 512> bridge_error{};
   void failed(Error why, const char *message) noexcept {
     failure = why;
@@ -809,6 +919,8 @@ struct CodingEngine::Runtime {
     std::optional<RawThreadBinding> retained;
     if (trace.handle)
       retained.emplace(trace.handle);
+    if (module_issuer)
+      module_issuer->closing.store(true);
     if (state != nullptr)
       lua_close(state);
     trace.finish(1);
@@ -854,6 +966,23 @@ struct CodingEngine::Runtime {
   }
   static int install_impl(lua_State *L) {
     auto *self = static_cast<Runtime *>(lua_touserdata(L, 1));
+    lua_newtable(L);
+    lua_newtable(L);
+    lua_pushliteral(L, "k");
+    lua_setfield(L, -2, "__mode");
+    lua_setmetatable(L, -2);
+    lua_rawsetp(L, LUA_REGISTRYINDEX, &module_current_key);
+    lua_newtable(L);
+    lua_pushcfunction(L, module_gc);
+    lua_setfield(L, -2, "__gc");
+    lua_pushlightuserdata(L, self);
+    lua_pushcclosure(L, module_close, 1);
+    lua_setfield(L, -2, "__close");
+    lua_rawsetp(L, LUA_REGISTRYINDEX, &module_tag_key);
+    lua_pushcfunction(L, create_module_userdata);
+    lua_rawsetp(L, LUA_REGISTRYINDEX, &module_setup_key);
+    lua_pushcfunction(L, prepare_native);
+    lua_rawsetp(L, LUA_REGISTRYINDEX, &preparation_key);
     // Host effects go through the owned audit boundary, including module reads.
     const luaL_Reg libraries[] = {{LUA_GNAME, luaopen_base},
                                   {LUA_COLIBNAME, luaopen_coroutine},
@@ -901,6 +1030,17 @@ struct CodingEngine::Runtime {
     lua_pushlightuserdata(L, self);
     lua_pushcclosure(L, module_call, 1);
     lua_setfield(L, -2, "_module_call");
+    lua_pushlightuserdata(L, self);
+    lua_pushcclosure(L, module_begin, 1);
+    lua_setfield(L, -2, "_module_begin");
+    lua_pushlightuserdata(L, self);
+    lua_pushcclosure(L, module_observe, 1);
+    lua_setfield(L, -2, "_module_observe");
+    lua_pushlightuserdata(L, self);
+    lua_pushcclosure(L, module_end, 1);
+    lua_setfield(L, -2, "_module_end");
+    lua_rawgetp(L, LUA_REGISTRYINDEX, &module_current_key);
+    lua_setfield(L, -2, "_module_current");
     lua_newtable(L);
     lua_getfield(L, -2, "decode");
     lua_setfield(L, -2, "decode");
@@ -938,21 +1078,36 @@ struct CodingEngine::Runtime {
         "function blackbird.tasks.edit(q) return blackbird.call('tasks_edit',q) end "
         "function blackbird.define_tool(d) return blackbird.call('tool_define',"
         "{definition=d}) end "
-        "do local cache,loading={},{}; local load_module,call_module="
-        "blackbird._module_load,blackbird._module_call; "
-        "blackbird._module_load=nil;blackbird._module_call=nil; "
-        "function blackbird.module(name) "
-        "if cache[name]~=nil then return cache[name] end "
-        "assert(not loading[name], 'cyclic module import: '..name); "
-        "local r=blackbird.call('module_source',{name=name}); "
-        "assert(r.source, 'module unavailable: '..name); "
-        "local env=setmetatable({}, {__index=_G}); "
-        "local fn=assert(load_module(r.source, '@module:'..name..':'..r.revision, "
-        "env)); "
-        "loading[name]=true; local ok,value=call_module(fn); loading[name]=nil; "
-        "if not ok then error(value) end; "
-        "assert(value~=nil, 'module must return a value'); "
-        "cache[name]=value; return value end end";
+        "do local cache,loading={},{};local "
+        "load_module,call_module,begin,observe,finish,current,protected,running="
+        "blackbird._module_load,blackbird._module_call,blackbird._module_begin,"
+        "blackbird._module_observe,blackbird._module_end,blackbird._module_current,"
+        "pcall,coroutine.running; "
+        "blackbird._module_load=nil;blackbird._module_call=nil;blackbird._module_begin="
+        "nil;blackbird._module_observe=nil;blackbird._module_end=nil;blackbird._module_"
+        "current=nil; "
+        "local function import(name,token) "
+        "local cached=cache[name];local hit=cached~=nil;observe(token,1,hit);if hit "
+        "then return cached end "
+        "local active=loading[name];observe(token,2,not not active);assert(not "
+        "active,'cyclic module import: '..name); "
+        "local r=blackbird.call('module_source',{name=name});assert(r.source,'module "
+        "unavailable: '..name); "
+        "local env=setmetatable({}, {__index=_G});local "
+        "fn=assert(load_module(r.source,'@module:'..name..':'..r.revision,env)); "
+        "loading[name]=true;observe(token,3,loading[name]);local "
+        "ok,value=call_module(fn);"
+        "loading[name]=nil;observe(token,4,loading[name]);if not ok then error(value) "
+        "end;"
+        "assert(value~=nil,'module must return a "
+        "value');cache[name]=value;observe(token,5,cache[name]);return value end "
+        "function blackbird.module(name) local key=running();local parent=current[key];"
+        "local token <close> =begin(name,parent);if token==nil then return "
+        "import(name,nil) end;current[key]=token;"
+        "local "
+        "ok,value=protected(import,name,token);current[key]=parent;finish(token,ok,"
+        "value);"
+        "if not ok then error(value) end;return value end end";
     if (self->load_and_call(L, tool_api, "tool-api", SourceKind::tool_api, 0) != LUA_OK)
       return lua_error(L);
 
@@ -965,114 +1120,608 @@ struct CodingEngine::Runtime {
       return lua_error(L);
     return 0;
   }
-  static int bridge(lua_State *L) {
+  struct ModuleUserdata {
+    RawModuleToken *token = nullptr;
+  };
+  inline static char module_tag_key, module_current_key;
+  std::shared_ptr<RawModuleIssuer> module_issuer;
+  struct ModuleSetup {
+    RawModuleToken *token;
+    bool attached = false;
+  };
+  ModuleSetup *module_setup = nullptr;
+  static ModuleUserdata *module_userdata(lua_State *L, int index) noexcept {
+    if (lua_type(L, index) != LUA_TUSERDATA ||
+        lua_rawlen(L, index) != sizeof(ModuleUserdata))
+      return nullptr;
+    if (!lua_getmetatable(L, index))
+      return nullptr;
+    lua_rawgetp(L, LUA_REGISTRYINDEX, &module_tag_key);
+    const bool tagged = lua_rawequal(L, -1, -2) != 0;
+    lua_pop(L, 2);
+    return tagged ? static_cast<ModuleUserdata *>(lua_touserdata(L, index)) : nullptr;
+  }
+  static RawModuleToken *current_module(lua_State *L) noexcept {
+    lua_rawgetp(L, LUA_REGISTRYINDEX, &module_current_key);
+    lua_pushthread(L);
+    lua_rawget(L, -2);
+    auto *stored = module_userdata(L, -1);
+    auto *token = stored ? stored->token : nullptr;
+    lua_pop(L, 2);
+    return token && token->active() ? token : nullptr;
+  }
+  static int module_gc(lua_State *L) {
+    auto *self = *static_cast<Runtime **>(lua_getextraspace(L));
+    RawCaptureFailureScope capture{self->trace.owner.enabled};
+    auto *stored = module_userdata(L, 1);
+    if (stored && stored->token) {
+      stored->token->finish(stored->token->closing() ? 2 : 1,
+                            RawOperationBranch::unfinished);
+      delete stored->token;
+      stored->token = nullptr;
+    }
+    if (capture.error()) {
+      self->trace.owner.admission_failure = *capture.error();
+      self->failure = *capture.error();
+    }
+    return 0;
+  }
+  static int module_close(lua_State *L) {
+    auto *self = *static_cast<Runtime **>(lua_getextraspace(L));
+    RawCaptureFailureScope capture{self->trace.owner.enabled};
+    auto *stored = module_userdata(L, 1);
+    if (!stored || !stored->token || !stored->token->active())
+      return 0;
+    lua_rawgetp(L, LUA_REGISTRYINDEX, &module_current_key);
+    lua_getiuservalue(L, 1, 2);
+    lua_rawget(L, -2);
+    const bool current = lua_rawequal(L, 1, -1) != 0;
+    lua_pop(L, 1);
+    if (current) {
+      lua_getiuservalue(L, 1, 2);
+      lua_getiuservalue(L, 1, 1);
+      lua_rawset(L, -3);
+    }
+    lua_pop(L, 1);
+    const int type = lua_type(L, 2);
+    const void *value = lua_topointer(L, 2);
+    stored->token->finish(3, RawOperationBranch::unfinished, nullptr,
+                          {.type = &type, .value = &value});
+    if (capture.error()) {
+      self->trace.owner.admission_failure = *capture.error();
+      self->failure = *capture.error();
+    }
+    return 0;
+  }
+  static int create_module_userdata(lua_State *L) {
+    auto *self = *static_cast<Runtime **>(lua_getextraspace(L));
+    auto *stored =
+        static_cast<ModuleUserdata *>(lua_newuserdatauv(L, sizeof(ModuleUserdata), 2));
+    stored->token = nullptr;
+    lua_pushvalue(L, 1);
+    lua_setiuservalue(L, -2, 1);
+    lua_pushthread(L);
+    lua_setiuservalue(L, -2, 2);
+    lua_rawgetp(L, LUA_REGISTRYINDEX, &module_tag_key);
+    lua_setmetatable(L, -2);
+    stored->token = self->module_setup->token;
+    self->module_setup->attached = true;
+    return 1;
+  }
+  inline static char module_setup_key;
+  static int module_begin(lua_State *L) {
     auto *self = static_cast<Runtime *>(lua_touserdata(L, lua_upvalueindex(1)));
-    const auto op = static_cast<Op>(lua_tointeger(L, lua_upvalueindex(2)));
-    if (op == array_op) {
+    if (!self->trace.owner.enabled) {
+      lua_pushnil(L);
+      return 1;
+    }
+    bool failed = false;
+    Error rejected{ErrorCode::external_unknown};
+    {
+      RawCaptureFailureScope capture{true};
+      std::optional<RawModuleToken> paid;
+      std::unique_ptr<RawModuleToken> token;
+      RawModuleToken *offered = nullptr;
+      RawOperationBranch outcome = RawOperationBranch::error;
+      try {
+        if (self->trace.owner.admission_failure)
+          throw *self->trace.owner.admission_failure;
+        if (!lua_checkstack(L, 8))
+          throw Error{ErrorCode::allocation};
+        if (!self->module_issuer)
+          self->module_issuer = RawModuleIssuer::prepare();
+        const auto vm = self->trace.owner.vm;
+        const auto generation = self->trace.owner.generation;
+        const int argc = lua_gettop(L), type = lua_type(L, 1);
+        auto *parent = module_userdata(L, 2);
+        const auto parent_ref = parent && parent->token && parent->token->active()
+                                    ? parent->token->reference()
+                                    : RawEventRef{};
+        const bool parent_present = parent_ref.ordinal != 0;
+        const auto operation = self->engine.operation_trace_
+                                   ? self->engine.operation_trace_->reference()
+                                   : RawEventRef{};
+        const bool operation_present = operation.ordinal != 0;
+        std::array<ByteView, 12> fields{};
+        std::size_t count = 0;
+        fields[count++] = vm.lane;
+        fields[count++] = raw_native(vm.ordinal);
+        fields[count++] = generation;
+        fields[count++] = raw_native(argc);
+        fields[count++] = raw_native(type);
+        fields[count++] = raw_native(parent_present);
+        if (parent_present) {
+          fields[count++] = parent_ref.lane;
+          fields[count++] = raw_native(parent_ref.ordinal);
+        }
+        fields[count++] = raw_native(operation_present);
+        if (operation_present) {
+          fields[count++] = operation.lane;
+          fields[count++] = raw_native(operation.ordinal);
+        }
+        std::optional<std::string_view> name;
+        if (type == LUA_TSTRING) {
+          std::size_t size = 0;
+          const char *text = lua_tolstring(L, 1, &size);
+          name = std::string_view{text, size};
+        }
+        paid.emplace(self->module_issuer, std::span{fields}.first(count), name);
+        capture.require();
+        token = std::make_unique<RawModuleToken>(std::move(*paid));
+        offered = token.get();
+        const auto mode = std::uint8_t{3};
+        const int base = lua_gettop(L);
+        const auto request =
+            offered->event({4832, 1}, std::array{raw_native(mode), raw_native(base)});
+        capture.require();
+        ModuleSetup setup{offered};
+        auto *previous = self->module_setup;
+        self->module_setup = &setup;
+        struct Restore {
+          ModuleSetup *&current;
+          ModuleSetup *previous;
+          ~Restore() { current = previous; }
+        } restore{self->module_setup, previous};
+        lua_rawgetp(L, LUA_REGISTRYINDEX, &module_setup_key);
+        lua_pushvalue(L, 2);
+        const int lua_status = lua_pcall(L, 1, 1, 0);
+        if (setup.attached)
+          (void)token.release();
+        const int top = lua_gettop(L);
+        (void)offered->linked(4833, request,
+                              std::array{raw_native(lua_status), raw_native(top)});
+        capture.require();
+        if (lua_status != LUA_OK)
+          throw Error{lua_status == LUA_ERRMEM ? ErrorCode::allocation
+                                               : ErrorCode::external_unknown};
+      } catch (const Error &why) {
+        rejected = why;
+        failed = true;
+      } catch (const std::bad_alloc &) {
+        rejected = {ErrorCode::allocation};
+        outcome = RawOperationBranch::allocation;
+        failed = true;
+      } catch (...) {
+        rejected = {ErrorCode::external_unknown};
+        outcome = RawOperationBranch::nonstandard;
+        failed = true;
+      }
+      if (failed) {
+        raw_capture_failed(rejected);
+        self->trace.owner.admission_failure = capture.error().value_or(rejected);
+        self->failure = rejected;
+        auto *owned = offered ? offered : paid ? &*paid : nullptr;
+        if (owned)
+          owned->finish(4, outcome, &rejected);
+      }
+    }
+    if (failed)
+      return authored_raise(L, rejected);
+    return 1;
+  }
+  static int module_observe(lua_State *L) {
+    if (lua_isnil(L, 1))
+      return 0;
+    auto *self = static_cast<Runtime *>(lua_touserdata(L, lua_upvalueindex(1)));
+    bool failed = false;
+    Error rejected{ErrorCode::external_unknown};
+    {
+      RawCaptureFailureScope capture{self->trace.owner.enabled};
+      auto *stored = module_userdata(L, 1);
+      try {
+        if (!stored || !stored->token || !lua_isinteger(L, 2))
+          throw Error{ErrorCode::invalid_range};
+        const auto phase = lua_tointeger(L, 2);
+        if (phase == 1 || phase == 2) {
+          const auto branch = static_cast<std::uint8_t>(phase);
+          const bool predicate = lua_toboolean(L, 3) != 0;
+          (void)stored->token->event(
+              {4822, 2}, std::array{raw_native(branch), raw_native(predicate)});
+        } else if (phase >= 3 && phase <= 5) {
+          const auto mutation = static_cast<std::uint8_t>(phase - 2);
+          const int type = lua_type(L, 3);
+          const void *value = lua_topointer(L, 3);
+          (void)stored->token->event(
+              {4823, static_cast<std::uint8_t>(phase == 3   ? 5
+                                               : phase == 4 ? 6
+                                                            : 7)},
+              std::array{raw_native(mutation), raw_native(type), raw_native(value)});
+        } else
+          throw Error{ErrorCode::invalid_range};
+        capture.require();
+      } catch (const Error &why) {
+        rejected = why;
+        failed = true;
+      } catch (...) {
+        rejected = {ErrorCode::external_unknown};
+        failed = true;
+      }
+      if (failed) {
+        if (stored && stored->token)
+          stored->token->failed(rejected);
+        if (capture.error())
+          self->trace.owner.admission_failure = *capture.error();
+      }
+    }
+    if (failed)
+      return authored_raise(L, rejected);
+    return 0;
+  }
+  static int module_end(lua_State *L) {
+    auto *self = static_cast<Runtime *>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto *stored = module_userdata(L, 1);
+    if (!stored || !stored->token || !stored->token->active())
+      return authored_raise(L, {ErrorCode::invalid_range});
+    bool failed = false;
+    Error rejected{ErrorCode::external_unknown};
+    {
+      RawCaptureFailureScope capture{self->trace.owner.enabled};
+      const int success = lua_toboolean(L, 2), type = lua_type(L, 3);
+      const void *value = lua_topointer(L, 3);
+      stored->token->finish(0, RawOperationBranch::returned, nullptr,
+                            {.success = &success, .type = &type, .value = &value});
+      if (capture.error()) {
+        rejected = *capture.error();
+        self->trace.owner.admission_failure = rejected;
+        failed = true;
+      }
+    }
+    if (failed)
+      return authored_raise(L, rejected);
+    return 0;
+  }
+  struct NativeFrame {
+    Runtime &runtime;
+    RawCaptureFailureScope capture;
+    RawBridgeTrace raw;
+    std::optional<RawCapacityClaim> error_credit;
+    std::optional<Value> value;
+    std::optional<Error> primary;
+    std::exception_ptr native_exception;
+    NativeExceptionFrame *evaluation;
+    RawOperationBranch branch = RawOperationBranch::returned;
+    std::array<char, 512> message{};
+    std::size_t message_size = 0;
+    bool prepared = false;
+    explicit NativeFrame(Runtime &owner)
+        : runtime(owner),
+          capture(owner.trace.owner.enabled && owner.trace.owner.vm.ordinal != 0),
+          evaluation(owner.native_exception_frame) {}
+    void failed(Error why, const char *text, RawOperationBranch outcome) noexcept {
+      primary = why;
+      branch = outcome;
+      if (why.code == ErrorCode::capacity)
+        runtime.engine.capacity_stopped_ = true;
+      message_size = std::min(std::strlen(text), message.size() - 1);
+      std::memcpy(message.data(), text, message_size);
+      message[message_size] = '\0';
+    }
+    void recording() noexcept {
+      if (capture.error()) {
+        runtime.trace.owner.admission_failure = *capture.error();
+        failed(*capture.error(), error_name(capture.error()->code),
+               RawOperationBranch::error);
+      }
+    }
+    void begin(lua_State *L, int operation) {
+      const auto vm = runtime.trace.owner.vm;
+      const auto generation = runtime.trace.owner.generation;
+      const auto operation_ref = runtime.engine.operation_trace_
+                                     ? runtime.engine.operation_trace_->reference()
+                                     : RawEventRef{};
+      const bool operation_present = operation_ref.ordinal != 0;
+      if (!lua_checkstack(L, 8))
+        throw Error{ErrorCode::allocation};
+      auto *parent_module = current_module(L);
+      const auto module_ref =
+          parent_module ? parent_module->reference() : RawEventRef{};
+      const bool module_present = module_ref.ordinal != 0;
+      const int argc = lua_gettop(L);
+      std::array<ByteView, 12> fields{};
+      std::size_t count = 0;
+      fields[count++] = vm.lane;
+      fields[count++] = raw_native(vm.ordinal);
+      fields[count++] = generation;
+      fields[count++] = raw_native(operation);
+      fields[count++] = raw_native(argc);
+      fields[count++] = raw_native(operation_present);
+      if (operation_present) {
+        fields[count++] = operation_ref.lane;
+        fields[count++] = raw_native(operation_ref.ordinal);
+      }
+      fields[count++] = raw_native(module_present);
+      if (module_present) {
+        fields[count++] = module_ref.lane;
+        fields[count++] = raw_native(module_ref.ordinal);
+      }
+      raw.start(4800, 4801, 264, runtime.trace.owner.enabled && vm.ordinal != 0,
+                std::span{fields}.first(count));
+      capture.require();
+      error_credit = raw.data(560);
+      capture.require();
+    }
+    void original(std::uint8_t role, std::string_view text) {
+      if (text.size() > UINT32_MAX - 49) {
+        raw_capture_failed({ErrorCode::overflow});
+        throw Error{ErrorCode::overflow};
+      }
+      auto credit = raw.data(49 + text.size());
+      const auto size = text.size();
+      raw.original(4802, std::array{raw_native(role), raw_native(size), raw_text(text)},
+                   credit ? &*credit : nullptr);
+      capture.require();
+    }
+  };
+  NativeFrame *bridge_frame = nullptr;
+  struct Preparation {
+    const Value *value = nullptr;
+    const char *message = nullptr;
+    std::size_t size = 0;
+    std::uint8_t mode = 0;
+  };
+  Preparation *preparation = nullptr;
+  inline static char preparation_key;
+  static int prepare_native(lua_State *L) {
+    auto *self = *static_cast<Runtime **>(lua_getextraspace(L));
+    auto *offered = self->preparation;
+    if (offered->mode == 1)
+      lua_pushlstring(L, offered->message, offered->size);
+    else if (offered->mode == 2) {
       luaL_checktype(L, 1, LUA_TTABLE);
       lua_pushvalue(L, 1);
       tag(L, ValueTag::array);
-      return 1;
-    }
-    if (!lua_checkstack(L, 1024))
-      return luaL_error(L, "Lua traversal stack exhausted");
-    self->failure.reset();
-    bool failed = false;
+    } else
+      push_value(L, *offered->value);
+    return 1;
+  }
+  int prepare_unrecorded(NativeFrame &frame, lua_State *L, std::uint8_t mode) {
+    Preparation offered{frame.value ? &*frame.value : nullptr, frame.message.data(),
+                        frame.message_size, mode};
+    auto *previous = preparation;
+    preparation = &offered;
+    struct Restore {
+      Preparation *&current;
+      Preparation *previous;
+      ~Restore() { current = previous; }
+    } restore{preparation, previous};
+    lua_rawgetp(L, LUA_REGISTRYINDEX, &preparation_key);
+    if (mode == 2)
+      lua_pushvalue(L, 1);
+    const int lua_status = lua_pcall(L, mode == 2 ? 1 : 0, 1, 0);
+    frame.prepared = true;
+    return lua_status;
+  }
+  int prepare(NativeFrame &frame, lua_State *L, std::uint8_t mode) {
+    if (!lua_checkstack(L, 4))
+      throw Error{ErrorCode::allocation};
+    const int base = lua_gettop(L);
+    const auto request =
+        frame.raw.event(4803, std::array{raw_native(mode), raw_native(base)});
+    if (mode != 1)
+      frame.capture.require();
+    const int lua_status = prepare_unrecorded(frame, L, mode);
+    const int top = lua_gettop(L);
+    if (frame.raw.enabled())
+      frame.raw.linked(4804, request,
+                       std::array{raw_native(lua_status), raw_native(top)});
+    frame.capture.require();
+    return lua_status;
+  }
+  static std::string bridge_string(lua_State *L, int index, NativeFrame &frame,
+                                   std::uint8_t role) {
+    if (lua_type(L, index) != LUA_TSTRING)
+      throw Error{ErrorCode::invalid_range};
+    std::size_t size = 0;
+    const char *text = lua_tolstring(L, index, &size);
+    frame.original(role, {text, size});
+    return {text, size};
+  }
+  static int bridge(lua_State *L) {
+    auto *self = static_cast<Runtime *>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto op = static_cast<Op>(lua_tointeger(L, lua_upvalueindex(2)));
+    bool raise = false;
     {
+      NativeFrame frame{*self};
+      auto *previous = self->bridge_frame;
+      const auto previous_failure = self->failure;
+      self->bridge_frame = &frame;
+      self->failure.reset();
+      struct Restore {
+        Runtime &runtime;
+        NativeFrame *previous;
+        ~Restore() { runtime.bridge_frame = previous; }
+      } restore{*self, previous};
       try {
+        if (frame.evaluation && frame.evaluation->primary)
+          std::rethrow_exception(frame.evaluation->primary);
+        frame.begin(L, static_cast<int>(op));
+        frame.raw.stage(1);
+        if (self->argument_restore_failed)
+          throw Error{ErrorCode::external_unknown};
+        if (self->trace.owner.admission_failure)
+          throw *self->trace.owner.admission_failure;
+        if (!lua_checkstack(L, 1024))
+          throw Error{ErrorCode::allocation};
+        frame.raw.stage(2);
         std::size_t nodes = 0;
+        frame.raw.stage(3);
         switch (op) {
         case packet_decode_op:
-          self->scratch = unwrap(decode_packet_value(read_value(L, 1, {0, &nodes})));
+          frame.value = unwrap(decode_packet_value(read_value(L, 1, {0, &nodes})));
           break;
         case packet_encode_op:
-          self->scratch =
+          frame.value =
               Value{unwrap(encode_packet_string(read_value(L, 1, {0, &nodes})))};
           break;
         case format_op:
-          self->scratch = Value{unwrap(format_value(read_value(L, 1, {0, &nodes})))};
+          frame.value = Value{unwrap(format_value(read_value(L, 1, {0, &nodes})))};
           break;
         case stats_op:
-          self->scratch = self->engine.stats();
+          frame.value = self->engine.stats();
           break;
         case restarting_op:
-          self->scratch = Value{self->engine.restart_note_.has_value()};
+          frame.value = Value{self->engine.restart_note_.has_value()};
           break;
         case request_op:
-          self->scratch = self->engine.request(lua_isnoneornil(L, 1)
-                                                   ? Value::object({})
-                                                   : read_value(L, 1, {0, &nodes}));
+          frame.value = self->engine.request(lua_isnoneornil(L, 1)
+                                                 ? Value::object({})
+                                                 : read_value(L, 1, {0, &nodes}));
           break;
         case call_op: {
-          auto name = lua_string(L, 1);
+          auto name = bridge_string(L, 1, frame, 1);
           auto args = read_value(L, 2, {0, &nodes});
-          self->scratch = self->engine.call(std::move(name), std::move(args));
+          frame.value = self->engine.call(std::move(name), std::move(args));
           break;
         }
         case manage_op:
-          self->scratch = self->engine.context_.manage(read_value(L, 1, {0, &nodes}));
+          frame.value = self->engine.context_.manage(read_value(L, 1, {0, &nodes}));
           break;
         case inspect_op:
-          self->scratch = self->engine.context_.inspect(read_value(L, 1, {0, &nodes}));
+          frame.value = self->engine.context_.inspect(read_value(L, 1, {0, &nodes}));
           break;
         case context_op:
-
-          self->scratch = self->engine.context_.view();
+          frame.value = self->engine.context_.view();
           break;
         case edit_op:
-          self->scratch = self->engine.context_.edit(read_value(L, 1, {0, &nodes}));
+          frame.value = self->engine.context_.edit(read_value(L, 1, {0, &nodes}));
           break;
         case originals_op:
-          self->scratch = self->engine.context_.originals();
+          frame.value = self->engine.context_.originals();
           break;
         case restore_op:
-          self->engine.context_.restore(lua_string(L, 1));
-          self->scratch = self->engine.context_.view();
+          self->engine.context_.restore(bridge_string(L, 1, frame, 3));
+          frame.value = self->engine.context_.view();
           break;
         case append_op: {
           auto items = read_value(L, 1, {0, &nodes});
           self->engine.context_.append(items.array(), "lua.synthetic");
-          self->scratch = self->engine.context_.view();
+          frame.value = self->engine.context_.view();
           break;
         }
         case decode_op:
-          self->scratch = unwrap(parse_json(lua_string(L, 1)));
+          frame.value = unwrap(parse_json(bridge_string(L, 1, frame, 2)));
           break;
         case encode_op:
-          self->scratch = Value{unwrap(dump_json(read_value(L, 1, {0, &nodes})))};
+          frame.value = Value{unwrap(dump_json(read_value(L, 1, {0, &nodes})))};
           break;
         case display_op: {
-          auto s = lua_string(L, 1);
-          self->engine.log_.original({"display", s, Value{}});
+          auto text = bridge_string(L, 1, frame, 4);
+          self->engine.log_.original({"display", text, Value{}});
           if (self->engine.display)
-            self->engine.display(s);
-          self->scratch = Value{};
+            self->engine.display(text);
+          frame.value = Value{};
           break;
         }
         case present_op:
           self->engine.present(read_value(L, 1, {0, &nodes}));
-          self->scratch = Value{};
+          frame.value = Value{};
           break;
         case array_op:
           break;
         }
-      } catch (const Error &e) {
-        self->failed(e, error_name(e.code));
-        failed = true;
+        frame.capture.require();
+      } catch (const Error &why) {
+        frame.failed(why, error_name(why.code), RawOperationBranch::error);
       } catch (const std::bad_alloc &) {
-        self->failed({ErrorCode::allocation}, "allocation");
-        failed = true;
-      } catch (const std::exception &e) {
-        self->failed({ErrorCode::external_unknown}, e.what());
-        failed = true;
+        frame.failed({ErrorCode::allocation}, "allocation",
+                     RawOperationBranch::allocation);
+      } catch (const std::length_error &why) {
+        frame.failed({ErrorCode::external_unknown}, why.what(),
+                     RawOperationBranch::length);
+      } catch (const std::exception &why) {
+        frame.failed({ErrorCode::external_unknown}, why.what(),
+                     RawOperationBranch::standard);
+      } catch (...) {
+        frame.native_exception = std::current_exception();
+        frame.failed({ErrorCode::external_unknown}, "foreign native exception",
+                     RawOperationBranch::nonstandard);
       }
+      frame.recording();
+      if (frame.primary) {
+        try {
+          const auto role = std::uint8_t{5};
+          const auto size = frame.message_size;
+          frame.raw.original(4802,
+                             std::array{raw_native(role), raw_native(size),
+                                        raw_text({frame.message.data(), size})},
+                             frame.error_credit ? &*frame.error_credit : nullptr);
+        } catch (const Error &) {
+          frame.recording();
+        }
+      }
+      frame.raw.stage(4);
+      try {
+        const int status = self->prepare(frame, L,
+                                         frame.primary    ? 1
+                                         : op == array_op ? 2
+                                                          : 0);
+        if (status != LUA_OK && !frame.primary)
+          frame.failed(self->failure.value_or(Error{status == LUA_ERRMEM
+                                                        ? ErrorCode::allocation
+                                                        : ErrorCode::external_unknown}),
+                       status == LUA_ERRMEM ? "allocation" : "Lua preparation failed",
+                       RawOperationBranch::error);
+        raise = frame.primary.has_value() || status != LUA_OK;
+      } catch (const Error &why) {
+        frame.failed(why, error_name(why.code), RawOperationBranch::error);
+        raise = true;
+      } catch (const std::exception &) {
+        frame.failed({ErrorCode::external_unknown}, "native preparation failed",
+                     RawOperationBranch::nonstandard);
+        raise = true;
+      } catch (...) {
+        if (!frame.native_exception)
+          frame.native_exception = std::current_exception();
+        frame.failed({ErrorCode::external_unknown}, "native preparation failed",
+                     RawOperationBranch::nonstandard);
+        raise = true;
+      }
+      frame.recording();
+      if (raise && !frame.prepared && lua_checkstack(L, 4))
+        (void)self->prepare_unrecorded(frame, L, 1);
+      const bool returned = !raise && !frame.primary;
+      const int returns = 1;
+      frame.raw.stage(5);
+      if (returned)
+        frame.raw.finish(frame.branch, nullptr,
+                         std::array{raw_native(returned), raw_native(returns)});
+      else
+        frame.raw.finish(frame.branch, frame.primary ? &*frame.primary : nullptr,
+                         std::array{raw_native(returned)});
+      frame.recording();
+      raise |= frame.primary.has_value();
+      self->failure = previous ? previous_failure : frame.primary;
+      // Carry the actual exception to the enclosing protected eval, after this
+      // callback's owners are gone. A finalizer cannot replace an outer callback's
+      // existing primary failure in the same eval.
+      if (frame.native_exception && frame.evaluation && !frame.evaluation->primary &&
+          !(previous && previous->evaluation == frame.evaluation && previous->primary))
+        frame.evaluation->primary = frame.native_exception;
+      frame.capture.finish();
     }
-    // No owning automatic C++ objects live across Lua allocation/error jumps.
-    if (failed) {
-      lua_pushstring(L, self->bridge_error.data());
+    // Protected preparation already rooted the result/error. No C++ owner remains.
+    if (raise)
       return lua_error(L);
-    }
-    push_value(L, self->scratch);
     return 1;
   }
   static void interrupt_hook(lua_State *L, lua_Debug *) {
@@ -1114,34 +1763,165 @@ struct CodingEngine::Runtime {
       throw;
     }
   }
-  Value invoke_tool(const Value &definition, const Value &arguments) {
-    return eval("local fn = function(args)\n" + string_field(definition, "source") +
-                    "\nend\nreturn fn(_native_args)",
-                &arguments, SourceKind::tool);
+  struct ToolInvocation {
+    const Value &definition;
+    const Value &arguments;
+    const RawProgramContext *origin = nullptr;
+  };
+  Value invoke_tool(ToolInvocation invocation) {
+    const auto &source = string_field(invocation.definition, "source");
+    const auto length = source.size();
+    constexpr std::string_view prefix = "local fn = function(args)\n";
+    constexpr std::string_view suffix = "\nend\nreturn fn(_native_args)";
+    RawProgramCall wrapper{3836, 3837, invocation.origin,
+                           std::array{raw_native(length)}};
+    return wrapper.run([&] {
+      if (length > UINT32_MAX - 48 - prefix.size() - suffix.size())
+        throw Error{ErrorCode::overflow};
+      const auto total = prefix.size() + length + suffix.size();
+      auto original = wrapper.data(48 + total);
+      std::string wrapped;
+      wrapped.reserve(total);
+      wrapped.append(prefix);
+      wrapped.append(source);
+      wrapped.append(suffix);
+      wrapper.bytes(3838, wrapped, original);
+      return eval(wrapped, &invocation.arguments, SourceKind::tool);
+    });
+  }
+  static int transfer_arguments(lua_State *L) {
+    auto *self = *static_cast<Runtime **>(lua_getextraspace(L));
+    auto *frame = self->argument_frame;
+    if (frame->phase == 1) {
+      if (frame->previous == LUA_REFNIL)
+        lua_pushnil(L);
+      else
+        lua_rawgeti(L, LUA_REGISTRYINDEX, frame->previous);
+      lua_setglobal(L, "_native_args");
+    } else if (frame->phase == 2) {
+      luaL_unref(L, LUA_REGISTRYINDEX, frame->previous);
+    } else {
+      lua_getglobal(L, "_native_args");
+      frame->previous = luaL_ref(L, LUA_REGISTRYINDEX);
+      frame->captured = true;
+      push_value(L, *frame->arguments);
+      lua_setglobal(L, "_native_args");
+    }
+    return 0;
+  }
+  int protected_arguments(ArgumentFrame &frame, std::uint8_t phase) {
+    const RawProgramContext origin{
+        RawEventRef{trace.owner.vm.lane, trace.owner.vm.ordinal}, {}};
+    RawProgramCall transfer{3840, 3841, &origin,
+                            std::array{raw_native(phase), raw_native(frame.captured),
+                                       raw_native(frame.previous)},
+                            sizeof(int) + sizeof(bool)};
+    return transfer.run([&] {
+      if (!lua_checkstack(state, 1024))
+        throw Error{ErrorCode::allocation};
+      auto *previous = argument_frame;
+      argument_frame = &frame;
+      frame.phase = phase;
+      lua_pushcfunction(state, transfer_arguments);
+      int lua_status = LUA_OK;
+      try {
+        lua_status = lua_pcall(state, 0, 0, 0);
+      } catch (...) {
+        argument_frame = previous;
+        throw;
+      }
+      argument_frame = previous;
+      if (phase == 2 && lua_status == LUA_OK) {
+        frame.captured = false;
+        frame.previous = LUA_NOREF;
+      }
+      transfer.finish(RawOperationBranch::returned, nullptr,
+                      std::array{raw_native(lua_status), raw_native(frame.captured)});
+      return lua_status;
+    });
+  }
+  static int error_text(lua_State *L) {
+    const char *message = lua_tostring(L, 1);
+    if (message == nullptr)
+      lua_pushnil(L);
+    else
+      lua_pushvalue(L, 1);
+    return 1;
   }
   Value eval(std::string_view source, const Value *arguments = nullptr,
              SourceKind kind = SourceKind::root) {
+    NativeExceptionFrame native_exception;
+    struct RestoreExceptionFrame {
+      NativeExceptionFrame *&current;
+      NativeExceptionFrame *previous;
+      ~RestoreExceptionFrame() { current = previous; }
+    } restore_exception{native_exception_frame, native_exception_frame};
+    native_exception_frame = &native_exception;
     const int base = lua_gettop(state);
-    bool installed_arguments = false;
+    ArgumentFrame frame{arguments};
     auto restore_arguments = [&] {
-      if (installed_arguments) {
-        lua_pushvalue(state, base + 1);
-        lua_setglobal(state, "_native_args");
-        installed_arguments = false;
+      if (frame.captured) {
+        const int restore_base = lua_gettop(state);
+        try {
+          const int lua_status = protected_arguments(frame, 1);
+          lua_settop(state, restore_base);
+          if (lua_status != LUA_OK) {
+            argument_restore_failed = true;
+            throw Error{lua_status == LUA_ERRMEM ? ErrorCode::allocation
+                                                 : ErrorCode::external_unknown};
+          }
+          const int released = protected_arguments(frame, 2);
+          lua_settop(state, restore_base);
+          if (released != LUA_OK) {
+            argument_restore_failed = true;
+            throw Error{released == LUA_ERRMEM ? ErrorCode::allocation
+                                               : ErrorCode::external_unknown};
+          }
+        } catch (...) {
+          argument_restore_failed = true;
+          throw;
+        }
       }
     };
     try {
+      if (argument_restore_failed)
+        throw Error{ErrorCode::external_unknown};
       if (arguments) {
-        if (!lua_checkstack(state, 1024))
-          throw Error{ErrorCode::allocation};
-        lua_getglobal(state, "_native_args");
-        push_value(state, *arguments);
-        lua_setglobal(state, "_native_args");
-        installed_arguments = true;
+        const int lua_status = protected_arguments(frame, 0);
+        frame.arguments = nullptr;
+        if (lua_status != LUA_OK)
+          throw Error{lua_status == LUA_ERRMEM ? ErrorCode::allocation
+                                               : ErrorCode::external_unknown};
       }
-      if (load_and_call(state, source, "arco-program", kind, 1) != LUA_OK) {
+      const int execution_status =
+          load_and_call(state, source, "arco-program", kind, 1);
+      if (native_exception.primary)
+        std::rethrow_exception(native_exception.primary);
+      if (execution_status != LUA_OK) {
         const auto native_error = authored_error(state, -1);
-        const char *message = lua_tostring(state, -1);
+        const RawProgramContext text_origin{
+            RawEventRef{trace.owner.vm.lane, trace.owner.vm.ordinal}, {}};
+        const std::uint8_t phase = 3;
+        RawProgramCall conversion{3840, 3841, &text_origin,
+                                  std::array{raw_native(phase),
+                                             raw_native(frame.captured),
+                                             raw_native(frame.previous)},
+                                  sizeof(int) + sizeof(bool)};
+        const int converted = conversion.run([&] {
+          if (!lua_checkstack(state, 2))
+            throw Error{ErrorCode::allocation};
+          lua_pushcfunction(state, error_text);
+          lua_pushvalue(state, -2);
+          const int lua_status = lua_pcall(state, 1, 1, 0);
+          conversion.finish(
+              RawOperationBranch::returned, nullptr,
+              std::array{raw_native(lua_status), raw_native(frame.captured)});
+          return lua_status;
+        });
+        if (converted != LUA_OK)
+          throw Error{ErrorCode::allocation};
+        const char *message =
+            lua_type(state, -1) == LUA_TSTRING ? lua_tostring(state, -1) : nullptr;
         error = native_error.has_value() ? error_name(native_error->code)
                                          : (message == nullptr ? "Lua error" : message);
         const auto lost = error.size() > 512 ? error.size() - 512 : 0;
@@ -1157,22 +1937,34 @@ struct CodingEngine::Runtime {
       }
       if (!lua_checkstack(state, 1024))
         throw Error{ErrorCode::allocation};
+      if (argument_restore_failed)
+        throw Error{ErrorCode::external_unknown};
       std::size_t nodes = 0;
       restore_arguments();
+      if (native_exception.primary)
+        std::rethrow_exception(native_exception.primary);
       auto result = read_value(state, -1, {0, &nodes});
       lua_settop(state, base);
       return result;
     } catch (...) {
-      restore_arguments();
+      frame.arguments = nullptr;
+      const auto primary = native_exception.primary ? native_exception.primary
+                                                    : std::current_exception();
+      try {
+        restore_arguments();
+      } catch (...) {
+        // The registry root survives until Runtime closes. Both native statuses
+        // are already emitted; restoration cannot replace the primary failure.
+      }
       lua_settop(state, base);
-      throw;
+      std::rethrow_exception(primary);
     }
   }
 };
 namespace {
 // Intentionally small supported schema: a flat object of scalar JSON types.
 // Unsupported schema keywords reject rather than pretending to enforce them.
-void validate_tool_schema(const Value &schema) {
+void validate_tool_schema(const Value &schema, RawProgramCall *trace = nullptr) {
   if (string_field(schema, "type") != "object")
     throw Error{ErrorCode::invalid_range};
   for (const auto &[k, v] : schema.object()) {
@@ -1185,6 +1977,8 @@ void validate_tool_schema(const Value &schema) {
   if (properties.size() > 64)
     throw Error{ErrorCode::capacity};
   for (const auto &[key, property] : properties) {
+    if (trace)
+      trace->validation(3, properties.size());
     if (key.empty() || key.size() > 128)
       throw Error{ErrorCode::invalid_range};
     const auto &type = string_field(property, "type");
@@ -1287,158 +2081,294 @@ void validate_context_budget(const Value &value, RawPolicyFields &fields) {
     throw Error{ErrorCode::invalid_range};
 }
 } // namespace
+namespace {
+RawProgramContext program_origin(const RawOperationTrace *operation,
+                                 const RawTurnTrace *turn,
+                                 DefinitionGenerationId generation) {
+  return {operation ? std::optional{operation->reference()}
+          : turn    ? std::optional{turn->reference()}
+                    : std::nullopt,
+          generation.bytes()};
+}
+std::string program_encoded(RawProgramCall &trace, std::uint8_t kind,
+                            const Value &value) {
+  const ValueLimits limits{65536, 500000, 128};
+  auto data = trace.data(49 + limits.bytes);
+  const auto origin = trace.context();
+  RawProgramCall encoding{3804, 3805, &origin,
+                          std::array{raw_native(kind), raw_native(limits.bytes),
+                                     raw_native(limits.nodes),
+                                     raw_native(limits.depth)},
+                          sizeof(bool)};
+  auto encoded = encoding.run([&] {
+    auto result = encode_packet_string(value, limits);
+    const bool success = result.has_value();
+    if (success)
+      trace.encoded(kind, result.value(), data);
+    encoding.finish(RawOperationBranch::returned, success ? nullptr : &result.error(),
+                    std::array{raw_native(success)});
+    return result;
+  });
+  return unwrap(std::move(encoded));
+}
+template <class F>
+bool program_syntax(RawProgramCall &trace, std::uint8_t kind, std::string_view source,
+                    F &&validate) {
+  trace.stage(4);
+  const auto origin = trace.context();
+  const auto size = source.size();
+  RawProgramCall syntax{3807, 3808, &origin,
+                        std::array{raw_native(kind), raw_native(size)}, sizeof(bool)};
+  syntax.stage(4);
+  return syntax.run([&] {
+    const bool valid = std::forward<F>(validate)();
+    syntax.finish(RawOperationBranch::returned, nullptr, std::array{raw_native(valid)});
+    return valid;
+  });
+}
+} // namespace
 Value CodingEngine::program_config(const Value &arguments) {
-  if (const auto *proposal = arguments.find("proposal")) {
-    if (const auto *base = arguments.find("base");
-        base && base->string() != program_revision_)
-      throw Error{ErrorCode::conflict};
-    for (const auto &[key, value] : proposal->object()) {
-      (void)value;
-      if (key != "modules" && key != "model" && key != "effort" && key != "workflows" &&
-          key != "workflow_prefix")
+  const auto origin = program_origin(operation_trace_, turn_trace_, generation_);
+  RawProgramCall trace{arguments.find("proposal") ? std::uint8_t{2} : std::uint8_t{1},
+                       &origin};
+  return trace.run([&] {
+    trace.stage(1);
+    trace.revision(0, program_revision_);
+    if (const auto *proposal = arguments.find("proposal")) {
+      if (const auto *base = arguments.find("base");
+          base && base->string() != program_revision_)
+        throw Error{ErrorCode::conflict};
+      for (const auto &[key, value] : proposal->object()) {
+        (void)value;
+        if (key != "modules" && key != "model" && key != "effort" &&
+            key != "workflows" && key != "workflow_prefix")
+          throw Error{ErrorCode::invalid_range};
+      }
+      const auto &model = string_field(*proposal, "model");
+      const auto &effort = string_field(*proposal, "effort");
+      if (model.size() > 256 ||
+          (!effort.empty() && effort != "low" && effort != "medium" &&
+           effort != "high" && effort != "xhigh"))
         throw Error{ErrorCode::invalid_range};
+      const auto &modules = field(*proposal, "modules").array();
+      trace.stage(2);
+      if (modules.size() > 32 || program_encoded(trace, 0, *proposal).size() > 65536)
+        throw Error{ErrorCode::capacity};
+      std::set<std::string> names;
+      for (const auto &module : modules) {
+        trace.stage(3);
+        trace.validation(0, modules.size());
+        const auto &name = string_field(module, "name");
+        const auto &source = string_field(module, "source");
+        if (module.object().size() != 2 || name.empty() || name.size() > 64 ||
+            !std::all_of(name.begin(), name.end(),
+                         [](char c) {
+                           return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                  (c >= '0' && c <= '9') || c == '_' || c == '-' ||
+                                  c == '.';
+                         }) ||
+            !names.insert(name).second || source.empty() || source.size() > 16384 ||
+            !program_syntax(trace, 0, source,
+                            [&] { return runtime_->valid_module_source(source); }))
+          throw Error{ErrorCode::invalid_range};
+      }
+      const auto child_origin = trace.context();
+      auto candidate_registry =
+          std::make_shared<WorkflowRegistry>(*proposal, "candidate", &child_origin);
+      for (const auto &d : candidate_registry->definitions().array())
+        if (!program_syntax(trace, 1, string_field(d, "source"), [&] {
+              return runtime_->valid_tool_source(string_field(d, "source"));
+            }))
+          throw Error{ErrorCode::invalid_range};
+      // Copy/issue before publication; validation never executes candidate code.
+      auto next = *proposal;
+      if (trace.enabled() && !program_issuer_)
+        program_issuer_ = RawProgramIssuer::prepare();
+      RawProgramLifetime pending{trace.enabled() ? program_issuer_ : nullptr,
+                                 trace.reference(), false};
+      try {
+        trace.stage(5);
+        auto issued_credit = trace.control(57);
+        const auto issued = unwrap(log_.root().issue<DefinitionGenerationId>());
+        const std::uint8_t kind = 0;
+        trace.event(3809, std::array{raw_native(kind), ByteView{issued.bytes()}},
+                    issued_credit);
+        pending.generation(issued.bytes());
+        auto revision = hex_identity(issued.bytes());
+        trace.stage(6);
+        auto registry =
+            std::make_shared<WorkflowRegistry>(next, revision, &child_origin);
+        trace.stage(7);
+        pending_program_trace_.finish(1);
+        pending_workflows_ = std::move(registry);
+        pending_program_config_ = std::move(next);
+        pending_program_revision_ = std::move(revision);
+        pending.installed(pending_program_revision_);
+        pending_program_trace_ = std::move(pending);
+      } catch (const Error &error) {
+        pending.finish(3, &error);
+        throw;
+      } catch (...) {
+        pending.finish(3);
+        throw;
+      }
     }
-    const auto &model = string_field(*proposal, "model");
-    const auto &effort = string_field(*proposal, "effort");
-    if (model.size() > 256 ||
-        (!effort.empty() && effort != "low" && effort != "medium" && effort != "high" &&
-         effort != "xhigh"))
-      throw Error{ErrorCode::invalid_range};
-    const auto &modules = field(*proposal, "modules").array();
-    if (modules.size() > 32 || unwrap(encode_packet_string(*proposal)).size() > 65536)
-      throw Error{ErrorCode::capacity};
-    std::set<std::string> names;
-    for (const auto &module : modules) {
-      const auto &name = string_field(module, "name");
-      const auto &source = string_field(module, "source");
-      if (module.object().size() != 2 || name.empty() || name.size() > 64 ||
-          !std::all_of(name.begin(), name.end(),
-                       [](char c) {
-                         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                                (c >= '0' && c <= '9') || c == '_' || c == '-' ||
-                                c == '.';
-                       }) ||
-          !names.insert(name).second || source.empty() || source.size() > 16384 ||
-          !runtime_->valid_module_source(source))
-        throw Error{ErrorCode::invalid_range};
-    }
-    auto candidate_registry =
-        std::make_shared<WorkflowRegistry>(*proposal, "candidate");
-    for (const auto &d : candidate_registry->definitions().array())
-      if (!runtime_->valid_tool_source(string_field(d, "source")))
-        throw Error{ErrorCode::invalid_range};
-    // Copy/issue before publication; validation never executes candidate code.
-    auto next = *proposal;
-    auto revision =
-        hex_identity(unwrap(log_.root().issue<DefinitionGenerationId>()).bytes());
-    pending_workflows_ = std::make_shared<WorkflowRegistry>(next, revision);
-    pending_program_config_ = std::move(next);
-    pending_program_revision_ = std::move(revision);
-  }
-  return Value::object(
-      {{"revision", Value{program_revision_}},
-       {"effective", program_config_},
-       {"pending", pending_program_config_},
-       {"launch_defaults",
-        Value::object({{"model", Value{model_}}, {"effort", Value{effort_}}})},
-       {"tools", tool_registry()},
-       {"request_defaults",
-        Value::object(
-            {{"model", Value{string_field(program_config_, "model").empty()
-                                 ? model_
-                                 : string_field(program_config_, "model")}},
-             {"effort", Value{string_field(program_config_, "effort").empty()
-                                  ? effort_
-                                  : string_field(program_config_, "effort")}}})},
-       {"context_policy", budget_view(string_field(program_config_, "model").empty()
-                                          ? model_
-                                          : string_field(program_config_, "model"),
-                                      0)},
-       {"governing_workflow",
-        Value::object(
-            {{"generation", Value{hex_identity(generation_.bytes())}},
-             {"source", Value{"retained program.source; selected workflow file is read "
-                              "at turn admission"}},
-             {"selection",
-              Value{"--workflow or /workflow; no staged selector in this API"}}})},
-       {"pending_revision", pending_program_config_ == Value{}
-                                ? Value{}
-                                : Value{pending_program_revision_}},
-       {"staged", Value{arguments.find("proposal") != nullptr}},
-       {"activation", Value{"successful-workflow-boundary"}}});
+    trace.stage(8);
+    return Value::object(
+        {{"revision", Value{program_revision_}},
+         {"effective", program_config_},
+         {"pending", pending_program_config_},
+         {"launch_defaults",
+          Value::object({{"model", Value{model_}}, {"effort", Value{effort_}}})},
+         {"tools", tool_registry()},
+         {"request_defaults",
+          Value::object(
+              {{"model", Value{string_field(program_config_, "model").empty()
+                                   ? model_
+                                   : string_field(program_config_, "model")}},
+               {"effort", Value{string_field(program_config_, "effort").empty()
+                                    ? effort_
+                                    : string_field(program_config_, "effort")}}})},
+         {"context_policy", budget_view(string_field(program_config_, "model").empty()
+                                            ? model_
+                                            : string_field(program_config_, "model"),
+                                        0)},
+         {"governing_workflow",
+          Value::object(
+              {{"generation", Value{hex_identity(generation_.bytes())}},
+               {"source",
+                Value{"retained program.source; selected workflow file is read "
+                      "at turn admission"}},
+               {"selection",
+                Value{"--workflow or /workflow; no staged selector in this API"}}})},
+         {"pending_revision", pending_program_config_ == Value{}
+                                  ? Value{}
+                                  : Value{pending_program_revision_}},
+         {"staged", Value{arguments.find("proposal") != nullptr}},
+         {"activation", Value{"successful-workflow-boundary"}}});
+  });
 }
 Value CodingEngine::module_source(const Value &arguments) {
-  const auto &name = string_field(arguments, "name");
-  for (const auto &module : field(program_config_, "modules").array())
-    if (string_field(module, "name") == name)
-      return Value::object({{"name", Value{name}},
-                            {"source", field(module, "source")},
-                            {"revision", Value{program_revision_}}});
-  throw Error{ErrorCode::invalid_range};
+  const auto origin = program_origin(operation_trace_, turn_trace_, generation_);
+  const std::uint8_t kind = 2;
+  RawProgramCall trace{3815, 3816, &origin, std::array{raw_native(kind)}};
+  return trace.run([&] {
+    const auto &name = string_field(arguments, "name");
+    auto body = trace.data(48 + name.size());
+    trace.bytes(3817, name, body);
+    for (const auto &module : field(program_config_, "modules").array())
+      if (string_field(module, "name") == name)
+        return Value::object({{"name", Value{name}},
+                              {"source", field(module, "source")},
+                              {"revision", Value{program_revision_}}});
+    throw Error{ErrorCode::invalid_range};
+  });
 }
 Value CodingEngine::tool_registry() const {
-  return Value::object(
-      {{"revision", Value{tools_revision_}},
-       {"effective", lua_tools_},
-       {"pending", pending_lua_tools_},
-       {"pending_revision",
-        pending_lua_tools_ == Value{} ? Value{} : Value{pending_tools_revision_}}});
+  const auto origin = program_origin(operation_trace_, turn_trace_, generation_);
+  const std::uint8_t kind = 1;
+  RawProgramCall trace{3815, 3816, &origin, std::array{raw_native(kind)}};
+  return trace.run([&] {
+    return Value::object(
+        {{"revision", Value{tools_revision_}},
+         {"effective", lua_tools_},
+         {"pending", pending_lua_tools_},
+         {"pending_revision",
+          pending_lua_tools_ == Value{} ? Value{} : Value{pending_tools_revision_}}});
+  });
 }
 Value CodingEngine::request_tools() const {
-  auto result = tool_definitions();
-  for (const auto &d : lua_tools_.array())
-    result.array().push_back(Value::object({{"type", Value{"function"}},
-                                            {"name", field(d, "name")},
-                                            {"description", field(d, "description")},
-                                            {"parameters", field(d, "parameters")}}));
-  return result;
+  const auto origin = program_origin(operation_trace_, turn_trace_, generation_);
+  const std::uint8_t kind = 3;
+  RawProgramCall trace{3815, 3816, &origin, std::array{raw_native(kind)}};
+  return trace.run([&] {
+    auto result = tool_definitions();
+    for (const auto &d : lua_tools_.array())
+      result.array().push_back(Value::object({{"type", Value{"function"}},
+                                              {"name", field(d, "name")},
+                                              {"description", field(d, "description")},
+                                              {"parameters", field(d, "parameters")}}));
+    return result;
+  });
 }
 Value CodingEngine::define_tool(const Value &arguments) {
-  if (const auto *base = arguments.find("base");
-      base && base->string() != tools_revision_)
-    throw Error{ErrorCode::conflict};
-  const auto &definition = field(arguments, "definition");
-  for (const auto &[k, v] : definition.object()) {
-    (void)v;
-    if (k != "name" && k != "description" && k != "parameters" && k != "source")
-      throw Error{ErrorCode::invalid_range};
-  }
-  const auto &name = string_field(definition, "name");
-  if (name.empty() || name.size() > 64 || name == "provider" ||
-      !std::all_of(name.begin(), name.end(), [](char c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-               (c >= '0' && c <= '9') || c == '_' || c == '-';
-      }))
-    throw Error{ErrorCode::invalid_range};
-  const auto native_definitions = tool_definitions();
-  for (const auto &d : native_definitions.array())
-    if (string_field(d, "name") == name)
+  const auto origin = program_origin(operation_trace_, turn_trace_, generation_);
+  RawProgramCall trace{4, &origin};
+  return trace.run([&] {
+    trace.stage(1);
+    trace.revision(1, tools_revision_);
+    if (const auto *base = arguments.find("base");
+        base && base->string() != tools_revision_)
       throw Error{ErrorCode::conflict};
-  const auto &description = string_field(definition, "description");
-  const auto &source = string_field(definition, "source");
-  if (description.empty() || description.size() > 4096 || source.empty() ||
-      source.size() > 16384)
-    throw Error{ErrorCode::invalid_range};
-  validate_tool_schema(field(definition, "parameters"));
-  if (!runtime_->valid_tool_source(source))
-    throw Error{ErrorCode::invalid_range};
-  auto next = pending_lua_tools_ == Value{} ? lua_tools_ : pending_lua_tools_;
-  auto found =
-      std::find_if(next.array().begin(), next.array().end(),
-                   [&](const Value &d) { return string_field(d, "name") == name; });
-  if (found == next.array().end())
-    next.array().push_back(definition);
-  else
-    *found = definition;
-  if (next.array().size() > 32 || unwrap(encode_packet_string(next)).size() > 65536)
-    throw Error{ErrorCode::capacity};
-  auto revision =
-      hex_identity(unwrap(log_.root().issue<DefinitionGenerationId>()).bytes());
-  pending_lua_tools_ = std::move(next);
-  pending_tools_revision_ = std::move(revision);
-  auto result = tool_registry();
-  result.object().emplace_back("staged", Value{true});
-  return result;
+    const auto &definition = field(arguments, "definition");
+    for (const auto &[k, v] : definition.object()) {
+      (void)v;
+      if (k != "name" && k != "description" && k != "parameters" && k != "source")
+        throw Error{ErrorCode::invalid_range};
+    }
+    const auto &name = string_field(definition, "name");
+    if (name.empty() || name.size() > 64 || name == "provider" ||
+        !std::all_of(name.begin(), name.end(), [](char c) {
+          return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                 (c >= '0' && c <= '9') || c == '_' || c == '-';
+        }))
+      throw Error{ErrorCode::invalid_range};
+    const auto native_definitions = tool_definitions();
+    for (const auto &d : native_definitions.array())
+      if (string_field(d, "name") == name)
+        throw Error{ErrorCode::conflict};
+    const auto &description = string_field(definition, "description");
+    const auto &source = string_field(definition, "source");
+    if (description.empty() || description.size() > 4096 || source.empty() ||
+        source.size() > 16384)
+      throw Error{ErrorCode::invalid_range};
+    trace.stage(3);
+    validate_tool_schema(field(definition, "parameters"), &trace);
+    if (!program_syntax(trace, 2, source,
+                        [&] { return runtime_->valid_tool_source(source); }))
+      throw Error{ErrorCode::invalid_range};
+    auto next = pending_lua_tools_ == Value{} ? lua_tools_ : pending_lua_tools_;
+    auto found =
+        std::find_if(next.array().begin(), next.array().end(),
+                     [&](const Value &d) { return string_field(d, "name") == name; });
+    if (found == next.array().end())
+      next.array().push_back(definition);
+    else
+      *found = definition;
+    trace.stage(2);
+    if (next.array().size() > 32 || program_encoded(trace, 2, next).size() > 65536)
+      throw Error{ErrorCode::capacity};
+    if (trace.enabled() && !program_issuer_)
+      program_issuer_ = RawProgramIssuer::prepare();
+    RawProgramLifetime pending{trace.enabled() ? program_issuer_ : nullptr,
+                               trace.reference(), false, 1};
+    try {
+      trace.stage(5);
+      auto issued_credit = trace.control(57);
+      const auto issued = unwrap(log_.root().issue<DefinitionGenerationId>());
+      const std::uint8_t kind = 1;
+      trace.event(3809, std::array{raw_native(kind), ByteView{issued.bytes()}},
+                  issued_credit);
+      pending.generation(issued.bytes());
+      auto revision = hex_identity(issued.bytes());
+      trace.stage(7);
+      pending_tools_trace_.finish(1);
+      pending_lua_tools_ = std::move(next);
+      pending_tools_revision_ = std::move(revision);
+      pending.installed(pending_tools_revision_);
+      pending_tools_trace_ = std::move(pending);
+    } catch (const Error &error) {
+      pending.finish(3, &error);
+      throw;
+    } catch (...) {
+      pending.finish(3);
+      throw;
+    }
+    trace.stage(8);
+    auto result = tool_registry();
+    result.object().emplace_back("staged", Value{true});
+    return result;
+  });
 }
 Value CodingEngine::budget_view(std::string_view model, std::size_t input_bytes) const {
   RawPolicyTrace trace{2, budget_revision_, 119,
@@ -1545,68 +2475,83 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
       model_(std::move(model)), decision_models_(std::move(decisions)),
       identity_(session_identity(log)),
       generation_(unwrap(log.root().issue<DefinitionGenerationId>())) {
-  command_jobs_ = std::make_shared<CommandJobs>();
-  observations_ = std::make_unique<Observations>(log_);
-  program_config_.object().emplace_back("workflows", default_workflows());
-  program_config_.object().emplace_back("workflow_prefix", Value{""});
-  program_revision_ = "builtin-ultracode-v1";
-  budget_ = default_context_budget();
-  for (const auto &packet : log_.root().current_programs()) {
-    if (packet.find("label") && string_field(packet, "label") == "session.recovery")
-      if (const auto *metadata = packet.find("metadata"))
-        if (const auto *uncontained = metadata->find("uncontained_exec"))
-          uncontained_exec_recovery_ = *uncontained == Value{true};
-    const auto *label = packet.find("label");
-    if (label && label->string() == "workflow-config-effective-v1") {
-      if (const auto *config = packet.find("program_config")) {
-        program_config_ = *config;
-        program_revision_ = string_field(packet, "program_revision");
+  const RawProgramContext bootstrap{{}, generation_.bytes()};
+  RawProgramCall trace{0, &bootstrap};
+  trace.run([&] {
+    command_jobs_ = std::make_shared<CommandJobs>();
+    observations_ = std::make_unique<Observations>(log_);
+    program_config_.object().emplace_back("workflows", default_workflows());
+    program_config_.object().emplace_back("workflow_prefix", Value{""});
+    program_revision_ = "builtin-ultracode-v1";
+    budget_ = default_context_budget();
+    for (const auto &packet : log_.root().current_programs()) {
+      if (packet.find("label") && string_field(packet, "label") == "session.recovery")
+        if (const auto *metadata = packet.find("metadata"))
+          if (const auto *uncontained = metadata->find("uncontained_exec"))
+            uncontained_exec_recovery_ = *uncontained == Value{true};
+      const auto *label = packet.find("label");
+      if (label && label->string() == "workflow-config-effective-v1") {
+        if (const auto *config = packet.find("program_config")) {
+          program_config_ = *config;
+          program_revision_ = string_field(packet, "program_revision");
+        }
+        lua_tools_ = field(packet, "tools");
+        tools_revision_ = string_field(packet, "tools_revision");
       }
-      lua_tools_ = field(packet, "tools");
-      tools_revision_ = string_field(packet, "tools_revision");
-    }
-    if (!label || (label->string() != "context-budget-effective-v1" &&
-                   label->string() != "workflow-config-effective-v1"))
+      if (!label || (label->string() != "context-budget-effective-v1" &&
+                     label->string() != "workflow-config-effective-v1"))
 
-      continue;
-    auto policy = field(packet, "policy");
-    const auto &revision = string_field(packet, "revision");
-    RawPolicyTrace restore{3, revision, 119};
-    restore.run([&] {
-      RawPolicyFields parsed;
-      try {
-        validate_context_budget(policy, parsed);
-      } catch (...) {
+        continue;
+      auto policy = field(packet, "policy");
+      const auto &revision = string_field(packet, "revision");
+      RawPolicyTrace restore{3, revision, 119};
+      restore.run([&] {
+        RawPolicyFields parsed;
+        try {
+          validate_context_budget(policy, parsed);
+        } catch (...) {
+          restore.validation(parsed);
+          throw;
+        }
         restore.validation(parsed);
-        throw;
-      }
-      restore.validation(parsed);
-      budget_ = std::move(policy);
-      budget_revision_ = revision;
-      restore.finish(0);
-    });
-  }
-  Value participants_saved;
-  for (const auto &packet : log_.root().current_programs())
-    if (string_field(packet, "label") == "participants-state-v1")
-      participants_saved = packet;
-  participants_ = std::make_unique<Participants>(
-      participants_saved,
-      [&](const OriginalCapture &capture) {
-        return log_.original(log_.issue(), capture);
-      },
-      [&](const Value &snapshot) {
-        const auto identity = log_.issue();
-        log_.record(identity, ApplicationChannel::program, snapshot);
-        return std::optional{identity};
-      },
-      [&](const Value &activity) {
-        if (task_activity)
-          task_activity(activity);
+        budget_ = std::move(policy);
+        budget_revision_ = revision;
+        restore.finish(0);
       });
-  workflows_ = std::make_shared<WorkflowRegistry>(program_config_, program_revision_);
-  if (context_.head().empty())
-    context_.append({}, "initial");
+    }
+    Value participants_saved;
+    for (const auto &packet : log_.root().current_programs())
+      if (string_field(packet, "label") == "participants-state-v1")
+        participants_saved = packet;
+    participants_ = std::make_unique<Participants>(
+        participants_saved,
+        [&](const OriginalCapture &capture) {
+          return log_.original(log_.issue(), capture);
+        },
+        [&](const Value &snapshot) {
+          const auto identity = log_.issue();
+          log_.record(identity, ApplicationChannel::program, snapshot);
+          return std::optional{identity};
+        },
+        [&](const Value &activity) {
+          if (task_activity)
+            task_activity(activity);
+        },
+        [&](const Value &activity, RawEventRef source) {
+          if (task_activity_native)
+            task_activity_native(
+                activity,
+                RawTaskPresentation{
+                    source.ordinal ? std::optional{source} : std::nullopt, {}, {}});
+          else if (task_activity)
+            task_activity(activity);
+        });
+    const auto origin = trace.context();
+    workflows_ =
+        std::make_shared<WorkflowRegistry>(program_config_, program_revision_, &origin);
+    if (context_.head().empty())
+      context_.append({}, "initial");
+  });
 }
 CodingEngine::~CodingEngine() { command_jobs_->shutdown(); }
 void CodingEngine::shutdown_commands() {
@@ -1788,142 +2733,332 @@ void CodingEngine::shutdown_participants() {
   if ((!cancelled || !cancelled()) && log_.root().state() == JournalWriterState::live)
     participants_->drain();
 }
-void recover_coding_session(RetainedState &root, RecoveryMode mode) {
-  struct CodingRecovery final : CustodyVerifier {
-    struct Abandoned {
-      OperationAttemptId attempt;
-      std::string operation;
-      bool local;
-      bool uncontained;
-    };
-    RetainedState &root;
-    RecoveryMode mode;
-    std::vector<Abandoned> abandoned;
-    CodingRecovery(RetainedState &value, RecoveryMode selected)
-        : root(value), mode(selected) {}
-    Result<void> verify(std::span<const AttemptState> attempts) override {
-      for (const auto &attempt : attempts) {
-        const auto recovered_decision = root.decision(attempt.admission.decision);
-        if (!recovered_decision.has_value())
-          return Result<void>::failure(recovered_decision.error());
-        const auto *decision = &recovered_decision.value();
-        const auto metadata = read_packet(decision->continuation);
-        if (!metadata.has_value())
-          return Result<void>::failure({ErrorCode::external_unknown});
-        const auto *operation = metadata.value().find("operation");
-        if (!operation || !std::holds_alternative<std::string>(operation->value()))
-          return Result<void>::failure({ErrorCode::external_unknown});
-        const auto &name = operation->string();
-        const bool provider =
-            name == "provider" || name == "colleague" || name == "participant_start" ||
-            name == "participant_send" || name == "participant_read" ||
-            name == "participant_cancel" || name == "participant_await" ||
-            name == "participant_join" || name == "participant_archive" ||
-            name == "participant_configure";
-        const bool local = name == "exec" || name == "process" || name == "read_file" ||
-                           name == "write_file" || name == "edit_file" ||
-                           name == "lua" || name == "workflow_execute" ||
-                           name == "workflow_invoke";
-        if (!provider && (!local || mode != RecoveryMode::acknowledge_local_unknowns))
-          return Result<void>::failure({ErrorCode::external_unknown});
-        const auto *input = metadata.value().find("input");
-        const auto *generation = metadata.value().find("generation");
-        const auto *revision = metadata.value().find("revision");
-        const std::string_view admitted_input{
-            reinterpret_cast<const char *>(attempt.admission.input.data()),
-            attempt.admission.input.size()};
-        const auto recovered_invocation = root.invocation(attempt.admission.invocation);
-        if (!recovered_invocation.has_value())
-          return Result<void>::failure(recovered_invocation.error());
-        const auto &invocation = recovered_invocation.value();
-        const bool linked =
-            invocation.decision == decision->decision &&
-            invocation.definition == decision->definition &&
-            invocation.input == attempt.admission.input &&
-            decision->planned_invocations.size() == 1 &&
-            decision->planned_invocations.front() == invocation.invocation;
-        // New decisions bind the already-retained invocation rather than embedding
-        // another full input. Older decisions keep their explicit input check.
-        bool input_bound = false;
-        if (const auto *binding = metadata.value().find("input_binding")) {
-          const auto *invocation_id = metadata.value().find("invocation");
-          const auto parsed_input = decode_packet_string(admitted_input);
-          input_bound =
-              parsed_input.has_value() &&
-              std::holds_alternative<Value::Object>(parsed_input.value().value()) &&
-              !input && *binding == Value{"invocation-v1"} && invocation_id &&
-              *invocation_id == Value{hex_identity(invocation.invocation.bytes())};
-        } else if (input) {
-          const auto encoded_input = encode_packet_string(*input);
-          input_bound = std::holds_alternative<Value::Object>(input->value()) &&
-                        encoded_input.has_value() &&
-                        encoded_input.value() == admitted_input;
-        }
-        if (!linked || !input_bound || !generation || !revision ||
-            !std::holds_alternative<std::string>(generation->value()) ||
-            !std::holds_alternative<std::string>(revision->value()) ||
-            generation->string() != hex_identity(decision->definition.bytes()) ||
-            revision->string() != hex_identity(decision->context.bytes()))
-          return Result<void>::failure({ErrorCode::external_unknown});
-        abandoned.push_back({attempt.admission.attempt, name, local,
-                             attempt.opened && (name == "exec" || name == "process")});
+void recover_coding_session(RetainedState &root, RecoveryMode mode,
+                            const RawAdapterContext *context) {
+  const auto cursor = root.cursor();
+  RawSessionCall whole{4440, 4441, context,
+                       std::array{raw_native(mode), ByteView{cursor.journal.bytes()},
+                                  raw_native(cursor.sequence),
+                                  raw_native(cursor.end_offset)}};
+  whole.run([&] {
+    auto blocked = whole.control(41);
+    struct CodingRecovery final : CustodyVerifier {
+      struct Abandoned {
+        OperationAttemptId attempt;
+        std::string operation;
+        bool local;
+        bool uncontained;
+      };
+      RetainedState &root;
+      RecoveryMode mode;
+      RawSessionCall &whole;
+      std::vector<Abandoned> abandoned;
+      CodingRecovery(RetainedState &value, RecoveryMode selected, RawSessionCall &owner)
+          : root(value), mode(selected), whole(owner) {}
+      Result<void> verify(std::span<const AttemptState> attempts) override {
+        const auto owner = whole.context();
+        const auto count = attempts.size();
+        RawSessionCall verify{4442, 4443, &owner, std::array{raw_native(count)}, 10};
+        return verify.run([&] {
+          for (const auto &attempt : attempts) {
+            const auto parent = verify.context();
+            RawSessionCall check{
+                4444, 4445, &parent,
+                std::array{ByteView{attempt.admission.attempt.bytes()},
+                           ByteView{attempt.admission.decision.bytes()},
+                           ByteView{attempt.admission.invocation.bytes()},
+                           raw_native(attempt.opened)},
+                10};
+            const auto checked = check.run([&] {
+              auto classify = [&]() -> Result<void> {
+                auto decision_credit = check.control(89);
+                const auto recovered_decision =
+                    root.decision(attempt.admission.decision);
+                if (!recovered_decision.has_value()) {
+                  const std::uint8_t kind = 3;
+                  const auto &error = recovered_decision.error();
+                  (void)check.event(4446,
+                                    std::array{raw_native(kind), raw_native(error.code),
+                                               raw_native(error.detail)},
+                                    decision_credit);
+                  return Result<void>::failure(error);
+                }
+                const auto *decision = &recovered_decision.value();
+                const std::uint8_t decision_kind = 1;
+                (void)check.event(4446,
+                                  std::array{raw_native(decision_kind),
+                                             ByteView{decision->decision.bytes()},
+                                             ByteView{decision->definition.bytes()},
+                                             ByteView{decision->context.bytes()}},
+                                  decision_credit);
+                const auto metadata =
+                    raw_restart_packet(check, 9, decision->continuation);
+                if (!raw_restart_predicate(
+                        check, 1, [&] { return metadata.has_value(); }, 4447))
+                  return Result<void>::failure({ErrorCode::external_unknown});
+                const auto *operation = metadata.value().find("operation");
+                if (!raw_restart_predicate(
+                        check, 2,
+                        [&] {
+                          return operation && std::holds_alternative<std::string>(
+                                                  operation->value());
+                        },
+                        4447))
+                  return Result<void>::failure({ErrorCode::external_unknown});
+                const auto &name = operation->string();
+                (void)raw_restart_source(check, 8, name);
+                const bool provider = raw_restart_predicate(
+                    check, 3,
+                    [&] {
+                      return name == "provider" || name == "colleague" ||
+                             name == "participant_start" ||
+                             name == "participant_send" || name == "participant_read" ||
+                             name == "participant_cancel" ||
+                             name == "participant_await" ||
+                             name == "participant_join" ||
+                             name == "participant_archive" ||
+                             name == "participant_configure";
+                    },
+                    4447);
+                const bool local = raw_restart_predicate(
+                    check, 4,
+                    [&] {
+                      return name == "exec" || name == "process" ||
+                             name == "read_file" || name == "write_file" ||
+                             name == "edit_file" || name == "lua" ||
+                             name == "workflow_execute" || name == "workflow_invoke";
+                    },
+                    4447);
+                if (!provider &&
+                    (!local || !raw_restart_predicate(
+                                   check, 5,
+                                   [&] {
+                                     return mode ==
+                                            RecoveryMode::acknowledge_local_unknowns;
+                                   },
+                                   4447)))
+                  return Result<void>::failure({ErrorCode::external_unknown});
+                const auto *input = metadata.value().find("input");
+                const auto *generation = metadata.value().find("generation");
+                const auto *revision = metadata.value().find("revision");
+                const std::string_view admitted_input{
+                    reinterpret_cast<const char *>(attempt.admission.input.data()),
+                    attempt.admission.input.size()};
+                (void)raw_restart_source(check, 14, admitted_input);
+                auto invocation_credit = check.control(97);
+                const auto recovered_invocation =
+                    root.invocation(attempt.admission.invocation);
+                if (!recovered_invocation.has_value()) {
+                  const std::uint8_t kind = 4;
+                  const auto &error = recovered_invocation.error();
+                  (void)check.event(4446,
+                                    std::array{raw_native(kind), raw_native(error.code),
+                                               raw_native(error.detail)},
+                                    invocation_credit);
+                  (void)raw_restart_predicate(
+                      check, 6, [&] { return recovered_invocation.has_value(); }, 4447);
+                  return Result<void>::failure(error);
+                }
+                const auto &invocation = recovered_invocation.value();
+                const std::uint8_t invocation_kind = 2;
+                const auto input_size = invocation.input.size();
+                (void)check.event(4446,
+                                  std::array{raw_native(invocation_kind),
+                                             ByteView{invocation.invocation.bytes()},
+                                             ByteView{invocation.decision.bytes()},
+                                             ByteView{invocation.definition.bytes()},
+                                             raw_native(input_size)},
+                                  invocation_credit);
+                (void)raw_restart_predicate(
+                    check, 6, [&] { return recovered_invocation.has_value(); }, 4447);
+                const bool linked = raw_restart_predicate(
+                    check, 7,
+                    [&] {
+                      return invocation.decision == decision->decision &&
+                             invocation.definition == decision->definition &&
+                             invocation.input == attempt.admission.input &&
+                             decision->planned_invocations.size() == 1 &&
+                             decision->planned_invocations.front() ==
+                                 invocation.invocation;
+                    },
+                    4447);
+                bool input_bound = false;
+                if (const auto *binding = metadata.value().find("input_binding")) {
+                  const auto *invocation_id = metadata.value().find("invocation");
+                  const auto parsed_input = decode_packet_string(admitted_input);
+                  input_bound =
+                      parsed_input.has_value() &&
+                      std::holds_alternative<Value::Object>(
+                          parsed_input.value().value()) &&
+                      !input && *binding == Value{"invocation-v1"} && invocation_id &&
+                      *invocation_id ==
+                          Value{raw_restart_hex(check, invocation.invocation.bytes())};
+                } else if (input) {
+                  auto encoded_credit = check.source_credit(ValueLimits{}.bytes);
+                  const auto encoded_input = encode_packet_string(*input);
+                  if (encoded_input.has_value())
+                    (void)raw_restart_source(check, 10, encoded_input.value(),
+                                             encoded_credit);
+                  input_bound = std::holds_alternative<Value::Object>(input->value()) &&
+                                encoded_input.has_value() &&
+                                encoded_input.value() == admitted_input;
+                }
+                if (!linked ||
+                    !raw_restart_predicate(
+                        check, 8, [&] { return input_bound; }, 4447) ||
+                    !raw_restart_predicate(
+                        check, 9, [&] { return generation != nullptr; }, 4447) ||
+                    !raw_restart_predicate(
+                        check, 10, [&] { return revision != nullptr; }, 4447) ||
+                    !raw_restart_predicate(
+                        check, 11,
+                        [&] {
+                          return std::holds_alternative<std::string>(
+                              generation->value());
+                        },
+                        4447) ||
+                    !raw_restart_predicate(
+                        check, 12,
+                        [&] {
+                          return std::holds_alternative<std::string>(revision->value());
+                        },
+                        4447))
+                  return Result<void>::failure({ErrorCode::external_unknown});
+                (void)raw_restart_source(check, 13, generation->string());
+                if (!raw_restart_predicate(
+                        check, 13,
+                        [&] {
+                          return generation->string() ==
+                                 raw_restart_hex(check, decision->definition.bytes());
+                        },
+                        4447))
+                  return Result<void>::failure({ErrorCode::external_unknown});
+                (void)raw_restart_source(check, 13, revision->string());
+                if (!raw_restart_predicate(
+                        check, 14,
+                        [&] {
+                          return revision->string() ==
+                                 raw_restart_hex(check, decision->context.bytes());
+                        },
+                        4447))
+                  return Result<void>::failure({ErrorCode::external_unknown});
+                auto collected = check.control(41);
+                auto identity = check.control(56);
+                abandoned.push_back(
+                    {attempt.admission.attempt, name, local,
+                     attempt.opened && (name == "exec" || name == "process")});
+                const std::uint8_t mutation = 1;
+                (void)check.event(4448, std::array{raw_native(mutation)}, collected);
+                (void)check.event(
+                    4449, std::array{ByteView{attempt.admission.attempt.bytes()}},
+                    identity);
+                return Result<void>::success();
+              };
+              const auto result = classify();
+              raw_restart_result(check, result);
+              return result;
+            });
+            if (!checked.has_value()) {
+              raw_restart_result(verify, checked);
+              return checked;
+            }
+          }
+          const auto result = Result<void>::success();
+          raw_restart_result(verify, result);
+          return result;
+        });
       }
-      return Result<void>::success();
-    }
-  } custody{root, mode};
-  unwrap(root.reconcile(custody));
-  try {
-    std::vector<RetainedEvent> observations;
-    Value::Array uncontained_attempts;
-    for (const auto &abandoned : custody.abandoned) {
-      if (abandoned.local) {
-        const auto observation = unwrap(encode_packet(Value::object(
-            {{"recovery", Value{"acknowledge-local-unknowns"}},
-             {"attempt", Value{hex_identity(abandoned.attempt.bytes())}},
-             {"operation", Value{abandoned.operation}},
-             {"outcome", Value{"unknown"}},
-             {"uncontained_exec", Value{abandoned.uncontained}},
-             {"message", Value{"Prior process operation abandoned; outcome unknown. "
-                               "No effect replayed, PID adopted or process exit "
-                               "or containment established."}}})));
+    } custody{root, mode, whole};
+    whole.stage(1);
+    raw_restart_mutation(whole, 2, [&] { unwrap(root.reconcile(custody)); }, 4448);
+    try {
+      whole.stage(2);
+      std::vector<RetainedEvent> observations;
+      Value::Array uncontained_attempts;
+      for (const auto &abandoned : custody.abandoned) {
+        if (abandoned.local) {
+          auto credit = whole.source_credit(ValueLimits{}.bytes);
+          const auto observation = unwrap(encode_packet(Value::object(
+              {{"recovery", Value{"acknowledge-local-unknowns"}},
+               {"attempt", Value{raw_restart_hex(whole, abandoned.attempt.bytes())}},
+               {"operation", Value{abandoned.operation}},
+               {"outcome", Value{"unknown"}},
+               {"uncontained_exec", Value{abandoned.uncontained}},
+               {"message", Value{"Prior process operation abandoned; outcome unknown. "
+                                 "No effect replayed, PID adopted or process exit "
+                                 "or containment established."}}})));
+          (void)raw_restart_source(
+              whole, 11,
+              {reinterpret_cast<const char *>(observation.data()), observation.size()},
+              credit);
+          observations.push_back(
+              {{},
+               AttemptObservationEvent{abandoned.attempt, AttemptPhase::terminal,
+                                       AttemptDisposition::unknown, observation}});
+          if (abandoned.uncontained)
+            uncontained_attempts.emplace_back(
+                raw_restart_hex(whole, abandoned.attempt.bytes()));
+          continue;
+        }
+        constexpr std::string_view message =
+            "Provider or participant operation abandoned during "
+            "prior process; outcome unknown. "
+            "No response accepted and no request replayed.";
+        (void)raw_restart_source(whole, 11, message);
+        const auto bytes = std::as_bytes(std::span{message.data(), message.size()});
+        observations.push_back({{},
+                                AttemptObservationEvent{abandoned.attempt,
+                                                        AttemptPhase::terminal,
+                                                        AttemptDisposition::unknown,
+                                                        {bytes.begin(), bytes.end()}}});
+      }
+      if (!uncontained_attempts.empty()) {
+        auto credit = whole.source_credit(ValueLimits{}.bytes);
+        const auto marker = unwrap(encode_packet(Value::object(
+            {{"label", Value{"session.recovery"}},
+             {"metadata",
+              Value::object({{"mode", Value{"acknowledge-local-unknowns"}},
+                             {"uncontained_exec", Value{true}},
+                             {"attempts", Value{std::move(uncontained_attempts)}}})},
+             {"message", Value{"Prior process custody unavailable; outcome unknown. "
+                               "No PID adopted or effect replayed."}}})));
+        (void)raw_restart_source(
+            whole, 12, {reinterpret_cast<const char *>(marker.data()), marker.size()},
+            credit);
         observations.push_back(
             {{},
-             AttemptObservationEvent{abandoned.attempt, AttemptPhase::terminal,
-                                     AttemptDisposition::unknown, observation}});
-        if (abandoned.uncontained)
-          uncontained_attempts.emplace_back(hex_identity(abandoned.attempt.bytes()));
-        continue;
+             ApplicationRecordEvent{unwrap(root.issue<ApplicationRecordId>()),
+                                    ApplicationChannel::program, marker}});
       }
-      const std::string message = "Provider or participant operation abandoned during "
-                                  "prior process; outcome unknown. "
-                                  "No response accepted and no request replayed.";
-      const auto bytes = std::as_bytes(std::span{message.data(), message.size()});
-      observations.push_back({{},
-                              AttemptObservationEvent{abandoned.attempt,
-                                                      AttemptPhase::terminal,
-                                                      AttemptDisposition::unknown,
-                                                      {bytes.begin(), bytes.end()}}});
+      if (!observations.empty()) {
+        whole.stage(3);
+        const auto parent = whole.context();
+        const auto at = root.cursor();
+        const auto count = observations.size();
+        RawSessionCall append{4450, 4451, &parent,
+                              std::array{ByteView{at.journal.bytes()},
+                                         raw_native(at.sequence),
+                                         raw_native(at.end_offset), raw_native(count)},
+                              32};
+        append.run([&] {
+          auto completion = whole.control(41);
+          const auto returned = unwrap(root.append(at, {}, observations));
+          append.require_capture();
+          append.finish(RawOperationBranch::returned, nullptr,
+                        std::array{ByteView{returned.journal.bytes()},
+                                   raw_native(returned.sequence),
+                                   raw_native(returned.end_offset)});
+          const std::uint8_t mutation = 3;
+          (void)whole.event(4448, std::array{raw_native(mutation)}, completion);
+        });
+      }
+    } catch (...) {
+      root.block_admission();
+      const std::uint8_t mutation = 4;
+      (void)whole.event(4448, std::array{raw_native(mutation)}, blocked);
+      throw;
     }
-    if (!uncontained_attempts.empty()) {
-      const auto marker = unwrap(encode_packet(Value::object(
-          {{"label", Value{"session.recovery"}},
-           {"metadata",
-            Value::object({{"mode", Value{"acknowledge-local-unknowns"}},
-                           {"uncontained_exec", Value{true}},
-                           {"attempts", Value{std::move(uncontained_attempts)}}})},
-           {"message", Value{"Prior process custody unavailable; outcome unknown. "
-                             "No PID adopted or effect replayed."}}})));
-      observations.push_back(
-          {{},
-           ApplicationRecordEvent{unwrap(root.issue<ApplicationRecordId>()),
-                                  ApplicationChannel::program, marker}});
-    }
-    if (!observations.empty())
-      (void)unwrap(root.append(root.cursor(), {}, observations));
-  } catch (...) {
-    root.block_admission();
-    throw;
-  }
+  });
 }
 
 void CodingEngine::protect_workflow(const Value::Array &entries, const Value &proposal,
@@ -2108,8 +3243,8 @@ Value CodingEngine::operation(
     CommandTaskMap staged_tasks;
     CommandTaskMap::node_type task_node;
     if (!task_id.empty()) {
-      staged_tasks.try_emplace(exec_id, task_activity, std::move(task_id), attempt,
-                               exec_id, std::string{name});
+      staged_tasks.try_emplace(exec_id, task_activity, task_activity_native,
+                               std::move(task_id), attempt, exec_id, std::string{name});
       task_node = staged_tasks.extract(exec_id);
     }
     struct TaskRun {
@@ -2777,63 +3912,138 @@ Value CodingEngine::operation(
   });
 }
 
-Value CodingEngine::execute_workflow(const WorkflowContinuation &invocation) {
+Value CodingEngine::execute_workflow(WorkflowContinuation &invocation) {
   try {
-    if (workflow_depth_ >= 8 || ++workflow_invocations_ > 64)
-      throw Error{ErrorCode::capacity};
-    return operation(
-        "workflow_execute", invocation.arguments,
-        [&](OperationAttemptId attempt, InvocationId, DefinitionGenerationId,
-            CommandTaskActivity *, RawRetainedExec *) {
-          const auto metadata = Value::object(
-              {{"name", field(invocation.definition, "name")},
-               {"revision", Value{invocation.revision}},
-               {"definition", invocation.definition},
-               {"invocation", invocation.arguments},
-               {"generation", Value{hex_identity(generation_.bytes())}},
-               {"attempt", Value{hex_identity(attempt.bytes())}},
-               {"selection_attempt", Value{invocation.selection_attempt}}});
-          log_.original({"workflow.source",
-                         string_field(invocation.definition, "source"), metadata});
-          log_.record(ApplicationChannel::program, metadata);
-          ++workflow_depth_;
-          struct Depth {
-            unsigned &n;
-            ~Depth() { --n; }
-          } depth{workflow_depth_};
-          Runtime child{*this};
-          return child.invoke_tool(invocation.definition, invocation.arguments);
-        });
+    const RawProgramContext origin{invocation.selection, generation_.bytes()};
+    RawProgramCall trace{3820, 3821, &origin,
+                         std::array{ByteView{generation_.bytes()},
+                                    raw_native(workflow_depth_),
+                                    raw_native(workflow_invocations_)},
+                         2 * sizeof(unsigned)};
+    invocation.parked.finish(0, nullptr, trace.reference());
+    auto end = [&](RawOperationBranch branch, const Error *error = nullptr) {
+      trace.finish(
+          branch, error,
+          std::array{raw_native(workflow_depth_), raw_native(workflow_invocations_)});
+    };
+    try {
+      auto guard = trace.control(48);
+      auto association = trace.control(72 + invocation.revision.size());
+      auto identities = trace.control(88);
+      if (workflow_depth_ >= 8) {
+        trace.event(
+            3824,
+            std::array{raw_native(workflow_depth_), raw_native(workflow_invocations_)},
+            guard);
+        throw Error{ErrorCode::capacity};
+      }
+      ++workflow_invocations_;
+      trace.event(
+          3824,
+          std::array{raw_native(workflow_depth_), raw_native(workflow_invocations_)},
+          guard);
+      if (workflow_invocations_ > 64)
+        throw Error{ErrorCode::capacity};
+      auto result = operation(
+          "workflow_execute", invocation.arguments,
+          [&](OperationAttemptId attempt, InvocationId invocation_id,
+              DefinitionGenerationId generation, CommandTaskActivity *,
+              RawRetainedExec *) {
+            trace.event(3822,
+                        std::array{ByteView{attempt.bytes()},
+                                   ByteView{invocation_id.bytes()},
+                                   ByteView{generation.bytes()}},
+                        identities);
+            const auto operation_ref =
+                operation_trace_ ? operation_trace_->reference() : RawEventRef{};
+            const auto revision_size = invocation.revision.size();
+            trace.event(3823,
+                        std::array{ByteView{operation_ref.lane},
+                                   raw_native(operation_ref.ordinal),
+                                   raw_native(revision_size),
+                                   raw_text(invocation.revision)},
+                        association);
+            const auto metadata = Value::object(
+                {{"name", field(invocation.definition, "name")},
+                 {"revision", Value{invocation.revision}},
+                 {"definition", invocation.definition},
+                 {"invocation", invocation.arguments},
+                 {"generation", Value{hex_identity(generation_.bytes())}},
+                 {"attempt", Value{hex_identity(attempt.bytes())}},
+                 {"selection_attempt", Value{invocation.selection_attempt}}});
+            log_.original({"workflow.source",
+                           string_field(invocation.definition, "source"), metadata});
+            log_.record(ApplicationChannel::program, metadata);
+            ++workflow_depth_;
+            struct Depth {
+              unsigned &n;
+              ~Depth() { --n; }
+            } depth{workflow_depth_};
+            Runtime child{*this};
+            const auto wrapper_origin = trace.context();
+            return child.invoke_tool({.definition = invocation.definition,
+                                      .arguments = invocation.arguments,
+                                      .origin = &wrapper_origin});
+          });
+      end(RawOperationBranch::returned);
+      return result;
+    } catch (const Error &error) {
+      end(RawOperationBranch::error, &error);
+      throw;
+    } catch (const std::bad_alloc &) {
+      end(RawOperationBranch::allocation);
+      throw;
+    } catch (const std::length_error &) {
+      end(RawOperationBranch::length);
+      throw;
+    } catch (const std::exception &) {
+      end(RawOperationBranch::standard);
+      throw;
+    } catch (...) {
+      end(RawOperationBranch::nonstandard);
+      throw;
+    }
   } catch (const Error &e) {
+    invocation.parked.finish(0, &e);
     workflow_failure_ = e;
+    throw;
+  } catch (...) {
+    invocation.parked.finish(0);
     throw;
   }
 }
 void CodingEngine::drain_workflows() {
   if (draining_workflows_ || workflow_continuations_.empty())
     return;
-  validate_protocol(context_.items());
-  draining_workflows_ = true;
-  struct Drain {
-    bool &flag;
-    ~Drain() { flag = false; }
-  } drain{draining_workflows_};
-  while (!workflow_continuations_.empty()) {
-    if (restart_note_)
-      throw Error{ErrorCode::busy};
-    if (cancelled && cancelled())
-      throw Error{ErrorCode::interrupted};
-    auto next = std::move(workflow_continuations_.front());
-    workflow_continuations_.erase(workflow_continuations_.begin());
-    const auto result = execute_workflow(next);
-    context_.append(
-        {Value::object(
-            {{"role", Value{"developer"}},
-             {"content",
-              Value{"Registered workflow " + string_field(next.definition, "name") +
-                    " completed in this turn: " + unwrap(format_value(result))}}})},
-        "workflow-continuation");
-  }
+  const RawProgramContext origin{
+      turn_trace_ ? std::optional{turn_trace_->reference()} : std::nullopt, {}};
+  const auto count = workflow_continuations_.size();
+  RawProgramCall trace{3825, 3826, &origin,
+                       std::array{raw_native(draining_workflows_), raw_native(count)}};
+  trace.run([&] {
+    validate_protocol(context_.items());
+    draining_workflows_ = true;
+    struct Drain {
+      bool &flag;
+      ~Drain() { flag = false; }
+    } drain{draining_workflows_};
+    while (!workflow_continuations_.empty()) {
+      if (restart_note_)
+        throw Error{ErrorCode::busy};
+      if (cancelled && cancelled())
+        throw Error{ErrorCode::interrupted};
+      auto next = std::move(workflow_continuations_.front());
+      workflow_continuations_.erase(workflow_continuations_.begin());
+      const auto result = execute_workflow(next);
+      context_.append(
+          {Value::object(
+              {{"role", Value{"developer"}},
+               {"content",
+                Value{"Registered workflow " + string_field(next.definition, "name") +
+                      " completed in this turn: " + unwrap(format_value(result))}}})},
+          "workflow-continuation");
+    }
+  });
 }
 Value CodingEngine::request(Value options) {
   RawProviderPhase assembly{2 * provider_scalar_credit + sizeof(IdentityBytes) +
@@ -3389,7 +4599,12 @@ Value CodingEngine::call(std::string name, Value arguments) {
                 {label, raw,
                  Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
           };
-          auto result = decision_models_.evaluate(arguments);
+          const RawAdapterContext raw_context{
+              nullptr,
+              operation_trace_ ? std::optional{operation_trace_->reference()}
+                               : std::nullopt,
+              nullptr, nullptr};
+          auto result = decision_models_.evaluate(arguments, &raw_context);
           result.object().emplace_back("audit_ref",
                                        Value{hex_identity(attempt.bytes())});
           return result;
@@ -3401,43 +4616,84 @@ Value CodingEngine::call(std::string name, Value arguments) {
                 {label, raw,
                  Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
           };
-          auto result = beads_.run(arguments);
+          const RawAdapterContext beads_capture{
+              nullptr,
+              operation_trace_ ? std::optional{operation_trace_->reference()}
+                               : std::nullopt,
+              nullptr, nullptr};
+          auto result = beads_.run(arguments, &beads_capture);
           result.object().emplace_back("audit_ref",
                                        Value{hex_identity(attempt.bytes())});
           return result;
         }
 
-        if (name == "workflow_registry")
-          return workflows_->discover();
+        if (name == "workflow_registry") {
+          const auto origin =
+              program_origin(operation_trace_, turn_trace_, generation_);
+          return workflows_->discover(&origin);
+        }
         if (name == "workflow_invoke") {
-          const auto &definition = workflows_->named(string_field(arguments, "name"));
-          WorkflowContinuation continuation{definition, arguments,
-                                            workflows_->revision(),
-                                            hex_identity(attempt.bytes())};
-          const auto selection = Value::object(
-              {{"name", field(definition, "name")},
-               {"revision", Value{workflows_->revision()}},
-               {"definition", definition},
-               {"invocation", arguments},
-               {"selection_attempt", Value{continuation.selection_attempt}}});
-          log_.original(
-              {"workflow.selection", string_field(definition, "source"), selection});
-          log_.record(ApplicationChannel::program, selection);
-          const auto unanswered = ContextStore::stop_outputs(
-              field(context_.view(), "entries").array(), false);
-          if (!unanswered.empty()) {
-            if (workflow_continuations_.size() >= 8)
-              throw Error{ErrorCode::capacity};
-            workflow_continuations_.push_back(std::move(continuation));
-            return Value::object(
-                {{"status", Value{"accepted"}},
-                 {"name", field(definition, "name")},
+          const auto origin =
+              program_origin(operation_trace_, turn_trace_, generation_);
+          RawProgramCall selection_trace{7, &origin};
+          return selection_trace.run([&] {
+            const auto selected_origin = selection_trace.context();
+            RawEventRef selected;
+            const auto &definition = workflows_->named(string_field(arguments, "name"),
+                                                       &selected_origin, &selected);
+            WorkflowContinuation continuation{definition,
+                                              arguments,
+                                              workflows_->revision(),
+                                              hex_identity(attempt.bytes()),
+                                              selected,
+                                              {}};
+            const auto selection = Value::object(
+                {{"name", field(definition, "name")},
                  {"revision", Value{workflows_->revision()}},
-                 {"execution",
-                  Value{"same-turn after tool outputs, before next request or "
-                        "successful boundary"}}});
-          }
-          return execute_workflow(continuation);
+                 {"definition", definition},
+                 {"invocation", arguments},
+                 {"selection_attempt", Value{continuation.selection_attempt}}});
+            log_.original(
+                {"workflow.selection", string_field(definition, "source"), selection});
+            log_.record(ApplicationChannel::program, selection);
+            const auto unanswered = ContextStore::stop_outputs(
+                field(context_.view(), "entries").array(), false);
+            if (!unanswered.empty()) {
+              if (workflow_continuations_.size() >= 8)
+                throw Error{ErrorCode::capacity};
+              if (selection_trace.enabled() && !program_issuer_)
+                program_issuer_ = RawProgramIssuer::prepare();
+              RawProgramLifetime parked{selection_trace.enabled() ? program_issuer_
+                                                                  : nullptr,
+                                        selected, true};
+              parked.queued(workflow_continuations_.size());
+              continuation.parked = std::move(parked);
+              try {
+                workflow_continuations_.push_back(std::move(continuation));
+              } catch (const Error &error) {
+                continuation.parked.finish(2, &error, {}, RawOperationBranch::error);
+                throw;
+              } catch (const std::bad_alloc &) {
+                continuation.parked.finish(2, nullptr, {},
+                                           RawOperationBranch::allocation);
+                throw;
+              } catch (...) {
+                continuation.parked.finish(2, nullptr, {},
+                                           RawOperationBranch::nonstandard);
+                throw;
+              }
+              workflow_continuations_.back().parked.installed(
+                  workflow_continuations_.size());
+              return Value::object(
+                  {{"status", Value{"accepted"}},
+                   {"name", field(definition, "name")},
+                   {"revision", Value{workflows_->revision()}},
+                   {"execution",
+                    Value{"same-turn after tool outputs, before next request or "
+                          "successful boundary"}}});
+            }
+            return execute_workflow(continuation);
+          });
         }
         if (name == "program_config")
           return program_config(arguments);
@@ -3450,22 +4706,48 @@ Value CodingEngine::call(std::string name, Value arguments) {
         for (const auto &definition : lua_tools_.array()) {
           if (string_field(definition, "name") != name)
             continue;
-          validate_tool_arguments(
-              {.schema = field(definition, "parameters"), .arguments = arguments});
-          log_.original(
-              {"tool.source", string_field(definition, "source"),
-               Value::object({{"name", Value{name}},
-                              {"revision", Value{tools_revision_}},
-                              {"attempt", Value{hex_identity(attempt.bytes())}}})});
-          return runtime_->invoke_tool(definition, arguments);
+          const auto origin =
+              program_origin(operation_trace_, turn_trace_, generation_);
+          const auto revision_size = tools_revision_.size();
+          const auto source_size = string_field(definition, "source").size();
+          RawProgramCall tool_trace{3827, 3828, &origin,
+                                    std::array{raw_native(revision_size),
+                                               raw_text(tools_revision_),
+                                               raw_native(source_size)}};
+          return tool_trace.run([&] {
+            validate_tool_arguments(
+                {.schema = field(definition, "parameters"), .arguments = arguments});
+            log_.original(
+                {"tool.source", string_field(definition, "source"),
+                 Value::object({{"name", Value{name}},
+                                {"revision", Value{tools_revision_}},
+                                {"attempt", Value{hex_identity(attempt.bytes())}}})});
+            const auto wrapper_origin = tool_trace.context();
+            return runtime_->invoke_tool({.definition = definition,
+                                          .arguments = arguments,
+                                          .origin = &wrapper_origin});
+          });
         }
         if (name == "restart") {
-
-          auto note = string_field(arguments, "note");
-          if (note.empty() || note.size() > 65536)
-            throw Error{ErrorCode::invalid_range};
-          restart_note_ = std::move(note);
-          return Value::object({{"scheduled", Value{true}}});
+          const RawAdapterContext parent{
+              nullptr,
+              operation_trace_ ? std::optional{operation_trace_->reference()}
+                               : std::nullopt,
+              nullptr, nullptr};
+          const std::uint8_t method = 1;
+          RawSessionCall call{
+              4420, 4421, &parent,
+              std::array{raw_native(method), ByteView{generation_.bytes()}}};
+          return call.run([&] {
+            const auto &borrowed = string_field(arguments, "note");
+            (void)raw_restart_source(call, 1, borrowed);
+            auto note = borrowed;
+            if (note.empty() || note.size() > 65536)
+              throw Error{ErrorCode::invalid_range};
+            raw_restart_mutation(
+                call, 1, [&] { restart_note_ = std::move(note); }, 4423);
+            return Value::object({{"scheduled", Value{true}}});
+          });
         }
         if (name == "read_process_output") {
           const auto &reference = string_field(arguments, "output_ref");
@@ -3609,71 +4891,238 @@ Value CodingEngine::call(std::string name, Value arguments) {
           return context_.manage(proposal);
         }
         if (name == "rageshake") {
-          const auto &observation = string_field(arguments, "observation");
-          if (observation.empty() || observation.size() > 65536)
-            throw Error{ErrorCode::invalid_range};
-          const auto references = arguments.find("references")
-                                      ? field(arguments, "references")
-                                      : Value::object({});
-          if (!std::holds_alternative<Value::Object>(references.value()) ||
-              unwrap(encode_packet_string(references)).size() > 65536)
-            throw Error{ErrorCode::invalid_range};
-          std::set<std::string> active;
-          for (const auto &unresolved : unwrap(log_.root().unresolved_attempts()))
-            active.insert(hex_identity(unresolved.admission.attempt.bytes()));
-          Value::Array active_ids;
-          for (const auto &id : active) {
-            if (active_ids.size() == 64)
-              break;
-            active_ids.push_back(Value{id});
-          }
-          auto detail = Value::object(
-              {{"observation", Value{observation}},
-               {"references", references},
-               {"active_attempts", Value{std::move(active_ids)}},
-               {"active_attempt_count", Value{Number{active.size()}}},
-               {"revision", Value{context_.head()}},
-               {"generation", Value{hex_identity(generation_.bytes())}},
-               {"actor", Value{hex_identity(identity_.actor.bytes())}},
-               {"conversation", Value{hex_identity(identity_.conversation.bytes())}},
-               {"workflow", Value{hex_identity(identity_.workflow.bytes())}},
-               {"model", Value{model_}},
-               {"effort", Value{effort_}},
-               {"audit_end", Value{Number{log_.root().fact_count()}}},
-               {"reporting_attempt", Value{hex_identity(attempt.bytes())}},
-               {"repair_required_now", Value{false}}});
-          const auto complaint = log_.original(
-              {"complaint.detail", unwrap(encode_packet_string(detail)),
-               Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
-          // Only a non-sensitive locator goes to beads (and hence issue backups).
-          // The observation and provider/context history remain in the local audit.
-          auto delivery = call(
-              "exec",
-              Value::object(
-                  {{"argv",
-                    Value{Value::Array{
-                        Value{"bd"}, Value{"create"},
-                        Value{"Blackbird model complaint " + complaint},
-                        Value{"--type"}, Value{"bug"}, Value{"--description"},
-                        Value{"Local audit complaint " + complaint + "; conversation " +
-                              hex_identity(identity_.conversation.bytes()) +
-                              ". Inspect complaint.detail locally. Advisory; no "
-                              "immediate repair required."},
-                        Value{"--json"}}}},
-                   {"timeout_seconds", Value{Number{"20"}}},
-                   {"output_max_bytes", Value{Number{"4096"}}}}));
-          const auto *exit = delivery.find("exit_code");
-          const bool delivered = exit && exit->number().text() == "0";
-          auto result =
-              Value::object({{"complaint", Value{complaint}},
-                             {"retained_locally", Value{true}},
-                             {"bead_created", Value{delivered}},
-                             {"delivery", delivery},
-                             {"sink", Value{"external consumer not configured"}},
-                             {"repair_required_now", Value{false}}});
-          log_.original({"complaint.delivery", unwrap(encode_packet_string(result)),
-                         Value::object({{"complaint", Value{complaint}}})});
-          return result;
+          const RawAdapterContext origin{
+              nullptr,
+              operation_trace_ ? std::optional{operation_trace_->reference()}
+                               : std::nullopt,
+              nullptr, nullptr};
+          RawSessionCall complaint_trace{
+              4500, 4501, &origin,
+              std::array{ByteView{attempt.bytes()}, ByteView{invocation.bytes()},
+                         ByteView{admitted_generation.bytes()}}};
+          return complaint_trace.run([&] {
+            auto predicate = [&](RawSessionCall &owner, std::uint8_t kind,
+                                 auto &&evaluate) {
+              auto credit = owner.control(42);
+              const bool value = evaluate();
+              (void)owner.event(4503, std::array{raw_native(kind), raw_native(value)},
+                                credit);
+              return value;
+            };
+            auto hexadecimal = [&](RawSessionCall &owner, std::uint8_t role,
+                                   const IdentityBytes &bytes) {
+              auto native_credit = owner.control(57);
+              auto source_credit = owner.source_credit(32);
+              (void)owner.event(4505, std::array{raw_native(role), ByteView{bytes}},
+                                native_credit);
+              auto text = hex_identity(bytes);
+              (void)owner.source(role, text, source_credit, 4502);
+              return text;
+            };
+            auto borrowed = [&](std::uint8_t role,
+                                const std::string &bytes) -> const std::string & {
+              (void)complaint_trace.source(role, bytes, 4502);
+              return bytes;
+            };
+            complaint_trace.stage(1);
+            const auto &observation = string_field(arguments, "observation");
+            (void)complaint_trace.source(1, observation, 4502);
+            if (predicate(complaint_trace, 1, [&] { return observation.empty(); }) ||
+                predicate(complaint_trace, 2,
+                          [&] { return observation.size() > 65536; }))
+              throw Error{ErrorCode::invalid_range};
+            complaint_trace.stage(2);
+            const auto references = arguments.find("references")
+                                        ? field(arguments, "references")
+                                        : Value::object({});
+            if (!predicate(complaint_trace, 3, [&] {
+                  return std::holds_alternative<Value::Object>(references.value());
+                }))
+              throw Error{ErrorCode::invalid_range};
+            auto references_credit = complaint_trace.source_credit(ValueLimits{}.bytes);
+            const auto encoded_references = unwrap(encode_packet_string(references));
+            (void)complaint_trace.source(2, encoded_references, references_credit,
+                                         4502);
+            if (predicate(complaint_trace, 4,
+                          [&] { return encoded_references.size() > 65536; }))
+              throw Error{ErrorCode::invalid_range};
+            complaint_trace.stage(3);
+            std::set<std::string> active;
+            for (const auto &unresolved : unwrap(log_.root().unresolved_attempts())) {
+              auto credit = complaint_trace.control(56);
+              (void)complaint_trace.event(
+                  4504, std::array{ByteView{unresolved.admission.attempt.bytes()}},
+                  credit);
+              active.insert(hexadecimal(complaint_trace, 3,
+                                        unresolved.admission.attempt.bytes()));
+            }
+            Value::Array active_ids;
+            for (const auto &id : active) {
+              auto credit = complaint_trace.control(50);
+              const auto size = active_ids.size();
+              const bool full = size == 64;
+              const std::uint8_t kind = 5;
+              (void)complaint_trace.event(
+                  4503,
+                  std::array{raw_native(kind), raw_native(full), raw_native(size)},
+                  credit);
+              if (full)
+                break;
+              active_ids.push_back(Value{id});
+            }
+            complaint_trace.stage(4);
+            auto detail = Value::object(
+                {{"observation", Value{observation}},
+                 {"references", references},
+                 {"active_attempts", Value{std::move(active_ids)}},
+                 {"active_attempt_count", Value{Number{[&] {
+                    auto credit = complaint_trace.control(48);
+                    const auto size = active.size();
+                    (void)complaint_trace.event(4506, std::array{raw_native(size)},
+                                                credit);
+                    return size;
+                  }()}}},
+                 {"revision", Value{borrowed(4, context_.head())}},
+                 {"generation",
+                  Value{hexadecimal(complaint_trace, 5, generation_.bytes())}},
+                 {"actor",
+                  Value{hexadecimal(complaint_trace, 6, identity_.actor.bytes())}},
+                 {"conversation", Value{hexadecimal(complaint_trace, 7,
+                                                    identity_.conversation.bytes())}},
+                 {"workflow",
+                  Value{hexadecimal(complaint_trace, 8, identity_.workflow.bytes())}},
+                 {"model", Value{borrowed(17, model_)}},
+                 {"effort", Value{borrowed(18, effort_)}},
+                 {"audit_end", Value{Number{[&] {
+                    auto credit = complaint_trace.control(48);
+                    const auto count = log_.root().fact_count();
+                    (void)complaint_trace.event(4507, std::array{raw_native(count)},
+                                                credit);
+                    return count;
+                  }()}}},
+                 {"reporting_attempt",
+                  Value{hexadecimal(complaint_trace, 9, attempt.bytes())}},
+                 {"repair_required_now", Value{false}}});
+            auto detail_credit = complaint_trace.source_credit(ValueLimits{}.bytes);
+            const auto encoded_detail = unwrap(encode_packet_string(detail));
+            const auto detail_original =
+                complaint_trace.source(10, encoded_detail, detail_credit, 4502);
+            complaint_trace.stage(5);
+            RawEventRef complaint_original;
+            const auto complaint = [&] {
+              const auto parent = complaint_trace.context();
+              RawSessionCall retain{4510, 4511, &parent,
+                                    std::array{ByteView{detail_original.lane},
+                                               raw_native(detail_original.ordinal)},
+                                    24};
+              retain.stage(5);
+              return retain.run([&] {
+                auto locator_credit = retain.source_credit(32);
+                auto locator = log_.original(
+                    {"complaint.detail", encoded_detail,
+                     Value::object({{"attempt", Value{hexadecimal(
+                                                    retain, 9, attempt.bytes())}}})});
+                complaint_original = retain.source(11, locator, locator_credit, 4502);
+                retain.require_capture();
+                retain.finish(RawOperationBranch::returned, nullptr,
+                              std::array{ByteView{complaint_original.lane},
+                                         raw_native(complaint_original.ordinal)});
+                return locator;
+              });
+            }();
+            complaint_trace.stage(6);
+            constexpr char title_prefix[] = "Blackbird model complaint ";
+            auto title_credit = complaint_trace.source_credit(
+                raw_session_bound(sizeof(title_prefix) - 1, complaint.size()));
+            auto title = title_prefix + complaint;
+            const auto title_original =
+                complaint_trace.source(12, title, title_credit, 4502);
+            constexpr char description_prefix[] = "Local audit complaint ";
+            constexpr char description_middle[] = "; conversation ";
+            constexpr char description_suffix[] =
+                ". Inspect complaint.detail locally. Advisory; no immediate repair "
+                "required.";
+            auto description_credit = complaint_trace.source_credit(raw_session_bound(
+                raw_session_bound(
+                    raw_session_bound(sizeof(description_prefix) - 1, complaint.size()),
+                    sizeof(description_middle) - 1),
+                raw_session_bound(32, sizeof(description_suffix) - 1)));
+            auto description =
+                description_prefix + complaint + description_middle +
+                hexadecimal(complaint_trace, 7, identity_.conversation.bytes()) +
+                description_suffix;
+            const auto description_original =
+                complaint_trace.source(13, description, description_credit, 4502);
+            complaint_trace.stage(7);
+            const auto parent = complaint_trace.context();
+            RawSessionCall deliver{4520, 4521, &parent,
+                                   std::array{ByteView{complaint_original.lane},
+                                              raw_native(complaint_original.ordinal),
+                                              ByteView{title_original.lane},
+                                              raw_native(title_original.ordinal),
+                                              ByteView{description_original.lane},
+                                              raw_native(description_original.ordinal)},
+                                   1};
+            deliver.stage(7);
+            bool delivered = false;
+            auto delivery = deliver.run([&] {
+              auto acquired =
+                  call("exec",
+                       Value::object(
+                           {{"argv",
+                             Value{Value::Array{
+                                 Value{"bd"}, Value{"create"}, Value{std::move(title)},
+                                 Value{"--type"}, Value{"bug"}, Value{"--description"},
+                                 Value{std::move(description)}, Value{"--json"}}}},
+                            {"timeout_seconds", Value{Number{"20"}}},
+                            {"output_max_bytes", Value{Number{"4096"}}}}));
+              deliver.require_capture();
+              complaint_trace.require_capture();
+              complaint_trace.stage(8);
+              deliver.stage(8);
+              const auto *exit = acquired.find("exit_code");
+              if (predicate(deliver, 6, [&] { return exit != nullptr; })) {
+                auto text_credit = deliver.source_credit(21);
+                const auto text = exit->number().text();
+                (void)deliver.source(16, text, text_credit, 4502);
+                delivered = predicate(deliver, 7, [&] { return text == "0"; });
+              }
+              deliver.finish(RawOperationBranch::returned, nullptr,
+                             std::array{raw_native(delivered)});
+              return acquired;
+            });
+            auto result =
+                Value::object({{"complaint", Value{complaint}},
+                               {"retained_locally", Value{true}},
+                               {"bead_created", Value{delivered}},
+                               {"delivery", delivery},
+                               {"sink", Value{"external consumer not configured"}},
+                               {"repair_required_now", Value{false}}});
+            complaint_trace.stage(9);
+            auto delivery_credit = complaint_trace.source_credit(ValueLimits{}.bytes);
+            const auto encoded_delivery = unwrap(encode_packet_string(result));
+            const auto delivery_original =
+                complaint_trace.source(14, encoded_delivery, delivery_credit, 4502);
+            complaint_trace.stage(10);
+            RawSessionCall retain{4530, 4531, &parent,
+                                  std::array{ByteView{delivery_original.lane},
+                                             raw_native(delivery_original.ordinal)},
+                                  24};
+            retain.stage(10);
+            retain.run([&] {
+              auto locator_credit = retain.source_credit(32);
+              const auto locator =
+                  log_.original({"complaint.delivery", encoded_delivery,
+                                 Value::object({{"complaint", Value{complaint}}})});
+              const auto locator_original =
+                  retain.source(15, locator, locator_credit, 4502);
+              retain.require_capture();
+              retain.finish(RawOperationBranch::returned, nullptr,
+                            std::array{ByteView{locator_original.lane},
+                                       raw_native(locator_original.ordinal)});
+            });
+            return result;
+          });
         }
         if (name == "audit_inspect")
           return log_.inspect(field(arguments, "query"), attempt);
@@ -3681,8 +5130,14 @@ Value CodingEngine::call(std::string name, Value arguments) {
           return log_.trajectory(field(arguments, "query"), attempt);
         if (name == "variables_read")
           return log_.variables(field(arguments, "query"), attempt);
-        if (name == "git_observe")
-          return observations_->git(arguments, cancelled);
+        if (name == "git_observe") {
+          const RawAdapterContext raw_context{
+              nullptr,
+              operation_trace_ ? std::optional{operation_trace_->reference()}
+                               : std::nullopt,
+              nullptr, nullptr};
+          return observations_->git(arguments, cancelled, &raw_context);
+        }
         if (name == "participant_configure")
           return participants_->configure(arguments);
         if (name == "participant_read")
@@ -3845,15 +5300,43 @@ Value CodingEngine::stats() const {
       "request_scope", Value{"last request in this process; null if unavailable"});
   return result;
 }
-void CodingEngine::validate_session_switch() const {
-  if (participants_->active() || command_jobs_->active())
-    throw Error{ErrorCode::busy};
+void CodingEngine::validate_session_switch(const RawAdapterContext *context) const {
+  const std::uint8_t method = 3;
+  RawSessionCall call{4420, 4421, context,
+                      std::array{raw_native(method), ByteView{generation_.bytes()}}};
+  call.run([&] {
+    if (raw_restart_predicate(
+            call, 2, [&] { return participants_->active(); }, 4422) ||
+        raw_restart_predicate(call, 3, [&] { return command_jobs_->active(); }, 4422))
+      throw Error{ErrorCode::busy};
+  });
 }
-void CodingEngine::validate_restart() const {
-  if (uncontained_exec_recovery_)
-    throw Error{ErrorCode::external_unknown};
-  validate_session_switch();
-  validate_protocol(context_.items());
+void CodingEngine::validate_restart(const RawAdapterContext *context) const {
+  const std::uint8_t method = 4;
+  RawSessionCall call{4420, 4421, context,
+                      std::array{raw_native(method), ByteView{generation_.bytes()}}};
+  call.run([&] {
+    if (raw_restart_predicate(
+            call, 4, [&] { return uncontained_exec_recovery_; }, 4422))
+      throw Error{ErrorCode::external_unknown};
+    const auto parent = call.context();
+    validate_session_switch(&parent);
+    validate_protocol(context_.items());
+  });
+}
+std::optional<std::string>
+CodingEngine::take_restart_note(const RawAdapterContext *context) {
+  const std::uint8_t method = 2;
+  RawSessionCall call{4420, 4421, context,
+                      std::array{raw_native(method), ByteView{generation_.bytes()}}};
+  return call.run([&] {
+    if (raw_restart_predicate(call, 1, [&] { return restart_note_.has_value(); }, 4422))
+      (void)raw_restart_source(call, 1, *restart_note_);
+    std::optional<std::string> result;
+    raw_restart_mutation(
+        call, 1, [&] { result = std::exchange(restart_note_, std::nullopt); }, 4423);
+    return result;
+  });
 }
 void CodingEngine::effort(std::string value) {
   if (value != "low" && value != "medium" && value != "high" && value != "xhigh")
@@ -3882,15 +5365,39 @@ void CodingEngine::present(const Value &item) {
       display(text);
   }
 }
-Error CodingEngine::claim_backstop() {
-  if (turn_running_ || operation_depth_ != 0 || !failed_turn_ || backstop_claimed_ ||
-      failed_turn_->code == ErrorCode::interrupted || (cancelled && cancelled()) ||
-      uncontained_exec_recovery_ || !detail::locally_quiescent() ||
-      log_.root().state() != JournalWriterState::live)
-    throw Error{ErrorCode::conflict};
-  backstop_claimed_ = true;
-  return *failed_turn_;
+Error CodingEngine::claim_backstop(const RawAdapterContext *raw_context) {
+  RawSessionCall claim{4710, 4711, raw_context, {}, 9};
+  return claim.run([&] {
+    auto predicate = [&](std::uint8_t kind, auto &&evaluate) {
+      auto credit = claim.control(42);
+      const bool value = evaluate();
+      (void)claim.event(
+          4703,
+          std::array{detail::raw_native_field(kind), detail::raw_native_field(value)},
+          credit);
+      return value;
+    };
+    if (predicate(21, [&] { return turn_running_; }) ||
+        predicate(22, [&] { return operation_depth_ != 0; }) ||
+        predicate(23, [&] { return !failed_turn_; }) ||
+        predicate(24, [&] { return backstop_claimed_; }) ||
+        predicate(25, [&] { return failed_turn_->code == ErrorCode::interrupted; }) ||
+        predicate(26, [&] { return cancelled && cancelled(); }) ||
+        predicate(27, [&] { return uncontained_exec_recovery_; }) ||
+        predicate(28, [&] { return !detail::locally_quiescent(); }) ||
+        predicate(29, [&] { return log_.root().state() != JournalWriterState::live; }))
+      throw Error{ErrorCode::conflict};
+    auto mutation = claim.control(41);
+    backstop_claimed_ = true;
+    const std::uint8_t kind = 1;
+    (void)claim.event(4706, std::array{detail::raw_native_field(kind)}, mutation);
+    claim.finish(RawOperationBranch::returned, nullptr,
+                 std::array{detail::raw_native_field(failed_turn_->code),
+                            detail::raw_native_field(failed_turn_->detail)});
+    return *failed_turn_;
+  });
 }
+
 Value CodingEngine::operator_call(std::string_view name, const Value &arguments) {
   // Quote only the operation name; arguments transfer as native values.
   auto literal = [](std::string_view value) {
@@ -3910,24 +5417,30 @@ Value CodingEngine::operator_call(std::string_view name, const Value &arguments)
   return workflow_result_;
 }
 bool CodingEngine::operator_turn(std::string_view prompt, std::string_view fallback) {
-  if (prompt.empty())
-    return false;
-  const auto selected = workflows_->select(prompt);
-  if (!selected) {
-    if (prompt.starts_with("/"))
+  const RawProgramContext origin{{}, generation_.bytes()};
+  RawProgramCall trace{6, &origin};
+  return trace.run([&] {
+    if (prompt.empty())
       return false;
-    turn({prompt, fallback});
+    const auto selection_origin = trace.context();
+    const auto selected = workflows_->select(prompt, &selection_origin);
+    if (!selected) {
+      if (prompt.starts_with("/"))
+        return false;
+      turn({prompt, fallback});
+      return true;
+    }
+    const auto invocation =
+        Value::object({{"name", field(selected->definition, "name")},
+                       {"arguments", Value{selected->arguments}},
+                       {"prompt", Value{std::string{prompt}}},
+                       {"trigger", Value{selected->trigger}},
+                       {"origin", Value{"operator"}}});
+    operator_arguments_ = invocation;
+    const auto program = "return blackbird.call('workflow_invoke',_native_args)";
+    turn({prompt, program});
     return true;
-  }
-  const auto invocation = Value::object({{"name", field(selected->definition, "name")},
-                                         {"arguments", Value{selected->arguments}},
-                                         {"prompt", Value{std::string{prompt}}},
-                                         {"trigger", Value{selected->trigger}},
-                                         {"origin", Value{"operator"}}});
-  operator_arguments_ = invocation;
-  const auto program = "return blackbird.call('workflow_invoke',_native_args)";
-  turn({prompt, program});
-  return true;
+  });
 }
 void CodingEngine::turn(TurnInput input) {
   RawTurnTrace trace{turn_running_, backstop_claimed_, generation_, context_.head()};
@@ -3958,6 +5471,8 @@ void CodingEngine::turn(TurnInput input) {
     const auto discarded = std::move(value);
   };
   const auto clear_pending = [&]() noexcept {
+    pending_program_trace_.finish(2);
+    pending_tools_trace_.finish(2);
     clear_value(pending_budget_);
     pending_workflows_.reset();
     clear_value(pending_program_config_);
@@ -3975,6 +5490,8 @@ void CodingEngine::turn(TurnInput input) {
     const decltype(state) &capture;
     ~Running() {
       engine.turn_running_ = false;
+      for (auto &continuation : engine.workflow_continuations_)
+        continuation.parked.finish(1);
       engine.workflow_continuations_.clear();
       engine.operator_arguments_.reset();
       capture(5);
@@ -4007,9 +5524,9 @@ void CodingEngine::turn(TurnInput input) {
     }
     activation_applied = true;
     if (activate_program)
-      trace.activation(0, program_revision_);
+      pending_program_trace_.finish(0, nullptr, trace.activation(0, program_revision_));
     if (activate_tools)
-      trace.activation(1, tools_revision_);
+      pending_tools_trace_.finish(0, nullptr, trace.activation(1, tools_revision_));
     if (activate_budget)
       trace.activation(2, budget_revision_);
     clear_pending();

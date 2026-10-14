@@ -7677,3 +7677,519 @@ Debug4/4 pass8.16s; no production change, deadline weakening or new review.
 2026-10-13 — Current owner segment committed on master as ca6747b after the installed full source hook passes110/110 Debug cases in146.29s, all161 owned C++ translation units, all owned C++ formatting/header coverage and Lua formatting/syntax/type/contract checks. No new NOLINT or hook bypass for source. Final seven integration fixture corrections pass Mac Release (3+4 cases6.04s/5.86s), ASan/UBSan (12.54s/24.83s), Linux Release7/7 in2.68s and ASan/UBSan7/7 in24.75s. Earlier20 owner cases stay qualified, including final Linux storage ASan76.11s; its initial60s whole-group watchdog was too short, native fault deadlines/assertions unchanged. All agent/fleet/local compiler workers are idle. Qualification/backlog updates are text only and get diff/link checks with the operator's documented text-only hook exception. Master publication follows; nls.2 stays in_progress for remaining census and workload measurements, nls.9 and broader P0 nls.10 remain open, evals stay deferred. Operator art and old unapplied stash remain preserved.
 
 2026-10-13 — Operator asks post-segment performance/startup. Small actual Release startup/input measurement uses the existing PTY driver,20 private fresh starts each for current isolated Release, older Release and published UI, serial round robin and no inference prompt. All60 endpoints/exits succeed without retries/forced shutdown. Current first-frame p50/p90/max126.465/165.234/363.068ms; typing2.105/6.811/66.561ms. Older Release first-frame p50123.369ms; publishedUI96.066ms. The observed+3.096ms difference is not exact source-change attribution; full owner cost, heavy/reopen and recorder lag remain unmeasured. Report papers/2026-10-13-owner-segment-startup.md and actual hashes/transcripts in ignored context/startup-after-owner-segment-2026-10-13. No product/source/binary changes or fullsuite. Text diff/link checks and checkpoint publication use the existing documented text-only exception.
+
+2026-10-13 — Operator authorizes remaining nls.2 tool callers, programs/workflows and session/operator owners, stopping before workload qualification for discussion. Branch work/nls2-remaining-owners preserves published master. Three conceptual lanes: file tools resolve their existing ONE plan attack; program activation and session ingress/presentation write their concrete plans, independently reviewed by root before source. Root owns remaining external callers and shared integration. Max six compiler/static workers; zero fleet/mutation/performance campaigns. Existing source/runtime choices and completed qualification stay settled. Actual decision owner baseline executes through public CodingEngine and preserves ordinary result; independent raw disk oracle fails on missing native stdout, as expected (context/remaining-tool-callers/baseline.log). No operator binary replacement or new evaluator/steering/multiplayer scope.
+
+
+2026-10-13 — Native file47–48 owner resolves the existing ONE plan attack.
+Pinned GNU/Darwin stream and stdio references extend the acquisition manifest
+from9 to14 originals. Genuine old LocalTools limit red forwards shared libc++
+fread through dyld:16785408 bytes acquired, capacity refusal, zero matching raw
+originals; preserved old headers/libs/binary/dylib/hashes live in ignored
+context/file-owner-unit/published. Candidate captures every positive prefix
+before limits/append, keeps platform EOF/Error behavior, and emits actual native
+request/return separately. Preconstructed held guards attach fd/name before
+capture, consume close/rename ownership before capture, and continue close/unlink
+under genuine sticky EOF or actual damaged publication. Independent native byte,
+field/ref, short/error/cleanup, max/max−1 and stdio parity checks pass; conditional
+GNU fallback cases remain platform-specific source pending root integration.
+No workload measurement, supported-profile campaign, source hook or commit in
+this lane. ONE whole code/oracle review follows direct/static completion.
+
+
+2026-10-13 — SAME file ONE code review F1/F2 resolved: proposal DATA admitted
+before the existing content copy/unique-position replace, completed bytes emitted
+immediately before later exists/read/file.before; borrowed content original stays
+distinct and helper references the actual output without duplication. Actual
+throwing-before original and literal max/max-minus-one copy/replace cuts pass;
+strict target/narrow static clean, registered Mac2/2 pass20.02s. F2 changes stale
+cleanup prose only. Linux file-only direct attempt cannot reach Neuroses SSH and
+fails before remote workspace/build/test; no Linux result or workload measurement
+claimed. Conditional fallback remains pending, not hidden. Root then requests
+confined absolute6/role7 mechanical reuse for Session: actual uncapped cwd/copy/
+join credit and returned native path body; its integration/new method belong to
+Session's single later code/oracle review, existing file review stays settled.
+
+
+2026-10-13 — File absolute6/role7 Session extension final direct2/2 GREEN33.26s,
+including native >8192 cwd growth/failed initialized buffer, removed-cwd Error,
+absolute copy and relative join exact/max-minus-one grants. Narrow static clean;
+Linux-only fallback remains SSH-blocked, no result claimed. Beads51 follows its
+completed one whole plan review: genuine old public Coding native child cut
+acquires stderr24/stdout24, then actual semantic original allocation throws.
+Old raw captures0/0 and no3500 graph; once marker and closed run preserved.
+Matching old headers/libs/source/binary/log archived before Beads coding; only
+owned adapter/helper/fixture and approved canonical request outparam change.
+No workload qualification or new review panel.
+## 2026-10-13 — Remaining native caller and operator surfaces
+
+On `work/nls2-remaining-owners`, completed the Decision/Git owners' sole
+code/oracle reviews and finite direct repairs: exact native fields, independent
+nested parent linkage, real source grant refusal, actual observer failure,
+cleanup ordering and selected/default behavior. Logs stay in ignored context;
+the two review reports record the bounded dispositions. No second review ran.
+
+Session-state published-source red and real selected native green cover settings,
+identity, discovery, unchanged derived snapshots and ordinary damaged-metadata
+replacement. A selected synchronous raw-failure scope distinguishes an actual
+recording refusal from a business error with the same ErrorCode. Its native
+read/parsed-field capacity cases forbid replacement and accepted completion.
+The sole Session code review found a missing check after paid terminal emission
+and specific native-field/effect-admission oracle gaps; those finite repairs are
+underway. The confined absolute-path helper now handles actual growing getcwd
+before path joining; it does not impose PATH_MAX on cwd. Direct Mac cases pass.
+The Linux file branch check could not start: SSH to Neuroses timed out before
+remote checkout/build, recorded in `context/file-owner-unit/linux-direct-launch.log`.
+
+Main's actual published-source `/help` fixture fails for missing input records.
+Candidate literal native input/dispatch, paste controls and EOF checks pass.
+Its existing 512-byte reader and poll remain unchanged; metrics wrap those native
+calls. The remaining native refusal/backstop fixture uses a private provider
+fixture, avoiding account/network calls. UI/program owners apply only their sole
+review's finite findings. Beads, bridge, representation, candidate and remaining
+operator owners continue; workload/performance/consumer qualification remains
+explicitly outside this authorized implementation pass.
+
+
+
+2026-10-13 — Beads51 whole owner implemented under the completed ONE plan
+review. Explicit Coding operation parent/run/argv/invocation/observer/parser
+request/return hooks, immediate completed native argv/status/field bytes, native
+Child stdout/stderr selection before limits/observer and lexical cleanup before
+invoke terminal. Default state mutations invalidate native source links; default
+calls remain opted out. Error versus parser Result/exception variants stay
+distinct, and writer elapsed_us is removed. Canonical helper's actual3410
+out-owner dependency is present, with refusal/default/failed-path assertions.
+
+Genuine preserved old public-Coding cut acquired stderr24/stdout24 then threw
+at actual AuditLog original allocation, while old raw bodies0/0 and Beads graph0
+failed the intended oracle. Current native source prefixes24/24, retained write
+UNKNOWN and append-only effect counter pass. Whole direct native fixture now
+passes command/argv/validation/cache, five observer exception classes, real
+pre-spawn/EOF/overflow/setup failures and literal CTRL246/245/DATA8301/8300
+admission cuts. Actual libc++ argv allocation is8200, not guessed8193; five
+completed elements survive its exception and no mutation child runs. Current
+Value cache assignment shares unexposed Storage, so there is no cache-copy
+allocator cut: direct returned/cached Storage identity and accepted3505 source/
+count replace that unreachable plan assumption.
+
+Strict target and narrow owned static checks are clean. The final fixture was
+linked in isolation against all three matching pre-Bridge qualified archives:
+Coding identity/layout confirmed by its owner; Beads/raw_beads/raw_file objects
+are byte-identical to current qualified objects. Headers/archive/owned-source
+hashes and matching notes are in ignored context/beads-owner-unit/qualified;
+isolated-native.log exits0. Transitional unrelated Bridge source was not mixed
+into that snapshot. ONE whole Beads code/oracle review requested from root; no
+workload qualification/profiles, source hook, live bd or operator issue writes.
+
+
+### 2026-10-13 UI emission consolidation and Station native links
+
+UI raw publication and retained request/bank/terminal mechanics now use the owned
+shared RawEmission primitive. Compile-time exception dispatch preserves UI's
+existing successful-body-open lifetime; actual intermediate caught events stay
+separate from the final paid terminal. Strict changed-owner syntax green.
+
+Station's first real CLI byte inspection exposed a completed-parser context being
+queried too late, causing selected admission to disappear. Saved actual parser
+context now remains the child request parent; the native CLI oracle checks it
+exactly. Reopened store fixture recovery corrected to the existing native recovery
+sequence, without production changes. Added actual CLI original/dispatch/status/
+malformed/native-write-failure oracle; matching greens and whole Station code
+review still pending. No workload qualification or performance claim.
+
+
+Station complete finite native tests green: real store/reopen, actual allocator
+cut and source-bound refusal; real CLI parser/control/admission/prompt/workflow
+references and raw originals, malformed external inputs and failed native rename.
+Local const-ref tidy correction has matching store link/native and clean owned
+tidy. Consolidated UI direct remains green. Whole Station ONE code review handed
+to Root; remaining H source census/plan written for ONE plan attack. H census
+includes actual outer poll/wake drain, termios/editor and signal-native custody;
+selected plain output is a separate synchronous owner. Bootstrap/read-only output
+and post-Runtime diagnostics remain explicit nls.10/successor boundaries. No
+qualification, source hook, commit or deployment from this lane.
+
+
+2026-10-13: Completed the ONE RawEmission consolidation plan attack E1–E7,
+Main input code/oracle attack M1/M2 and Restart/Backstop plan attacks, in their
+named papers; no duplicate panels/builds. Migrated File/Beads to root’s shared
+RawEmission/raw_call_run/raw_publish preserving custom byte layouts, exact grant
+order, filesystem exception class/native errno and deferred acquired-resource
+cleanup. Fixed SAME Beads B1 with prepaid completed .beads joined original9 and
+one reused business operand. Genuine matching pre-fix native red preserves the
+missing-original assertion in context/beads-owner-unit/join-red-native.log.
+Strengthened SAME B2 native fields/end graphs against actual argv/Child/native
+bytes/product returns/throws. Matching strict build passes; File2/2 native passes
+27.41s and whole Beads passes13.50s (b2-fields-native.log). Initial fixture role3
+and fixed186-slot floor decomposition corrections are documented, no production
+classification weakened. No workload/profile qualification or commit here.
+
+Operator2026-10-13 stopped the parallel surface work to ask whether emission was
+being reinvented. Confirmed common transport but duplicated caller/Program/Beads/
+Bridge/File/UI bank/link/end/classification machinery. On explicit cleanup and
+wrap instruction, introduced shared RawEmission/raw_publish/raw_call_run and
+migrated owner adapters without changing their native layouts. One concrete plan
+attack E1–7 and one shared-core code attack; existing owner native fixtures are
+the migration oracles. Genuine issuer/coroutine/cleanup lifetime decisions remain
+at their actual owners. No dependency, event transformer, callback registry,
+producer per emission or timer was added. Program, UI, Station and File/Beads
+migration direct checks pass; Bridge's same sole review found a pre-request C++
+holder allocation gap and literal parser gaps, finite correction in progress.
+Main's existing M1/M2 review fixes pass real signal/rearm/refusal/allocation and
+CLI/PTY sources. Qualification remains deferred.
+
+Corrected the scope overextension: standalone SystemA Value/radix/ByteBuffer
+allocator/deleter redesign is outside the operator's named tool/program/session
+groups in this delivery. Its proposed per-object lifetime loan would require
+further aggregate-capacity/lifetime design; no lane rotation, representation
+limit or large capacity change was implemented. Keep that census item open for
+later discussion. Complete the named owners with shared emission rather than
+expanding into a global allocator subsystem. Current work branch stays
+work/nls2-remaining-owners; source checkpoint requires installed full source gate.
+
+2026-10-13: Implemented the reviewed Backstop File.prefix7 dependency with the
+existing native open/read/cleanup machinery. Exact112-byte reads have no fstat or
+trailing acquisition; short/error prefixes are emitted before business failure,
+and close is paid before open. Native112/short7/EOF/EIO/EINTR/post-read allocation,
+actual owner reference and default opt-out assertions pass. Matching strict link
+and three-TU narrow static pass in context/file-owner-unit/prefix-*.log. Adapted
+File/Beads to shared RawCallSites without changing wire fields or capacity.
+Complaint55 whole source-grounded plan is ready for the single root plan attack;
+no Complaint implementation, workload qualification, source gate or commit here.
+
+2026-10-14: Completed Complaint55 using existing RawSessionCall/RawEmission only.
+Original business encoders/formatters now emit their acquired bytes immediately;
+local detail, advisory delivery and delivery retention have distinct paid pairs.
+Exact private-bd success preserves full local detail and sends only locators;
+old matching owner red confirms missing raw request/originals. Final strict link,
+whole finite native and module/fixture tidy pass. Native cuts cover field/ref
+graphs, actual IDs/cursors/locators/BBM, invalid inputs, absent/nonzero child,
+actual pre/post-effect EOF, actual retention allocation and65 unresolved/first64.
+Small header and ECANCELED-detail fixture misconceptions were corrected against
+actual native records; the low-DATA refusal is explicitly before the body, not
+claimed as an isolated Complaint source grant test. Root's sole code attack has
+no new production finding. No source gate, commit or workload qualification here.
+
+Completed the ONE whole RRC code/oracle attack in
+papers/2026-10-14-restart-recovery-owner-raw-code-attack.md: wrong-custody cleanup
+drops held producer credit, missing-file filesystem predicate changes native
+behavior, and concrete native oracle gaps. Exact old source disproves the
+suspected legacy-encoder ordering change; it is not a finding. Root owns finite
+repairs/direct rechecks, without another review layer.
+
+2026-10-14: Resolved the Station ONE code attack STC1–3. Exact paid outcomes now
+cover reached post-request grants; explicit Session identity and Restart contexts
+remain at the same acquisitions. Strengthened independent retained-fact/native
+field/projection oracles and added a genuine actual Main pre-read DATA refusal.
+Matching store, CLI four cases and selected Main refusal are green; earlier
+post-read cut was an invalid fixture because prepaid source released enough
+capacity for EOF. No additional review or workload qualification. H real CLI/PTY
+baseline is expected red with actual editor/mode/resize/native restoration; Darwin
+PENDIN is recorded as kernel state, not a configuration bit. Whole reviewed H
+source implemented using shared emission, existing wake signal publisher and
+prepaid lexical cleanup, strict syntax green; direct H native greens/code attack
+remain pending. No qualification or commit from this lane.
+
+2026-10-14: continued remaining-owner delivery and consolidated emission work.
+Shared raw admission/reference/publication/end mechanics remain in RawEmission;
+individual owners retain only actual native layouts/field decisions. Root added
+restart/resume/restore, Coding note/validation/recovery and Main selected successor
+hooks, direct real native fixtures and immutable candidate/complaint descriptions.
+Corrected the restart plan against actual Main: /new and /resume reopen in process
+(status0); status75 with selected restart args executes, once restart without args
+has no launch. Native cold failed exec exposed errno overwritten when the retained
+runtime closed; the native guard now restores actual exec errno after binding/state
+cleanup. Session restore now captures known borrowed note/token/state before its
+existing Value copy, without validating previously accepted malformed fields.
+Direct native restart/recovery plus real private successful exec/CLOEXEC drain and
+existing ordinary recovery checks pass; ONE independent code/oracle attack is in
+progress with the File colleague. Kimi's read-only attempt using the installed
+kimi-colleague skill failed actual subscription403, so no Kimi review is claimed;
+raw captures remain in context/kimi-review/run-7oau8_ag, with no credentials in brief.
+Complaint's genuine private native/full-source/retention/failure checks are green;
+Root's one code/oracle attack found no additional source defect and explicitly
+records that the tiny ring case refuses before4500, not isolated source admission.
+Remaining candidate timeout correction, terminal/plain and Backstop source work,
+findings/direct rechecks and final installed source hook remain. No qualification,
+evals, multiplayer, steering, trajectories or global allocation/codec census
+implementation is implied by these completed owner subsets.
+
+
+2026-10-14: completed finite RRC1–3 repairs and direct checks. The handoff's
+constructing PID/thread is its sole joined receiver; foreign thread/fork methods
+reject before publication or dropping its bank, and illegal destruction takes
+the existing fatal custody path. Real same-thread and joined-worker consume
+retain the original issuer. Missing/ENOTDIR status remains false; actual ELOOP
+retains the old exception. Shared File8 replaces fixed PATH_MAX returned-path
+grants at Restart and Session listing, with actual native source references.
+The SAME native fixture checks retained IDs/cursors, input/predicates/mutations,
+actual disk append boundary, real allocation after original note, exact/-1 source
+grant, failed pointer preparation and private exec/CLOEXEC drain. It passes.
+Two fixture assumptions were corrected: an exec marker identity reservation
+changes the pre-append cursor; note-copy allocation may follow a real issuer
+reservation, without recording or moving a restart. Actual Main /new,/resume
+argv and missing-audit failure pass in the existing native Main fixture. Plain
+Main output now uses common emission around the SAME safe formatter or native
+pieces with actual startup/dispatch context; pipe/formatter and terminal review
+repairs finish separately. Backstop's ONE whole code/oracle attack finds literal
+parser gaps BSC1 and description variants BSC2; source assessment asserts no
+new production defect. Those finite fixes remain in its SAME fixture. No new
+panel or qualification campaign; required source gate/checkpoint still pending.
+
+2026-10-14: completed H terminal custody ONE code/oracle review HC1–HC4 finite
+repairs. Actual creating-issuer rearm, explicit absent-context native opt-out,
+complete editor CString extents and one paid constructor rollback/state captured.
+Strict/matching source compile green; real direct/native CLI/PTy both green
+(`context/station-owner/h-finite-native.log`, 11.43s). Supplied malformed contexts
+refuse before effects with their actual invalid-identity fence. Qualification,
+performance and broader fault campaigns remain deferred.
+
+2026-10-14: completed plain native output helper and Root Main piece/same-formatter
+integration. Eight finite native pipe/source cases pass source-matched direct
+fixture (`context/station-owner/plain-diagnostic-native.log`); ONE Program review
+PC1 exact terminal/parent/extent assertions repaired within those same cases.
+Actual EPIPE fixture pipe now originates after recorder fork, preventing inherited
+reader from masking failure. No writer transforms/new producer/poll/timer; exact
+source-derived grants and shared emission machinery. Implementation paper states
+short-forwarding, unexercised EINTR/zero/post-terminal-failure limits explicitly.
+Final registered Plain source-matched link and all eight CTest native cases pass
+(`context/station-owner/plain-final-native.log`, 1.12s), after Root final source
+formatting. ONE Plain report complete, PC1 finite repairs resolved; zero owned
+compiler/static workers and no source changes pending. Workload qualification
+remains deferred.
+
+2026-10-14 — Completed Backstop's whole raw owner and File weak-canonical8
+acquisition dependency under the existing BS1–3 plan review. Actual source cursor,
+ticket/cause, original encoder/formatter results, native mkdir/header/entropy,
+independent Root/Context, pivot/assessment/action, protection and restoration
+boundaries emit native fields via shared RawSessionCall/RawEmission. Main passes
+its saved actual failed-dispatch context. File8 follows the acquired platform
+weak-prefix algorithms over the existing captured native file operations; no
+PATH_MAX/cwd acquisition cap or second formatter/encoder. Old matching archives
+produced real useful work and then the missing4700/4720/4725 red. The sole whole
+code/oracle attack BSC1–3 is resolved: exact independent field/ref/error checks,
+method-specific filesystem variants, and actual pivot protection parent. Current
+strict matching link and ten finite native cases passed (backstop-owner-unit/
+final-build.log/final-native.log); recording refusal after the acquired file
+preserves it and does not start another assessment. Missing mission retains its
+actual corrupt0, cancellation its native ECANCELED89, issuer native EIO its
+original business io0. The31-byte header fault measures admissions before native
+truncation and checks the actual shortened predecessor. Workload/performance
+qualification remains stopped; Root owns the integrated source gate/checkpoint.
+
+
+2026-10-14: remaining named owners now finish their direct source checks and
+ONE review dispositions. H HC1–4 fixes creating issuer, explicit opt-out, actual
+CString NUL extents and one honest paid constructor rollback. Native/CLI2/2
+pass11.43s. Plain PC1 checks whole terminal/original/format-parent fields in the
+same eight cases, with registered1/1 green1.12s; its actual EPIPE required
+creating the test pipe after recorder fork, and the short-write proxy's narrower
+claim is explicit. No Plain production finding. Backstop BSC1/BSC2 exact fields
+and descriptions are repaired; BSC3 links4732 to the actual pivot. All ten finite
+native cases pass, including acquired useful work followed by recording refusal
+without a second assessment/fallback. Fixture-owned header truncation is
+accounted for before invoking the actual owner. Existing helper/fixture static
+checks and strict matching builds pass. Production and fixture formatting is
+complete. Workload/profile qualification, standalone SystemA global lifetimes,
+logical clocks and broader audit completeness remain open. Source publication
+is gated by the installed full Debug/C++/Lua hook; log
+context/remaining-owner-source-gate.log. Evals/multiplayer/steering/additional
+trajectory work remain deferred.
+
+
+Final Backstop handoff corrected description role26 from lineageSeedBBM to
+backstopPacketBBM: the SAME existing encoder returns the full mission/source/
+attempt packet. Interrupted the first required source gate during its build,
+before CTest/lint, and staged this literal correction before restarting the
+installed hook. The interrupted log is preserved in context; no completed
+full-suite run was repeated.
+
+2026-10-14 — Same File/Backstop full-gate fixture corrections: reset the native
+file observation before the independent limit case (previous prefix left112
+bytes), retaining exact acquired/disk equality. Actual Backstop pre-fix closure
+red recorded closed=0: the source VM retained its raw issuer beyond Runtime
+release, so the reader could observe only a published prefix. Retire source
+VM/Context/Log/Root under the active issuer, then require an existing closed
+snapshot before every byte/ref oracle. Matching direct raw_file/backstop_raw2/2
+passed42.51s. Operator STOP left two optional-access lint findings pending; after
+explicit resume, wrote the same-unit static plan and replaced those accesses with
+an explicit absent guard and stable const-reference borrow, preserving has_value
+and closed assertions. No production change or dynamic repeat for that static
+correction. Root owns the required full source-hook retry and integration.
+
+
+2026-10-14 — Integrated remaining-owner gate built successfully, then passed
+124/131 tests; owned full lint was not reached. The operator requested a full
+status report before further fixes, then explicitly resumed study/analyze/plan/
+execute under BLACKBIRD. The Program io/ENOENT came from fixture-relative
+programs/turn.lua under CTest build/debug; resolving from compiler source __FILE__
+preserves actual default/effect/raw assertions. The existing operation provider
+integer93 exposed Bridge catch-all normalization of foreign exceptions. Runtime
+now retains the actual exception per eval, contains Lua error transfer until
+native holders close, restores nested exception context and rethrows after
+argument/stack cleanup; Lua pcall cannot enable later native dispatch. The
+unchanged operation93 oracle plus tightened Bridge19/nestedEval and Program
+cases passed3/3 in59.44s (gate-foreign-native.log), with matching strict link
+green. On the authorized static-only resume, SB1 preserved paid stack-token
+reason4 cleanup via explicit owned-token selection; SB2 uses named borrowed
+ToolInvocation fields; SB3 explicitly guards the optional closed snapshot. All
+three changed-TU analyses, formatter and scoped diff checks pass. The File and
+Backstop fixture dispositions above preserve exact originals and actual closure.
+Terminal cancellation/task/join ownership remains the last finite correction
+before the installed full source-hook retry. No qualification campaign starts.
+
+
+2026-10-14 — Final terminal integration correction is complete. The same owner
+now handles typed exec task activity, matching interrupted/ECANCELED capture
+consumption after perform unwinds, held failure/text/complete publication, actual
+worker join, paid native turn/IRQ wake rearm, then Root transfer. Actual rearm
+refusal retains joined child debt and blocks new Root work. The existing
+uncanceled completion-refusal path remains strict. Matching whole app/UI/H/wake
+build passes; all seven existing tasks_pty, terminal_pty, command_jobs_pty,
+raw_command_wake, ui_raw, terminal_custody_raw and terminal_custody_native cases
+pass in59.19s (context/station-owner/cancel-whole-direct.log). All four changed
+translation units pass owned static analysis; formatting and diff checks pass.
+No timers, new publisher or swallowed recorder/capacity failure. All delegated
+owners are idle before Root stages and runs the installed full source hook.
+
+
+The final source-hook retry reached the existing development-tool120-second
+native-build timeout before CTest/lint. No compiler diagnostic was reported;
+its log is context/remaining-owner-source-gate-build-timeout.log. Source/index
+remained unchanged during the run. Inspecting scripts/rigor identifies the
+existing generic command timeout; the native build remains incremental. Retry
+the same installed source hook after preserving this result. No completed test
+suite is repeated and no production source or test oracle changes follow this
+tooling interruption.
+
+
+Finite tooling correction before source delivery: a second healthy incremental
+build was killed by the same120-second generic utility timeout before CTest.
+Study of scripts/rigor shows full CTest and clang-tidy already use timeout=None,
+while build(profile) mistakenly applies the utility default to the whole Ninja
+build. Plan: pass timeout=None only for cmake --build, keeping tool/configure
+limits, six compiler workers, CTest case watchdogs, error exits and process-group
+interrupt handling unchanged. The two actual interrupted-build logs are the red
+case. Syntax/source inspection plus the same installed hook's actual native
+build/test/lint are the direct recheck; no new tooling/profile campaign.
+
+
+The gate after native-build cutoff correction completes the whole Debug build
+and passes130/131 tests in200.32s. Only storage_raw fails: its historical actual
+Terminal cancellation fixture waits for blocked Root after Ctrl-C, while the
+new paid actual join/rearm/Root restoration succeeds and reaches canceled idle.
+Studied the fixture/source and recorded the finite oracle correction plan in the
+existing physical owner review. Require actual cancellation, one perform, actual
+joined restoration, lawful Root and one idle native acquisition. The independent
+forced joined-admission refusal/debt case remains intact. No production repair
+or relaxed native deadline follows this stale oracle.
+
+
+Finite storage oracle recheck passes the existing completion selection with
+real normal/Ctrl-C/failed-launch Terminal handoffs, retained cold cleanup,
+forced joined-admission refusal and restoration. Actual cancellation remains
+required; Main performs exactly one idle native acquisition after restored
+joined ownership. All original settlement, close, issuer and raw linkage checks
+remain. Matching strict target build, storage fixture clang-tidy, formatter and
+diff checks pass (context/storage-terminal-rearm-oracle-{build,native,tidy}.log).
+No production source changes. The mandatory full source hook follows.
+
+
+The following integrated Debug run passes129/131 in201.05s, including corrected
+storage and all original seven failed owner cases. Existing session_recovery
+can observe the shell's done file after open/truncate but before printf; its
+exists-then-read oracle falsely reports effect loss. The exact paused-shell
+publication red and same-deadline exact-byte wait correction are recorded in
+papers/2026-10-14-session-recovery-publication-race.md; no recovery product defect
+is claimed. Main's SIGABRT report main_input_native_test-2026-10-14-030509.ips
+shows main_branch_refusal's fixture send observer, not prefix/IRQ teardown:
+RawNativePublisher.finish(noexcept) calls interposed send, whose throwing live
+channel unwrap races recorder acknowledgment/reuse. The prior bad_alloc case
+had completed. The existing owner is studying and correcting that fixture
+observer under the unchanged exact refusal/byte/closure assertions. Full owned
+lint is still pending the successful test gate; no qualification started.
+
+
+Recovery finite disposition: the discarded gate fixture does not establish
+which final marker/effect operand failed. A context-only actual shell stopped
+after opening done had visible empty done and exactly one EFFECT; resumed shell
+produced exact DONE without replay, demonstrating the old existence oracle's
+publication gap. Existing fixture now waits for exact EFFECT/DONE bytes with
+unchanged5s/5ms. Final exact bytes, pre-release absent marker, UNKNOWN/identity/
+no-dispatch checks remain. Recovery production/native control/PID adoption and
+shell program are unchanged. Matching target, fixture clang-tidy, formatter and
+diff checks pass; existing session_recovery passes3.80s. Owner idle before the
+next installed source gate.
+
+
+Main final disposition: actual crash stack belongs to the next branch-refusal
+fixture, after the512-byte prefix/allocation case completed. The send observer
+now forwards the original native notice exactly once, preserves native result/
+errno, retries only demonstrated monotonic-ACK stale-start, and selects the exact
+same lane/CONTROL/end position from preserved disk bytes if ACK retired the live
+prefix. Observer exceptions are captured and fail at the fixture boundary after
+fixture grant cleanup. Prefix512/closed/no-dispatch and40-byte remainder versus
+41-byte branch grant assertions are unchanged. Actual owned lint also rejects
+run_session's same-typed next/fallback positional output pair; the private named
+SessionSuccessorOutputs aggregate borrows those references at all three callers,
+with no vector copies, public API, layout or handoff behavior change. Matching
+app/fixture build, both changed-TU analyses, formatter and diff checks pass;
+main_input_native passes2.83s. Existing Main owner plan records both finite
+corrections. All owners are idle before the final required hook retry.
+
+
+Installed gate now passes all131 Debug tests210.23s, then completes analysis of
+all194 selected owned C++ translation units. Seven diagnostics remain in three
+TUs: RawSuccessorHandoff.execute optional bank access after prepare_exec; four
+Decision/Git fixture repeated-index optional snapshot accesses; Git's two helper
+signatures accept same-typed directory/repository positional references. Lua is
+not reached after native-analysis failure. Study: prepare_exec consumes the same
+bank and never resets/replaces it; actual receiver/PID checks precede native exec
+and publication. Plan: borrow the optional's token once through a checked local
+pointer, preserving those checks, exact credit, errno and retirement. For Git
+helpers, replace the positional paths with one private aggregate of named borrowed
+references and designated callers; no path copies or assertion changes. Metadata
+owner fixes the same stable closed-snapshot invariant separately, keeping exact
+closed/byte/outcome checks. Three affected-TU static rechecks precede the required
+whole source-hook retry. No annotations or relaxed checks.
+
+
+Finite full-lint disposition: RawSuccessorHandoff.execute now borrows the same
+engaged token through a checked pointer across prepare_exec; raw_restart.cpp
+clang-tidy passes. GitFixturePaths borrows named directory/repository references
+at both helpers/designated callers. Metadata owner made the three Decision and
+two Git closed-run guards explicit through stable const aliases, keeping existing
+single-run/error/presence/closed and byte/outcome conditions. Decision's narrow
+recheck additionally exposed two expected-Error dereferences after an availability
+equality assertion: explicit absence rejection/const borrow preserves exact code/
+detail checks. Both fixture TUs now pass lint; formatter/diff checks pass. Existing
+owner review dispositions record the corrections. No new oracle/native campaign,
+annotation, relaxed assertion, payload/path copy or public API. All owners idle;
+required installed whole source hook is rerun before checkpoint/push/integration.
+
+
+Final source-gate run passes131/131 Debug236.43s and all194 selected owned C++
+translation units, all owned C++ formatting/header coverage, Lua formatting and
+syntax. LuaLS alone reports three undefined blackbird.emit uses in turn.lua;
+the native Runtime already registers authored(site,value), accepts exactly a
+positive integer site plus number/boolean/string, and returns no values.
+Study/plan: add that exact declaration to the tooling-only Lua API stub, leaving
+native implementation/program behavior unchanged, then run Lua formatting,
+syntax, whole-workspace LuaLS and its existing contract probe. Operator explicitly
+instructs NOT to rerun the whole gate for this declaration. Finish only the Lua
+leg and use the operator-authorized per-command hook override to checkpoint the
+already-tested source; record the split result truthfully. No additional source,
+qualification or review after those checks pass.
+
+
+Final Lua leg passes: added exact authored(site,value) declaration to tooling/
+lua/blackbird.lua; stub formatting/syntax, fresh whole-workspace LuaLS (zero
+diagnostics) and existing contract probe pass. The only code change after the
+successful131/131 Debug/all194-C++ checks is this tooling-only Lua declaration.
+Operator explicitly says not to rerun the whole gate for it. Checkpoint uses the
+per-command hook override, then pushes work/nls2-remaining-owners before the
+authorized fast-forward master integration. Scope finishes here: no qualification,
+new review, performance run, eval definition or next implementation starts.
+Nls.2 stays in_progress for the documented broader census/workload boundaries;
+nls.9 and broader P0 nls.10 remain open.

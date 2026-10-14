@@ -2,16 +2,22 @@
 #include "blackbird/context.hpp"
 #include <set>
 namespace blackbird {
+struct RawAdapterContext;
 // Single native session owner. File adapters are trusted local operator inputs.
 class StationStore {
 public:
-  explicit StationStore(AuditLog &log);
-  bool control(const Value &command);
-  bool admit(const Value &event);
-  void pause(std::string_view reason);
-  void finish(const Value &event, bool returned);
-  std::string prompt(const Value &event) const;
-  Value view() const;
+  explicit StationStore(AuditLog &log, const RawAdapterContext *capture = nullptr);
+  bool control(const Value &command, const RawAdapterContext *capture = nullptr,
+               RawEventRef *actual_owner = nullptr);
+  bool admit(const Value &event, const RawAdapterContext *capture = nullptr,
+             RawEventRef *actual_owner = nullptr);
+  void pause(std::string_view reason, const RawAdapterContext *capture = nullptr);
+  void finish(const Value &event, bool returned,
+              const RawAdapterContext *capture = nullptr);
+  std::string prompt(const Value &event, const RawAdapterContext *capture = nullptr,
+                     RawEventRef *actual_source = nullptr) const;
+  Value view(const RawAdapterContext *capture = nullptr,
+             RawEventRef *actual_owner = nullptr) const;
   bool paused() const noexcept { return paused_; }
   bool stopped() const noexcept { return stopped_; }
 

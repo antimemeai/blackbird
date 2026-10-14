@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""Literal Main input/dispatch originals from real private launcher sessions."""
+from pathlib import Path
+import struct
+import os
+import pty
+import select
+import fcntl
+import termios
+import subprocess
+import sys
+import tempfile
+
+binary = str(Path(sys.argv[1]).resolve())
+
+
+def records(session, count=1):
+    runs = list((session / "raw").iterdir())
+    assert len(runs) == count
+    run = max(runs, key=lambda path: path.stat().st_mtime_ns)
+    assert (run / "closed").exists()
+    found = {}
+    for segment in sorted(run.glob("events.*")):
+        data = segment.read_bytes()
+        assert data[:8] == b"ARCOJ001"
+        offset = 112
+        while offset < len(data):
+            magic, version, kind, seq, first, length, crc = struct.unpack_from(
+                "<4sHHQQII", data, offset)
+            assert magic == b"ARJ1" and version == 1 and first <= seq
+            end = offset + 32 + length
+            assert end <= len(data)
+            if kind == 4:
+                payload = data[offset + 32:end]
+                lane = payload[:16]
+                partition, reserved, source = struct.unpack_from("<IIQ", payload, 16)
+                size, site, ordinal = struct.unpack_from("<IIQ", payload, 32)
+                assert reserved == 0 and size == len(payload) - 32
+                assert partition in (1, 2, 3) and ordinal > 0
+                key = lane + struct.pack("<Q", ordinal)
+                assert key not in found and site not in (8000, 8001)
+                found[key] = (site, payload[48:], partition)
+            offset = end
+        assert offset == len(data)
+    return found
+
+
+def selected(found, site):
+    return [(key, body) for key, (actual, body, partition) in found.items()
+            if actual == site]
+
+
+def input_oracle(found, expected, kinds, tags, failed):
+    inputs = selected(found, 4200)
+    assert len(inputs) == len(expected), ("actual Main inputs", len(inputs), expected)
+    bodies, reached, errors = {}, {}, {}
+    for key, body in selected(found, 4202):
+        parent, size = body[:24], struct.unpack_from("<Q", body, 24)[0]
+        assert parent in found and found[parent][0] == 4200
+        assert len(body) == 32 + size and parent not in bodies
+        bodies[parent] = body[32:]
+    dispatches = selected(found, 4203)
+    assert len(dispatches) == len(expected)
+    for key, body in dispatches:
+        assert len(body) == 24 and body in bodies
+        selection = [b for _, b in selected(found, 4205) if b[:24] == key]
+        terminal = [b for _, b in selected(found, 4204) if b[:24] == key]
+        assert len(selection) == 1 and len(selection[0]) == 25
+        assert len(terminal) == 1
+        reached[body] = selection[0][24]
+        end = terminal[0]
+        errors[body] = end[24] == 3
+        assert end[25] == 0
+        if end[24] == 3:
+            assert len(end) == 36 and end[26] == 1
+            assert end[27] == 8 and struct.unpack_from("<q", end, 28)[0] == 0
+        else:
+            assert end[24:] == b"\x01\x00\x00"
+    actual = {}
+    for key, body in inputs:
+        assert len(body) == 33 and body[:24] in found
+        assert found[body[:24]][0] == 1000
+        size = struct.unpack_from("<Q", body, 25)[0]
+        assert size == len(bodies[key])
+        terminal = [b for _, b in selected(found, 4201) if b[:24] == key]
+        assert len(terminal) == 1 and terminal[0][24:] == b"\x01\x00\x00"
+        actual[bodies[key]] = (body[24], reached[key], errors[key])
+    assert len(actual) == len(expected)
+    assert actual == dict(zip(expected, zip(kinds, tags, failed))), actual
+
+
+def native_tui(args, marker):
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
+    child = subprocess.Popen(args, stdin=slave, stdout=slave, stderr=slave)
+    os.close(slave)
+    output = b""
+    try:
+        while marker not in output:
+            assert select.select([master], [], [], 15)[0], ("native UI fixture stalled", output[-2000:])
+            output += os.read(master, 65536)
+        os.write(master, b"/quit\r")
+        while child.poll() is None:
+            assert select.select([master], [], [], 15)[0], "native UI exit stalled"
+            try:
+                output += os.read(master, 65536)
+            except OSError:
+                break
+        assert child.wait(timeout=15) == 0, output[-2000:]
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+        os.close(master)
+
+
+with tempfile.TemporaryDirectory(prefix="bb-main-native-") as temporary:
+    once = Path(temporary) / "once"
+    result = subprocess.run([binary, "--session", str(once), "--once", "/help"],
+                            capture_output=True, check=True, timeout=15)
+    assert b"/help" in result.stdout
+    input_oracle(records(once), [b"/help"], [1], [1], [False])
+
+    plain = Path(temporary) / "plain"
+    source = (b"/name literal\n/effort bogus\n/name bad\x00\xff\n"
+              b"/paste\n/not-command\nmore\n/send\n/quit\n")
+    result = subprocess.run([binary, "--session", str(plain), "--plain"],
+                            input=source, capture_output=True, check=True, timeout=15)
+    assert b"Session name saved." in result.stdout and b"Unknown command:" in result.stdout
+    found = records(plain)
+    input_oracle(found, [b"/name literal", b"/effort bogus", b"/name bad\x00\xff",
+                         b"/not-command\nmore\n"], [2]*4, [22, 36, 22, 40],
+                 [False, True, True, False])
+    reads = []
+    for key, body in selected(found, 4231):
+        parent = body[:24]
+        assert parent in found and found[parent][0] == 4230
+        request = found[parent][1]
+        assert len(request) == 36 and struct.unpack_from("<iQ", request, 24) == (0, 512)
+        count = struct.unpack_from("<q", body, 24)[0]
+        if count > 0:
+            assert len(body) == 32 + count
+            reads.append((struct.unpack_from("<Q", parent, 16)[0], body[32:]))
+        else:
+            assert len(body) == (36 if count < 0 else 32)
+            if count < 0:
+                assert struct.unpack_from("<i", body, 32)[0] > 0
+    assert b"".join(body for ordinal, body in sorted(reads)) == source
+    controls = [body[24:] for key, body in selected(found, 4206)]
+    assert controls == [b"\x03" + struct.pack("<Q", 6) + b"/paste",
+                        b"\x04" + struct.pack("<Q", 5) + b"/send",
+                        b"\x01" + struct.pack("<Q", 5) + b"/quit"], controls
+    for key, body in selected(found, 4232):
+        assert len(body) == 34 and struct.unpack_from("<ihi", body, 24) == (0, 1, 40)
+        returned = [b for _, b in selected(found, 4233) if b[:24] == key]
+        assert len(returned) == 1
+        result = struct.unpack_from("<i", returned[0], 24)[0]
+        if result < 0:
+            assert len(returned[0]) == 34
+            assert struct.unpack_from("<i", returned[0], 28)[0] > 0
+        else:
+            assert result in (0, 1) and len(returned[0]) == 30
+            events = struct.unpack_from("<h", returned[0], 28)[0]
+            assert (result == 0 and events == 0) or (result == 1 and events & (1 | 16))
+
+    eof = Path(temporary) / "eof"
+    subprocess.run([binary, "--session", str(eof), "--plain"], input=b"/help",
+                   capture_output=True, check=True, timeout=15)
+    found = records(eof)
+    input_oracle(found, [b"/help"], [2], [1], [False])
+    assert any(struct.unpack_from("<q", body, 24)[0] == 0
+               for _, body in selected(found, 4231)), "actual native EOF absent"
+
+    tui = Path(temporary) / "tui"
+    native_tui([binary, "--session", str(tui)], b"Enter send")
+    found = records(tui)
+    initial = [(key, body) for key, body in selected(found, 4202)
+               if struct.unpack_from("<Q", body, 24)[0] == 0]
+    assert len(initial) == 1 and len(initial[0][1]) == 32
+
+    resumed = Path(temporary) / "resumed"
+    workflow = Path(temporary) / "resume.lua"
+    workflow.write_text("print('MAIN_RESUME_READY'); return 'done'\n")
+    prepared = subprocess.run([binary, "--session", str(resumed), "--workflow", str(workflow),
+                               "--once", "/restart literal resume note"],
+                              capture_output=True, timeout=15)
+    assert prepared.returncode == 75, prepared.stderr
+    native_tui([binary, "--session", str(resumed), "--resume-continue"], b"MAIN_RESUME_READY")
+    found = records(resumed, 2)
+    originals = [(key, body) for key, body in selected(found, 4202)
+                 if body[32:] == b"continue"]
+    assert len(originals) == 2
+    original_refs = {key for key, body in originals}
+    launches = [body for key, body in selected(found, 4018)]
+    assert any(body[:24] in original_refs and body[24:] == struct.pack("<QQ", 0, 8)
+               for body in launches), \
+        "actual initial resume original not linked to UI launch"
+    snapshot = {str(path): path.read_bytes() for path in (once / "raw").rglob("*")
+                if path.is_file()}
+    subprocess.run([binary, "--session", str(once), "--audit-last"],
+                   capture_output=True, check=True, timeout=15)
+    assert snapshot == {str(path): path.read_bytes() for path in (once / "raw").rglob("*")
+                        if path.is_file()}, "read-only inspection emitted Main metrics"
+print("Main native input, literal dispatch outcomes, paste controls and EOF passed")

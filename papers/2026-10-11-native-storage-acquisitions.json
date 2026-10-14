@@ -11,5 +11,12 @@
     "sha256": "480cfed4e987be874bd71fb6933c254adf9fb1f36de8496dee8f351b18da13b1",
     "bytes": 147011,
     "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea"
+  },
+  {
+    "file": "xnu-fcntl.h",
+    "url": "https://raw.githubusercontent.com/apple-oss-distributions/xnu/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/fcntl.h",
+    "sha256": "0f93c8918a70ffafe20bfe9c72e671fde67438cbee9f9de8c2f87b5c704c9a9e",
+    "bytes": 32224,
+    "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea"
   }
 ]

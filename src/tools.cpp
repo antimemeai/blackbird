@@ -1,10 +1,16 @@
 #include "blackbird/tools.hpp"
+#include "blackbird/raw_file.hpp"
 #include "native_process.hpp"
 #include <charconv>
 #include <fstream>
 #include <sys/stat.h>
 
 namespace blackbird {
+std::string read_file_prefix(const std::filesystem::path &path, std::size_t count,
+                             const RawAdapterContext *context,
+                             RawEventRef *actual_owner) {
+  return raw_file_read_prefix(path, count, context, actual_owner);
+}
 std::string read_file(const std::filesystem::path &path, std::size_t limit) {
   std::ifstream file{path, std::ios::binary};
   if (!file)
@@ -68,8 +74,24 @@ void write_file(const std::filesystem::path &requested, std::string_view bytes) 
     throw;
   }
 }
-void LocalTools::capture(std::string label, std::string raw) {
-  if (observer_)
+std::string read_file(const std::filesystem::path &path, std::size_t limit,
+                      const RawAdapterContext *context, RawEventRef *actual_owner) {
+  if (!context || !context->parent || !raw_enabled())
+    return read_file(path, limit);
+  return raw_file_read(path, limit, context, actual_owner);
+}
+void write_file(const std::filesystem::path &path, std::string_view bytes,
+                const RawAdapterContext *context, const RawFileInput *input) {
+  if (!context || !context->parent || !raw_enabled()) {
+    write_file(path, bytes);
+    return;
+  }
+  raw_file_write(path, bytes, context, input);
+}
+void LocalTools::capture(std::string label, std::string raw, RawFileToolTrace *trace) {
+  if (trace)
+    trace->observer(static_cast<bool>(observer_), [&] { observer_(label, raw); });
+  else if (observer_)
     observer_(label, raw);
   captured_.push_back({std::move(label), std::move(raw)});
 }
@@ -102,7 +124,7 @@ std::size_t range_index(const Value &args, std::string_view key, std::size_t fal
 }
 // Normalize the single advertised selector into the existing slice machinery.
 // Historical Lua programs may still use one legacy range family.
-Value file_range(const Value &args) {
+Value file_range(const Value &args, RawFileToolTrace *trace = nullptr) {
   const auto *range = args.find("range");
   if (!range)
     return args;
@@ -121,6 +143,8 @@ Value file_range(const Value &args) {
   const bool lines = mode->string() == "lines";
   const auto start = range_index(*range, "start", lines ? 1 : 0);
   const auto end = range_index(*range, "end", SIZE_MAX);
+  if (trace)
+    trace->range(lines ? 2 : 1, start, end);
   if ((lines && start == 0) || end < start)
     throw Error{ErrorCode::invalid_range};
   Value::Object normalized;
@@ -133,7 +157,8 @@ Value file_range(const Value &args) {
                             Value{Number{lines ? "1" : "0"}});
   return Value::object(std::move(normalized));
 }
-std::string file_presentation(const std::string &raw, const Value &args) {
+std::string file_presentation(const std::string &raw, const Value &args,
+                              RawFileToolTrace *trace = nullptr) {
   const bool bytes = args.find("byte_start") || args.find("byte_end");
   const bool lines = args.find("line_start") || args.find("line_end");
   if (bytes && lines)
@@ -142,6 +167,8 @@ std::string file_presentation(const std::string &raw, const Value &args) {
     const auto start = range_index(args, "byte_start", 0);
     // An omitted end means EOF even when start is beyond it.
     const auto end = range_index(args, "byte_end", std::max(start, raw.size()));
+    if (trace)
+      trace->range(1, start, end);
     if (end < start)
       throw Error{ErrorCode::invalid_range};
     const auto first = std::min(start, raw.size());
@@ -150,6 +177,8 @@ std::string file_presentation(const std::string &raw, const Value &args) {
   if (lines) {
     const auto start = range_index(args, "line_start", 1);
     const auto end = range_index(args, "line_end", SIZE_MAX);
+    if (trace)
+      trace->range(2, start, end);
     if (start == 0 || end < start)
       throw Error{ErrorCode::invalid_range};
     std::size_t first = raw.size(), last = raw.size(), line = 1, pos = 0;
@@ -179,40 +208,82 @@ Value process_output_presentation(const std::string &raw, const Value &args) {
 Value LocalTools::run(std::string_view name, const Value &args,
                       const RawAdapterContext *raw_context,
                       RawControlToken *native_return) {
+  if (name == "read_file" || name == "write_file" || name == "edit_file") {
+    const auto method = name == "read_file"    ? RawFileMethod::read
+                        : name == "write_file" ? RawFileMethod::write
+                                               : RawFileMethod::edit;
+    RawFileToolTrace trace{raw_context, method};
+    return trace.run([&] {
+      captured_.clear();
+      if (name == "read_file") {
+        const auto range = file_range(args, &trace);
+        const auto &path = string_field(args, "path");
+        trace.argument(0, path);
+        RawEventRef read_owner{};
+        auto raw = read_file(path, 16 * 1024 * 1024, trace.context(), &read_owner);
+        trace.selection(1, read_owner, raw.size());
+        capture("file.read", raw, &trace);
+        const auto presented = file_presentation(raw, range, &trace);
+        auto shown = display_bytes(presented);
+        auto result = Value::object({{"content", std::move(shown)}});
+        trace.result(presented.size());
+        return result;
+      }
+      const auto &path = string_field(args, "path");
+      trace.argument(0, path);
+      std::string next;
+      RawFileInput input{};
+      RawEventRef read_owner{};
+      if (name == "edit_file") {
+        const auto &old = string_field(args, "old");
+        trace.argument(1, old);
+        const auto &replacement = string_field(args, "new");
+        trace.argument(2, replacement);
+        if (old.empty())
+          throw Error{ErrorCode::invalid_range};
+        next = read_file(path, 16 * 1024 * 1024, trace.context(), &read_owner);
+        trace.selection(2, read_owner, next.size());
+        capture("file.before", next, &trace);
+        const auto pos = next.find(old);
+        trace.selection(3, read_owner, next.size(), pos);
+        if (pos == std::string::npos)
+          throw Error{ErrorCode::conflict};
+        const auto duplicate = next.find(old, pos + 1);
+        if (duplicate != std::string::npos) {
+          trace.selection(4, read_owner, next.size(), duplicate);
+          throw Error{ErrorCode::conflict};
+        }
+        const auto base = next.size() - old.size();
+        if (replacement.size() > SIZE_MAX - base)
+          throw Error{ErrorCode::overflow};
+        auto proposal = trace.prepare_proposal(base + replacement.size());
+        next.replace(pos, old.size(), replacement);
+        input = trace.proposed(next, proposal);
+        trace.selection(5, input.body, input.length);
+      } else {
+        const auto &content = string_field(args, "content");
+        trace.argument(3, content);
+        auto proposal = trace.prepare_proposal(content.size());
+        next = content;
+        input = trace.proposed(next, proposal);
+        trace.selection(5, input.body, input.length);
+        std::error_code error;
+        if (raw_file_exists(path, error, trace.context())) {
+          auto before = read_file(path, 16 * 1024 * 1024, trace.context(), &read_owner);
+          trace.selection(2, read_owner, before.size());
+          capture("file.before", before, &trace);
+        }
+        if (error)
+          throw Error{ErrorCode::io, error.value()};
+      }
+      capture("file.proposed", next, &trace);
+      write_file(path, next, trace.context(), &input);
+      auto result = Value::object({{"written", Value{true}}, {"path", Value{path}}});
+      trace.result(next.size());
+      return result;
+    });
+  }
   captured_.clear();
-  if (name == "read_file") {
-    const auto range = file_range(args);
-    auto raw = read_file(string_field(args, "path"));
-    capture("file.read", raw);
-    auto shown = display_bytes(file_presentation(raw, range));
-    return Value::object({{"content", std::move(shown)}});
-  }
-  if (name == "write_file" || name == "edit_file") {
-    const auto &path = string_field(args, "path");
-    std::string next;
-    if (name == "edit_file") {
-      const auto &old = string_field(args, "old");
-      const auto &replacement = string_field(args, "new");
-      if (old.empty())
-        throw Error{ErrorCode::invalid_range};
-      next = read_file(path);
-      capture("file.before", next);
-      const auto pos = next.find(old);
-      if (pos == std::string::npos || next.find(old, pos + 1) != std::string::npos)
-        throw Error{ErrorCode::conflict};
-      next.replace(pos, old.size(), replacement);
-    } else {
-      next = string_field(args, "content");
-      std::error_code error;
-      if (std::filesystem::exists(path, error))
-        capture("file.before", read_file(path));
-      if (error)
-        throw Error{ErrorCode::io, error.value()};
-    }
-    capture("file.proposed", next);
-    write_file(path, next);
-    return Value::object({{"written", Value{true}}, {"path", Value{path}}});
-  }
   if (name == "exec") {
     const auto budget = range_index(args, "output_max_bytes", SIZE_MAX);
     int seconds = 120;

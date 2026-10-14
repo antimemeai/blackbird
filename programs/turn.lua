@@ -1,5 +1,6 @@
 -- Effective source is retained each turn. Edit this program; next turn reloads it.
 for step = 1, 64 do
+  blackbird.emit(3880, step)
   local response = blackbird.request()
   local calls = 0
   for _, item in ipairs(response.output) do
@@ -17,7 +18,10 @@ for step = 1, 64 do
       blackbird.present(item)
     end
   end
-  if blackbird.restarting() or calls == 0 then
+  blackbird.emit(3881, calls)
+  local restarting = blackbird.restarting()
+  blackbird.emit(3882, restarting)
+  if restarting or calls == 0 then
     return
   end
 end

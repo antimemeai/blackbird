@@ -236,6 +236,9 @@ RawCommandWake::RawCommandWake(Mode mode) : mode_(mode) {
     }
   state_.store(State::armed, std::memory_order_release);
 }
+RawEventRef RawCommandWake::reference() const noexcept {
+  return wake_ref(incarnation_lane_, incarnation_ordinal_);
+}
 RawCommandWake::~RawCommandWake() {
   const ErrnoGuard guard;
   // Every containing owner joins before this destructor; shutdown failure with
@@ -336,11 +339,19 @@ void RawCommandWake::notify(RawControlToken *credit,
   }
   state_.store(State::notified, std::memory_order_release);
 }
-Result<void> RawCommandWake::clear() noexcept {
+Result<void> RawCommandWake::clear(RawControlToken *preheld) noexcept {
+  if (preheld && (mode_ != Mode::reusable || raw_current_thread() != owner_))
+    return Result<void>::failure({ErrorCode::wrong_incarnation});
+  return clear_paid(preheld, preheld);
+}
+Result<void> RawCommandWake::clear_paid(RawControlToken *lifecycle_preheld,
+                                        RawControlToken *owner_preheld) noexcept {
   const ErrnoGuard guard;
   std::optional<RawControlToken> lifecycle;
   if (raw_enabled()) {
-    auto admitted = raw_try_claim_control(raw_wake_lifecycle_credit);
+    auto admitted = lifecycle_preheld
+                        ? lifecycle_preheld->split(raw_wake_lifecycle_credit)
+                        : raw_try_claim_control(raw_wake_lifecycle_credit);
     if (!admitted.has_value())
       return Result<void>::failure(admitted.error());
     lifecycle.emplace(std::move(admitted).value());
@@ -375,8 +386,10 @@ Result<void> RawCommandWake::clear() noexcept {
       const bool replace = notify_credit_ && notify_credit_->remaining() == 0;
       std::optional<RawControlToken> bank;
       if (raw_enabled()) {
-        auto admitted = raw_try_claim_control(raw_wake_rearm_credit +
-                                              (replace ? raw_wake_notify_credit : 0));
+        const auto amount =
+            raw_wake_rearm_credit + (replace ? raw_wake_notify_credit : 0);
+        auto admitted = owner_preheld ? owner_preheld->split(amount)
+                                      : raw_try_claim_control(amount);
         if (!admitted.has_value())
           throw admitted.error();
         bank.emplace(std::move(admitted).value());
@@ -459,9 +472,11 @@ auto wake_native_action(const struct sigaction &action) noexcept {
                     wake_native_mask(action.sa_mask)};
 #endif
 }
-WakeReturn wake_action(int signal, const struct sigaction &action,
-                       struct sigaction &previous, RawEventRef incarnation,
-                       RawControlToken *credit) noexcept {
+} // namespace
+RawCommandSignalResult raw_command_action(int signal, const struct sigaction &action,
+                                          struct sigaction &previous,
+                                          RawEventRef incarnation,
+                                          RawControlToken *credit) noexcept {
   const auto requested = wake_native_action(action);
   std::array<ByteView, requested.size() + 1> request_fields{};
   request_fields[0] = raw_native_field(signal);
@@ -482,8 +497,8 @@ WakeReturn wake_action(int signal, const struct sigaction &action,
       2063, request, std::span{returned}.first(acquired ? returned.size() : 3), credit);
   return {result, error};
 }
-int wake_mask(int how, const sigset_t &requested, sigset_t &previous,
-              RawEventRef incarnation, RawControlToken *credit) noexcept {
+int raw_command_mask(int how, const sigset_t &requested, sigset_t &previous,
+                     RawEventRef incarnation, RawControlToken *credit) noexcept {
   const auto request = raw_command_linked(
       2064, incarnation, std::array{raw_native_field(how), wake_native_mask(requested)},
       credit);
@@ -497,28 +512,38 @@ int wake_mask(int how, const sigset_t &requested, sigset_t &previous,
       2065, request, std::span{returned}.first(acquired ? returned.size() : 3), credit);
   return result;
 }
-} // namespace
 RawCommandInterrupt::RawCommandInterrupt(std::atomic_bool &interrupted)
     : owner_(raw_current_thread()), interrupted_(interrupted) {
-  credit_ = raw_command_claim(2 * action_credit + 2 * mask_credit);
-  wake_ = std::make_unique<RawCommandWake>(RawCommandWake::Mode::signal);
-  signal_wake_ = wake_.get();
-  RawCommandInterrupt *expected = nullptr;
-  if (!interrupt_owner.compare_exchange_strong(expected, this,
-                                               std::memory_order_acq_rel))
-    throw Error{ErrorCode::busy};
-  wake_->publish();
-  struct sigaction action{};
-  action.sa_handler = &RawCommandInterrupt::handler;
-  sigemptyset(&action.sa_mask);
-  const auto incarnation =
-      wake_ref(wake_->incarnation_lane_, wake_->incarnation_ordinal_);
-  const auto installed = wake_action(SIGINT, action, previous_, incarnation,
-                                     credit_ ? &*credit_ : nullptr);
-  if (installed.result < 0) {
-    interrupt_owner.store(nullptr, std::memory_order_release);
-    wake_->retire();
-    throw Error{ErrorCode::io, installed.error};
+  try {
+    credit_ = raw_command_claim(2 * action_credit + 2 * mask_credit);
+    reset_lifecycle_credit_ = raw_command_claim(raw_wake_lifecycle_credit);
+    wake_ = std::make_unique<RawCommandWake>(RawCommandWake::Mode::signal);
+    {
+      RawThreadBinding wake_owner{wake_->owner_};
+      reset_wake_credit_ =
+          raw_command_claim(raw_wake_rearm_credit + raw_wake_notify_credit);
+    }
+    signal_wake_ = wake_.get();
+    RawCommandInterrupt *expected = nullptr;
+    if (!interrupt_owner.compare_exchange_strong(expected, this,
+                                                 std::memory_order_acq_rel))
+      throw Error{ErrorCode::busy};
+    wake_->publish();
+    struct sigaction action{};
+    action.sa_handler = &RawCommandInterrupt::handler;
+    sigemptyset(&action.sa_mask);
+    const auto incarnation =
+        wake_ref(wake_->incarnation_lane_, wake_->incarnation_ordinal_);
+    const auto installed = raw_command_action(SIGINT, action, previous_, incarnation,
+                                              credit_ ? &*credit_ : nullptr);
+    if (installed.result < 0) {
+      interrupt_owner.store(nullptr, std::memory_order_release);
+      wake_->retire();
+      throw Error{ErrorCode::io, installed.error};
+    }
+  } catch (...) {
+    release_reset();
+    throw;
   }
 }
 RawCommandInterrupt::~RawCommandInterrupt() {
@@ -532,19 +557,20 @@ RawCommandInterrupt::~RawCommandInterrupt() {
   sigset_t blocked{}, previous{}, discarded{};
   sigemptyset(&blocked);
   sigaddset(&blocked, SIGINT);
-  if (wake_mask(SIG_BLOCK, blocked, previous, incarnation,
-                credit_ ? &*credit_ : nullptr) != 0)
+  if (raw_command_mask(SIG_BLOCK, blocked, previous, incarnation,
+                       credit_ ? &*credit_ : nullptr) != 0)
     ::_exit(70);
   interrupt_owner.store(nullptr, std::memory_order_release);
   struct sigaction returned{};
-  if (wake_action(SIGINT, previous_, returned, incarnation,
-                  credit_ ? &*credit_ : nullptr)
+  if (raw_command_action(SIGINT, previous_, returned, incarnation,
+                         credit_ ? &*credit_ : nullptr)
           .result < 0)
     ::_exit(70);
   wake_->retire();
+  release_reset();
   wake_.reset();
-  if (wake_mask(SIG_SETMASK, previous, discarded, incarnation,
-                credit_ ? &*credit_ : nullptr) != 0)
+  if (raw_command_mask(SIG_SETMASK, previous, discarded, incarnation,
+                       credit_ ? &*credit_ : nullptr) != 0)
     ::_exit(70);
 }
 void RawCommandInterrupt::handler(int) noexcept {
@@ -556,9 +582,47 @@ void RawCommandInterrupt::handler(int) noexcept {
   }
   errno = saved;
 }
+void RawCommandInterrupt::release_reset() noexcept {
+  RawThreadBinding caller{owner_};
+  reset_lifecycle_credit_.reset();
+  if (wake_) {
+    RawThreadBinding wake_owner{wake_->owner_};
+    reset_wake_credit_.reset();
+  }
+}
+Result<void> RawCommandInterrupt::prepare_reset() noexcept {
+  RawThreadBinding caller{owner_};
+  if (!raw_enabled())
+    return Result<void>::success();
+  if (!reset_lifecycle_credit_) {
+    auto acquired = raw_try_claim_control(raw_wake_lifecycle_credit);
+    if (!acquired.has_value())
+      return Result<void>::failure(acquired.error());
+    reset_lifecycle_credit_.emplace(std::move(acquired).value());
+  }
+  RawThreadBinding wake_owner{wake_->owner_};
+  if (!reset_wake_credit_) {
+    auto acquired =
+        raw_try_claim_control(raw_wake_rearm_credit + raw_wake_notify_credit);
+    if (!acquired.has_value())
+      return Result<void>::failure(acquired.error());
+    reset_wake_credit_.emplace(std::move(acquired).value());
+  }
+  return Result<void>::success();
+}
 Result<void> RawCommandInterrupt::reset() noexcept {
+  const ErrnoGuard guard;
+  RawThreadBinding caller{owner_};
+  auto ready = prepare_reset();
+  if (!ready.has_value())
+    return ready;
   const bool previous = interrupted_.exchange(false, std::memory_order_relaxed);
-  auto result = wake_->clear();
+  auto result =
+      wake_->clear_paid(reset_lifecycle_credit_ ? &*reset_lifecycle_credit_ : nullptr,
+                        reset_wake_credit_ ? &*reset_wake_credit_ : nullptr);
+  release_reset();
+  if (result.has_value())
+    result = prepare_reset(); // Next admission is only after actual native rearm.
   if (!result.has_value() && (previous || result.error().code == ErrorCode::busy))
     interrupted_.store(true, std::memory_order_relaxed);
   if (interrupted_.load(std::memory_order_relaxed))

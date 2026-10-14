@@ -629,6 +629,14 @@ RetainedState::prepare_raw_stop(JournalCapacity credit, RawStorageHandoff *hando
   }
 }
 
+void RetainedState::block_raw_owner() noexcept {
+  raw_owner_blocked_ = true;
+  raw_origin_.input = RawRetainedOrigin::Input::no_new;
+  raw_origin_.loan = nullptr;
+  journal_->raw_origin_ = raw_origin_;
+  if (archive_)
+    archive_->raw_origin_ = raw_origin_;
+}
 Result<void> RetainedState::restore_raw_owner() {
   if (!raw_storage_owner_.enabled())
     return Result<void>::success();
@@ -637,12 +645,7 @@ Result<void> RetainedState::restore_raw_owner() {
   if (settlement_credit_) {
     auto next = prepare_raw_stop(*settlement_credit_);
     if (!next.has_value()) {
-      raw_owner_blocked_ = true;
-      raw_origin_.input = RawRetainedOrigin::Input::no_new;
-      raw_origin_.loan = nullptr;
-      journal_->raw_origin_ = raw_origin_;
-      if (archive_)
-        archive_->raw_origin_ = raw_origin_;
+      block_raw_owner();
       return Result<void>::failure(next.error());
     }
     raw_stop_ = std::move(next).value();
@@ -741,7 +744,7 @@ void RawRetainedTransfer::rollback_launch() noexcept {
   if (storage_)
     storage_->finish();
 }
-Result<void> RawRetainedTransfer::joined() {
+Result<void> RawRetainedTransfer::joined(std::optional<Error> admission_refusal) {
   if (!launched_ || joined_ || raw_current_thread() != parent_ ||
       !root_.raw_storage_owner_.permits_current())
     return Result<void>::failure({ErrorCode::wrong_incarnation});
@@ -749,6 +752,12 @@ Result<void> RawRetainedTransfer::joined() {
   if (root_.raw_stop_)
     root_.raw_stop_->joined();
   root_.raw_joined_owner_ = child_;
+  if (admission_refusal) {
+    // Actual child custody ended, but native wake rearm did not admit another
+    // owner. Preserve this joined debt without acquiring a fresh Root bank.
+    root_.block_raw_owner();
+    return Result<void>::failure(*admission_refusal);
+  }
   return root_.restore_raw_owner();
 }
 std::string_view raw_retained_description() noexcept {

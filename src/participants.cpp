@@ -170,8 +170,10 @@ struct Participants::Impl {
   Retain retain;
   Save save;
   Publish publish;
-  Impl(Retain r, Save s, Publish p)
-      : retain(std::move(r)), save(std::move(s)), publish(std::move(p)) {}
+  PublishNative publish_native;
+  Impl(Retain r, Save s, Publish p, PublishNative native)
+      : retain(std::move(r)), save(std::move(s)), publish(std::move(p)),
+        publish_native(std::move(native)) {}
   struct OwnerCallback {
     bool &active;
     explicit OwnerCallback(bool &value) : active(value) { active = true; }
@@ -228,7 +230,8 @@ struct Participants::Impl {
   void notify(const Value &row, RawParticipantBank &bank, RawEventRef parent,
               bool guarded = false,
               PublicationOwner owner = PublicationOwner::worker) noexcept {
-    const bool present = static_cast<bool>(publish);
+    const bool present =
+        static_cast<bool>(publish_native) || static_cast<bool>(publish);
     const auto request = event(bank, 2130, parent, {f(present)});
     std::uint8_t branch = present ? 1 : 2;
     std::optional<Error> failure;
@@ -247,11 +250,17 @@ struct Participants::Impl {
                              {"operation", Value{"participant"}},
                              {"cancel_requested", field(row, "cancel_requested")}}));
         }
+        const auto deliver = [&] {
+          if (publish_native)
+            publish_native(*activity, request);
+          else
+            publish(*activity);
+        };
         if (owner == PublicationOwner::worker)
-          publish(*activity);
+          deliver();
         else {
           const OwnerCallback scope{owner_callback_active};
-          publish(*activity);
+          deliver();
         }
       } catch (...) {
         branch = 3;
@@ -812,9 +821,9 @@ struct Participants::Impl {
   }
 };
 Participants::Participants(const Value &saved, Retain retain, Save save,
-                           Publish publish)
+                           Publish publish, PublishNative publish_native)
     : impl_(std::make_unique<Impl>(std::move(retain), std::move(save),
-                                   std::move(publish))) {
+                                   std::move(publish), std::move(publish_native))) {
   if (saved == Value{})
     return;
   RawParticipantTrace trace{RawParticipantAction::restore, 142};

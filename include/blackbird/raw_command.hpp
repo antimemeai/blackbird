@@ -54,15 +54,19 @@ public:
   RawCommandWake &operator=(const RawCommandWake &) = delete;
   int read_fd() const noexcept { return endpoints_[0]; }
   int write_fd() const noexcept { return endpoints_[1]; }
+  // Ordinary exclusive owner only; the handler uses its prepaid POD view.
+  RawEventRef reference() const noexcept;
   void notify(RawControlToken *credit = nullptr,
               std::atomic_bool *sticky = nullptr) noexcept;
-  Result<void> clear() noexcept;
+  Result<void> clear(RawControlToken *preheld = nullptr) noexcept;
   // Lifecycle policy, set before dispatch/publication and retired after joins.
   void publish() noexcept { borrowed_.store(true, std::memory_order_release); }
   void retire() noexcept { borrowed_.store(false, std::memory_order_release); }
 
 private:
   friend class RawCommandInterrupt;
+  Result<void> clear_paid(RawControlToken *lifecycle_preheld,
+                          RawControlToken *owner_preheld) noexcept;
   enum class State : std::uint8_t {
     armed,
     notifying,
@@ -109,7 +113,10 @@ public:
   static constexpr std::uint64_t mask_credit = 93 + 2 * signal_mask_bytes;
 
 private:
+  Result<void> prepare_reset() noexcept;
+  void release_reset() noexcept;
   static void handler(int) noexcept;
+  std::optional<RawControlToken> reset_lifecycle_credit_, reset_wake_credit_;
   RawThreadHandle owner_;
   std::optional<RawControlToken> credit_;
   std::unique_ptr<RawCommandWake> wake_;
@@ -117,5 +124,14 @@ private:
   std::atomic_bool &interrupted_;
   struct sigaction previous_{};
 };
+struct RawCommandSignalResult {
+  int result, error;
+};
+RawCommandSignalResult raw_command_action(int signal, const struct sigaction &action,
+                                          struct sigaction &previous,
+                                          RawEventRef incarnation,
+                                          RawControlToken *credit) noexcept;
+int raw_command_mask(int how, const sigset_t &requested, sigset_t &previous,
+                     RawEventRef incarnation, RawControlToken *credit) noexcept;
 std::string_view raw_command_description() noexcept;
 } // namespace blackbird

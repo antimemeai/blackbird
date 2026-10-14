@@ -1,6 +1,7 @@
 #pragma once
 #include "blackbird/chat_view.hpp"
 #include "blackbird/command_jobs.hpp"
+#include "blackbird/raw_ui.hpp"
 #include "blackbird/tasks.hpp"
 #include <atomic>
 #include <filesystem>
@@ -25,31 +26,38 @@ enum class InputAction {
 struct InputResult {
   InputAction action = InputAction::none;
   std::string text;
+  RawUiSource source{};
 };
 struct TerminalState {
   std::string draft;
   std::size_t cursor = 0;
   std::vector<std::string> history, queued;
+  RawUiSource draft_source{};
+  std::vector<RawUiSource> history_sources{}, queued_sources{};
 };
 struct EditorResult {
   bool accepted = false;
   std::string text, message;
 };
 // Synchronous operator-selected foreground editor; caller owns terminal handoff.
-EditorResult edit_terminal_draft(std::string_view draft);
+EditorResult edit_terminal_draft(std::string_view draft,
+                                 const RawAdapterContext *context = nullptr);
 // Shared command discovery; local-only commands are labelled in help.
 std::string terminal_help();
 std::string terminal_key_help();
 std::string terminal_command_hint(std::string_view draft);
-TerminalState load_terminal_state(const std::filesystem::path &path);
-void save_terminal_state(const std::filesystem::path &path, const TerminalState &state);
+TerminalState load_terminal_state(const std::filesystem::path &path,
+                                  bool capture = false);
+void save_terminal_state(const std::filesystem::path &path, const TerminalState &state,
+                         bool capture = false);
 struct ComposerChoice {
   std::string name, arguments, description, group;
   std::string label{};
 };
 class Composer {
 public:
-  InputResult feed(char byte);
+  InputResult feed(char byte, RawUiInput *raw = nullptr);
+  std::uint64_t capture_bound(std::size_t acquired_bytes) const;
   void restore(const TerminalState &state);
   TerminalState state() const;
   void draft(std::string text);
@@ -64,7 +72,10 @@ public:
   std::size_t cursor() const noexcept { return cursor_; }
 
 private:
+  InputResult feed_impl(char byte, RawUiInput *raw);
+  std::size_t history_capture_bound_ = 0, choice_capture_bound_ = 0;
   std::shared_ptr<const std::vector<ComposerChoice>> choices_;
+  mutable std::shared_ptr<const std::vector<ComposerChoice>> capture_catalog_;
   std::string choices_heading_;
   std::string text_, escape_;
   std::size_t cursor_ = 0, history_index_ = 0;
@@ -92,7 +103,14 @@ std::vector<ChatRow> terminal_powerword_lines(std::string_view text,
 std::vector<std::string> terminal_lines(std::string_view text, std::size_t columns);
 class TerminalUI {
 public:
-  explicit TerminalUI(std::string title) : title_(std::move(title)) {}
+  explicit TerminalUI(std::string title);
+  ~TerminalUI();
+  void raw_capture(bool enabled, RawUiSource initial = {}) noexcept {
+    raw_capture_ = enabled;
+    initial_source_ = initial;
+  }
+  void initial_source(RawUiSource source) noexcept { initial_source_ = source; }
+  void raw_parent(RawEventRef parent) noexcept { raw_parent_ = parent; }
   void text(std::string_view text);
   void notice(std::string_view text);
   void process_output(std::string_view text);
@@ -103,9 +121,9 @@ public:
   void operation_completed(std::string_view text, Ink outcome = Ink::muted);
   void failed();
   void title(std::string_view text);
-  void sessions(const Value &listing);
-  void tasks(const Value &publication);
-  void task_activity(const Value &event);
+  void sessions(const Value &listing, RawUiValueOrigin origin = {});
+  void tasks(const Value &publication, RawUiValueOrigin origin = {});
+  void task_activity(const Value &event, RawUiValueOrigin origin = {});
   void run(const std::function<void(std::string_view)> &perform,
            std::atomic_bool &cancelled,
            const std::function<bool()> &exit_requested = {}, std::string initial = {},
@@ -137,7 +155,13 @@ private:
     std::string text;
     Ink outcome = Ink::muted;
     Value data;
+    RawEventRef enqueue{}, latest{};
+    RawUiValueOrigin origin{};
   };
+  bool raw_capture_ = false;
+  RawUiSource initial_source_{};
+  RawEventRef raw_parent_{};
+  std::unique_ptr<class TerminalResize> resize_;
   std::mutex mutex_;
   int notification_ = -1;
   std::vector<Message> messages_;
@@ -149,6 +173,6 @@ private:
   std::set<std::string> task_folded_;
   std::size_t task_offset_ = 0;
   std::string task_anchor_;
-  void post(Kind kind, std::string_view text);
+  void post(Kind kind, std::string_view text, RawCapacityClaim *preheld_data = nullptr);
 };
 } // namespace blackbird

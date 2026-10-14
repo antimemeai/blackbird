@@ -4,10 +4,12 @@
 #include "blackbird/packet.hpp"
 #include "blackbird/process_lifetime.hpp"
 #include "blackbird/raw_command.hpp"
+#include "blackbird/raw_file.hpp"
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/retained_state.hpp"
 #include "blackbird/sprite.hpp"
 #include "blackbird/task_view.hpp"
+#include "blackbird/terminal_custody.hpp"
 #include "blackbird/tools.hpp"
 #include "blackbird/workflows.hpp"
 #include <algorithm>
@@ -19,6 +21,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <cwchar>
+#include <exception>
 #include <fcntl.h>
 #include <iostream>
 #include <limits>
@@ -30,19 +33,11 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <thread>
+#include <tuple>
 #include <unistd.h>
 extern char **environ;
 namespace blackbird {
 namespace {
-volatile sig_atomic_t resize_pipe = -1;
-void resize_signal(int) {
-  const int saved = errno;
-  if (resize_pipe >= 0) {
-    const char byte = 1;
-    (void)::write(resize_pipe, &byte, 1);
-  }
-  errno = saved;
-}
 using ChatCommand = ComposerChoice;
 const std::array builtin_commands{
     ChatCommand{"/help", "", "Command guide (immediate in TUI)", "Chat"},
@@ -141,21 +136,34 @@ const std::array builtin_commands{
                 "configure JSON | ready | list | show ID | select ID | cached",
                 "Explicit native Beads refresh/selection (lazy binding)", "Tools"}};
 
-std::shared_ptr<const std::vector<ChatCommand>> command_catalog() {
+std::shared_ptr<const std::vector<ChatCommand>>
+command_catalog(std::size_t *capture_bound = nullptr) {
   thread_local std::shared_ptr<const WorkflowRegistry> previous;
   thread_local std::shared_ptr<const std::vector<ChatCommand>> cached;
+  thread_local std::size_t bound = 0;
   const auto registry = displayed_workflows();
   if (!cached || previous != registry) {
-    auto next = std::make_shared<std::vector<ChatCommand>>(builtin_commands.begin(),
-                                                           builtin_commands.end());
+    auto next = std::make_shared<std::vector<ChatCommand>>();
+    std::size_t next_bound = 0;
+    auto append = [&](ChatCommand command) {
+      next_bound = std::max(next_bound,
+                            command.name.size() +
+                                static_cast<std::size_t>(!command.arguments.empty()));
+      next->push_back(std::move(command));
+    };
+    for (const auto &command : builtin_commands)
+      append(command);
     if (registry)
       for (const auto &d : registry->definitions().array())
         for (const auto &alias : field(d, "aliases").array())
-          next->push_back({"/" + registry->prefix() + alias.string(), "ARGS",
-                           field(d, "description").string(), "Workflows"});
+          append({"/" + registry->prefix() + alias.string(), "ARGS",
+                  field(d, "description").string(), "Workflows"});
     cached = std::move(next);
+    bound = next_bound;
     previous = registry;
   }
+  if (capture_bound)
+    *capture_bound = bound;
   return cached;
 }
 
@@ -293,170 +301,7 @@ std::size_t word_right(std::string_view text, std::size_t cursor) {
     cursor = next(text, cursor);
   return cursor;
 }
-// Control handoffs use a bounded writer too. CAN cancels an abandoned CSI.
-void terminal_control(std::string_view bytes) {
-  ChatOutput writer;
-  writer.attach(STDOUT_FILENO);
-  writer.start(bytes);
-  const auto deadline =
-      std::chrono::steady_clock::now() + std::chrono::milliseconds(150);
-  while (!writer.flush()) {
-    if (std::chrono::steady_clock::now() >= deadline)
-      throw std::runtime_error("Terminal control handoff timed out");
-    pollfd fd{STDOUT_FILENO, POLLOUT, 0};
-    (void)::poll(&fd, 1, 10);
-  }
-}
-class TerminalMode {
-public:
-  TerminalMode() {
-    if (tcgetattr(STDIN_FILENO, &before_) != 0)
-      throw std::runtime_error("Cannot read terminal mode");
-    try {
-      resume();
-    } catch (...) {
-      (void)tcsetattr(STDIN_FILENO, TCSANOW, &before_);
-      throw;
-    }
-  }
-  void resume() {
-    auto raw = before_;
-    raw.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO | IEXTEN | ISIG));
-    raw.c_iflag &= static_cast<tcflag_t>(~(IXON | ICRNL));
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 0;
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) != 0)
-      throw std::runtime_error("Cannot set terminal mode");
-    active_ = true;
-    terminal_control("\x18\x1b[?1049h\x1b[?2004h");
-  }
-  void suspend() {
-    if (!active_)
-      return;
-    terminal_control("\x18\x1b_Ga=d,d=I,i=72171,q=2;\x1b\\\x1b[?2026l\x1b[0m\x1b[?"
-                     "2004l\x1b[?1049l\x1b[?25h");
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &before_) != 0)
-      throw std::runtime_error("Cannot restore terminal for editor");
-    active_ = false;
-  }
-  ~TerminalMode() {
-    if (active_) {
-      try {
-        terminal_control("\x18\x1b_Ga=d,d=I,i=72171,q=2;\x1b\\\x1b[?2026l\x1b[0m\x1b[?"
-                         "2004l\x1b[?1049l\x1b[?25h");
-      } catch (...) {
-      }
-      (void)tcsetattr(STDIN_FILENO, TCSANOW, &before_);
-    }
-  }
-
-private:
-  termios before_{};
-  bool active_ = false;
-};
 } // namespace
-EditorResult edit_terminal_draft(std::string_view draft) {
-  constexpr std::size_t limit = 1024 * 1024;
-  if (draft.size() > limit)
-    return {false, {}, "Draft exceeds editor limit."};
-  struct Cleanup {
-    std::string path;
-    int fd = -1;
-    bool owned = false;
-    void close() {
-      if (fd >= 0) {
-        (void)::close(fd);
-        fd = -1;
-      }
-    }
-    ~Cleanup() {
-      close();
-      if (owned)
-        (void)::unlink(path.c_str());
-    }
-  } cleanup;
-  auto &path = cleanup.path;
-  auto &fd = cleanup.fd;
-  try {
-    path = (std::filesystem::temp_directory_path() / "arco-draft-XXXXXX").string();
-    {
-      const std::lock_guard lock{detail::process_spawn_mutex};
-      fd = ::mkstemp(path.data());
-      if (fd < 0)
-        throw std::runtime_error("Cannot create private editor draft");
-      cleanup.owned = true;
-      if (fd < 3) {
-        const auto replacement = ::fcntl(fd, F_DUPFD_CLOEXEC, 3);
-        if (replacement < 0)
-          throw std::runtime_error("Cannot normalize editor draft descriptor");
-        (void)::close(fd);
-        fd = replacement;
-      }
-      if (::fcntl(fd, F_SETFD, FD_CLOEXEC) < 0)
-        throw std::runtime_error("Cannot protect editor draft descriptor");
-    }
-    auto remaining = draft;
-    while (!remaining.empty()) {
-      const auto n = ::write(fd, remaining.data(), remaining.size());
-      if (n < 0 && errno == EINTR)
-        continue;
-      if (n <= 0)
-        throw std::runtime_error("Cannot write editor draft");
-      remaining.remove_prefix(static_cast<std::size_t>(n));
-    }
-    cleanup.close();
-    const char *editor = std::getenv("VISUAL");
-    if (!editor || !*editor)
-      editor = std::getenv("EDITOR");
-    if (!editor || !*editor)
-      editor = "vi";
-    std::string quoted = "'";
-    for (const char c : path)
-      quoted += c == '\'' ? "'\\''" : std::string(1, c);
-    quoted += '\'';
-    std::string command = "exec " + std::string{editor} + " " + quoted;
-    std::array<char *, 4> args{const_cast<char *>("sh"), const_cast<char *>("-c"),
-                               command.data(), nullptr};
-    pid_t child{};
-    const auto launched = [&] {
-      const std::lock_guard lock{detail::process_spawn_mutex};
-      return ::posix_spawn(&child, "/bin/sh", nullptr, nullptr, args.data(), environ);
-    }();
-    if (launched != 0)
-      return {false, {}, "Editor could not start; draft retained."};
-    int status{};
-    pid_t waited;
-    do {
-      waited = ::waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    if (waited < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
-      return {false, {}, "Editor cancelled or failed; draft retained."};
-    fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
-    struct stat info{};
-    if (fd < 0 || ::fstat(fd, &info) != 0 || !S_ISREG(info.st_mode))
-      return {false,
-              {},
-              "Editor draft unavailable or not a regular file; original retained."};
-    std::string edited;
-    std::array<char, 4096> bytes{};
-    while (true) {
-      const auto n = ::read(fd, bytes.data(), bytes.size());
-      if (n < 0 && errno == EINTR)
-        continue;
-      if (n < 0)
-        return {false, {}, "Cannot read editor draft; original retained."};
-      if (n == 0)
-        break;
-      const auto count = static_cast<std::size_t>(n);
-      if (count > limit - edited.size())
-        return {false, {}, "Editor draft exceeds 1 MiB; original retained."};
-      edited.append(bytes.data(), count);
-    }
-    return {true, std::move(edited), "Editor returned; Enter sends explicitly."};
-  } catch (const std::exception &e) {
-    return {false, {}, std::string{e.what()} + "; original draft retained."};
-  }
-}
 std::string terminal_key_help() {
   return "Keyboard\n"
          "  Enter        Send; while busy, queue for the next turn\n"
@@ -552,7 +397,7 @@ void Composer::insert(char byte) {
 }
 namespace {
 constexpr std::size_t ui_limit = 1024 * 1024;
-void validate_state(const TerminalState &state) {
+void validate_state(const TerminalState &state, std::size_t *history_bound = nullptr) {
   if (state.draft.size() > ui_limit || state.cursor > state.draft.size())
     throw Error{ErrorCode::capacity};
   for (const auto *list : {&state.history, &state.queued}) {
@@ -564,6 +409,8 @@ void validate_state(const TerminalState &state) {
         throw Error{ErrorCode::capacity};
       size += value.size();
     }
+    if (history_bound && list == &state.history)
+      *history_bound = size;
   }
 }
 std::string ui_hex(std::string_view value, bool decode = false) {
@@ -588,7 +435,7 @@ std::string ui_hex(std::string_view value, bool decode = false) {
   }
   return out;
 }
-void trim_history(std::vector<std::string> &values) {
+std::size_t trim_history(std::vector<std::string> &values) {
   std::size_t size = 0;
   for (const auto &value : values)
     size += value.size();
@@ -596,6 +443,7 @@ void trim_history(std::vector<std::string> &values) {
     size -= values.front().size();
     values.erase(values.begin());
   }
+  return size;
 }
 } // namespace
 std::size_t terminal_scroll_after_output(const TerminalScrollUpdate &update) {
@@ -623,49 +471,175 @@ void trim_terminal_transcript(std::string &text) {
     text.insert(0, notice);
   }
 }
-TerminalState load_terminal_state(const std::filesystem::path &path) {
-  if (!std::filesystem::exists(path))
-    return {};
-  const auto packet = unwrap(decode_packet_string(read_file(path, 7 * ui_limit)));
-  if (string_field(packet, "encoding") != "hex-v1")
-    throw Error{ErrorCode::corrupt};
-  TerminalState state;
-  state.draft = ui_hex(string_field(packet, "draft"), true);
-  const auto &cursor = field(packet, "cursor").number().text();
-  auto r = std::from_chars(cursor.data(), cursor.data() + cursor.size(), state.cursor);
-  if (r.ec != std::errc{} || r.ptr != cursor.data() + cursor.size())
-    throw Error{ErrorCode::corrupt};
-  for (const auto &[key, list] :
-       {std::pair{"history", &state.history}, std::pair{"queued", &state.queued}})
-    for (const auto &value : field(packet, key).array())
-      list->push_back(ui_hex(value.string(), true));
-  validate_state(state);
-  while (state.cursor > 0 && state.cursor < state.draft.size() &&
-         continuation(state.draft[state.cursor]))
-    --state.cursor;
-  return state;
+TerminalState load_terminal_state(const std::filesystem::path &path, bool capture) {
+  const auto &native_path = path.native();
+  const auto path_size = native_path.size();
+  const std::uint8_t operation = 1;
+  RawUiTrace trace{capture,
+                   {4020, 4023},
+                   std::array{detail::raw_native_field(operation),
+                              detail::raw_native_field(path_size),
+                              detail::raw_string_field(native_path)},
+                   raw_ui_error_bytes + raw_envelope_size + 24 + 1 +
+                       sizeof(std::size_t) + 85,
+                   true};
+  return trace.run([&] {
+    const auto exists_request = trace.event(4082, {});
+    std::error_code exists_error;
+    const bool exists = std::filesystem::exists(path, exists_error);
+    const int native_error = exists_error.value();
+    (void)raw_ui_link(4083, exists_request,
+                      std::array{detail::raw_native_field(exists),
+                                 detail::raw_native_field(native_error)},
+                      trace.credit());
+    if (exists_error)
+      throw std::filesystem::filesystem_error("terminal state status", path,
+                                              exists_error);
+    if (!exists) {
+      const std::uint8_t branch = 0;
+      const std::size_t cursor = 0;
+      (void)trace.event(4022, std::array{detail::raw_native_field(branch),
+                                         detail::raw_native_field(cursor)});
+      trace.close();
+      return TerminalState{};
+    }
+    auto source_credit = raw_ui_data(trace.enabled(), 7 * ui_limit + 48);
+    RawAdapterContext context;
+    if (trace.enabled())
+      context.parent = trace.reference();
+    const auto source =
+        read_file(path, 7 * ui_limit, trace.enabled() ? &context : nullptr);
+    if (source_credit) {
+      const auto ref = trace.reference();
+      const auto size = source.size();
+      Error failure{ErrorCode::audit_unavailable};
+      const auto emitted = raw_ui_emit(
+          4021,
+          std::array{ByteView{ref.lane}, detail::raw_native_field(ref.ordinal),
+                     detail::raw_native_field(size), detail::raw_string_field(source)},
+          RawPartition::data, &*source_credit, &failure);
+      if (!emitted.ordinal)
+        throw failure;
+      source_credit.reset();
+    }
+    const auto packet = unwrap(decode_packet_string(source));
+    if (string_field(packet, "encoding") != "hex-v1")
+      throw Error{ErrorCode::corrupt};
+    const auto fields =
+        raw_ui_add(1, raw_ui_add(field(packet, "history").array().size(),
+                                 field(packet, "queued").array().size()));
+    constexpr auto field_overhead = raw_envelope_size + raw_ui_ref_bytes +
+                                    sizeof(std::uint8_t) + 2 * sizeof(std::size_t);
+    auto decoded_credit = raw_ui_data(
+        trace.enabled(),
+        raw_ui_add(source.size() / 2, raw_ui_multiply(fields, field_overhead)));
+    auto decoded = [&](std::string_view encoded, std::uint8_t kind, std::size_t index) {
+      auto value = ui_hex(encoded, true);
+      const auto size = value.size();
+      const auto ref = trace.reference();
+      Error failure{ErrorCode::audit_unavailable};
+      const auto body = raw_ui_emit(
+          4052,
+          std::array{ByteView{ref.lane}, detail::raw_native_field(ref.ordinal),
+                     detail::raw_native_field(kind), detail::raw_native_field(index),
+                     detail::raw_native_field(size), detail::raw_string_field(value)},
+          RawPartition::data, decoded_credit ? &*decoded_credit : nullptr, &failure);
+      if (trace.enabled() && !body.ordinal)
+        throw failure;
+      return std::pair{std::move(value), RawUiSource{body, 0, size}};
+    };
+    TerminalState state;
+    auto draft = decoded(string_field(packet, "draft"), 1, 0);
+    state.draft = std::move(draft.first);
+    state.draft_source = draft.second;
+    const auto &cursor = field(packet, "cursor").number().text();
+    const auto r =
+        std::from_chars(cursor.data(), cursor.data() + cursor.size(), state.cursor);
+    if (r.ec != std::errc{} || r.ptr != cursor.data() + cursor.size())
+      throw Error{ErrorCode::corrupt};
+    for (const auto &[key, list, origins, kind] :
+         {std::tuple{"history", &state.history, &state.history_sources,
+                     std::uint8_t{2}},
+          std::tuple{"queued", &state.queued, &state.queued_sources,
+                     std::uint8_t{3}}}) {
+      for (const auto &value : field(packet, key).array()) {
+        auto item = decoded(value.string(), kind, list->size());
+        list->push_back(std::move(item.first));
+        origins->push_back(item.second);
+      }
+    }
+    validate_state(state);
+    while (state.cursor > 0 && state.cursor < state.draft.size() &&
+           continuation(state.draft[state.cursor]))
+      --state.cursor;
+    const std::uint8_t branch = 1;
+    (void)trace.event(4022, std::array{detail::raw_native_field(branch),
+                                       detail::raw_native_field(state.cursor)});
+    trace.close();
+    return state;
+  });
 }
-void save_terminal_state(const std::filesystem::path &path,
-                         const TerminalState &state) {
-  validate_state(state);
-  auto encode = [](const auto &values) {
-    Value::Array out;
-    for (const auto &v : values)
-      out.emplace_back(ui_hex(v));
-    return Value{std::move(out)};
-  };
-  write_file(path, unwrap(encode_packet_string(
-                       Value::object({{"encoding", Value{"hex-v1"}},
-                                      {"draft", Value{ui_hex(state.draft)}},
-                                      {"cursor", Value{Number{state.cursor}}},
-                                      {"history", encode(state.history)},
-                                      {"queued", encode(state.queued)}}))));
+void save_terminal_state(const std::filesystem::path &path, const TerminalState &state,
+                         bool capture) {
+  const auto &native_path = path.native();
+  const auto path_size = native_path.size();
+  const std::uint8_t operation = 2;
+  RawUiTrace trace{capture,
+                   {4020, 4023},
+                   std::array{detail::raw_native_field(operation),
+                              detail::raw_native_field(path_size),
+                              detail::raw_string_field(native_path)},
+                   raw_ui_error_bytes + raw_envelope_size + 24 + 1 +
+                       sizeof(std::size_t),
+                   true};
+  trace.run([&] {
+    auto source_credit = raw_ui_data(trace.enabled(), ValueLimits{}.bytes + 48);
+    validate_state(state);
+    auto encode = [](const auto &values) {
+      Value::Array out;
+      for (const auto &value : values)
+        out.emplace_back(ui_hex(value));
+      return Value{std::move(out)};
+    };
+    const auto source = unwrap(
+        encode_packet_string(Value::object({{"encoding", Value{"hex-v1"}},
+                                            {"draft", Value{ui_hex(state.draft)}},
+                                            {"cursor", Value{Number{state.cursor}}},
+                                            {"history", encode(state.history)},
+                                            {"queued", encode(state.queued)}})));
+    RawEventRef body{};
+    if (source_credit) {
+      const auto ref = trace.reference();
+      const auto size = source.size();
+      Error failure{ErrorCode::audit_unavailable};
+      body = raw_ui_emit(
+          4021,
+          std::array{ByteView{ref.lane}, detail::raw_native_field(ref.ordinal),
+                     detail::raw_native_field(size), detail::raw_string_field(source)},
+          RawPartition::data, &*source_credit, &failure);
+      if (!body.ordinal)
+        throw failure;
+      source_credit.reset();
+    }
+    RawAdapterContext context;
+    if (trace.enabled())
+      context.parent = trace.reference();
+    const RawFileInput original{body, source.size()};
+    write_file(path, source, trace.enabled() ? &context : nullptr,
+               trace.enabled() ? &original : nullptr);
+    const std::uint8_t branch = 2;
+    (void)trace.event(4022, std::array{detail::raw_native_field(branch),
+                                       detail::raw_native_field(state.cursor)});
+    trace.close();
+  });
 }
 void Composer::restore(const TerminalState &state) {
-  validate_state(state);
+  std::size_t history_bound = 0;
+  validate_state(state, &history_bound);
   text_ = state.draft;
   cursor_ = state.cursor;
   history_ = state.history;
+  history_capture_bound_ = history_bound;
   history_index_ = history_.size();
   draft_.clear();
   draft_cursor_ = 0;
@@ -678,7 +652,9 @@ void Composer::restore(const TerminalState &state) {
   palette_query_.clear();
   palette_selected_ = 0;
 }
-TerminalState Composer::state() const { return {text_, cursor_, history_, {}}; }
+TerminalState Composer::state() const {
+  return {text_, cursor_, history_, {}, {}, {}, {}};
+}
 void Composer::draft(std::string text) {
   slash_open_ = false;
   if (text.size() > ui_limit)
@@ -691,7 +667,11 @@ void Composer::draft(std::string text) {
   goal_column_.reset();
 }
 void Composer::choices(std::vector<ComposerChoice> entries, std::string heading) {
+  std::size_t bound = 0;
+  for (const auto &entry : entries)
+    bound = std::max(bound, entry.name.size() + 1);
   choices_ = std::make_shared<const std::vector<ComposerChoice>>(std::move(entries));
+  choice_capture_bound_ = bound;
   choices_heading_ = std::move(heading);
   palette_open_ = true;
   slash_open_ = false;
@@ -808,8 +788,80 @@ void Composer::kill(std::size_t begin, std::size_t end) {
   cursor_ = begin;
   goal_column_.reset();
 }
-InputResult Composer::feed(char byte) {
-  const auto catalog = choices_ && palette_open_ ? choices_ : command_catalog();
+std::uint64_t Composer::capture_bound(std::size_t acquired_bytes) const {
+  std::size_t catalog_bound = 0;
+  capture_catalog_ = command_catalog(&catalog_bound);
+  const auto source = std::max(
+      {text_.size(), history_capture_bound_, choice_capture_bound_, catalog_bound});
+  return raw_ui_add(raw_ui_multiply(acquired_bytes, raw_ui_add(source, acquired_bytes)),
+                    raw_ui_multiply(acquired_bytes,
+                                    raw_envelope_size + raw_ui_ref_bytes +
+                                        4 * sizeof(std::size_t) + sizeof(InputAction)));
+}
+InputResult Composer::feed(char byte, RawUiInput *raw) {
+  if (!raw || !raw->enabled || !raw_enabled())
+    return feed_impl(byte, nullptr);
+  if (!raw->data || !raw->control)
+    throw Error{ErrorCode::invalid_range};
+  RawUiBurst burst{raw->control};
+  const bool known = raw->keyboard.has_value();
+  std::array<ByteView, 5> request{};
+  std::size_t fields = 0;
+  request[fields++] = detail::raw_native_field(known);
+  if (raw->keyboard) {
+    request[fields++] = raw->keyboard->lane;
+    request[fields++] = detail::raw_native_field(raw->keyboard->ordinal);
+  }
+  request[fields++] = detail::raw_native_field(raw->index);
+  request[fields++] = detail::raw_native_field(byte);
+  RawUiTrace trace{
+      true, {4080, 4012}, std::span{request}.first(fields), raw_ui_feed_credit};
+  raw->feed = trace.reference();
+  return trace.run([&] {
+    if (raw->keyboard && !raw_ui_source_valid(*raw->keyboard))
+      throw Error{ErrorCode::invalid_identity};
+    auto result = feed_impl(byte, raw);
+    if (!result.source.record.ordinal) {
+      const auto action = result.action;
+      const auto length = result.text.size();
+      if (action == InputAction::choose_command || action == InputAction::submit) {
+        const auto ref =
+            raw_ui_emit(4010,
+                        std::array{ByteView{raw->feed.lane},
+                                   detail::raw_native_field(raw->feed.ordinal),
+                                   detail::raw_native_field(raw->index),
+                                   detail::raw_native_field(action),
+                                   detail::raw_native_field(cursor_),
+                                   detail::raw_native_field(text_.size()),
+                                   detail::raw_native_field(length),
+                                   detail::raw_string_field(result.text)},
+                        RawPartition::data, raw->data);
+        if (!ref.ordinal)
+          throw Error{ErrorCode::audit_unavailable};
+        result.source = {ref, 0, length};
+      } else {
+        const auto ref =
+            raw_ui_emit(4010,
+                        std::array{ByteView{raw->feed.lane},
+                                   detail::raw_native_field(raw->feed.ordinal),
+                                   detail::raw_native_field(raw->index),
+                                   detail::raw_native_field(action),
+                                   detail::raw_native_field(cursor_),
+                                   detail::raw_native_field(text_.size())},
+                        RawPartition::control, trace.credit());
+        if (!ref.ordinal)
+          throw Error{ErrorCode::audit_unavailable};
+        result.source = {ref, 0, 0};
+      }
+    }
+    trace.finish();
+    return result;
+  });
+}
+InputResult Composer::feed_impl(char byte, RawUiInput *raw) {
+  const auto catalog = choices_ && palette_open_ ? choices_
+                       : raw && capture_catalog_ ? capture_catalog_
+                                                 : command_catalog();
   const auto &commands = *catalog;
   const auto c = static_cast<unsigned char>(byte);
   if (!escape_.empty()) {
@@ -1002,17 +1054,33 @@ InputResult Composer::feed(char byte) {
       slash_open_ = false;
     }
     auto result = text_;
-    text_.clear();
-    cursor_ = 0;
+    if (raw && raw->enabled && raw_enabled()) {
+      const auto action = InputAction::submit;
+      const auto length = result.size();
+      const auto ref = raw_ui_emit(
+          4010,
+          std::array{
+              ByteView{raw->feed.lane}, detail::raw_native_field(raw->feed.ordinal),
+              detail::raw_native_field(raw->index), detail::raw_native_field(action),
+              detail::raw_native_field(cursor_), detail::raw_native_field(text_.size()),
+              detail::raw_native_field(length), detail::raw_string_field(result)},
+          RawPartition::data, raw->data);
+      if (!ref.ordinal)
+        throw Error{ErrorCode::audit_unavailable};
+      raw->acquired = {ref, 0, length};
+    }
     if (!result.empty() && result != "/quit" && result != "/exit") {
       history_.push_back(result);
-      trim_history(history_);
+      history_capture_bound_ = trim_history(history_);
     }
+    text_.clear();
+    cursor_ = 0;
     history_index_ = history_.size();
     draft_.clear();
     draft_cursor_ = 0;
     goal_column_.reset();
-    return {InputAction::submit, std::move(result)};
+    return {InputAction::submit, std::move(result),
+            raw ? raw->acquired : RawUiSource{}};
   }
   if (c == 10) {
     insert('\n');
@@ -1140,25 +1208,113 @@ std::vector<ChatRow> terminal_powerword_lines(std::string_view text,
   } while (true);
   return result;
 }
-void TerminalUI::post(Kind kind, std::string_view text) {
-  const std::lock_guard lock{mutex_};
-  if (!messages_.empty() && messages_.back().kind == kind &&
-      (kind == Kind::text || kind == Kind::process))
-    messages_.back().text.append(text);
-  else
-    messages_.push_back({kind, std::string{text}, Ink::muted, Value{}});
-  if (notification_ >= 0) {
-    const char byte = 1;
-    (void)::write(notification_, &byte, 1);
-  }
+namespace {
+struct UiPrompt {
+  std::string text;
+  RawUiSource source{};
+  RawEventRef enqueue{};
+};
+void append_prompt_state(std::vector<std::string> &target,
+                         const std::vector<UiPrompt> &prompts) {
+  for (const auto &prompt : prompts)
+    target.push_back(prompt.text);
 }
-void TerminalUI::sessions(const Value &listing) {
-  const std::lock_guard lock{mutex_};
-  messages_.push_back({Kind::sessions, "", Ink::muted, listing});
-  if (notification_ >= 0) {
-    const char byte = 1;
-    (void)::write(notification_, &byte, 1);
-  }
+RawEventRef enqueue_ui_prompt(bool enabled, std::vector<UiPrompt> &prompts,
+                              std::string &text, RawUiSource source, std::uint8_t kind,
+                              RawEventRef action, RawControlToken *borrowed = nullptr) {
+  RawUiBurst burst{borrowed};
+  RawUiTrace trace{
+      enabled,
+      {4013, 4016},
+      std::array{ByteView{action.lane}, detail::raw_native_field(action.ordinal),
+                 detail::raw_native_field(kind), ByteView{source.record.lane},
+                 detail::raw_native_field(source.record.ordinal),
+                 detail::raw_native_field(source.offset),
+                 detail::raw_native_field(source.length)},
+      raw_ui_enqueue_credit};
+  return trace.run([&] {
+    if (trace.enabled() &&
+        (!raw_ui_source_valid(source.record) || source.length != text.size()))
+      throw Error{ErrorCode::invalid_identity};
+    prompts.reserve(prompts.size() + 1);
+    const auto index = prompts.size();
+    const auto request = trace.reference();
+    prompts.push_back({std::move(text), source, request});
+    const std::uint8_t branch = 1;
+    (void)trace.event(4014, std::array{detail::raw_native_field(branch),
+                                       detail::raw_native_field(index)});
+    trace.close();
+    return request;
+  });
+}
+void withdraw_ui_prompts(bool enabled, std::vector<UiPrompt> &prompts,
+                         std::uint8_t branch, RawEventRef target,
+                         RawControlToken *borrowed = nullptr) {
+  RawUiBurst burst{borrowed};
+  auto credit = raw_ui_control(enabled, raw_ui_multiply(prompts.size(), 73));
+  for (std::size_t index = 0; index < prompts.size(); ++index)
+    (void)raw_ui_link(4015, prompts[index].enqueue,
+                      std::array{detail::raw_native_field(branch),
+                                 detail::raw_native_field(index), ByteView{target.lane},
+                                 detail::raw_native_field(target.ordinal)},
+                      credit ? &*credit : nullptr);
+  prompts.clear();
+}
+} // namespace
+TerminalUI::TerminalUI(std::string title) : title_(std::move(title)) {}
+TerminalUI::~TerminalUI() = default;
+void TerminalUI::post(Kind kind, std::string_view text,
+                      RawCapacityClaim *preheld_data) {
+  const auto size = text.size();
+  const Ink outcome = Ink::muted;
+  RawUiTrace trace{
+      raw_capture_,
+      {4000, 4002},
+      std::array{detail::raw_native_field(kind), detail::raw_native_field(outcome),
+                 detail::raw_native_field(size), detail::raw_string_field(text)},
+      179,
+      true,
+      RawWaitControl{},
+      preheld_data};
+  trace.run([&] {
+    const std::lock_guard lock{mutex_};
+    std::uint8_t branch = 1;
+    if (!messages_.empty() && messages_.back().kind == kind &&
+        (kind == Kind::text || kind == Kind::process)) {
+      messages_.back().text.append(text);
+      messages_.back().latest = trace.reference();
+      branch = 2;
+    } else {
+      messages_.push_back({kind,
+                           std::string{text},
+                           Ink::muted,
+                           Value{},
+                           trace.reference(),
+                           trace.reference(),
+                           {}});
+    }
+    const auto &message = messages_.back();
+    const auto current = message.text.size();
+    (void)trace.event(4001,
+                      std::array{ByteView{message.enqueue.lane},
+                                 detail::raw_native_field(message.enqueue.ordinal),
+                                 detail::raw_native_field(branch),
+                                 detail::raw_native_field(current)});
+    raw_ui_notify(trace, notification_);
+    trace.close();
+  });
+}
+void TerminalUI::sessions(const Value &listing, RawUiValueOrigin origin) {
+  auto trace = raw_ui_value_trace(raw_capture_, origin);
+  trace.run([&] {
+    if (trace.enabled() && (!origin.source || !raw_ui_source_valid(*origin.source)))
+      throw Error{ErrorCode::invalid_identity};
+    const std::lock_guard lock{mutex_};
+    messages_.push_back({Kind::sessions, "", Ink::muted, listing, trace.reference(),
+                         trace.reference(), origin});
+    raw_ui_notify(trace, notification_);
+    trace.finish();
+  });
 }
 void TerminalUI::text(std::string_view value) { post(Kind::text, value); }
 void TerminalUI::notice(std::string_view value) { post(Kind::notice, value); }
@@ -1172,57 +1328,96 @@ void TerminalUI::operation_started(bool provider) {
 }
 void TerminalUI::status(std::string_view value) { post(Kind::status, value); }
 void TerminalUI::operation_completed(std::string_view value, Ink outcome) {
-  const std::lock_guard lock{mutex_};
-  messages_.push_back({Kind::operation_complete, std::string{value}, outcome, Value{}});
-  if (notification_ >= 0) {
-    const char byte = 1;
-    (void)::write(notification_, &byte, 1);
-  }
+  const auto kind = Kind::operation_complete;
+  const auto size = value.size();
+  RawUiTrace trace{
+      raw_capture_,
+      {4000, 4002},
+      std::array{detail::raw_native_field(kind), detail::raw_native_field(outcome),
+                 detail::raw_native_field(size), detail::raw_string_field(value)},
+      179,
+      true,
+      RawWaitControl{}};
+  trace.run([&] {
+    const std::lock_guard lock{mutex_};
+    messages_.push_back({kind,
+                         std::string{value},
+                         outcome,
+                         Value{},
+                         trace.reference(),
+                         trace.reference(),
+                         {}});
+    const std::uint8_t branch = 1;
+    const auto ref = trace.reference();
+    (void)trace.event(4001, std::array{ByteView{ref.lane},
+                                       detail::raw_native_field(ref.ordinal),
+                                       detail::raw_native_field(branch),
+                                       detail::raw_native_field(size)});
+    raw_ui_notify(trace, notification_);
+    trace.close();
+  });
 }
 void TerminalUI::failed() { post(Kind::failure, {}); }
 void TerminalUI::title(std::string_view value) { post(Kind::title, value); }
-void TerminalUI::tasks(const Value &publication) {
-  const std::lock_guard lock{mutex_};
-  if (string_field(publication, "label") == "task-state-v1")
-    task_state_.restore(publication);
-  else
-    task_state_.replay(publication);
-  if (publication.find("order"))
-    if (const auto position = task_state_.position(task_anchor_))
-      task_offset_ = *position;
-  if (const auto *removed = publication.find("removed"))
-    for (const auto &id : removed->array()) {
-      task_activity_.erase(id.string());
-      task_runs_.erase(id.string());
-      task_folded_.erase(id.string());
-    }
-  // One mutable derived view, not a queued snapshot per update.
-  tasks_dirty_ = true;
-  if (notification_ >= 0) {
-    const char byte = 1;
-    (void)::write(notification_, &byte, 1);
-  }
+void TerminalUI::tasks(const Value &publication, RawUiValueOrigin origin) {
+  auto trace = raw_ui_value_trace(raw_capture_, origin);
+  trace.run([&] {
+    if (trace.enabled() && (!origin.source || !raw_ui_source_valid(*origin.source)))
+      throw Error{ErrorCode::invalid_identity};
+    const bool snapshot = string_field(publication, "label") == "task-state-v1";
+    auto task_credit = raw_ui_control(true, snapshot ? 221 : 552, RawWaitControl{});
+    auto task_data =
+        snapshot ? std::optional<RawCapacityClaim>{}
+                 : raw_ui_data(true, ValueLimits{}.bytes + 48, RawWaitControl{});
+    RawTaskOrigin task_origin{trace.enabled() ? std::optional{trace.reference()}
+                                              : std::nullopt,
+                              false, nullptr, task_data ? &*task_data : nullptr,
+                              task_credit ? &*task_credit : nullptr};
+    const std::lock_guard lock{mutex_};
+    if (snapshot)
+      task_state_.restore(publication, task_origin);
+    else
+      task_state_.replay(publication, task_origin);
+    if (publication.find("order"))
+      if (const auto position = task_state_.position(task_anchor_))
+        task_offset_ = *position;
+    if (const auto *removed = publication.find("removed"))
+      for (const auto &id : removed->array()) {
+        task_activity_.erase(id.string());
+        task_runs_.erase(id.string());
+        task_folded_.erase(id.string());
+      }
+    // One mutable derived view, not a queued snapshot per update.
+    tasks_dirty_ = true;
+    raw_ui_notify(trace, notification_);
+    trace.finish();
+  });
 }
-void TerminalUI::task_activity(const Value &event) {
-  const std::lock_guard lock{mutex_};
-  const auto &id = string_field(event, "task_id");
-  if (!task_state_.item(id))
-    return;
-  auto &runs = task_runs_[id];
-  const auto &attempt = string_field(event, "attempt");
-  if (string_field(event, "phase") == "running" ||
-      string_field(event, "phase") == "waiting")
-    runs.insert_or_assign(attempt, event);
-  else
-    runs.erase(attempt);
-  task_activity_.insert_or_assign(id, runs.empty() ? event : runs.begin()->second);
-  if (runs.empty())
-    task_runs_.erase(id);
-  tasks_dirty_ = true;
-  if (notification_ >= 0) {
-    const char byte = 1;
-    (void)::write(notification_, &byte, 1);
-  }
+void TerminalUI::task_activity(const Value &event, RawUiValueOrigin origin) {
+  auto trace = raw_ui_value_trace(raw_capture_, origin);
+  trace.run([&] {
+    if (trace.enabled() && (!origin.source || !raw_ui_source_valid(*origin.source)))
+      throw Error{ErrorCode::invalid_identity};
+    const auto &id = string_field(event, "task_id");
+    const auto &attempt = string_field(event, "attempt");
+    const auto &phase = string_field(event, "phase");
+    const std::lock_guard lock{mutex_};
+    if (!task_state_.item(id)) {
+      trace.finish();
+      return;
+    }
+    auto &runs = task_runs_[id];
+    if (phase == "running" || phase == "waiting")
+      runs.insert_or_assign(attempt, event);
+    else
+      runs.erase(attempt);
+    task_activity_.insert_or_assign(id, runs.empty() ? event : runs.begin()->second);
+    if (runs.empty())
+      task_runs_.erase(id);
+    tasks_dirty_ = true;
+    raw_ui_notify(trace, notification_);
+    trace.finish();
+  });
 }
 void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                      std::atomic_bool &cancelled,
@@ -1232,58 +1427,32 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                      std::shared_ptr<CommandJobs> commands, int interrupt_fd,
                      const std::function<Result<void>()> &reset_interrupt,
                      RetainedState *raw_root) {
-  (void)std::setlocale(LC_CTYPE, "");
-  TerminalMode mode;
+  RawCaptureFailureScope ui_capture{raw_capture_ && raw_enabled()};
+  const RawAdapterContext terminal_context{
+      nullptr,
+      raw_capture_ && raw_ui_source_valid(raw_parent_) ? std::optional{raw_parent_}
+                                                       : std::nullopt,
+      nullptr, nullptr};
+  terminal_native_locale(&terminal_context);
+  ui_capture.require();
+  TerminalMode mode{&terminal_context};
   ChatOutput output;
+  output.raw_capture(raw_capture_);
   output.attach(STDOUT_FILENO);
-  int notifications[2];
-  {
-    const std::lock_guard lock{detail::process_spawn_mutex};
-    if (::pipe(notifications) != 0)
-      throw std::runtime_error("cannot create terminal wakeup");
-    for (auto &fd : notifications) {
-      if (fd < 3) {
-        const auto replacement = ::fcntl(fd, F_DUPFD_CLOEXEC, 3);
-        if (replacement < 0) {
-          const auto failure = errno;
-          ::close(notifications[0]);
-          ::close(notifications[1]);
-          throw Error{ErrorCode::io, failure};
-        }
-        ::close(fd);
-        fd = replacement;
-      }
-      if (::fcntl(fd, F_SETFD, FD_CLOEXEC) < 0 ||
-          ::fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
-        const auto failure = errno;
-        ::close(notifications[0]);
-        ::close(notifications[1]);
-        throw Error{ErrorCode::io, failure};
-      }
-    }
-  }
+  TerminalNotifications notifications{&terminal_context};
+  resize_ = std::make_unique<TerminalResize>(&terminal_context);
   struct WakeCleanup {
     TerminalUI &ui;
-    int read, write;
-    struct sigaction before{};
     ~WakeCleanup() {
-      resize_pipe = -1;
-      (void)::sigaction(SIGWINCH, &before, nullptr);
+      ui.resize_->uninstall();
       const std::lock_guard lock{ui.mutex_};
       ui.notification_ = -1;
-      ::close(read);
-      ::close(write);
     }
-  } wake{*this, notifications[0], notifications[1]};
-  struct sigaction action{};
-  action.sa_handler = resize_signal;
-  sigemptyset(&action.sa_mask);
-  if (::sigaction(SIGWINCH, &action, &wake.before) != 0)
-    throw std::runtime_error("cannot install terminal resize wakeup");
-  resize_pipe = notifications[1];
+  } wake{*this};
+  resize_->install();
   {
     const std::lock_guard lock{mutex_};
-    notification_ = notifications[1];
+    notification_ = notifications.write_fd();
   }
   RawCommandWake turn_cancel;
   RawWaitScope ui_wait{{{interrupt_fd, -1}, {}}};
@@ -1295,25 +1464,38 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   Composer composer;
   std::unique_ptr<RawRetainedTransfer> transfer;
   std::jthread worker;
+  std::optional<RawControlToken> joined_rearm_credit;
+  std::exception_ptr worker_publication_failure;
+  std::optional<Error> worker_capture_failure;
   struct WorkerCustody {
     std::jthread &worker;
     std::unique_ptr<RawRetainedTransfer> &transfer;
     RawCommandWake &wake;
     int interrupt;
+    const std::function<Result<void>()> &reset_interrupt;
+    std::optional<RawControlToken> &rearm_credit;
     Result<void> join() {
-      if (worker.joinable())
-        worker.join();
-      if (!transfer)
+      if (!worker.joinable())
         return Result<void>::success();
-      // Preserve the child's actual cancellation endpoint until fresh owner
-      // admission succeeds or truthfully leaves joined-child debt in Root.
+      worker.join();
+      // Only the actual joined worker permits retiring its sticky incarnation.
+      // Rearm has held native credit; the cancellation flag remains truthful.
+      wake.retire();
+      auto reset = wake.clear(rearm_credit ? &*rearm_credit : nullptr);
+      rearm_credit.reset();
+      if (reset.has_value() && reset_interrupt)
+        reset = reset_interrupt();
+      if (!transfer)
+        return reset;
       RawWaitScope wait{{{interrupt, wake.read_fd()}, {}}};
-      auto result = transfer->joined();
+      auto result = transfer->joined(reset.has_value() ? std::nullopt
+                                                       : std::optional{reset.error()});
       transfer.reset();
       return result;
     }
     ~WorkerCustody() { (void)join(); }
-  } custody{worker, transfer, turn_cancel, interrupt_fd};
+  } custody{worker,       transfer,        turn_cancel,
+            interrupt_fd, reset_interrupt, joined_rearm_credit};
   struct StopOnExit {
     std::atomic_bool &flag;
     RawCommandWake &wake;
@@ -1322,13 +1504,38 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       wake.notify();
     }
   } stop{cancelled, turn_cancel};
-  std::vector<std::string> queued, recovered;
+  auto queue_cleanup_credit = raw_ui_control(raw_capture_, 256 * 73);
+  std::vector<UiPrompt> queued, recovered;
+  struct PromptCleanup {
+    std::vector<UiPrompt> &queued, &recovered;
+    std::optional<RawControlToken> &credit;
+    ~PromptCleanup() {
+      const std::uint8_t branch = 5;
+      const RawEventRef target{};
+      for (const auto *list : {&queued, &recovered})
+        for (std::size_t index = 0; index < list->size(); ++index)
+          (void)raw_ui_link(4015, (*list)[index].enqueue,
+                            std::array{detail::raw_native_field(branch),
+                                       detail::raw_native_field(index),
+                                       ByteView{target.lane},
+                                       detail::raw_native_field(target.ordinal)},
+                            credit ? &*credit : nullptr);
+    }
+  } prompt_cleanup{queued, recovered, queue_cleanup_credit};
   if (!state_path.empty()) {
     try {
-      const auto saved = load_terminal_state(state_path);
+      const auto saved = load_terminal_state(state_path, raw_capture_);
       composer.restore(saved);
-      recovered = saved.queued;
+      for (std::size_t index = 0; index < saved.queued.size(); ++index) {
+        auto text = saved.queued[index];
+        const auto source = index < saved.queued_sources.size()
+                                ? saved.queued_sources[index]
+                                : RawUiSource{};
+        (void)enqueue_ui_prompt(raw_capture_, recovered, text, source, 2,
+                                source.record);
+      }
     } catch (...) {
+      ui_capture.require();
       text("UI state damaged/unreadable; not restored. Audit untouched.\n");
     }
   }
@@ -1340,13 +1547,14 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     if (state_path.empty())
       return true;
     auto saved = composer.state();
-    saved.queued = recovered;
-    saved.queued.insert(saved.queued.end(), queued.begin(), queued.end());
+    append_prompt_state(saved.queued, recovered);
+    append_prompt_state(saved.queued, queued);
     try {
-      save_terminal_state(state_path, saved);
+      save_terminal_state(state_path, saved, raw_capture_);
       save_failed = false;
       return true;
     } catch (...) {
+      ui_capture.require();
       if (!save_failed)
         text("UI state save failed; unsaved drafts retained in RAM. New work waits for "
              "a successful save.\n");
@@ -1355,7 +1563,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     }
   };
 
-  ChatView transcript;
+  ChatView transcript{raw_capture_};
   bool welcoming = initial.empty();
   std::vector<std::string> welcome_lines;
   ChatGrid grid;
@@ -1494,106 +1702,206 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   auto started = std::chrono::steady_clock::now();
   auto second = started, tool_started = started;
   bool wake_refused = false;
-  auto start = [&](const std::string &source) {
-    welcoming = false;
-    (void)custody.join();
-    turn_cancel.retire();
-    cancelled.store(false);
-    auto reset = turn_cancel.clear();
-    if (reset.has_value() && reset_interrupt)
-      reset = reset_interrupt();
-    if (!reset.has_value()) {
-      cancelled.store(true);
-      wake_refused = true;
-      notice(std::string{"Cancellation rearm refused: "} +
-             error_name(reset.error().code));
-      return false;
-    }
-    std::string prompt;
-    RawThreadHandle context;
-    RawWorkerDispatch dispatch{};
-    try {
-      prompt = source;
-      context = unwrap(raw_prepare_thread());
-      dispatch = raw_worker_dispatch();
-      if (raw_root)
-        transfer = unwrap(raw_root->prepare_raw_transfer(context, dispatch));
-    } catch (...) {
-      cancelled.store(true);
-      wake_refused = true;
-      notice("Turn admission refused; prompt retained.");
-      return false;
-    }
-    if (transfer)
-      transfer->stage_before_launch();
-    busy = true;
-    tool_active = false;
-    turn_failed = false;
-    started = std::chrono::steady_clock::now();
-    transcript.append(ChatKind::user, prompt);
-    observed_usage.clear();
-    operations.clear();
-    scroll = 0;
-    activity = "Starting";
-    // Each worker owns a separately registered lane. Transfer facts reference
-    // the UI lane and ordinal; neither producer nor region migrates threads.
-    turn_cancel.publish();
-    try {
-      auto *borrowed_transfer = transfer.get();
-      worker = std::jthread([&, context = std::move(context), dispatch,
-                             borrowed_transfer, prompt = std::move(prompt)]() mutable {
-        try {
-          RawWaitScope wait{{{interrupt_fd, turn_cancel.read_fd()}, {}}};
-          RawThreadBinding binding{std::move(context)};
-          raw_worker_started(dispatch);
-          RawRegion command{raw_regions::command_perform};
-          try {
-            RawStorageAuthorityScope authority{
-                borrowed_transfer ? borrowed_transfer->handoff() : nullptr,
-                {raw_lane_epoch(), command.begin_ordinal()}};
-            try {
-              perform(prompt);
-            } catch (const Error &error) {
-              authority.error(error);
-              throw;
-            }
-            command.outcome(RawRegionOutcome::returned);
-          } catch (const Error &error) {
-            command.error(error);
-            command.outcome(RawRegionOutcome::exception);
-            post(Kind::failure, {});
-            text("\nTurn failed; inspect the retained audit.\n");
-          } catch (const std::exception &e) {
-            command.outcome(RawRegionOutcome::exception);
-            post(Kind::failure, {});
-            text(std::string{"\nError: "} + e.what() + "\n");
-          } catch (...) {
-            command.outcome(RawRegionOutcome::exception);
-            post(Kind::failure, {});
-            text("\nTurn failed; inspect the retained audit.\n");
-          }
-          command.finish();
-        } catch (...) {
-          post(Kind::failure, {});
-          text("\nWorker admission failed; inspect the retained raw audit.\n");
-        }
-        post(Kind::complete, {});
-      });
-      if (transfer)
-        transfer->commit_launch();
-    } catch (...) {
-      if (transfer) {
-        transfer->rollback_launch();
-        transfer.reset();
-      }
+  RawEventRef last_launch{};
+  auto start = [&](const std::string &source, RawUiSource original) {
+    RawUiTrace launch{raw_capture_,
+                      {4018, 4016},
+                      std::array{ByteView{original.record.lane},
+                                 detail::raw_native_field(original.record.ordinal),
+                                 detail::raw_native_field(original.offset),
+                                 detail::raw_native_field(original.length)},
+                      148};
+    last_launch = launch.reference();
+    auto returned = [&](bool accepted) {
+      (void)launch.event(4070, std::array{detail::raw_native_field(accepted)});
+      launch.close();
+      return accepted;
+    };
+    return launch.run([&] {
+      if (launch.enabled() &&
+          (!raw_ui_source_valid(original.record) || original.length != source.size()))
+        throw Error{ErrorCode::invalid_identity};
+      launch.stage(1);
+      welcoming = false;
+      (void)custody.join();
       turn_cancel.retire();
-      cancelled.store(true);
-      busy = false;
-      wake_refused = true;
-      notice("Worker launch refused; prompt retained.");
-      return false;
-    }
-    return true;
+      cancelled.store(false);
+      launch.stage(2);
+      auto reset = turn_cancel.clear();
+      if (reset.has_value() && reset_interrupt)
+        reset = reset_interrupt();
+      if (!reset.has_value()) {
+        const std::uint8_t branch = 1, stage = 2;
+        (void)launch.event(4016,
+                           std::array{detail::raw_native_field(branch),
+                                      detail::raw_native_field(stage),
+                                      detail::raw_native_field(reset.error().code),
+                                      detail::raw_native_field(reset.error().detail)});
+        cancelled.store(true);
+        wake_refused = true;
+        notice(std::string{"Cancellation rearm refused: "} +
+               error_name(reset.error().code));
+        return returned(false);
+      }
+      std::string prompt;
+      RawThreadHandle context;
+      RawWorkerDispatch dispatch{};
+      launch.stage(3);
+      try {
+        prompt = source;
+        context = unwrap(raw_prepare_thread());
+        dispatch = raw_worker_dispatch();
+        if (raw_root)
+          transfer = unwrap(raw_root->prepare_raw_transfer(context, dispatch));
+      } catch (...) {
+        ui_capture.require();
+        launch.capture_exception(4016);
+        cancelled.store(true);
+        wake_refused = true;
+        notice("Turn admission refused; prompt retained.");
+        return returned(false);
+      }
+      launch.stage(4);
+      transcript.append(ChatKind::user, prompt, false, original.record);
+      if (transfer)
+        transfer->stage_before_launch();
+      busy = true;
+      tool_active = false;
+      turn_failed = false;
+      started = std::chrono::steady_clock::now();
+      observed_usage.clear();
+      operations.clear();
+      scroll = 0;
+      activity = "Starting";
+      // Each worker owns a separately registered lane. Transfer facts reference
+      // the UI lane and ordinal; neither producer nor region migrates threads.
+      joined_rearm_credit = raw_ui_control(raw_capture_, raw_wake_lifecycle_credit +
+                                                             raw_wake_rearm_credit +
+                                                             raw_wake_notify_credit);
+      turn_cancel.publish();
+      launch.stage(5);
+      try {
+        auto *borrowed_transfer = transfer.get();
+        worker = std::jthread([&, context = std::move(context), dispatch,
+                               borrowed_transfer, original,
+                               prompt = std::move(prompt)]() mutable {
+          RawThreadBinding binding{std::move(context)};
+          RawCaptureFailureScope worker_capture{raw_capture_ && raw_enabled()};
+          std::optional<RawUiTrace> execution;
+          try {
+            // Actual request64, perform error51, terminal51, native wake106.
+            constexpr std::uint64_t credit =
+                raw_envelope_size + 2 * 24 + 2 * raw_ui_error_bytes +
+                (raw_envelope_size + 24 + sizeof(int) + sizeof(std::size_t) +
+                 sizeof(char)) +
+                (raw_envelope_size + 24 + sizeof(ssize_t) + sizeof(bool) + sizeof(int));
+            execution.emplace(
+                raw_capture_, RawUiSites{4076, 4077},
+                std::array{ByteView{original.record.lane},
+                           detail::raw_native_field(original.record.ordinal),
+                           ByteView{dispatch.lane},
+                           detail::raw_native_field(dispatch.ordinal)},
+                credit, false, RawWaitControl{});
+            constexpr std::string_view failed_notice =
+                "\nTurn failed; inspect the retained audit.\n";
+            constexpr std::string_view interrupted_notice =
+                "\nTurn interrupted; context/audit retained.\n";
+            constexpr std::uint64_t ingress_bytes =
+                raw_envelope_size + sizeof(Kind) + sizeof(Ink) + sizeof(std::size_t);
+            auto completion_data =
+                raw_ui_data(raw_capture_,
+                            3 * ingress_bytes + std::max(failed_notice.size(),
+                                                         interrupted_notice.size()),
+                            RawWaitControl{});
+            auto completion_control =
+                raw_ui_control(raw_capture_, 3 * 179, RawWaitControl{});
+            execution->stage(1);
+            RawWaitScope wait{{{interrupt_fd, turn_cancel.read_fd()}, {}}};
+            raw_worker_started(dispatch);
+            RawRegion command{raw_regions::command_perform};
+            bool perform_failed = false, perform_cancelled = false;
+            try {
+              RawStorageAuthorityScope authority{
+                  borrowed_transfer ? borrowed_transfer->handoff() : nullptr,
+                  {raw_lane_epoch(), command.begin_ordinal()}};
+              try {
+                execution->stage(2);
+                perform(prompt);
+              } catch (const Error &error) {
+                authority.error(error);
+                throw;
+              }
+              command.outcome(RawRegionOutcome::returned);
+            } catch (const Error &error) {
+              execution->capture_exception(4078);
+              command.error(error);
+              command.outcome(RawRegionOutcome::exception);
+              perform_failed = true;
+              // This owner has recorded the actual interrupted acquisition.
+              // Consume only its matching cancellation origin after perform
+              // has unwound; recorder/capacity failures still stop the UI.
+              perform_cancelled = error == Error{ErrorCode::interrupted, ECANCELED} &&
+                                  cancelled.load() && worker_capture.consume(error);
+            } catch (...) {
+              execution->capture_exception(4078);
+              command.outcome(RawRegionOutcome::exception);
+              perform_failed = true;
+            }
+            command.finish();
+            worker_capture.require();
+            execution->stage(3);
+            std::optional<RawUiBurst> canceled_publication;
+            RawCapacityClaim *paid_source = nullptr;
+            if (cancelled.load()) {
+              canceled_publication.emplace(completion_control ? &*completion_control
+                                                              : nullptr);
+              paid_source = completion_data ? &*completion_data : nullptr;
+            }
+            if (perform_failed) {
+              post(Kind::failure, {}, paid_source);
+              post(Kind::text, perform_cancelled ? interrupted_notice : failed_notice,
+                   paid_source);
+            }
+            post(Kind::complete, {}, paid_source);
+            worker_capture.require();
+            execution->finish();
+          } catch (...) {
+            // No fresh diagnostic/complete retry after admission or publication
+            // refusal. This native handoff belongs to the existing UI mutex.
+            const auto failure = std::current_exception();
+            {
+              const std::lock_guard lock{mutex_};
+              worker_publication_failure = failure;
+              worker_capture_failure = worker_capture.error();
+            }
+            if (execution) {
+              raw_ui_notify(*execution, notifications.write_fd());
+              execution->capture_exception(4077);
+              execution->close();
+            }
+          }
+        });
+        if (transfer)
+          transfer->commit_launch();
+      } catch (...) {
+        launch.capture_exception(4016);
+        if (transfer) {
+          transfer->rollback_launch();
+          transfer.reset();
+        }
+        turn_cancel.retire();
+        cancelled.store(true);
+        busy = false;
+        wake_refused = true;
+        if (ui_capture.error()) {
+          launch.close();
+          ui_capture.require();
+        }
+        notice("Worker launch refused; prompt retained.");
+        return returned(false);
+      }
+      return returned(true);
+    });
   };
   auto edit = [&] {
     if (busy) {
@@ -1608,20 +1916,20 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         return false;
       }
       pollfd fd{STDOUT_FILENO, POLLOUT, 0};
-      (void)::poll(&fd, 1, 10);
+      (void)terminal_native_poll(&terminal_context, std::span{&fd, std::size_t{1}}, 10,
+                                 true);
     }
     if (!persist())
       return false;
     output.detach();
     mode.suspend();
-    const auto edited = edit_terminal_draft(composer.text());
+    const auto edited = edit_terminal_draft(composer.text(), &terminal_context);
     mode.resume();
     image_loaded = false;
     image_placement = {};
     output.attach(STDOUT_FILENO);
     painter.invalidate();
-    (void)tcflush(STDIN_FILENO,
-                  TCIFLUSH); // Editor typeahead must never send the returned draft.
+    terminal_native_flush(&terminal_context); // Editor typeahead cannot send a draft.
     if (edited.accepted && edited.text != composer.text())
       composer.draft(edited.text);
     transcript += "\n" + edited.message + "\n";
@@ -1631,9 +1939,24 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     return true;
   };
   if (!initial.empty())
-    if (!start(initial))
-      queued.push_back(std::move(initial));
+    if (!start(initial, initial_source_))
+      (void)enqueue_ui_prompt(raw_capture_, queued, initial, initial_source_, 1,
+                              initial_source_.record);
   while (true) {
+    std::exception_ptr publication_failure;
+    std::optional<Error> capture_failure;
+    {
+      const std::lock_guard lock{mutex_};
+      publication_failure = worker_publication_failure;
+      capture_failure = worker_capture_failure;
+    }
+    if (publication_failure) {
+      if (capture_failure)
+        raw_capture_failed(*capture_failure);
+      cancel_turn();
+      (void)custody.join();
+      std::rethrow_exception(publication_failure);
+    }
     if (output.pending() && output.flush()) {
       first_frame.outcome(RawRegionOutcome::flushed);
       first_frame.finish();
@@ -1643,128 +1966,172 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         painter.invalidate();
     }
     std::vector<Message> incoming;
-    {
-      const std::lock_guard lock{mutex_};
-      incoming.swap(messages_);
-      if (tasks_dirty_) {
-        Value::Array folded;
-        for (const auto &id : task_folded_)
-          folded.push_back(Value{id});
-        const auto count = task_state_.size();
-        if (count)
-          welcoming = false;
-        task_offset_ = std::min(task_offset_, count ? count - 1 : 0);
-        task_page =
-            task_state_.read(Value::object({{"offset", Value{Number{task_offset_}}},
-                                            {"limit", Value{Number{"64"}}},
-                                            {"collapsed", Value{std::move(folded)}}}));
-        const auto &visible_tasks = field(task_page, "items").array();
-        task_anchor_ =
-            visible_tasks.empty() ? "" : string_field(visible_tasks.front(), "id");
-        task_activity = task_activity_;
-        tasks_dirty_ = false;
-        task_rows_dirty = true;
-        redraw = true;
-      }
-    }
-    for (const auto &message : incoming) {
-      if (message.kind == Kind::sessions) {
-        std::vector<ComposerChoice> entries;
-        const auto &listing = message.data;
-        for (const auto &entry : field(listing, "sessions").array()) {
-          const auto &path = string_field(entry, "path");
-          if (path.find_first_of("\r\n") != std::string::npos)
-            continue;
-          const auto &config = field(entry, "configuration");
-          const auto *name = config.find("name");
-          entries.push_back({"/resume " + path, "", path, "Session",
-                             name && !name->string().empty()
-                                 ? name->string()
-                                 : std::filesystem::path{path}.filename().string()});
+    RawUiTrace drain{raw_capture_, {4005, 4009}, {}, 171};
+    auto task_read_credit = raw_ui_control(true, 222);
+    drain.run([&] {
+      {
+        const std::lock_guard lock{mutex_};
+        incoming.swap(messages_);
+        const auto message_count = incoming.size();
+        const RawEventRef first =
+            incoming.empty() ? RawEventRef{} : incoming.front().enqueue;
+        const RawEventRef last =
+            incoming.empty() ? RawEventRef{} : incoming.back().enqueue;
+        (void)drain.event(4008, std::array{detail::raw_native_field(message_count),
+                                           ByteView{first.lane},
+                                           detail::raw_native_field(first.ordinal),
+                                           ByteView{last.lane},
+                                           detail::raw_native_field(last.ordinal)});
+        if (tasks_dirty_) {
+          Value::Array folded;
+          for (const auto &id : task_folded_)
+            folded.push_back(Value{id});
+          const auto count = task_state_.size();
+          if (count)
+            welcoming = false;
+          task_offset_ = std::min(task_offset_, count ? count - 1 : 0);
+          task_page = task_state_.read(
+              Value::object({{"offset", Value{Number{task_offset_}}},
+                             {"limit", Value{Number{"64"}}},
+                             {"collapsed", Value{std::move(folded)}}}),
+              RawTaskOrigin{drain.enabled() ? std::optional{drain.reference()}
+                                            : std::nullopt,
+                            false, nullptr, nullptr,
+                            task_read_credit ? &*task_read_credit : nullptr});
+          const auto &visible_tasks = field(task_page, "items").array();
+          task_anchor_ =
+              visible_tasks.empty() ? "" : string_field(visible_tasks.front(), "id");
+          task_activity = task_activity_;
+          tasks_dirty_ = false;
+          task_rows_dirty = true;
+          redraw = true;
         }
-        composer.choices(std::move(entries), "Sessions");
       }
-      if (message.kind == Kind::text || message.kind == Kind::process ||
-          message.kind == Kind::failure || message.kind == Kind::user ||
-          message.kind == Kind::assistant)
-        welcoming = false;
-      if (message.kind == Kind::text)
-        transcript.append(turn_failed ? ChatKind::error : ChatKind::assistant,
-                          message.text, true);
-      if (message.kind == Kind::notice)
-        transcript += message.text;
-      if (message.kind == Kind::process)
-        transcript.append(ChatKind::tool, message.text, true);
-      if (message.kind == Kind::user || message.kind == Kind::assistant)
-        transcript.append(message.kind == Kind::user ? ChatKind::user
-                                                     : ChatKind::assistant,
-                          message.text);
-      if (message.kind == Kind::usage)
-        observed_usage = message.text;
-      if (message.kind == Kind::provider_start || message.kind == Kind::tool_start) {
-        live_provider = message.kind == Kind::provider_start;
-        operations.push_back(live_provider);
+      for (std::size_t message_index = 0; message_index < incoming.size();
+           ++message_index) {
+        const auto &message = incoming[message_index];
+        const auto size = message.text.size();
+        const auto batch = drain.reference();
+        RawUiTrace apply{raw_capture_,
+                         {4006, 4007},
+                         std::array{ByteView{batch.lane},
+                                    detail::raw_native_field(batch.ordinal),
+                                    ByteView{message.enqueue.lane},
+                                    detail::raw_native_field(message.enqueue.ordinal),
+                                    ByteView{message.latest.lane},
+                                    detail::raw_native_field(message.latest.ordinal),
+                                    detail::raw_native_field(message.kind),
+                                    detail::raw_native_field(message.outcome),
+                                    detail::raw_native_field(size)},
+                         152};
+        apply.run([&] {
+          if (message.kind == Kind::sessions) {
+            std::vector<ComposerChoice> entries;
+            const auto &listing = message.data;
+            for (const auto &entry : field(listing, "sessions").array()) {
+              const auto &path = string_field(entry, "path");
+              if (path.find_first_of("\r\n") != std::string::npos)
+                continue;
+              const auto &config = field(entry, "configuration");
+              const auto *name = config.find("name");
+              entries.push_back(
+                  {"/resume " + path, "", path, "Session",
+                   name && !name->string().empty()
+                       ? name->string()
+                       : std::filesystem::path{path}.filename().string()});
+            }
+            composer.choices(std::move(entries), "Sessions");
+          }
+          if (message.kind == Kind::text || message.kind == Kind::process ||
+              message.kind == Kind::failure || message.kind == Kind::user ||
+              message.kind == Kind::assistant)
+            welcoming = false;
+          if (message.kind == Kind::text)
+            transcript.append(turn_failed ? ChatKind::error : ChatKind::assistant,
+                              message.text, true, message.enqueue);
+          if (message.kind == Kind::notice)
+            transcript.append(ChatKind::notice, message.text, true, message.enqueue);
+          if (message.kind == Kind::process)
+            transcript.append(ChatKind::tool, message.text, true, message.enqueue);
+          if (message.kind == Kind::user || message.kind == Kind::assistant)
+            transcript.append(message.kind == Kind::user ? ChatKind::user
+                                                         : ChatKind::assistant,
+                              message.text, false, message.enqueue);
+          if (message.kind == Kind::usage)
+            observed_usage = message.text;
+          if (message.kind == Kind::provider_start ||
+              message.kind == Kind::tool_start) {
+            live_provider = message.kind == Kind::provider_start;
+            operations.push_back(live_provider);
+          }
+          if (message.kind == Kind::status) {
+            activity = message.text;
+            tool_started = std::chrono::steady_clock::now();
+            tool_active = !live_provider;
+            if (!live_provider)
+              transcript.append(ChatKind::tool, "▸ " + message.text + "\n");
+          }
+          if (message.kind == Kind::operation_complete) {
+            activity = message.text;
+            tool_active = false;
+            if (!live_provider)
+              transcript.append(
+                  message.outcome == Ink::failure ? ChatKind::error : ChatKind::tool,
+                  (message.outcome == Ink::success ? "✓ " : "• ") + message.text);
+            if (!operations.empty())
+              operations.pop_back();
+            live_provider = !operations.empty() && operations.back();
+          }
+          if (message.kind == Kind::failure)
+            turn_failed = true;
+          if (message.kind == Kind::title)
+            title_ = message.text;
+          if (message.kind == Kind::complete) {
+            const auto restored = custody.join();
+            if (!restored.has_value()) {
+              wake_refused = true;
+              notice(std::string{"Product owner admission refused: "} +
+                     error_name(restored.error().code));
+            }
+            turn_cancel.retire();
+            busy = false;
+            tool_active = false;
+            activity = cancelled.load() ? "Turn cancelled"
+                       : turn_failed    ? "Turn failed"
+                                        : "Turn completed";
+            activity += " · " +
+                        std::to_string(std::chrono::duration_cast<std::chrono::seconds>(
+                                           std::chrono::steady_clock::now() - started)
+                                           .count()) +
+                        "s";
+            transcript.append(
+                turn_failed ? ChatKind::error : ChatKind::summary,
+                activity + (observed_usage.empty() ? "" : " · " + observed_usage));
+          }
+          redraw = true;
+          apply.finish();
+        });
+        drain.progress(message_index + 1);
       }
-      if (message.kind == Kind::status) {
-        activity = message.text;
-        tool_started = std::chrono::steady_clock::now();
-        tool_active = !live_provider;
-        if (!live_provider)
-          transcript.append(ChatKind::tool, "▸ " + message.text + "\n");
-      }
-      if (message.kind == Kind::operation_complete) {
-        activity = message.text;
-        tool_active = false;
-        if (!live_provider)
-          transcript.append(
-              message.outcome == Ink::failure ? ChatKind::error : ChatKind::tool,
-              (message.outcome == Ink::success ? "✓ " : "• ") + message.text);
-        if (!operations.empty())
-          operations.pop_back();
-        live_provider = !operations.empty() && operations.back();
-      }
-      if (message.kind == Kind::failure)
-        turn_failed = true;
-      if (message.kind == Kind::title)
-        title_ = message.text;
-      if (message.kind == Kind::complete) {
-        const auto restored = custody.join();
-        if (!restored.has_value()) {
-          wake_refused = true;
-          notice(std::string{"Product owner admission refused: "} +
-                 error_name(restored.error().code));
-        }
-        turn_cancel.retire();
-        busy = false;
-        tool_active = false;
-        activity = cancelled.load() ? "Turn cancelled"
-                   : turn_failed    ? "Turn failed"
-                                    : "Turn completed";
-        activity += " · " +
-                    std::to_string(std::chrono::duration_cast<std::chrono::seconds>(
-                                       std::chrono::steady_clock::now() - started)
-                                       .count()) +
-                    "s";
-        transcript.append(turn_failed ? ChatKind::error : ChatKind::summary,
-                          activity +
-                              (observed_usage.empty() ? "" : " · " + observed_usage));
-      }
-      redraw = true;
-    }
+      drain.finish();
+    });
     if (!busy && idle_work && (!raw_root || !raw_root->raw_owner_blocked()))
       idle_work();
     if (commands) {
       pollfd child_input_ready{STDIN_FILENO, POLLIN, 0};
       if (foreground_pty && !child_escape.empty() &&
           std::chrono::steady_clock::now() >= child_escape_deadline &&
-          poll(&child_input_ready, 1, 0) == 0) {
+          terminal_native_poll(&terminal_context,
+                               std::span{&child_input_ready, std::size_t{1}}, 0) == 0) {
         append_child_input(child_escape);
         child_escape.clear();
       }
       // Preserve the existing input batching despite bounded native reads.
       // Flush a full prefix or when the kernel has no further input ready.
       child_input_ready.revents = 0;
-      const bool more_input = poll(&child_input_ready, 1, 0) > 0;
+      const bool more_input =
+          terminal_native_poll(&terminal_context,
+                               std::span{&child_input_ready, std::size_t{1}}, 0) > 0;
       if (child_input.size() >= 4096 || !more_input)
         (void)flush_child_input();
       const auto lease = commands->foreground();
@@ -1793,10 +2160,33 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     if (!busy && quitting)
       break;
     if (!busy && !wake_refused && !queued.empty()) {
+      auto dispatch_credit = raw_ui_control(raw_capture_, 73);
       if (persist()) {
-        if (start(queued.front()))
+        if (start(queued.front().text, queued.front().source)) {
+          const std::uint8_t branch = 1;
+          const std::size_t index = 0;
+          const auto target = last_launch;
+          (void)raw_ui_link(4015, queued.front().enqueue,
+                            std::array{detail::raw_native_field(branch),
+                                       detail::raw_native_field(index),
+                                       ByteView{target.lane},
+                                       detail::raw_native_field(target.ordinal)},
+                            dispatch_credit ? &*dispatch_credit : nullptr);
           queued.erase(queued.begin());
+        }
       } else {
+        auto credit = raw_ui_control(raw_capture_, raw_ui_multiply(queued.size(), 73));
+        recovered.reserve(recovered.size() + queued.size());
+        for (std::size_t index = 0; index < queued.size(); ++index) {
+          const std::uint8_t branch = 3;
+          const auto target = queued[index].enqueue;
+          (void)raw_ui_link(4015, queued[index].enqueue,
+                            std::array{detail::raw_native_field(branch),
+                                       detail::raw_native_field(index),
+                                       ByteView{target.lane},
+                                       detail::raw_native_field(target.ordinal)},
+                            credit ? &*credit : nullptr);
+        }
         recovered.insert(recovered.end(), std::make_move_iterator(queued.begin()),
                          std::make_move_iterator(queued.end()));
         queued.clear();
@@ -1804,7 +2194,36 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       redraw = true;
     }
     winsize dimensions{};
-    (void)ioctl(STDOUT_FILENO, TIOCGWINSZ, &dimensions);
+    {
+      const int descriptor = STDOUT_FILENO;
+      const unsigned long method = TIOCGWINSZ;
+      auto dimensions_credit = raw_ui_control(
+          raw_capture_, raw_envelope_size + sizeof(descriptor) + sizeof(method) +
+                            raw_envelope_size + 24 + sizeof(int) + sizeof(bool) +
+                            std::max(2 * sizeof(unsigned short), sizeof(int)));
+      const auto request = raw_ui_emit(
+          4048,
+          std::array{detail::raw_native_field(descriptor),
+                     detail::raw_native_field(method)},
+          RawPartition::control, dimensions_credit ? &*dimensions_credit : nullptr);
+      const int result = ioctl(STDOUT_FILENO, TIOCGWINSZ, &dimensions);
+      const int error = errno;
+      const bool valid = result == 0;
+      if (valid)
+        (void)raw_ui_link(4049, request,
+                          std::array{detail::raw_native_field(result),
+                                     detail::raw_native_field(valid),
+                                     detail::raw_native_field(dimensions.ws_row),
+                                     detail::raw_native_field(dimensions.ws_col)},
+                          dimensions_credit ? &*dimensions_credit : nullptr);
+      else
+        (void)raw_ui_link(4049, request,
+                          std::array{detail::raw_native_field(result),
+                                     detail::raw_native_field(valid),
+                                     detail::raw_native_field(error)},
+                          dimensions_credit ? &*dimensions_credit : nullptr);
+      errno = error;
+    }
     const auto rows =
         dimensions.ws_row ? dimensions.ws_row : static_cast<unsigned short>(24);
     const auto columns =
@@ -1829,313 +2248,369 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       redraw = true;
     if (redraw && !output.pending()) {
       RawRegion render{raw_regions::command_render};
-      const bool same_width = old_columns == columns;
-      const bool geometry_changed = old_columns != columns || old_rows != rows;
-      old_rows = rows;
-      old_columns = columns;
-      redraw = false;
-      const auto width = static_cast<std::size_t>(columns > 1 ? columns - 1 : 1);
-      if (rows < 8 || columns < 12) {
-        const auto draft = terminal_lines("> " + composer.text(), width);
-        small_frame = "\x1b[?2026h\x1b[H\x1b[2J" + draft.back();
-        small_frame += "\x1b[1;" +
-                       std::to_string(std::min(static_cast<std::size_t>(columns),
-                                               display_width(draft.back()) + 1)) +
-                       "H";
-        if (graphics_enabled && image_placement[2]) {
-          small_frame += blackbird_graphics_erase();
-          image_placement = {};
-        }
-        small_frame += "\x1b[?2026l";
-        pending_grid = false;
-        output.start(small_frame);
-        if (output.flush()) {
-          first_frame.outcome(RawRegionOutcome::flushed);
-          first_frame.finish();
-        }
-        painter.invalidate();
-        render.outcome(RawRegionOutcome::small_frame);
-        continue;
-      }
-      const bool show_task_pane =
-          !welcoming && !tasks_hidden && width >= 90 && rows >= 18;
-      const auto pane_width =
-          show_task_pane ? std::clamp(width / 3, std::size_t{28}, std::size_t{36}) : 0;
-      const auto main_width = show_task_pane ? width - pane_width - 2 : width;
-      const auto inner_width = main_width - 4;
-      const auto composed =
-          terminal_powerword_lines("> " + composer.text(), inner_width);
-      const auto prefix = terminal_lines(
-          "> " + composer.text().substr(0, composer.cursor()), inner_width);
-      const auto draft_height = std::min<std::size_t>(
-          {6, composed.size(), static_cast<std::size_t>(rows - 7)});
-      const auto palette =
-          composer.palette_lines(std::min<std::size_t>(8, rows - 5 - draft_height));
-      const auto height =
-          static_cast<std::size_t>(rows - 5) - draft_height - palette.size();
-      const bool show_sprite = !welcoming && mascot_enabled &&
-                               (!tasks_expanded || show_task_pane) &&
-                               width >= (graphics_enabled ? 70U : 90U) &&
-                               height + 2 >= blackbird_sprite_height;
-      const auto header_width = show_task_pane ? main_width
-                                : show_sprite  ? width - blackbird_sprite_width - 2
-                                               : width;
-      // The square occupies a right gutter, including beside the first chat rows.
-      // Wrap into the remaining columns so a sprite can never overwrite content.
-      const auto &lines = transcript.rows(header_width);
-      if (welcoming && (geometry_changed || welcome_lines.empty()))
-        welcome_lines =
-            blackbird_startup(width - 4, height > 2 ? height - 2 : 0, mascot_enabled);
-      if (display_generation != transcript.generation()) {
-        scroll =
-            0; // Evicted display history: return to live tail, never a false anchor.
-        display_generation = transcript.generation();
-      }
-      if (scroll > 0 && same_width)
-        scroll = terminal_scroll_after_output({.scroll = scroll,
-                                               .previous = previous_lines,
-                                               .before_trim = lines.size(),
-                                               .after_trim = lines.size(),
-                                               .height = height});
-      previous_lines = lines.size();
-      scroll = std::min(scroll, lines.size() > height ? lines.size() - height : 0);
-      const auto end = lines.size() - scroll;
-      const auto begin = end > height ? end - height : 0;
-      grid.reset(width, rows);
-      auto title = title_;
-      const auto path = title.rfind(" · /");
-      if (path != std::string::npos)
-        title = title.substr(0, path) + " · " +
-                std::filesystem::path(title.substr(path + 4)).filename().string();
-      grid.line(0,
-                {{" " + terminal_lines(title, header_width - 1)[0], Ink::assistant}});
-      std::string status_line;
-      if (busy)
-        status_line = "Turn " +
-                      std::to_string(std::chrono::duration_cast<std::chrono::seconds>(
-                                         now - started)
-                                         .count()) +
-                      "s · ";
-      if (tool_active)
-        status_line += "Tool " +
-                       std::to_string(std::chrono::duration_cast<std::chrono::seconds>(
-                                          now - tool_started)
-                                          .count()) +
-                       "s · ";
-      if (!queued.empty())
-        status_line += "queued " + std::to_string(queued.size()) + " · ";
-      if (scroll > 0)
-        status_line += "Up " + std::to_string(scroll) + " · ";
-      status_line += activity;
-      constexpr std::array<std::string_view, 10> spinner{"⠋", "⠙", "⠹", "⠸", "⠼",
-                                                         "⠴", "⠦", "⠧", "⠇", "⠏"};
-      const auto phase =
-          static_cast<std::size_t>(
-              std::chrono::duration_cast<std::chrono::milliseconds>(now - started)
-                  .count() /
-              80) %
-          spinner.size();
-      const auto status_text = terminal_lines(std::string{busy ? spinner[phase] : "·"} +
-                                                  " " + status_line + " ",
-                                              header_width)[0];
-      std::string rule;
-      for (auto n = display_width(status_text); n < header_width; ++n)
-        rule += "─";
-      grid.line(1, {{status_text, busy ? Ink::user : Ink::muted}, {rule, Ink::border}});
-      if (show_sprite) {
-        const auto &sprite = blackbird_sprite(busy, phase / 2);
-        const auto ink = turn_failed   ? Ink::failure
-                         : tool_active ? Ink::user
-                         : busy        ? Ink::assistant
-                                       : Ink::muted;
-        for (std::size_t row = 0; row < sprite.size(); ++row)
-          if (graphics_enabled)
-            grid.line(row, {{"│", ink}}, width - blackbird_sprite_width - 1);
-          else
-            grid.line(row, {{sprite[row], ink}}, width - blackbird_sprite_width);
-      }
-      std::array<std::size_t, 4> placement{};
-      if (welcoming) {
-        std::size_t lettering_row = 2, lettering_column = 2;
-        if (graphics_enabled) {
-          std::size_t lettering_width = 0;
-          for (const auto &line : welcome_lines)
-            lettering_width = std::max(lettering_width, display_width(line));
-          const auto lettering_height = welcome_lines.size();
-          const auto reserved = lettering_width + 6;
-          if (width >= reserved + 24 &&
-              height >= std::max<std::size_t>(12, lettering_height)) {
-            const auto side = std::min(height, (width - reserved) / 2);
-            placement = {2, 2, side * 2, side};
-            lettering_column = side * 2 + 6;
-            lettering_row += (side - lettering_height) / 2;
-          } else if (height > lettering_height + 1) {
-            const auto side = std::min(height - lettering_height - 1, (width - 4) / 2);
-            placement = {lettering_row + lettering_height + 1, 2, side * 2, side};
-          }
-        }
-        for (std::size_t row = 0; row < std::min(height, welcome_lines.size()); ++row)
-          grid.line(row + lettering_row, {{welcome_lines[row], Ink::assistant}},
-                    lettering_column);
-        if (!graphics_enabled && welcome_lines.size() + 1 < height)
-          grid.line(welcome_lines.size() + 3,
-                    {{"  Enter continues · / commands · Workflow reloads each turn.",
-                      Ink::muted}});
-      } else if (!tasks_expanded || show_task_pane)
-        for (std::size_t row = 0; row < height; ++row)
-          if (begin + row < end)
-            grid.line(row + 2, lines[begin + row]);
-      if (graphics_enabled && show_sprite)
-        placement = {0, width - blackbird_sprite_width, blackbird_sprite_width,
-                     blackbird_sprite_height};
-      const auto task_width = show_task_pane ? pane_width : main_width;
-      if (task_rows_dirty || task_render_width != task_width) {
-        task_rows = task_pane_rows(task_page, task_width, task_activity);
-        task_render_width = task_width;
-        task_rows_dirty = false;
-      }
-      if (show_task_pane) {
-        for (std::size_t row = 0; row < rows; ++row)
-          grid.line(row, {{"│", Ink::border}}, main_width);
-        const auto task_start = show_sprite ? blackbird_sprite_height + 1 : 2;
-        for (std::size_t row = 0; row < task_rows.size() && row + task_start + 1 < rows;
-             ++row)
-          grid.line(row + task_start, task_rows[row], main_width + 2);
-        grid.line(rows - 1, {{"/tasks up/down · fold ID", Ink::muted}}, main_width + 2);
-      } else if (tasks_expanded && !welcoming) {
-        for (std::size_t row = 0; row < height && row < task_rows.size(); ++row)
-          grid.line(row + 2, task_rows[row]);
-      } else if (!welcoming && !busy && !tasks_hidden &&
-                 !field(task_page, "items").array().empty()) {
-        grid.line(1, {{terminal_lines("Tasks: " + task_summary(task_page) +
-                                          " · /tasks expand",
-                                      header_width)[0],
-                       Ink::muted}});
-      }
-      std::size_t menu_row = height + 2;
-      for (const auto &line : palette) {
-        const auto text = terminal_lines(line, main_width)[0];
-        const bool selected = text.starts_with("> ");
-        if (selected || text.starts_with("  /")) {
-          const auto name_end = text.find(' ', 2);
-          const auto command_end =
-              name_end == std::string::npos ? text.size() : name_end;
-          grid.line(menu_row++, {{text.substr(0, command_end),
-                                  selected ? Ink::selected : Ink::normal},
-                                 {text.substr(command_end), Ink::muted}});
-        } else {
-          grid.line(menu_row++,
-                    {{text, line.starts_with("Commands") ? Ink::heading : Ink::muted}});
-        }
-      }
-      std::string hint = composer.palette_open() ? " command palette "
-                         : composer.slash_open() ? " commands "
-                         : busy ? " Enter queue · Ctrl-C stop "
-                                : " Enter send · / commands · Ctrl-G editor ";
-      if (!foreground_job.empty())
-        hint = std::string{foreground_pty ? " PTY input "
-                                          : " Enter queue · Foreground command "} +
-               foreground_job + " · Ctrl-B background ";
-      auto border = [&](std::pair<std::string_view, std::string_view> corners,
-                        std::string_view label) {
-        std::string out{corners.first};
-        const auto clipped = terminal_lines(label, main_width - 2)[0];
-        out += clipped;
-        for (auto n = display_width(clipped); n < main_width - 2; ++n)
-          out += "─";
-        return out + std::string{corners.second};
-      };
-      grid.line(menu_row++, {{border({"╭", "╮"}, hint), Ink::border}});
-      const auto cursor_row = prefix.size() - 1;
-      const auto draft_begin =
-          cursor_row >= draft_height ? cursor_row - draft_height + 1 : 0;
-      for (std::size_t row = 0; row < draft_height; ++row) {
-        const auto line = draft_begin + row < composed.size()
-                              ? chat_plain(composed[draft_begin + row])
-                              : "";
-        ChatRow content{{"│ ", Ink::border}};
-        if (draft_begin + row < composed.size()) {
-          const auto &colored = composed[draft_begin + row];
-          content.insert(content.end(), colored.begin(), colored.end());
-        }
-        content.push_back(
-            {std::string(inner_width - std::min(inner_width, display_width(line)),
-                         ' ') +
-                 " │",
-             Ink::border});
-        grid.line(menu_row++, content);
-      }
-      grid.line(menu_row, {{border({"╰", "╯"}, ""), Ink::border}});
-      const auto cursor_line = height + palette.size() + 4 + cursor_row - draft_begin;
-      // Derive cursor cells with the same terminal width rules, including UTF-8.
-      std::size_t cells = 0;
-      std::mbstate_t state{};
-      auto remain = std::string_view{prefix.back()};
-      while (!remain.empty()) {
-        wchar_t wide{};
-        const auto n = std::mbrtowc(&wide, remain.data(), remain.size(), &state);
-        if (n == 0 || n > remain.size())
-          break;
-        cells += static_cast<std::size_t>(std::max(0, ::wcwidth(wide)));
-        remain.remove_prefix(n);
-      }
-      const auto display_cursor_line =
-          composer.palette_open() ? height + 3 : cursor_line;
-      const auto display_cursor_cells =
-          composer.palette_open()
-              ? display_width(palette.front().substr(0, palette.front().size() - 1)) + 1
-              : cells + 3;
-      const auto &packet =
-          painter.prepare(grid, display_cursor_line - 1,
-                          std::min(display_cursor_cells, main_width) - 1);
-      if (!packet.empty()) {
-        pending_grid = true;
-        if (graphics_enabled && placement != image_placement) {
-          image_frame.assign(packet);
-          // Insert image commands before the existing synchronized-update close.
-          image_frame.resize(image_frame.size() -
-                             std::string_view{"\x1b[?2026l"}.size());
-          image_frame += blackbird_graphics_erase();
-          if (placement[2] && placement[3]) {
-            if (!image_loaded) {
-              image_frame += blackbird_graphics_load();
-              image_loaded = true;
+      RawUiTrace layout{
+          raw_capture_,
+          {4074, 4075},
+          std::array{detail::raw_native_field(rows), detail::raw_native_field(columns)},
+          raw_envelope_size + 2 * sizeof(unsigned short) + raw_ui_error_bytes};
+      try {
+        const bool same_width = old_columns == columns;
+        const bool geometry_changed = old_columns != columns || old_rows != rows;
+        old_rows = rows;
+        old_columns = columns;
+        redraw = false;
+        const auto width = static_cast<std::size_t>(columns > 1 ? columns - 1 : 1);
+        if (rows < 8 || columns < 12) {
+          const auto bound =
+              raw_capture_ && raw_enabled()
+                  ? raw_ui_add(raw_ui_multiply(composer.text().size() + 2, 4), 256)
+                  : 0;
+          RawUiFrame captured{raw_capture_, bound};
+          captured.run([&] {
+            const auto draft = terminal_lines("> " + composer.text(), width);
+            small_frame = "\x1b[?2026h\x1b[H\x1b[2J" + draft.back();
+            small_frame += "\x1b[1;" +
+                           std::to_string(std::min(static_cast<std::size_t>(columns),
+                                                   display_width(draft.back()) + 1)) +
+                           "H";
+            if (graphics_enabled && image_placement[2]) {
+              small_frame += blackbird_graphics_erase();
+              image_placement = {};
             }
-            image_frame += blackbird_graphics_place(placement[0], placement[1],
-                                                    placement[2], placement[3]);
-          }
-          image_frame += "\x1b[?2026l";
-          image_placement = placement;
-          output.start(image_frame);
-        } else
-          output.start(packet);
-        if (output.flush()) {
-          first_frame.outcome(RawRegionOutcome::flushed);
-          first_frame.finish();
-          painter.commit(grid);
+            small_frame += "\x1b[?2026l";
+            pending_grid = false;
+            captured.capture(small_frame);
+            output.start(small_frame, captured.handoff());
+            if (output.flush()) {
+              first_frame.outcome(RawRegionOutcome::flushed);
+              first_frame.finish();
+            }
+            painter.invalidate();
+            render.outcome(RawRegionOutcome::small_frame);
+          });
+          layout.finish();
+          continue;
         }
+        const bool show_task_pane =
+            !welcoming && !tasks_hidden && width >= 90 && rows >= 18;
+        const auto pane_width =
+            show_task_pane ? std::clamp(width / 3, std::size_t{28}, std::size_t{36})
+                           : 0;
+        const auto main_width = show_task_pane ? width - pane_width - 2 : width;
+        const auto inner_width = main_width - 4;
+        const auto composed =
+            terminal_powerword_lines("> " + composer.text(), inner_width);
+        const auto prefix = terminal_lines(
+            "> " + composer.text().substr(0, composer.cursor()), inner_width);
+        const auto draft_height = std::min<std::size_t>(
+            {6, composed.size(), static_cast<std::size_t>(rows - 7)});
+        const auto palette =
+            composer.palette_lines(std::min<std::size_t>(8, rows - 5 - draft_height));
+        const auto height =
+            static_cast<std::size_t>(rows - 5) - draft_height - palette.size();
+        const bool show_sprite = !welcoming && mascot_enabled &&
+                                 (!tasks_expanded || show_task_pane) &&
+                                 width >= (graphics_enabled ? 70U : 90U) &&
+                                 height + 2 >= blackbird_sprite_height;
+        const auto header_width = show_task_pane ? main_width
+                                  : show_sprite  ? width - blackbird_sprite_width - 2
+                                                 : width;
+        // The square occupies a right gutter, including beside the first chat rows.
+        // Wrap into the remaining columns so a sprite can never overwrite content.
+        const auto &lines = transcript.rows(header_width);
+        if (welcoming && (geometry_changed || welcome_lines.empty()))
+          welcome_lines =
+              blackbird_startup(width - 4, height > 2 ? height - 2 : 0, mascot_enabled);
+        if (display_generation != transcript.generation()) {
+          scroll =
+              0; // Evicted display history: return to live tail, never a false anchor.
+          display_generation = transcript.generation();
+        }
+        if (scroll > 0 && same_width)
+          scroll = terminal_scroll_after_output({.scroll = scroll,
+                                                 .previous = previous_lines,
+                                                 .before_trim = lines.size(),
+                                                 .after_trim = lines.size(),
+                                                 .height = height});
+        previous_lines = lines.size();
+        scroll = std::min(scroll, lines.size() > height ? lines.size() - height : 0);
+        const auto end = lines.size() - scroll;
+        const auto begin = end > height ? end - height : 0;
+        layout.stage(2);
+        grid.reset(width, rows);
+        auto title = title_;
+        const auto path = title.rfind(" · /");
+        if (path != std::string::npos)
+          title = title.substr(0, path) + " · " +
+                  std::filesystem::path(title.substr(path + 4)).filename().string();
+        grid.line(0,
+                  {{" " + terminal_lines(title, header_width - 1)[0], Ink::assistant}});
+        std::string status_line;
+        if (busy)
+          status_line = "Turn " +
+                        std::to_string(std::chrono::duration_cast<std::chrono::seconds>(
+                                           now - started)
+                                           .count()) +
+                        "s · ";
+        if (tool_active)
+          status_line +=
+              "Tool " +
+              std::to_string(
+                  std::chrono::duration_cast<std::chrono::seconds>(now - tool_started)
+                      .count()) +
+              "s · ";
+        if (!queued.empty())
+          status_line += "queued " + std::to_string(queued.size()) + " · ";
+        if (scroll > 0)
+          status_line += "Up " + std::to_string(scroll) + " · ";
+        status_line += activity;
+        constexpr std::array<std::string_view, 10> spinner{"⠋", "⠙", "⠹", "⠸", "⠼",
+                                                           "⠴", "⠦", "⠧", "⠇", "⠏"};
+        const auto phase =
+            static_cast<std::size_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - started)
+                    .count() /
+                80) %
+            spinner.size();
+        const auto status_text = terminal_lines(
+            std::string{busy ? spinner[phase] : "·"} + " " + status_line + " ",
+            header_width)[0];
+        std::string rule;
+        for (auto n = display_width(status_text); n < header_width; ++n)
+          rule += "─";
+        grid.line(1,
+                  {{status_text, busy ? Ink::user : Ink::muted}, {rule, Ink::border}});
+        if (show_sprite) {
+          const auto &sprite = blackbird_sprite(busy, phase / 2);
+          const auto ink = turn_failed   ? Ink::failure
+                           : tool_active ? Ink::user
+                           : busy        ? Ink::assistant
+                                         : Ink::muted;
+          for (std::size_t row = 0; row < sprite.size(); ++row)
+            if (graphics_enabled)
+              grid.line(row, {{"│", ink}}, width - blackbird_sprite_width - 1);
+            else
+              grid.line(row, {{sprite[row], ink}}, width - blackbird_sprite_width);
+        }
+        std::array<std::size_t, 4> placement{};
+        if (welcoming) {
+          std::size_t lettering_row = 2, lettering_column = 2;
+          if (graphics_enabled) {
+            std::size_t lettering_width = 0;
+            for (const auto &line : welcome_lines)
+              lettering_width = std::max(lettering_width, display_width(line));
+            const auto lettering_height = welcome_lines.size();
+            const auto reserved = lettering_width + 6;
+            if (width >= reserved + 24 &&
+                height >= std::max<std::size_t>(12, lettering_height)) {
+              const auto side = std::min(height, (width - reserved) / 2);
+              placement = {2, 2, side * 2, side};
+              lettering_column = side * 2 + 6;
+              lettering_row += (side - lettering_height) / 2;
+            } else if (height > lettering_height + 1) {
+              const auto side =
+                  std::min(height - lettering_height - 1, (width - 4) / 2);
+              placement = {lettering_row + lettering_height + 1, 2, side * 2, side};
+            }
+          }
+          for (std::size_t row = 0; row < std::min(height, welcome_lines.size()); ++row)
+            grid.line(row + lettering_row, {{welcome_lines[row], Ink::assistant}},
+                      lettering_column);
+          if (!graphics_enabled && welcome_lines.size() + 1 < height)
+            grid.line(welcome_lines.size() + 3,
+                      {{"  Enter continues · / commands · Workflow reloads each turn.",
+                        Ink::muted}});
+        } else if (!tasks_expanded || show_task_pane)
+          for (std::size_t row = 0; row < height; ++row)
+            if (begin + row < end)
+              grid.line(row + 2, lines[begin + row]);
+        if (graphics_enabled && show_sprite)
+          placement = {0, width - blackbird_sprite_width, blackbird_sprite_width,
+                       blackbird_sprite_height};
+        const auto task_width = show_task_pane ? pane_width : main_width;
+        if (task_rows_dirty || task_render_width != task_width) {
+          task_rows = task_pane_rows(task_page, task_width, task_activity);
+          task_render_width = task_width;
+          task_rows_dirty = false;
+        }
+        if (show_task_pane) {
+          for (std::size_t row = 0; row < rows; ++row)
+            grid.line(row, {{"│", Ink::border}}, main_width);
+          const auto task_start = show_sprite ? blackbird_sprite_height + 1 : 2;
+          for (std::size_t row = 0;
+               row < task_rows.size() && row + task_start + 1 < rows; ++row)
+            grid.line(row + task_start, task_rows[row], main_width + 2);
+          grid.line(rows - 1, {{"/tasks up/down · fold ID", Ink::muted}},
+                    main_width + 2);
+        } else if (tasks_expanded && !welcoming) {
+          for (std::size_t row = 0; row < height && row < task_rows.size(); ++row)
+            grid.line(row + 2, task_rows[row]);
+        } else if (!welcoming && !busy && !tasks_hidden &&
+                   !field(task_page, "items").array().empty()) {
+          grid.line(1, {{terminal_lines("Tasks: " + task_summary(task_page) +
+                                            " · /tasks expand",
+                                        header_width)[0],
+                         Ink::muted}});
+        }
+        std::size_t menu_row = height + 2;
+        for (const auto &line : palette) {
+          const auto text = terminal_lines(line, main_width)[0];
+          const bool selected = text.starts_with("> ");
+          if (selected || text.starts_with("  /")) {
+            const auto name_end = text.find(' ', 2);
+            const auto command_end =
+                name_end == std::string::npos ? text.size() : name_end;
+            grid.line(menu_row++, {{text.substr(0, command_end),
+                                    selected ? Ink::selected : Ink::normal},
+                                   {text.substr(command_end), Ink::muted}});
+          } else {
+            grid.line(menu_row++, {{text, line.starts_with("Commands") ? Ink::heading
+                                                                       : Ink::muted}});
+          }
+        }
+        std::string hint = composer.palette_open() ? " command palette "
+                           : composer.slash_open() ? " commands "
+                           : busy ? " Enter queue · Ctrl-C stop "
+                                  : " Enter send · / commands · Ctrl-G editor ";
+        if (!foreground_job.empty())
+          hint = std::string{foreground_pty ? " PTY input "
+                                            : " Enter queue · Foreground command "} +
+                 foreground_job + " · Ctrl-B background ";
+        auto border = [&](std::pair<std::string_view, std::string_view> corners,
+                          std::string_view label) {
+          std::string out{corners.first};
+          const auto clipped = terminal_lines(label, main_width - 2)[0];
+          out += clipped;
+          for (auto n = display_width(clipped); n < main_width - 2; ++n)
+            out += "─";
+          return out + std::string{corners.second};
+        };
+        grid.line(menu_row++, {{border({"╭", "╮"}, hint), Ink::border}});
+        const auto cursor_row = prefix.size() - 1;
+        const auto draft_begin =
+            cursor_row >= draft_height ? cursor_row - draft_height + 1 : 0;
+        for (std::size_t row = 0; row < draft_height; ++row) {
+          const auto line = draft_begin + row < composed.size()
+                                ? chat_plain(composed[draft_begin + row])
+                                : "";
+          ChatRow content{{"│ ", Ink::border}};
+          if (draft_begin + row < composed.size()) {
+            const auto &colored = composed[draft_begin + row];
+            content.insert(content.end(), colored.begin(), colored.end());
+          }
+          content.push_back(
+              {std::string(inner_width - std::min(inner_width, display_width(line)),
+                           ' ') +
+                   " │",
+               Ink::border});
+          grid.line(menu_row++, content);
+        }
+        grid.line(menu_row, {{border({"╰", "╯"}, ""), Ink::border}});
+        const auto cursor_line = height + palette.size() + 4 + cursor_row - draft_begin;
+        // Derive cursor cells with the same terminal width rules, including UTF-8.
+        std::size_t cells = 0;
+        std::mbstate_t state{};
+        auto remain = std::string_view{prefix.back()};
+        while (!remain.empty()) {
+          wchar_t wide{};
+          const auto n = std::mbrtowc(&wide, remain.data(), remain.size(), &state);
+          if (n == 0 || n > remain.size())
+            break;
+          cells += static_cast<std::size_t>(std::max(0, ::wcwidth(wide)));
+          remain.remove_prefix(n);
+        }
+        const auto display_cursor_line =
+            composer.palette_open() ? height + 3 : cursor_line;
+        const auto display_cursor_cells =
+            composer.palette_open()
+                ? display_width(palette.front().substr(0, palette.front().size() - 1)) +
+                      1
+                : cells + 3;
+        layout.stage(3);
+        const auto bound =
+            raw_capture_ && raw_enabled() ? raw_ui_owned_grid_bound(grid) : 0;
+        RawUiFrame captured{raw_capture_,
+                            {grid.width, grid.height, display_cursor_line - 1,
+                             std::min(display_cursor_cells, main_width) - 1},
+                            bound};
+        const auto &packet = captured.run([&]() -> const std::string & {
+          const auto &result =
+              painter.prepare(grid, display_cursor_line - 1,
+                              std::min(display_cursor_cells, main_width) - 1);
+          captured.capture(result);
+          return result;
+        });
+        if (!packet.empty()) {
+          pending_grid = true;
+          if (graphics_enabled && placement != image_placement) {
+            layout.stage(4);
+            constexpr auto digits = std::numeric_limits<std::size_t>::digits10 + 1;
+            const auto image_bound =
+                raw_capture_ && raw_enabled()
+                    ? raw_ui_add(packet.size(), 4096 + 256 + 4 * digits)
+                    : 0;
+            RawUiFrame image{raw_capture_, image_bound};
+            image.run([&] {
+              image_frame.assign(packet);
+              // Insert image commands before the existing synchronized-update close.
+              image_frame.resize(image_frame.size() -
+                                 std::string_view{"\x1b[?2026l"}.size());
+              image_frame += blackbird_graphics_erase();
+              if (placement[2] && placement[3]) {
+                if (!image_loaded) {
+                  image_frame += blackbird_graphics_load();
+                  image_loaded = true;
+                }
+                image_frame += blackbird_graphics_place(placement[0], placement[1],
+                                                        placement[2], placement[3]);
+              }
+              image_frame += "\x1b[?2026l";
+              image_placement = placement;
+              image.capture(image_frame);
+              output.start(image_frame, image.handoff());
+            });
+            captured.discard();
+          } else
+            output.start(packet, captured.handoff());
+          if (output.flush()) {
+            first_frame.outcome(RawRegionOutcome::flushed);
+            first_frame.finish();
+            painter.commit(grid);
+          }
+        }
+        if (packet.empty())
+          captured.discard();
+        render.outcome(output.pending() ? RawRegionOutcome::queued
+                                        : RawRegionOutcome::flushed);
+        layout.finish();
+      } catch (...) {
+        layout.capture_exception(4075);
+        layout.close();
+        throw;
       }
-      render.outcome(output.pending() ? RawRegionOutcome::queued
-                                      : RawRegionOutcome::flushed);
     }
-    std::array<pollfd, 3> inputs{
+    std::array<pollfd, 4> inputs{
         {{STDIN_FILENO, POLLIN, 0},
-         {notifications[0], POLLIN, 0},
-         {STDOUT_FILENO, static_cast<short>(output.pending() ? POLLOUT : 0), 0}}};
-    const auto ready = poll(inputs.data(), inputs.size(),
-                            composer.escape_pending() || !child_escape.empty() ? 50
-                            : busy || commands                                 ? 40
-                                                                               : 1000);
+         {notifications.read_fd(), POLLIN, 0},
+         {STDOUT_FILENO, static_cast<short>(output.pending() ? POLLOUT : 0), 0},
+         {resize_->read_fd(), POLLIN, 0}}};
+    const auto ready =
+        terminal_native_poll(&terminal_context, inputs,
+                             composer.escape_pending() || !child_escape.empty() ? 50
+                             : busy || commands                                 ? 40
+                                                                                : 1000);
     if (ready < 0) {
       if (errno == EINTR)
         continue;
       throw std::runtime_error("Terminal polling failed");
     }
-    if (inputs[1].revents & POLLIN) {
-      char bytes[128];
-      while (::read(notifications[0], bytes, sizeof(bytes)) > 0) {
-      }
+    if (inputs[3].revents & (POLLIN | POLLHUP | POLLERR)) {
+      resize_->observed();
+      redraw = true;
     }
+    if (inputs[1].revents & POLLIN)
+      terminal_notification_drain(&terminal_context, notifications.read_fd());
+    ui_capture.require();
     if (!(inputs[0].revents & (POLLIN | POLLHUP | POLLERR))) {
       if (std::chrono::steady_clock::now() >= escape_deadline &&
           composer.flush_escape())
@@ -2148,6 +2623,14 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     if (raw_enabled())
       keyboard_data.emplace(unwrap(raw_claim_data(1155081)));
     auto keyboard_control = raw_command_claim(21950 + raw_wake_single_notify_credit);
+    auto session_control = raw_ui_control(raw_capture_, raw_ui_keyboard_credit);
+    const int ui_descriptor = STDIN_FILENO;
+    const auto ui_requested = sizeof(bytes);
+    RawUiTrace keyboard_process{raw_capture_,
+                                {4085, 4084},
+                                std::array{detail::raw_native_field(ui_descriptor),
+                                           detail::raw_native_field(ui_requested)},
+                                raw_ui_keyboard_batch_credit};
     std::optional<RawCommandBurstScope> keyboard_burst;
     keyboard_burst.emplace(
         RawCommandBurstCredits{keyboard_data ? &*keyboard_data : nullptr,
@@ -2171,15 +2654,24 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                            count > 0          ? nullptr
                            : keyboard_control ? &*keyboard_control
                                               : nullptr);
+    keyboard_process.extent(count > 0 ? static_cast<std::size_t>(count) : 0);
+    (void)keyboard_process.event(
+        4086, std::array{ByteView{keyboard_read.lane},
+                         detail::raw_native_field(keyboard_read.ordinal),
+                         detail::raw_native_field(count)});
     if (count < 0) {
-      if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+      if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+        keyboard_process.finish();
         continue;
+      }
+      keyboard_process.finish(1, Error{ErrorCode::io, errno});
       throw Error{ErrorCode::io, errno};
     }
     if (count == 0) {
       quitting = true;
       cancel_turn();
       persist();
+      keyboard_process.finish();
       continue;
     }
     bool saved_last_input = false;
@@ -2215,218 +2707,310 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           append_child_input(std::string_view{&byte, 1});
         }
         redraw = true;
+        keyboard_process.progress(static_cast<std::size_t>(i) + 1);
         continue;
       }
       if (bytes[i] == '\x02' && !foreground_job.empty() && !composer.pasted() &&
           !composer.escape_pending()) {
         release_command({});
+        keyboard_process.progress(static_cast<std::size_t>(i) + 1);
         continue;
       }
       const bool was_escape = composer.escape_pending();
-      auto result = composer.feed(bytes[i]);
-      welcoming = false; // First operator input reveals retained chat and the avatar.
-      if (!was_escape && composer.escape_pending())
-        escape_deadline =
-            std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
-      redraw = true;
-      if (result.action == InputAction::choose_command) {
-        bool load = true;
-        if (!composer.text().empty()) {
-          auto candidate = composer.state();
-          candidate.queued = recovered;
-          candidate.queued.insert(candidate.queued.end(), queued.begin(), queued.end());
-          candidate.queued.push_back(composer.text());
-          try {
-            validate_state(candidate);
-            recovered.push_back(composer.text());
-          } catch (const Error &) {
-            load = false;
-            transcript +=
-                "\nDraft storage full; original retained, command not loaded.\n";
+      auto result = keyboard_process.run([&] {
+        auto session_data = raw_ui_data(raw_capture_, composer.capture_bound(1));
+        RawUiInput origin{raw_capture_,
+                          keyboard_read,
+                          static_cast<std::size_t>(i),
+                          session_data ? &*session_data : nullptr,
+                          session_control ? &*session_control : nullptr,
+                          {}};
+        auto outcome = composer.feed(bytes[i], &origin);
+        keyboard_process.progress(static_cast<std::size_t>(i) + 1);
+        return outcome;
+      });
+      std::optional<RawUiTrace> handling;
+      {
+        RawUiBurst loan{session_control ? &*session_control : nullptr};
+        const auto source = result.source.record;
+        handling.emplace(
+            raw_capture_ && result.action != InputAction::none, RawUiSites{4017, 4016},
+            std::array{ByteView{source.lane}, detail::raw_native_field(source.ordinal)},
+            raw_ui_handler_credit);
+      }
+      std::uint8_t action_branch = 1;
+      RawEventRef action_target{};
+      auto finish_action = [&] {
+        (void)raw_ui_link(4011, result.source.record,
+                          std::array{detail::raw_native_field(action_branch),
+                                     ByteView{action_target.lane},
+                                     detail::raw_native_field(action_target.ordinal)},
+                          handling->credit());
+        handling->close();
+      };
+      try {
+        welcoming = false; // First operator input reveals retained chat and the avatar.
+        if (!was_escape && composer.escape_pending())
+          escape_deadline =
+              std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
+        redraw = true;
+        if (result.action == InputAction::choose_command) {
+          bool load = true;
+          if (!composer.text().empty()) {
+            auto candidate = composer.state();
+            append_prompt_state(candidate.queued, recovered);
+            append_prompt_state(candidate.queued, queued);
+            candidate.queued.push_back(composer.text());
+            try {
+              validate_state(candidate);
+              const auto length = composer.text().size();
+              const auto draft_actor = result.source.record;
+              RawUiTrace draft_original{
+                  raw_capture_,
+                  {4071, 4016},
+                  std::array{ByteView{draft_actor.lane},
+                             detail::raw_native_field(draft_actor.ordinal),
+                             detail::raw_native_field(length),
+                             detail::raw_string_field(composer.text())},
+                  raw_ui_error_bytes,
+                  true};
+              draft_original.run([&] {
+                auto draft = composer.text();
+                const RawUiSource source{draft_original.reference(), 0, length};
+                (void)enqueue_ui_prompt(raw_capture_, recovered, draft, source, 2,
+                                        result.source.record);
+                draft_original.finish();
+              });
+            } catch (const Error &) {
+              ui_capture.require();
+              load = false;
+              transcript +=
+                  "\nDraft storage full; original retained, command not loaded.\n";
+            }
+          }
+          if (load) {
+            const bool saved_draft = !composer.text().empty();
+            composer.draft(std::move(result.text));
+            transcript += saved_draft ? "\nCommand loaded; Enter sends explicitly. "
+                                        "Previous draft in /drafts.\n"
+                                      : "\nCommand loaded; Enter sends explicitly.\n";
           }
         }
-        if (load) {
-          const bool saved_draft = !composer.text().empty();
-          composer.draft(std::move(result.text));
-          transcript += saved_draft ? "\nCommand loaded; Enter sends explicitly. "
-                                      "Previous draft in /drafts.\n"
-                                    : "\nCommand loaded; Enter sends explicitly.\n";
+        if (result.action == InputAction::edit && edit()) {
+          finish_action();
+          break;
         }
-      }
-      if (result.action == InputAction::edit && edit())
-        break;
-      if (result.action == InputAction::page_up)
-        scroll += static_cast<std::size_t>(rows / 2);
-      if (result.action == InputAction::page_down)
-        scroll -= std::min(scroll, static_cast<std::size_t>(rows / 2));
-      if (result.action == InputAction::cancel) {
-        queued.clear();
-        if (busy) {
-          cancel_turn();
-          activity = "Stopping";
-        }
-      }
-      if (result.action == InputAction::quit ||
-          (result.action == InputAction::submit &&
-           (result.text == "/quit" || result.text == "/exit"))) {
-        quitting = true;
-        cancel_turn();
-      }
-      if (result.action == InputAction::submit && !result.text.empty() && !quitting) {
-        if (commands && result.text == "/jobs") {
-          try {
-            transcript.append(ChatKind::assistant,
-                              unwrap(dump_json(commands->read(Value::object({})))) +
-                                  "\n");
-          } catch (const Error &error) {
-            transcript += std::string{"\nCommand discovery refused: "} +
-                          error_name(error.code) + "\n";
-          }
-          scroll = 0;
-        } else if (commands &&
-                   (result.text == "/bg" || result.text.starts_with("/bg "))) {
-          release_command(result.text == "/bg"
-                              ? std::string_view{}
-                              : std::string_view{result.text}.substr(4));
-        } else if (commands && busy && result.text.starts_with("/fg ") &&
-                   !string_field(commands->foreground(), "job_id").empty()) {
-          transcript +=
-              string_field(commands->foreground(), "job_id") == result.text.substr(4)
-                  ? "\nThat command is already foreground.\n"
-                  : "\nRelease the current turn before foregrounding another "
-                    "command.\n";
-        } else if (commands && busy && result.text.starts_with("/process ")) {
-          try {
-            auto request = unwrap(parse_json(std::string_view{result.text}.substr(9)));
-            const auto op = string_field(request, "op");
-            if (op == "read")
-              transcript.append(ChatKind::assistant,
-                                unwrap(dump_json(commands->read(request))) + "\n");
-            else if (op == "input" || op == "resize" || op == "signal" ||
-                     op == "stop" || op == "background")
-              (void)command_request(std::move(request));
-            else
-              transcript += "\nThat process operation requires an idle turn.\n";
-          } catch (const Error &error) {
-            transcript += std::string{"\nInvalid process control: "} +
-                          error_name(error.code) + "\n";
-          } catch (const std::exception &error) {
-            transcript +=
-                std::string{"\nInvalid process control: "} + error.what() + "\n";
-          }
-        } else if (result.text == "/tasks up" || result.text == "/tasks down" ||
-                   result.text == "/tasks expand" || result.text == "/tasks show" ||
-                   result.text == "/tasks hide" ||
-                   result.text.starts_with("/tasks fold ")) {
-          const std::lock_guard lock{mutex_};
-          task_anchor_.clear();
-          if (result.text == "/tasks up")
-            task_offset_ -= std::min(task_offset_, std::size_t{2});
-          else if (result.text == "/tasks down")
-            task_offset_ += 2;
-          else if (result.text == "/tasks hide") {
-            tasks_hidden = true;
-            tasks_expanded = false;
-          } else if (result.text == "/tasks show") {
-            tasks_hidden = false;
-            tasks_expanded = false;
-          } else if (result.text == "/tasks expand") {
-            tasks_hidden = false;
-            tasks_expanded = !tasks_expanded;
-          } else {
-            const auto id = result.text.substr(12);
-            if (const auto *row = task_state_.item(id);
-                row && string_field(*row, "parent").empty()) {
-              if (!task_folded_.erase(id))
-                task_folded_.insert(id);
-              task_offset_ = *task_state_.position(id);
-            } else
-              transcript += "\nFold requires a top-level task ID.\n";
-          }
-          tasks_dirty_ = true;
-        } else if (result.text == "/commands") {
-          (void)composer.feed(0);
-        } else if (result.text == "/edit") {
-          if (edit())
-            break;
-        } else if (result.text == "/help" || result.text == "/keys") {
-          transcript +=
-              "\n" + (result.text == "/help" ? terminal_help() : terminal_key_help());
-          scroll = 0;
-        } else if (result.text == "/queue") {
-          transcript += "\nPending prompts: " + std::to_string(queued.size()) + "\n";
-          for (std::size_t n = 0; n < queued.size(); ++n)
-            transcript += std::to_string(n + 1) + ": " + queued[n] + "\n";
-          transcript += "Recovered drafts: " + std::to_string(recovered.size()) +
-                        " (use /drafts)\n";
-          scroll = 0;
-        } else if (result.text == "/cancel") {
-          queued.clear();
+        if (result.action == InputAction::page_up)
+          scroll += static_cast<std::size_t>(rows / 2);
+        if (result.action == InputAction::page_down)
+          scroll -= std::min(scroll, static_cast<std::size_t>(rows / 2));
+        if (result.action == InputAction::cancel) {
+          action_branch = 5;
+          withdraw_ui_prompts(raw_capture_, queued, 2, result.source.record,
+                              session_control ? &*session_control : nullptr);
           if (busy) {
             cancel_turn();
             activity = "Stopping";
           }
-          transcript += busy ? "\nStop requested; pending queue cleared.\n"
-                             : "\nNo active turn; pending queue cleared.\n";
-          scroll = 0;
-        } else if (result.text == "/clear") {
-          transcript.clear();
-          scroll = 0;
-        } else if (result.text == "/drafts") {
-          transcript +=
-              "\nRecovered drafts: " + std::to_string(recovered.size()) + "\n";
-          for (std::size_t n = 0; n < recovered.size(); ++n)
-            transcript += std::to_string(n + 1) + ": " + recovered[n] + "\n";
-        } else if (result.text.starts_with("/draft ")) {
-          std::size_t n = 0;
-          const auto arg = std::string_view{result.text}.substr(7);
-          const auto r = std::from_chars(arg.data(), arg.data() + arg.size(), n);
-          if (r.ec != std::errc{} || r.ptr != arg.data() + arg.size() || n == 0 ||
-              n > recovered.size())
-            transcript += "\nInvalid recovered draft number.\n";
-          else {
-            composer.draft(std::move(recovered[n - 1]));
-            recovered.erase(recovered.begin() + static_cast<std::ptrdiff_t>(n - 1));
-            transcript += "\nLoaded recovered draft; Enter submits explicitly.\n";
-          }
-        } else if (busy || !queued.empty()) {
-          wake_refused =
-              false; // An explicit submission permits the queued owner to retry.
-          auto candidate = composer.state();
-          candidate.queued = recovered;
-          candidate.queued.insert(candidate.queued.end(), queued.begin(), queued.end());
-          candidate.queued.push_back(result.text);
-          try {
-            validate_state(candidate);
-            queued.push_back(std::move(result.text));
-          } catch (const Error &) {
-            composer.draft(std::move(result.text));
-            transcript += "\nQueue full; prompt retained in composer.\n";
-          }
-        } else {
-          if (persist()) {
-            saved_last_input = true;
-            input.outcome(RawRegionOutcome::dispatch);
-            input.finish();
-            keyboard_burst.reset();
-            keyboard_data.reset();
-            keyboard_control.reset();
-            wake_refused = false;
-            if (!start(result.text))
-              composer.draft(std::move(result.text));
-          } else
-            composer.draft(std::move(result.text));
         }
+        if (result.action == InputAction::quit ||
+            (result.action == InputAction::submit &&
+             (result.text == "/quit" || result.text == "/exit"))) {
+          action_branch = 6;
+          quitting = true;
+          cancel_turn();
+        }
+        if (result.action == InputAction::submit && !result.text.empty() && !quitting) {
+          if (commands && result.text == "/jobs") {
+            try {
+              transcript.append(ChatKind::assistant,
+                                unwrap(dump_json(commands->read(Value::object({})))) +
+                                    "\n");
+            } catch (const Error &error) {
+              transcript += std::string{"\nCommand discovery refused: "} +
+                            error_name(error.code) + "\n";
+            }
+            scroll = 0;
+          } else if (commands &&
+                     (result.text == "/bg" || result.text.starts_with("/bg "))) {
+            release_command(result.text == "/bg"
+                                ? std::string_view{}
+                                : std::string_view{result.text}.substr(4));
+          } else if (commands && busy && result.text.starts_with("/fg ") &&
+                     !string_field(commands->foreground(), "job_id").empty()) {
+            transcript +=
+                string_field(commands->foreground(), "job_id") == result.text.substr(4)
+                    ? "\nThat command is already foreground.\n"
+                    : "\nRelease the current turn before foregrounding another "
+                      "command.\n";
+          } else if (commands && busy && result.text.starts_with("/process ")) {
+            try {
+              auto request =
+                  unwrap(parse_json(std::string_view{result.text}.substr(9)));
+              const auto op = string_field(request, "op");
+              if (op == "read")
+                transcript.append(ChatKind::assistant,
+                                  unwrap(dump_json(commands->read(request))) + "\n");
+              else if (op == "input" || op == "resize" || op == "signal" ||
+                       op == "stop" || op == "background")
+                (void)command_request(std::move(request));
+              else
+                transcript += "\nThat process operation requires an idle turn.\n";
+            } catch (const Error &error) {
+              transcript += std::string{"\nInvalid process control: "} +
+                            error_name(error.code) + "\n";
+            } catch (const std::exception &error) {
+              transcript +=
+                  std::string{"\nInvalid process control: "} + error.what() + "\n";
+            }
+          } else if (result.text == "/tasks up" || result.text == "/tasks down" ||
+                     result.text == "/tasks expand" || result.text == "/tasks show" ||
+                     result.text == "/tasks hide" ||
+                     result.text.starts_with("/tasks fold ")) {
+            const std::lock_guard lock{mutex_};
+            task_anchor_.clear();
+            if (result.text == "/tasks up")
+              task_offset_ -= std::min(task_offset_, std::size_t{2});
+            else if (result.text == "/tasks down")
+              task_offset_ += 2;
+            else if (result.text == "/tasks hide") {
+              tasks_hidden = true;
+              tasks_expanded = false;
+            } else if (result.text == "/tasks show") {
+              tasks_hidden = false;
+              tasks_expanded = false;
+            } else if (result.text == "/tasks expand") {
+              tasks_hidden = false;
+              tasks_expanded = !tasks_expanded;
+            } else {
+              const auto id = result.text.substr(12);
+              if (const auto *row = task_state_.item(id);
+                  row && string_field(*row, "parent").empty()) {
+                if (!task_folded_.erase(id))
+                  task_folded_.insert(id);
+                task_offset_ = *task_state_.position(id);
+              } else
+                transcript += "\nFold requires a top-level task ID.\n";
+            }
+            tasks_dirty_ = true;
+          } else if (result.text == "/commands") {
+            (void)composer.feed(0);
+          } else if (result.text == "/edit") {
+            if (edit()) {
+              finish_action();
+              break;
+            }
+          } else if (result.text == "/help" || result.text == "/keys") {
+            transcript +=
+                "\n" + (result.text == "/help" ? terminal_help() : terminal_key_help());
+            scroll = 0;
+          } else if (result.text == "/queue") {
+            transcript += "\nPending prompts: " + std::to_string(queued.size()) + "\n";
+            for (std::size_t n = 0; n < queued.size(); ++n)
+              transcript += std::to_string(n + 1) + ": " + queued[n].text + "\n";
+            transcript += "Recovered drafts: " + std::to_string(recovered.size()) +
+                          " (use /drafts)\n";
+            scroll = 0;
+          } else if (result.text == "/cancel") {
+            action_branch = 5;
+            withdraw_ui_prompts(raw_capture_, queued, 2, result.source.record,
+                                session_control ? &*session_control : nullptr);
+            if (busy) {
+              cancel_turn();
+              activity = "Stopping";
+            }
+            transcript += busy ? "\nStop requested; pending queue cleared.\n"
+                               : "\nNo active turn; pending queue cleared.\n";
+            scroll = 0;
+          } else if (result.text == "/clear") {
+            transcript.clear();
+            scroll = 0;
+          } else if (result.text == "/drafts") {
+            transcript +=
+                "\nRecovered drafts: " + std::to_string(recovered.size()) + "\n";
+            for (std::size_t n = 0; n < recovered.size(); ++n)
+              transcript += std::to_string(n + 1) + ": " + recovered[n].text + "\n";
+          } else if (result.text.starts_with("/draft ")) {
+            std::size_t n = 0;
+            const auto arg = std::string_view{result.text}.substr(7);
+            const auto r = std::from_chars(arg.data(), arg.data() + arg.size(), n);
+            if (r.ec != std::errc{} || r.ptr != arg.data() + arg.size() || n == 0 ||
+                n > recovered.size())
+              transcript += "\nInvalid recovered draft number.\n";
+            else {
+              auto credit = raw_ui_control(raw_capture_, 73);
+              const std::uint8_t branch = 4;
+              const auto index = n - 1;
+              const auto target = result.source.record;
+              (void)raw_ui_link(4015, recovered[index].enqueue,
+                                std::array{detail::raw_native_field(branch),
+                                           detail::raw_native_field(index),
+                                           ByteView{target.lane},
+                                           detail::raw_native_field(target.ordinal)},
+                                credit ? &*credit : nullptr);
+              action_branch = 7;
+              action_target = recovered[n - 1].enqueue;
+              composer.draft(std::move(recovered[n - 1].text));
+              recovered.erase(recovered.begin() + static_cast<std::ptrdiff_t>(n - 1));
+              transcript += "\nLoaded recovered draft; Enter submits explicitly.\n";
+            }
+          } else if (busy || !queued.empty()) {
+            wake_refused =
+                false; // An explicit submission permits the queued owner to retry.
+            auto candidate = composer.state();
+            append_prompt_state(candidate.queued, recovered);
+            append_prompt_state(candidate.queued, queued);
+            candidate.queued.push_back(result.text);
+            try {
+              validate_state(candidate);
+              action_target = enqueue_ui_prompt(
+                  raw_capture_, queued, result.text, result.source, 1,
+                  result.source.record, session_control ? &*session_control : nullptr);
+              action_branch = 2;
+            } catch (const Error &) {
+              ui_capture.require();
+              composer.draft(std::move(result.text));
+              transcript += "\nQueue full; prompt retained in composer.\n";
+            }
+          } else {
+            if (persist()) {
+              saved_last_input = true;
+              input.outcome(RawRegionOutcome::dispatch);
+              input.finish();
+              keyboard_burst.reset();
+              keyboard_data.reset();
+              keyboard_control.reset();
+              wake_refused = false;
+              if (!start(result.text, result.source))
+                composer.draft(std::move(result.text));
+              action_target = last_launch;
+              action_branch = wake_refused ? 4 : 3;
+            } else {
+              action_branch = 4;
+              composer.draft(std::move(result.text));
+            }
+          }
+        }
+        finish_action();
+      } catch (...) {
+        handling->capture_exception(4016);
+        handling->close();
+        keyboard_process.capture_exception(4084);
+        keyboard_process.close();
+        throw;
       }
     }
     pollfd next_input{STDIN_FILENO, POLLIN, 0};
-    if (child_input.size() >= 4096 || poll(&next_input, 1, 0) == 0)
+    if (child_input.size() >= 4096 ||
+        terminal_native_poll(&terminal_context, std::span{&next_input, std::size_t{1}},
+                             0) == 0)
       (void)flush_child_input();
     report_refused_input();
     // A final-byte submission already saved this exact state before dispatch.
     // Do not serialize/rename/fsync it again; trailing input still gets saved.
     if (!saved_last_input)
       persist();
+    keyboard_process.finish();
   }
   persist();
 }

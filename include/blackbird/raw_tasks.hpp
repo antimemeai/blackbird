@@ -17,6 +17,8 @@ struct RawTaskOrigin {
   std::optional<RawEventRef> parent;
   bool replay = false;
   RawControlToken *credit = nullptr;
+  RawCapacityClaim *data = nullptr;
+  RawControlToken *borrowed_control = nullptr;
 };
 // Stack-owned finite outcomes. Parent/credit are supplied by actual owner calls.
 class RawTaskTrace {
@@ -58,6 +60,8 @@ private:
   std::optional<RawControlToken> credit_;
   std::uint8_t stage_ = 0;
   bool operator_ = false;
+  RawCapacityClaim *borrowed_data_ = nullptr;
+  RawControlToken *borrowed_control_ = nullptr;
 };
 std::string_view raw_tasks_description() noexcept;
 } // namespace blackbird

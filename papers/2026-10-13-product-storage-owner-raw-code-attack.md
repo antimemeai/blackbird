@@ -289,3 +289,29 @@ fixture assumptions are corrected and their direct/profile checks pass; native
 byte, failure, custody and publication assertions remain strict. Full disposition
 and remaining scope are in [the completion plan](../docs/INSTRUMENTATION_COMPLETION.md).
 nls.2 remains open; this completes the present owner segment.
+
+
+2026-10-14 integration disposition: storage_raw alone fails the remaining-owner
+mandatory gate (130/131 overall). Actual selected Terminal cancellation reaches
+Turn cancelled and restored idle, but its fixture exit waits for raw_owner_blocked
+and times out. Study of terminal_product_owner(cancellation), WorkerCustody.join
+and the completed UI cancellation subplan shows this historical oracle assumed
+sticky wake admission after join; the new actual paid rearm deliberately removes
+that stale incarnation before restoring Root. Plan: require actual Ctrl-C flag,
+one real perform, one idle native acquisition after actual join, lawful restored
+Root and unchanged original/settlement/close linkage. Exit on that idle event for
+normal and cancellation; keep failed-launch and combined_transfer(true)'s genuine
+forced-admission-refusal/debt oracles unchanged. No production change, relaxed
+watchdog, second code-review panel or new fixture campaign. Recheck the existing
+storage_raw completion selection, actual fixture static/dry-format, then the
+required full installed source hook.
+
+
+Finite storage oracle recheck passes the existing completion selection with
+real normal/Ctrl-C/failed-launch Terminal handoffs, retained cold cleanup,
+forced joined-admission refusal and restoration. Actual cancellation remains
+required; Main performs exactly one idle native acquisition after restored
+joined ownership. All original settlement, close, issuer and raw linkage checks
+remain. Matching strict target build, storage fixture clang-tidy, formatter and
+diff checks pass (context/storage-terminal-rearm-oracle-{build,native,tidy}.log).
+No production source changes. The mandatory full source hook follows.

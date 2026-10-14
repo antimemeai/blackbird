@@ -257,6 +257,7 @@ private:
   Result<std::unique_ptr<RawRetainedStopBundle>>
   prepare_raw_stop(JournalCapacity credit, RawStorageHandoff *handoff = nullptr,
                    RawThreadHandle issuer = {});
+  void block_raw_owner() noexcept;
   Result<void> restore_raw_owner();
   std::shared_ptr<void> lifetime_ = std::make_shared<int>(0);
   std::function<Result<void>(const RawEventRef &)> maintenance_checkpoint_;

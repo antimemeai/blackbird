@@ -1,0 +1,44 @@
+[
+  {
+    "source": "/opt/homebrew/Cellar/llvm/23.1.2/include/c++/v1/__memory/shared_ptr.h",
+    "release": "llvmorg-23.1.2",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.2/libcxx/include/__memory/shared_ptr.h",
+    "path": "quarantine/representation-native-2026-10-13/shared_ptr.h",
+    "sha256": "f10a4e190682db855622b4964e87409444cf183f9b6d02fb0a5bcfbcf5ca5aff",
+    "restoration": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.2/libcxx/include/__memory/shared_ptr.h",
+      "-o",
+      "quarantine/representation-native-2026-10-13/shared_ptr.h"
+    ]
+  },
+  {
+    "source": "/opt/homebrew/Cellar/llvm/23.1.2/include/c++/v1/__memory/shared_count.h",
+    "release": "llvmorg-23.1.2",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.2/libcxx/include/__memory/shared_count.h",
+    "path": "quarantine/representation-native-2026-10-13/shared_count.h",
+    "sha256": "fc622382a9ed7c9192295a42df2bf3a6242926c6032e913a9940ef83edf2ff69",
+    "restoration": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.2/libcxx/include/__memory/shared_count.h",
+      "-o",
+      "quarantine/representation-native-2026-10-13/shared_count.h"
+    ]
+  },
+  {
+    "source": "/opt/homebrew/Cellar/llvm/23.1.2/include/c++/v1/__vector/vector.h",
+    "release": "llvmorg-23.1.2",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.2/libcxx/include/__vector/vector.h",
+    "path": "quarantine/representation-native-2026-10-13/vector.h",
+    "sha256": "4e6be6f4aed78449e86f74b41cccb632e6fdd3e041a4dc1f15814addf7638457",
+    "restoration": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.2/libcxx/include/__vector/vector.h",
+      "-o",
+      "quarantine/representation-native-2026-10-13/vector.h"
+    ]
+  }
+]

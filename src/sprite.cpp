@@ -1,6 +1,7 @@
 #include "blackbird/sprite.hpp"
 #include <array>
 #include <cstdlib>
+#include <stdexcept>
 #include <string_view>
 #include <unistd.h>
 
@@ -142,7 +143,10 @@ bool blackbird_graphics_available() {
          ::access(std::string{path}.c_str(), R_OK) == 0;
 }
 std::string blackbird_graphics_load() {
-  return "\x1b_Ga=t,f=100,t=f,i=72171,q=2;" + base64_path(image_path()) + "\x1b\\";
+  const auto path = image_path();
+  if (path.size() > 3072)
+    throw std::length_error("graphics image path exceeds 3072 bytes");
+  return "\x1b_Ga=t,f=100,t=f,i=72171,q=2;" + base64_path(path) + "\x1b\\";
 }
 std::string_view blackbird_graphics_erase(bool release) {
   return release ? "\x1b_Ga=d,d=I,i=72171,q=2;\x1b\\"

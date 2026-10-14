@@ -362,7 +362,7 @@ public:
   void stage_before_launch() noexcept;
   void commit_launch() noexcept;
   void rollback_launch() noexcept;
-  Result<void> joined();
+  Result<void> joined(std::optional<Error> admission_refusal = {});
   RawStorageHandoff *handoff() noexcept { return storage_.get(); }
 
 private:

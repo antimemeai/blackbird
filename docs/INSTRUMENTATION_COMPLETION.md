@@ -218,6 +218,100 @@ Remaining program/workflow/bridge owners,
 remain open. Task hooks cover30–31; authored/VM hooks and authorization hooks
 cover their stated subplans only. No completed subset closes the60-row census.
 
+## Remaining-owner delivery, 2026-10-14
+
+The operator authorized tool callers, programs/workflows and session/operator
+surfaces through source and direct checks, stopping before qualification. This
+segment uses ONE shared [emission mechanism](../papers/2026-10-13-raw-emission-consolidation.md):
+RawEmission owns paid banks, request/publication/end; raw_publish copies native
+parts; raw_call_run classifies actual returned/thrown alternatives. Surface
+owners supply their actual fields and lifecycle. No callback registry, metric
+formatter/encoder, producer per event, event transformer or timer is introduced.
+Original business encoders/formatters retain their existing work; instrumentation
+funds their output beforehand and preserves it before later work.
+
+| Delivered owner | Concrete source and checks |
+| --- | --- |
+| File47–48, Beads51, decision/Git callers | Original native path/read/write/partial/error bytes and actual Child outcomes, paid resource cleanup, actual CWD growth, source grants and semantic results. [File](../papers/2026-10-13-file-owner-raw-code-attack.md), [Beads](../papers/2026-10-13-beads-owner-raw-code-attack.md), [decision](../papers/2026-10-13-decision-owner-raw-code-attack.md), [Git](../papers/2026-10-13-git-owner-raw-code-attack.md). |
+| Programs/workflows13–22 and bridge | Activation, generation/source/callable lifetime, VM/native/Lua original boundaries and errors; retained issuer owns cleanup after cold lifetimes. [Program/workflow](../papers/2026-10-13-program-workflow-owner-raw-code-attack.md), [bridge](../papers/2026-10-13-bridge-module-owner-raw-code-attack.md). |
+| Candidate56 | Actual file/Git/intent/observation/child custody and same business BBM outputs; timeout keeps its old unknown-outcome path while recording failures escape. Actual terminated argv and native canonical paths. [Candidate](../papers/2026-10-14-candidate-owner-raw-code-attack.md). |
+| Session/input/UI1–9,11–12 | Settings/state/locators, actual native input, dispatch/refusal, messages/palette/frame/packet and cold retirement. Existing real CLI/PTY fixtures compare bytes, identities and no-effect refusal. [Session](../papers/2026-10-13-session-state-owner-raw-code-attack.md), [input](../papers/2026-10-13-main-input-owner-raw-code-attack.md), [UI](../papers/2026-10-13-session-ui-owner-raw-code-attack.md). |
+| Restart/recovery23,58,60 | Real token/locators/state and structural recovery IDs/predicates/append cursors; actual new/resume argv reopen in process, restart exec has no fabricated return on success. Retained sole issuer survives Runtime destruction; foreign custody rejects without dropping its loan. [Restart/recovery](../papers/2026-10-14-restart-recovery-owner-raw-code-attack.md). |
+| Complaint55, Station57 | Actual local detail/delivery/retention and station admission/control/workflow/publication, original bytes and failed/no-effect outcomes. [Complaint](../papers/2026-10-14-complaint-owner-raw-code-attack.md), [Station](../papers/2026-10-13-station-owner-raw-code-attack.md). |
+| Backstop59, terminal H and plain output | Actual recovery choices/actions/independent artifact; native editor/mode/signal/resize and paid restoration; existing plain native pieces and safe formatter with original-before-format and real write outcomes. ONE [Backstop](../papers/2026-10-14-backstop-owner-raw-code-attack.md), [H](../papers/2026-10-14-terminal-custody-raw-code-attack.md) and [Plain](../papers/2026-10-14-plain-output-owner-raw-code-attack.md) code/oracle attack each; their finite fixes and direct native checks pass. |
+
+Shared File.prefix7 reads the requested112 native bytes without whole-file size
+rejection/trailing acquisition. Shared File.weakCanonical8 preserves the actual
+native prefix/CWD and returned path rather than guessing a PATH_MAX output grant;
+Restart and Session listing reference that already-preserved body. Request and
+return remain separate events. Absent optional context opts out; present invalid
+references reject at the shared caller and selected terminal/native boundaries.
+
+The first integrated Debug gate built successfully and passed124/131 cases.
+Its seven failures exposed three production defects: foreign C++ exceptions lost
+their original type at the Lua bridge, exec task activity missed the native
+subscriber, and canceled workers could not finish publication/joined ownership.
+Fixture defects were a source-relative workflow path, a reused file acquisition
+accumulator, and reading a run while the source VM still retained its issuer.
+Each correction follows its existing owner plan and review. The bridge/workflow/
+operation cases pass3/3 in59.44s; File/Backstop pass2/2 in42.51s. The terminal
+correction passes all seven existing task/terminal/command PTY, wake, UI and
+terminal-custody cases in59.19s. Exact original-error, byte, closure and genuine
+completion-refusal assertions remain intact. The first failed gate is preserved in
+context/remaining-owner-source-gate-first-tests-failed.log. The final installed
+hook must pass before publication; its result will be recorded here.
+The next integrated run builds completely and passes130/131 tests in200.32s.
+The sole remaining storage fixture assumed cancellation must leave Root blocked;
+its actual join/rearm path now restores Root. The existing completion selection
+passes after requiring actual cancellation, joined restoration and exactly one
+idle native acquisition. The genuine forced-refusal/debt case stays strict.
+The development build driver now lets whole native builds finish, matching its
+existing whole-suite/native-analysis behavior; utility limits and individual
+fixture watchdogs remain unchanged.
+A later run passes129/131 in201.05s, including storage. Its recovery marker
+oracle can read an opened file before the shell writes completion bytes; the
+same-deadline exact-byte wait correction passes the existing case. The Main
+crash report identifies a throwing fixture observer racing recorder ACK inside
+noexcept publication, after the prefix test had completed. The corrected
+observer uses the same exact preserved control record and reports its own errors
+at the fixture boundary. Named borrowed successor outputs fix the Main lint
+finding without argument copies. Matching Main/recovery direct and static checks
+pass; the final whole-source gate remains required before publication.
+The next gate passes131/131 Debug tests in210.23s and reaches all194 selected
+owned C++ translation units. Its three failing TUs have explicit optional-bank/
+snapshot/expected-error guards and named borrowed Git path parameters corrected;
+the same three targeted analyses now pass. No annotations or weaker assertions.
+Final verification is complete:131/131 Debug tests pass in236.43s; all194
+selected owned C++ translation units, C++ formatting and header coverage pass.
+Lua formatting and syntax pass. LuaLS then found the tooling-only declaration
+missing for the already implemented blackbird.emit(site,value). Its exact native
+contract is now declared; targeted formatting/syntax, whole-workspace LuaLS
+(zero diagnostics) and the existing Lua contract probe pass. The operator
+explicitly directs no whole-gate rerun for that declaration. Native/test/C++
+source is unchanged from the successful checks; the checkpoint uses that
+operator-authorized hook override after completing only the remaining Lua leg.
+Logs: context/remaining-owner-source-gate-lua-declaration-failed.log and
+context/final-lua-declaration-check.log. No workload/profile qualification starts.
+
+Source and direct owner checks are separate from qualification. Publication of this source checkpoint requires the installed full Debug
+build/test/C++/Lua commit hook. The execution log is
+context/remaining-owner-source-gate.log; the hook rejects source or index changes
+during its check. Final native H and Plain checks pass2/2 and1/1 respectively,
+and Backstop's ten direct native cases pass. These finish the named source work,
+without starting workload/profile qualification. Linux-only File and Candidate long-CWD direct
+branches remain unexecuted on this host; the attempted remote launch timed out
+before remote work. No Linux/profile/workload result is claimed for this segment.
+
+Standalone SystemA Value/radix/ByteBuffer allocator/deleter/lifetime redesign
+remains outside this delivery and open in the census. Bridge and native numeric
+acquisitions needed by the named owners are covered. Workload sizing/capacity,
+producer/recorder costs and consumer-contention qualification remain for the
+operator discussion. nls.2 remains in_progress; nls.9 and broader P0 nls.10
+remain open. Pre-runtime help/auth/discovery/read-only inspection and diagnostics
+after Runtime teardown remain explicit bootstrap/audit boundaries, not claimed
+as captured live-session output. Evals, multiplayer, steering and further
+trajectories remain deferred.
+
 ## Shared defects and boundaries
 
 The participant capture limit, post-effect result refusal and provider original

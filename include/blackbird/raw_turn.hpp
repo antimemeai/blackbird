@@ -110,7 +110,7 @@ public:
   void admission(bool settlement_existed, JournalCapacity limits,
                  JournalCursor cursor) noexcept;
   void state(std::uint8_t stage, const RawTurnState &state) noexcept;
-  void activation(std::uint8_t kind, std::string_view revision) noexcept;
+  RawEventRef activation(std::uint8_t kind, std::string_view revision) noexcept;
   RawEventRef source_request(DefinitionGenerationId generation,
                              std::string_view source);
   void source_return(RawEventRef request, std::uint8_t branch,

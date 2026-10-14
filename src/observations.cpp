@@ -1,5 +1,6 @@
 #include "blackbird/observations.hpp"
 #include "blackbird/packet.hpp"
+#include "blackbird/raw_caller.hpp"
 #include "native_process.hpp"
 #include <algorithm>
 #include <charconv>
@@ -128,96 +129,166 @@ void Observations::doctrine(std::string_view content, InvocationId invocation,
             Value{
                 "consecutive equal instruction bytes within this process observer"}}}));
 }
-Value Observations::git(const Value &query, const std::function<bool()> &cancelled) {
-  if (!std::holds_alternative<Value::Object>(query.value()))
-    throw Error{ErrorCode::invalid_range};
-  for (const auto &[key, value] : query.object()) {
-    (void)value;
-    if (key != "path" && key != "history")
+Value Observations::git(const Value &query, const std::function<bool()> &cancelled,
+                        const RawAdapterContext *context) {
+  RawCallerTrace trace{{3700, 3701}, context};
+  return trace.run([&] {
+    trace.stage(1);
+    if (!std::holds_alternative<Value::Object>(query.value()))
       throw Error{ErrorCode::invalid_range};
-  }
-  const auto path = string_field(query, "path");
-  if (path.empty() || path.size() > 4096 || path.find('\0') != std::string::npos)
-    throw Error{ErrorCode::invalid_range};
-  const auto count = query.find("history") ? numeric(field(query, "history")) : 0;
-  if (count < 0 || count > 64)
-    throw Error{ErrorCode::invalid_range};
-  auto run = [&](std::vector<std::string> args, int &code) {
-    detail::Child child;
-    child.cancelled = cancelled;
-    // Environment Git overrides must not silently change the requested repository.
-    for (char **e = environ; *e; ++e)
-      if (!std::string_view{*e}.starts_with("GIT_"))
-        child.child_environment.emplace_back(*e);
-    child.child_environment.emplace_back("GIT_OPTIONAL_LOCKS=0");
-    child.child_environment.emplace_back("GIT_TERMINAL_PROMPT=0");
-    child.separate_error = true;
-    child.start(std::move(args));
-    child.close_input();
-    return child.collect(detail::Clock::now() + std::chrono::seconds{5}, 65536, &code);
-  };
-  int code = 0;
-  const auto repo =
-      line(run({"/usr/bin/git", "-C", path, "rev-parse", "--show-toplevel"}, code));
-  if (code != 0) {
-    auto observed = sample("git.head", Value{},
-                           Value::object({{"kind", Value{"git_cli"}},
-                                          {"path", Value{path}},
-                                          {"exit_code", integer(code)}}),
-                           "unavailable");
-    return Value::object({{"samples", Value{Value::Array{observed}}},
-                          {"scope", Value{"repository lookup failed"}}});
-  }
-  const auto head =
-      line(run({"/usr/bin/git", "-C", path, "rev-parse", "--verify", "HEAD"}, code));
-  auto source = Value::object({{"kind", Value{"git_cli"}},
-                               {"repository", Value{repo}},
-                               {"requested_path", Value{path}},
-                               {"exit_code", integer(code)}});
-  Value::Array samples;
-  samples.push_back(sample("git.head", code == 0 && oid(head) ? Value{head} : Value{},
-                           source,
-                           code == 0 && oid(head) ? "observed" : "unavailable"));
-  if (code == 0 && oid(head) && count > 0) {
-    // Traverse the observed immutable commit, not a potentially moved HEAD.
-    const auto raw = run({"/usr/bin/git", "-C", path, "log", "--no-show-signature",
-                          "--format=%H%x00%at%x00%ct%x00%P%x00", "-n",
-                          std::to_string(count), head, "--"},
-                         code);
-    if (code != 0)
-      throw Error{ErrorCode::io, code};
-    std::size_t offset = 0;
-    while (offset < raw.size()) {
-      if (raw[offset] == '\n') {
-        ++offset;
-        continue;
-      }
-      std::array<std::string, 4> fields;
-      for (auto &f : fields) {
-        const auto end = raw.find('\0', offset);
-        if (end == std::string::npos)
-          throw Error{ErrorCode::corrupt};
-        f = raw.substr(offset, end - offset);
-        offset = end + 1;
-      }
-      if (!oid(fields[0]) || samples.size() > static_cast<std::size_t>(count))
-        throw Error{ErrorCode::corrupt};
-      const auto author = numeric(Value{Number{fields[1]}});
-      const auto committer = numeric(Value{Number{fields[2]}});
-      samples.push_back(
-          sample("git.commit",
-                 Value::object({{"commit", Value{fields[0]}},
-                                {"author_unix_seconds", integer(author)},
-                                {"committer_unix_seconds", integer(committer)},
-                                {"parents", Value{fields[3]}}}),
-                 source));
+    for (const auto &[key, value] : query.object()) {
+      (void)value;
+      if (key != "path" && key != "history")
+        throw Error{ErrorCode::invalid_range};
     }
-  }
-  return Value::object(
-      {{"samples", Value{std::move(samples)}},
-       {"scope",
-        Value{"point observations; commit metadata times are not activation times; "
+    trace.stage(2);
+    const auto &path_source = string_field(query, "path");
+    if (path_source.empty() || path_source.size() > 4096 ||
+        path_source.find('\0') != std::string::npos)
+      throw Error{ErrorCode::invalid_range};
+    auto path_credit = trace.data(48 + path_source.size());
+    const auto path = path_source;
+    trace.bytes(3702, path, path_credit);
+    path_credit.reset();
+    trace.stage(3);
+    const auto count = query.find("history") ? numeric(field(query, "history")) : 0;
+    if (count < 0 || count > 64)
+      throw Error{ErrorCode::invalid_range};
+    auto run = [&](std::uint8_t kind, std::initializer_list<std::string_view> sources,
+                   int &code) {
+      const auto parent = trace.context();
+      const auto argc = sources.size();
+      RawCallerTrace invocation{
+          {3703, 3704},
+          &parent,
+          std::array{detail::raw_native_field(kind), detail::raw_native_field(argc)}};
+      return invocation.run([&] {
+        std::vector<std::string> args;
+        args.reserve(argc);
+        for (const auto source : sources) {
+          const auto index = args.size();
+          auto credit =
+              invocation.data(56 + (kind == 3 && index == 7 ? 2 : source.size()));
+          if (kind == 3 && index == 7) {
+            auto formatted = std::to_string(count);
+            const auto size = formatted.size();
+            invocation.data_event(3705,
+                                  std::array{detail::raw_native_field(index),
+                                             detail::raw_native_field(size),
+                                             detail::raw_string_field(formatted)},
+                                  credit);
+            args.emplace_back(std::move(formatted));
+          } else {
+            args.emplace_back(source);
+            const auto size = args.back().size();
+            invocation.data_event(3705,
+                                  std::array{detail::raw_native_field(index),
+                                             detail::raw_native_field(size),
+                                             detail::raw_string_field(args.back())},
+                                  credit);
+          }
+        }
+        detail::Child child;
+        child.cancelled = cancelled;
+        for (char **e = environ; *e; ++e)
+          if (!std::string_view{*e}.starts_with("GIT_"))
+            child.child_environment.emplace_back(*e);
+        child.child_environment.emplace_back("GIT_OPTIONAL_LOCKS=0");
+        child.child_environment.emplace_back("GIT_TERMINAL_PROMPT=0");
+        child.separate_error = true;
+        if (invocation.enabled())
+          child.raw_capture(invocation.reference(), true, true);
+        child.start(std::move(args));
+        child.close_input();
+        auto exit_credit = invocation.control(68);
+        auto result =
+            child.collect(detail::Clock::now() + std::chrono::seconds{5}, 65536, &code);
+        const auto child_ref = child.raw_reference();
+        invocation.event(3706,
+                         std::array{ByteView{child_ref.lane},
+                                    detail::raw_native_field(child_ref.ordinal),
+                                    detail::raw_native_field(code)},
+                         exit_credit);
+        return result;
+      });
+    };
+    int code = 0;
+    trace.stage(4);
+    const auto repo = line(
+        run(1, {"/usr/bin/git", "-C", path, "rev-parse", "--show-toplevel"}, code));
+    if (code != 0) {
+      auto observed = sample("git.head", Value{},
+                             Value::object({{"kind", Value{"git_cli"}},
+                                            {"path", Value{path}},
+                                            {"exit_code", integer(code)}}),
+                             "unavailable");
+      return Value::object({{"samples", Value{Value::Array{observed}}},
+                            {"scope", Value{"repository lookup failed"}}});
+    }
+    trace.stage(5);
+    const auto head = line(
+        run(2, {"/usr/bin/git", "-C", path, "rev-parse", "--verify", "HEAD"}, code));
+    auto source = Value::object({{"kind", Value{"git_cli"}},
+                                 {"repository", Value{repo}},
+                                 {"requested_path", Value{path}},
+                                 {"exit_code", integer(code)}});
+    Value::Array samples;
+    bool head_valid = false;
+    if (code == 0) {
+      auto predicate_credit = trace.control(45);
+      head_valid = oid(head);
+      trace.event(3707,
+                  std::array{detail::raw_native_field(code),
+                             detail::raw_native_field(head_valid)},
+                  predicate_credit);
+    }
+    samples.push_back(sample("git.head", head_valid ? Value{head} : Value{}, source,
+                             head_valid ? "observed" : "unavailable"));
+    if (head_valid && count > 0) {
+      trace.stage(6);
+      const auto raw =
+          run(3,
+              {"/usr/bin/git", "-C", path, "log", "--no-show-signature",
+               "--format=%H%x00%at%x00%ct%x00%P%x00", "-n", "", head, "--"},
+              code);
+      trace.stage(7);
+      if (code != 0)
+        throw Error{ErrorCode::io, code};
+      std::size_t offset = 0;
+      while (offset < raw.size()) {
+        if (raw[offset] == '\n') {
+          ++offset;
+          continue;
+        }
+        std::array<std::string, 4> fields;
+        for (auto &f : fields) {
+          const auto end = raw.find('\0', offset);
+          if (end == std::string::npos)
+            throw Error{ErrorCode::corrupt};
+          f = raw.substr(offset, end - offset);
+          offset = end + 1;
+        }
+        if (!oid(fields[0]) || samples.size() > static_cast<std::size_t>(count))
+          throw Error{ErrorCode::corrupt};
+        const auto author = numeric(Value{Number{fields[1]}});
+        const auto committer = numeric(Value{Number{fields[2]}});
+        samples.push_back(
+            sample("git.commit",
+                   Value::object({{"commit", Value{fields[0]}},
+                                  {"author_unix_seconds", integer(author)},
+                                  {"committer_unix_seconds", integer(committer)},
+                                  {"parents", Value{fields[3]}}}),
+                   source));
+      }
+    }
+    trace.stage(8);
+    return Value::object(
+        {{"samples", Value{std::move(samples)}},
+         {"scope",
+          Value{
+              "point observations; commit metadata times are not activation times; "
               "HEAD is not loaded executable identity; worktree bytes not observed"}}});
+  });
 }
 std::string correlation_plot(const Value &page) {
   struct Point {

@@ -18,7 +18,9 @@ public:
   using Retain = std::function<std::optional<SourceReference>(const OriginalCapture &)>;
   using Save = std::function<std::optional<ApplicationRecordId>(const Value &)>;
   using Publish = std::function<void(const Value &)>;
-  Participants(const Value &saved, Retain retain, Save save, Publish publish = {});
+  using PublishNative = std::function<void(const Value &, RawEventRef)>;
+  Participants(const Value &saved, Retain retain, Save save, Publish publish = {},
+               PublishNative publish_native = {});
   ~Participants();
   Participants(const Participants &) = delete;
   Participants &operator=(const Participants &) = delete;

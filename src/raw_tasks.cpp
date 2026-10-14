@@ -11,8 +11,10 @@ std::optional<RawControlToken> claim(std::uint64_t bytes, RawControlToken *paren
   if (!raw_enabled())
     return {};
   auto held = parent ? parent->split(bytes) : raw_claim_control(bytes);
-  if (!held.has_value())
+  if (!held.has_value()) {
+    raw_capture_failed(held.error());
     throw held.error();
+  }
   return std::move(held).value();
 }
 } // namespace
@@ -20,7 +22,10 @@ RawTaskTrace::RawTaskTrace(RawTaskAction action, std::uint64_t revision,
                            RawTaskOrigin origin, std::uint64_t credit) {
   const ErrnoGuard guard;
   const bool parent = origin.parent.has_value();
-  credit_ = claim(credit + (parent ? 24 : 0), origin.credit);
+  borrowed_data_ = origin.data;
+  borrowed_control_ = origin.borrowed_control;
+  credit_ = claim(credit + (parent ? 24 : 0),
+                  origin.credit ? origin.credit : borrowed_control_);
   if (!credit_.has_value())
     return;
   const auto tag = static_cast<std::uint8_t>(action);
@@ -112,14 +117,16 @@ void RawTaskTrace::bytes(std::string_view source, RawCapacityClaim &credit) noex
 }
 RawTaskOrigin RawTaskTrace::child(bool replay) const noexcept {
   return {enabled() ? std::optional<RawEventRef>{request_} : std::nullopt, replay,
-          nullptr};
+          nullptr, borrowed_data_, borrowed_control_};
 }
 std::optional<RawControlToken> RawTaskTrace::split(std::uint64_t amount) {
   if (!credit_.has_value())
     return {};
   auto child = credit_->split(amount);
-  if (!child.has_value())
+  if (!child.has_value()) {
+    raw_capture_failed(child.error());
     throw child.error();
+  }
   return std::move(child).value();
 }
 std::string_view raw_tasks_description() noexcept {

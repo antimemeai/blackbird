@@ -241,3 +241,51 @@ write/EINTR/zero, fsync/close/rename/unlink errors, edit conflicts, observer
 exceptions, sticky admission cancellation and selected/unselected parent paths.
 These are concrete repairs and direct oracles within this unit. They do not
 require a second plan attack, a review of this report, or unrelated assurance.
+
+
+## Implementation disposition, 2026-10-13
+
+All six plan findings are incorporated in the authoritative file subplan and
+selected owner implementation. Five additional pinned stream/stdio sources and
+restoration records extend the original nine-entry acquisition manifest. The
+selected loop preserves 8192-byte business append batches; Darwin negative
+reads remain EOF/prefix outcomes, while GNU retries EINTR and preserves its
+stream Error mapping. Native failures remain distinct captured returns in both.
+There is no clock or producer conversion.
+
+The genuine published-owner red is `context/file-owner-unit/limit-red.log`:
+actual shared libc++ fread acquires16785408 source bytes through the fixture dyld
+interposer, the existing business limit refuses, and the independent raw-disk
+oracle fails because those originals are absent. Matching old headers, archives,
+source, dylib, binary and hashes remain in `context/file-owner-unit/published`.
+Initial public-read/main-image wrappers did not reach that private stdio path;
+their zero-acquisition attempts are explicitly not evidence.
+
+Native candidate checks compare unchanged binary read/write/edit bytes and real
+field/ref ordering, observed failures and exact credit boundaries. Descriptor
+custody is attached before capture; native close and successful rename consume
+ownership before capture. Damaged actual shared publication after open, mkstemp,
+close and rename produces8001 and still attempts held cleanup. Close-capture
+failure plus native unlink EACCES preserves the original conflict and the
+separate actual cleanup return. Successful rename followed by failed return
+capture leaves a genuinely different old-temp-name replacement untouched.
+These controlled publication cuts stop the actual recorder/supervisor and
+restore the fixture word before resuming; they do not claim ordinary transport
+failure is expected.
+
+Exact independent grants are41+50 for tool admission,50+184+77+53 for a native
+read with held cleanup, and16+24+1+8+8192 for positive original DATA. Each has a
+maximum and maximum-minus-one native acquisition oracle. Native Call releases
+unused terminal credit immediately after its actual return, rather than holding
+four success-branch bytes until helper exit. No new wait or native effect is
+introduced. Typed fixture-only stdio callbacks compare genuine first and partial
+EBADF against the unchanged helper. Embedded NUL preserves whole business
+arguments separately from first-NUL native operands; invalid UTF8 uses the
+actual platform result rather than assuming APFS accepts the name.
+
+GNU fallback native fixtures are conditional on Linux: fresh second lstat,
+full4095/4096/4097 readlink boundaries, genuine39/40-link chains and actual final
+exists deletion. They are source-written; Mac compilation does not execute or
+qualify that platform-specific branch. Whole code/oracle review is still the
+single next independent layer. Workload measurements and supported profile
+qualification are outside this operator-authorized unit window.

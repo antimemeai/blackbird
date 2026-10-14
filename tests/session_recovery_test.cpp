@@ -413,10 +413,10 @@ std::string lua_text(std::string_view text) {
   }
   return quoted + "\"";
 }
-bool await_file(const std::filesystem::path &path) {
+bool await_file(const std::filesystem::path &path, std::string_view expected) {
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
   while (std::chrono::steady_clock::now() < deadline) {
-    if (std::filesystem::exists(path))
+    if (std::filesystem::exists(path) && read_file(path) == expected)
       return true;
     std::this_thread::sleep_for(std::chrono::milliseconds{5});
   }
@@ -439,7 +439,7 @@ void interrupted_wrappers(const std::filesystem::path &base_path,
       try {
         write_file(path, "release");
         if (std::filesystem::exists(started))
-          (void)await_file(finished);
+          (void)await_file(finished, "DONE\n");
       } catch (...) {
       }
     }
@@ -483,7 +483,7 @@ void interrupted_wrappers(const std::filesystem::path &base_path,
                                  Value::object({{"proposal", config}}));
       engine.operation_completed = [&](std::string_view completed) {
         if (completed.starts_with("exec backgrounded")) {
-          if (!await_file(effected))
+          if (!await_file(effected, "EFFECT\n"))
             ::_exit(44);
           ::_exit(42);
         }
@@ -544,8 +544,17 @@ void interrupted_wrappers(const std::filesystem::path &base_path,
               !std::filesystem::exists(done),
           "recovery repeated or adopted prior command");
   write_file(release, "release");
-  require(await_file(done) && read_file(done) == "DONE\n" &&
-              read_file(effected) == "EFFECT\n",
+  const bool completed = await_file(done, "DONE\n");
+  const bool marker_exists = std::filesystem::exists(done);
+  const auto observed_done = marker_exists ? read_file(done) : std::string{};
+  const auto observed_effect = read_file(effected);
+  if (!completed || observed_done != "DONE\n" || observed_effect != "EFFECT\n")
+    std::cerr << "wrapper completion=" << completed
+              << " marker exists=" << marker_exists
+              << " done bytes=" << observed_done.size() << " [" << observed_done
+              << "] effect bytes=" << observed_effect.size() << " [" << observed_effect
+              << "]\n";
+  require(completed && observed_done == "DONE\n" && observed_effect == "EFFECT\n",
           "recovery killed prior command or replayed its effect");
 }
 } // namespace

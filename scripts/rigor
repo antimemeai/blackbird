@@ -78,7 +78,7 @@ def verify_tools():
 
 def build(profile):
     run([PROFILE["cmake"]["path"], "--preset", profile])
-    run([PROFILE["cmake"]["path"], "--build", "--preset", profile])
+    run([PROFILE["cmake"]["path"], "--build", "--preset", profile], timeout=None)
 
 
 def sources(extension):

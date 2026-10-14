@@ -2871,8 +2871,6 @@ void terminal_product_owner(TerminalCut cut) {
         auto exit = [&] {
           if (cut == TerminalCut::launch_failure)
             return refused_worker_launches == 1;
-          if (cut == TerminalCut::cancellation)
-            return root->raw_owner_blocked();
           return idle_after_perform == 1;
         };
         refused_worker_launches = 0;
@@ -2888,9 +2886,10 @@ void terminal_product_owner(TerminalCut cut) {
                   retained.has_value() && retained->max_file_bytes == 2048,
               "actual failed jthread construction restores untouched OLDmain bundle");
         else if (cut == TerminalCut::cancellation)
-          require(calls_to_perform == 1 && performed.load() &&
-                      root->raw_owner_blocked() && idle_after_perform == 0,
-                  "actual canceled Terminal join preserves child debt and skips idle");
+          require(calls_to_perform == 1 && performed.load() && cancelled.load() &&
+                      !root->raw_owner_blocked() && owner.permits_current() &&
+                      idle_after_perform == 1,
+                  "actual canceled Terminal join rearms before restored MAIN idle");
         else
           require(calls_to_perform == 1 && idle_after_perform == 1 &&
                       !root->raw_owner_blocked() && owner.permits_current(),

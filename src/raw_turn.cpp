@@ -296,12 +296,18 @@ void RawTurnTrace::state(std::uint8_t stage, const RawTurnState &state) noexcept
                           detail::raw_native_field(state.unretained_bytes)};
   event(1904, request_, fields);
 }
-void RawTurnTrace::activation(std::uint8_t kind, std::string_view revision) noexcept {
+RawEventRef RawTurnTrace::activation(std::uint8_t kind,
+                                     std::string_view revision) noexcept {
   const auto length = revision.size();
   const std::array fields{detail::raw_native_field(kind),
                           detail::raw_native_field(length),
                           detail::raw_string_field(revision)};
-  event(1905, request_, fields);
+  if (!credit_)
+    return {};
+  const std::array body{ByteView{request_.lane},
+                        detail::raw_native_field(request_.ordinal), fields[0],
+                        fields[1], fields[2]};
+  return publish(1905, body, &*credit_, RawPartition::control);
 }
 RawEventRef RawTurnTrace::source_request(DefinitionGenerationId generation,
                                          std::string_view source) {

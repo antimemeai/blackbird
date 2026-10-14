@@ -1,8 +1,8 @@
 # Beads51 whole owner: proposed raw emission subplan
 
-2026-10-11. Proposed and unimplemented. One root plan attack must accept this
-complete unit before production coding or builds. Zero compiler workers used in
-this study. Sites3500–3599 proposed; the current source and Oct11 subplans have
+2026-10-11 design; Oct13 implementation under the completed ONE root plan
+review in [Beads plan review](2026-10-13-beads-owner-raw-plan-review.md). Native
+old-source red precedes production edits; no second design-review layer. Sites3500–3599 proposed; the current source and Oct11 subplans have
 no use of that range. This does not complete nls.2 or authorize evaluations,
 dependency adoption, operator database writes or execution of quarantined code.
 
@@ -81,7 +81,7 @@ locals die. Do not borrow out/result/error strings after destruction. Finish onc
 on returned/Error/allocation/length/standard/nonstandard/unresolved branch;
 destructors consume prepared terminal credit without waits or throwing.
 
-## Canonical-path dependency: explicit, pending file47–48
+## Canonical-path dependency: explicit file47–48
 
 Configure currently calls canonical(project,error_code), then canonical of the
 actual joined `canonical / ".beads"`, and compares that returned path with the
@@ -93,7 +93,7 @@ Proposed shared file-owner interface, requiring incorporation in the pending
 [file subplan](2026-10-11-file-owner-raw-subplan.md):
 
 ```
-std::filesystem::path native_canonical(
+std::filesystem::path raw_file_canonical(
     const std::filesystem::path&, std::error_code&,
     const RawAdapterContext* = nullptr, RawEventRef* actual_owner = nullptr);
 ```
@@ -419,7 +419,7 @@ Required cases, each against real production owner path:
    prior bodies remain on disk, cleanup consumes898 without another grant.
 8. Allocation cuts before argv insertion, after published element, after child
    argv copy admission, after acquired stream, within parse_json, caught-Error
-   result construction, validated cache copy, and postaction result/audit_ref.
+   result construction, validated cache assignment provenance/shared-storage identity, and postaction result/audit_ref.
    Preserve actual thrown/converted branch and conservative marker. Reuse
    operation17's result-capture allocation oracle for its existing boundary;
    this unit supplies Beads linkage and real child effect marker.
@@ -457,3 +457,46 @@ external mutation promise is introduced.
    assurance layer, review of the review, unrelated source gate repetition or
    invented wall-clock cutoff. Report actual results and remaining dependency
    limits; do not activate an incomplete whole-owner candidate.
+
+
+## Oct13 accepted implementation corrections and genuine red
+
+The completed ONE plan review requires status admission before the required
+business status construction (literal view input, one owned string moved into
+Value), per-element admission before argv construction and reserved-vector
+noexcept insertion, source invalidation on selected/default/partial state
+mutations, and lexical Child destruction before invocation terminal. Parser
+Result failure remains distinct from a thrown exception. The completed file
+canonical helper supplies an optional actual3410 request outparam immediately
+after its request publication; opt-out/begin refusal leaves it absent. This
+narrow signature dependency belongs to Beads' whole owner review, not a second
+review of settled file behavior.
+
+Matching old current headers and three Debug archives were preserved before
+Beads edits in ignored context/beads-owner-unit/published. The genuine public
+CodingEngine::operator_call baseline forwards actual native stderr24/stdout24
+binary reads. An inherited pipe acknowledgment releases stdout only after the
+parent acquires stderr; the child writes its independent once effect marker.
+A stack-selected real AuditLog::original allocation then throws after acquired
+stdout. Recorder closes the native run without8000/8001. Old raw originals are
+0/0 and3500 run graph is absent, so the direct byte/owner assertion exits1 at
+the intended missing-capture oracle. Initial setup permission/SDK compile
+corrections were not called red. Source, archives, headers, executable and log
+are preserved, no operator bd/database was used.
+
+Current Value source correction: `Value::operator=(const Value&)` shares the
+existing Storage when the parsed data handle is unexposed. Beads receives that
+const parsed handle; there is no allocating cache-copy boundary to fault. The
+direct cache case compares actual returned/cached Storage identity, accepted
+3505 actionR/count and failed-refresh/default-invalidation behavior instead of
+inventing a clone or injection seam. The actual8192 argv acquisition allocator
+rounds to8200 on this libc++; its cut selects the real RawBeadsArgv::push stack
+and required source extent, not a guessed8193 heap size.
+
+
+2026-10-13 SAME B1 amendment:3503 field9 is the completed SAME
+canonical-project/".beads" operand, paid49+actual canonical.native().size()+1+6
+BEFORE join, emitted before following File admission, reused by equality.
+Configure's second canonical path receives it by const reference, with no second
+join or copy. B2 literal whole-native pair checks and shared RawEmission migration
+are recorded in the one code attack disposition. No new owner/bank/transport.

@@ -1,23 +1,29 @@
 #pragma once
 #include "blackbird/chat_view.hpp"
+#include "blackbird/raw_provider.hpp"
 #include "blackbird/value.hpp"
 #include <map>
 #include <memory>
 #include <optional>
 namespace blackbird {
+struct RawProgramContext;
 struct WorkflowSelection {
   Value definition;
   std::string arguments, trigger;
 };
 class WorkflowRegistry {
 public:
-  WorkflowRegistry(const Value &config, std::string revision);
+  WorkflowRegistry(const Value &config, std::string_view revision,
+                   const RawProgramContext *context = nullptr);
   const Value &definitions() const { return definitions_; }
   const std::string &revision() const { return revision_; }
   const std::string &prefix() const { return prefix_; }
-  Value discover() const;
-  std::optional<WorkflowSelection> select(std::string_view text) const;
-  const Value &named(std::string_view name) const;
+  Value discover(const RawProgramContext *context = nullptr) const;
+  std::optional<WorkflowSelection>
+  select(std::string_view text, const RawProgramContext *context = nullptr,
+         RawEventRef *selection_request = nullptr) const;
+  const Value &named(std::string_view name, const RawProgramContext *context = nullptr,
+                     RawEventRef *selection_request = nullptr) const;
   ChatRow color(std::string_view text, Ink base = Ink::normal) const;
 
 private:

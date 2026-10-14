@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <functional>
 namespace blackbird {
+struct RawFileInput;
+class RawFileToolTrace;
 struct CapturedOutput {
   std::string label;
   std::string bytes;
@@ -21,11 +23,18 @@ public:
 private:
   std::vector<CapturedOutput> captured_;
   Observer observer_;
-  void capture(std::string label, std::string raw);
+  void capture(std::string label, std::string raw, RawFileToolTrace * = nullptr);
 };
+std::string read_file_prefix(const std::filesystem::path &, std::size_t,
+                             const RawAdapterContext * = nullptr,
+                             RawEventRef *actual_owner = nullptr);
 std::string read_file(const std::filesystem::path &path,
                       std::size_t limit = 16 * 1024 * 1024);
 void write_file(const std::filesystem::path &path, std::string_view bytes);
+std::string read_file(const std::filesystem::path &, std::size_t,
+                      const RawAdapterContext *, RawEventRef *actual_owner = nullptr);
+void write_file(const std::filesystem::path &, std::string_view,
+                const RawAdapterContext *, const RawFileInput * = nullptr);
 Value process_output_presentation(const std::string &raw, const Value &args);
 Value tool_definitions();
 } // namespace blackbird

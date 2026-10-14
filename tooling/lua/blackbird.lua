@@ -51,6 +51,10 @@ function blackbird.present(item) end
 ---@return boolean Restart scheduled for successful turn boundary.
 function blackbird.restarting() end
 
+---@param site integer Positive site scoped to the current source generation.
+---@param value number|boolean|string Raw scalar or exact string bytes.
+function blackbird.emit(site, value) end
+
 -- Compatibility alias for existing retained scripts.
 arco = blackbird
 

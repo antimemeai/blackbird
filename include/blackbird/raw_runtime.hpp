@@ -16,6 +16,29 @@ struct RawWaitControl {
   std::optional<std::chrono::steady_clock::time_point> deadline;
 };
 RawWaitControl raw_wait_control() noexcept;
+// Explicit synchronous owner context. Captures actual raw-API failure origin
+// without confusing an identical business Error; it never escapes into a worker.
+class RawCaptureFailureScope {
+public:
+  explicit RawCaptureFailureScope(bool selected) noexcept;
+  ~RawCaptureFailureScope();
+  RawCaptureFailureScope(const RawCaptureFailureScope &) = delete;
+  RawCaptureFailureScope &operator=(const RawCaptureFailureScope &) = delete;
+  const std::optional<Error> &error() const noexcept { return error_; }
+  void require() const;
+  // Only a native owner performing its existing business-error translation may
+  // consume the identical failure of this active, individual admission call.
+  // This never clears an enclosing owner's marker.
+  bool consume(Error actual) noexcept;
+  void finish() noexcept;
+
+private:
+  RawCaptureFailureScope *previous_ = nullptr;
+  std::optional<Error> error_;
+  bool selected_ = false;
+  friend void raw_capture_failed(Error) noexcept;
+};
+void raw_capture_failed(Error error) noexcept;
 class RawWaitScope {
 public:
   explicit RawWaitScope(RawWaitControl control);
@@ -104,6 +127,7 @@ Result<RawControlToken> raw_claim_control(std::uint64_t bytes,
 // cancellation check. Refuses insufficient capacity before a caller effect.
 // Use only where ordinary admission already ran and cleanup must stay possible.
 Result<RawControlToken> raw_try_claim_control(std::uint64_t bytes) noexcept;
+Result<RawCapacityClaim> raw_try_claim_data(std::uint64_t bytes) noexcept;
 // Owned data capacity survives nested emission and ordinary reservation release.
 Result<RawCapacityClaim> raw_claim_data(std::uint64_t bytes,
                                         RawWaitControl control = raw_wait_control());

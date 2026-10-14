@@ -4,6 +4,7 @@
 #include <functional>
 
 namespace blackbird {
+struct RawAdapterContext;
 struct DecisionModelConfig {
   std::string curl_executable = "curl";
   std::filesystem::path credential_file;
@@ -17,7 +18,7 @@ public:
       : config_(std::move(config)) {}
   std::function<bool()> cancelled;
   std::function<void(std::string_view, std::string_view)> observer;
-  Value evaluate(const Value &arguments);
+  Value evaluate(const Value &arguments, const RawAdapterContext *context = nullptr);
 
 private:
   DecisionModelConfig config_;

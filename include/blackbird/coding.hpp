@@ -6,6 +6,7 @@
 #include "blackbird/observations.hpp"
 #include "blackbird/openai.hpp"
 #include "blackbird/participants.hpp"
+#include "blackbird/raw_program.hpp"
 #include "blackbird/session.hpp"
 #include "blackbird/tools.hpp"
 
@@ -54,7 +55,8 @@ private:
 enum class RecoveryMode { provider_only, acknowledge_local_unknowns };
 // Explicit local recovery records uncertainty; never redispatches old effects.
 void recover_coding_session(RetainedState &root,
-                            RecoveryMode mode = RecoveryMode::provider_only);
+                            RecoveryMode mode = RecoveryMode::provider_only,
+                            const RawAdapterContext *context = nullptr);
 struct TurnInput {
   std::string_view prompt;
   std::string_view program;
@@ -79,7 +81,7 @@ public:
   std::shared_ptr<const WorkflowRegistry> workflows() const { return workflows_; }
   // One cooperative failure ticket, consumed before creating a recovery audit.
   // A reopened/crashed engine has no such authority.
-  Error claim_backstop();
+  Error claim_backstop(const RawAdapterContext *raw_context = nullptr);
   const Value &workflow_result() const noexcept { return workflow_result_; }
   ContextStore &context() noexcept { return context_; }
   TaskStore &tasks() noexcept { return tasks_; }
@@ -90,6 +92,7 @@ public:
   std::function<void(const Value &)> observed_usage;
   std::function<void(std::string_view)> operation_started;
   std::function<void(const Value &)> task_activity;
+  std::function<void(const Value &, RawTaskPresentation)> task_activity_native;
   std::function<void(std::string_view)> status;
   std::function<void(std::string_view)> operation_completed;
   std::function<void(std::string_view, AttemptDisposition)> operation_outcome;
@@ -103,11 +106,10 @@ public:
   bool uncontained_command_custody() const noexcept {
     return uncontained_exec_recovery_;
   }
-  void validate_session_switch() const;
-  void validate_restart() const;
-  std::optional<std::string> take_restart_note() {
-    return std::exchange(restart_note_, std::nullopt);
-  }
+  void validate_session_switch(const RawAdapterContext *context = nullptr) const;
+  void validate_restart(const RawAdapterContext *context = nullptr) const;
+  std::optional<std::string>
+  take_restart_note(const RawAdapterContext *context = nullptr);
   const std::optional<std::string> &restart_note() const noexcept {
     return restart_note_;
   }
@@ -151,14 +153,18 @@ private:
                                        {"effort", Value{""}}})};
   std::shared_ptr<const WorkflowRegistry> workflows_, pending_workflows_;
   unsigned workflow_depth_ = 0, workflow_invocations_ = 0;
+  std::shared_ptr<RawProgramIssuer> program_issuer_;
+  RawProgramLifetime pending_program_trace_, pending_tools_trace_;
   struct WorkflowContinuation {
     Value definition, arguments;
     std::string revision, selection_attempt;
+    RawEventRef selection{};
+    RawProgramLifetime parked;
   };
   std::vector<WorkflowContinuation> workflow_continuations_;
   bool draining_workflows_ = false;
   std::optional<Error> workflow_failure_;
-  Value execute_workflow(const WorkflowContinuation &invocation);
+  Value execute_workflow(WorkflowContinuation &invocation);
   void drain_workflows();
   Value pending_program_config_;
   std::string program_revision_ = "initial-empty", pending_program_revision_;

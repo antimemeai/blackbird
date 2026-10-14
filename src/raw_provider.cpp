@@ -163,11 +163,14 @@ RawNativePermit RawChildTrace::permit(std::uint64_t bytes) {
   const ErrnoGuard guard;
   RawNativePermit result;
   if (cleanup_) {
+    RawCaptureFailureScope admission{true};
     try {
       result.control.emplace(claim(bytes));
     } catch (const Error &error) {
-      if (error.code == ErrorCode::interrupted && error.detail == ETIMEDOUT)
+      if (error.code == ErrorCode::interrupted && error.detail == ETIMEDOUT) {
+        (void)admission.consume(error);
         throw deadline_error_;
+      }
       throw;
     }
   }
@@ -177,11 +180,14 @@ RawNativePermit RawChildTrace::read_permit(RawReadChannel channel,
                                            std::size_t requested) {
   auto result = permit(read_bytes);
   if (cleanup_ && captures(static_cast<std::uint8_t>(channel))) {
+    RawCaptureFailureScope admission{true};
     auto ready = raw_claim_data(read_bytes + requested);
     if (!ready.has_value()) {
       const auto error = ready.error();
-      if (error.code == ErrorCode::interrupted && error.detail == ETIMEDOUT)
+      if (error.code == ErrorCode::interrupted && error.detail == ETIMEDOUT) {
+        (void)admission.consume(error);
         throw deadline_error_;
+      }
       throw error;
     }
     result.data.emplace(std::move(ready).value());

@@ -113,5 +113,68 @@
       "-o",
       "quarantine/file-native-2026-10-11/linux-namei.c"
     ]
+  },
+  {
+    "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-13.3.0/libstdc%2B%2B-v3/config/io/basic_file_stdio.cc",
+    "path": "quarantine/file-native-2026-10-11/gcc-basic-file-stdio.cc",
+    "bytes": 12360,
+    "sha256": "4aa399e80875a7bc8502cfa0cdb37ce791e7e28dc344b95c51a0509135d688f7",
+    "restore": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-13.3.0/libstdc%2B%2B-v3/config/io/basic_file_stdio.cc",
+      "-o",
+      "quarantine/file-native-2026-10-11/gcc-basic-file-stdio.cc"
+    ]
+  },
+  {
+    "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-13.3.0/libstdc%2B%2B-v3/include/bits/fstream.tcc",
+    "path": "quarantine/file-native-2026-10-11/gcc-fstream.tcc",
+    "bytes": 33421,
+    "sha256": "41a55811d640439540a1e3d07928c11eae4be3e4150b7e9e765c3625c0e51231",
+    "restore": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-13.3.0/libstdc%2B%2B-v3/include/bits/fstream.tcc",
+      "-o",
+      "quarantine/file-native-2026-10-11/gcc-fstream.tcc"
+    ]
+  },
+  {
+    "url": "https://raw.githubusercontent.com/apple-oss-distributions/Libc/3993268b10453da1651f3fbf54dee16fad6e0dc6/stdio/FreeBSD/refill.c",
+    "path": "quarantine/file-native-2026-10-11/darwin-refill.c",
+    "bytes": 4342,
+    "sha256": "8c4edc68b37bbb04c0d7a905049972fc23b553387eba81339d26ae3170fd7411",
+    "restore": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/apple-oss-distributions/Libc/3993268b10453da1651f3fbf54dee16fad6e0dc6/stdio/FreeBSD/refill.c",
+      "-o",
+      "quarantine/file-native-2026-10-11/darwin-refill.c"
+    ]
+  },
+  {
+    "url": "https://raw.githubusercontent.com/apple-oss-distributions/Libc/3993268b10453da1651f3fbf54dee16fad6e0dc6/stdio/FreeBSD/fread.c",
+    "path": "quarantine/file-native-2026-10-11/darwin-fread.c",
+    "bytes": 4944,
+    "sha256": "2d6e69bc112fa965130e29dc15afa6b018488d08d739db3846977b00933e1bdb",
+    "restore": [
+      "curl",
+      "-fL",
+      "https://raw.githubusercontent.com/apple-oss-distributions/Libc/3993268b10453da1651f3fbf54dee16fad6e0dc6/stdio/FreeBSD/fread.c",
+      "-o",
+      "quarantine/file-native-2026-10-11/darwin-fread.c"
+    ]
+  },
+  {
+    "path": "quarantine/file-native-2026-10-11/darwin-sdk-fstream",
+    "installed_source": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/fstream",
+    "bytes": 59569,
+    "sha256": "fa9d8579a7f31d1712eab8221fb5c934b4e938d68344d4ae10e911b0c5be1d06",
+    "restore": [
+      "cp",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/fstream",
+      "quarantine/file-native-2026-10-11/darwin-sdk-fstream"
+    ]
   }
 ]

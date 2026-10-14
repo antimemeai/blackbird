@@ -120,8 +120,15 @@ TaskState::Prepared TaskState::prepare(const Value &request,
     bounded_text(field(request, "op_id"), 64, false);
     trace.stage(2);
     std::optional<RawCapacityClaim> source_credit;
-    if (trace.enabled())
-      source_credit.emplace(unwrap(raw_claim_data(ValueLimits{}.bytes + 48)));
+    if (trace.enabled()) {
+      auto acquired = origin.data ? origin.data->split(ValueLimits{}.bytes + 48)
+                                  : raw_claim_data(ValueLimits{}.bytes + 48);
+      if (!acquired.has_value()) {
+        raw_capture_failed(acquired.error());
+        throw acquired.error();
+      }
+      source_credit.emplace(std::move(acquired).value());
+    }
     const auto source = unwrap(encode_packet_string(request));
     if (source_credit.has_value()) {
       trace.bytes(source, *source_credit);
@@ -495,7 +502,9 @@ void TaskState::replay(const Value &packet, RawTaskOrigin origin) {
     trace.finish();
   });
 }
-Value TaskState::snapshot(RawTaskOrigin origin) const {
+Value TaskState::snapshot(RawTaskOrigin origin, RawEventRef *completion) const {
+  if (completion)
+    *completion = {};
   RawTaskTrace trace{RawTaskAction::snapshot, revision_, origin, 157};
   return trace.run([&] {
     trace.stage(7);
@@ -522,7 +531,9 @@ Value TaskState::snapshot(RawTaskOrigin origin) const {
         detail::raw_native_field(revision_), detail::raw_native_field(next_),
         detail::raw_native_field(row_size), detail::raw_native_field(order_size),
         detail::raw_native_field(receipt_size)};
-    (void)trace.event(1708, trace.reference(), fields);
+    const auto captured = trace.event(1708, trace.reference(), fields);
+    if (completion)
+      *completion = captured;
     trace.finish();
     return result;
   });
@@ -772,6 +783,15 @@ Value TaskStore::edit(const Value &request, RawTaskOrigin origin) {
             (void)trace.event(1710, callback, fields);
           }
         };
+        const RawTaskPresentation presentation{
+            callback.ordinal ? std::optional{callback} : std::nullopt, identity,
+            state_.revision()};
+        struct PresentationScope {
+          const RawTaskPresentation *&slot;
+          const RawTaskPresentation *previous;
+          ~PresentationScope() { slot = previous; }
+        } presentation_scope{active_presentation_, active_presentation_};
+        active_presentation_ = &presentation;
         try {
           changed(packet);
           callback_result(0);

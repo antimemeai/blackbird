@@ -6,6 +6,11 @@
 #include <set>
 
 namespace blackbird {
+struct RawTaskPresentation {
+  std::optional<RawEventRef> source;
+  std::optional<ApplicationRecordId> fact;
+  std::optional<std::uint64_t> revision;
+};
 // Current task projection only; history belongs to the retained journal.
 class TaskState {
 public:
@@ -29,7 +34,7 @@ public:
   void commit(Prepared &&prepared, RawTaskOrigin origin = {});
   void replay(const Value &packet, RawTaskOrigin origin = {});
   void restore(const Value &snapshot, RawTaskOrigin origin = {});
-  Value snapshot(RawTaskOrigin origin = {}) const;
+  Value snapshot(RawTaskOrigin origin = {}, RawEventRef *completion = nullptr) const;
   Value read(const Value &query = Value::object({}), RawTaskOrigin origin = {}) const;
   const Value *item(std::string_view id) const;
   std::uint64_t revision() const noexcept { return revision_; }
@@ -55,12 +60,18 @@ public:
   }
   Value edit(const Value &request, RawTaskOrigin origin = {});
   Value operator_command(std::string_view command);
-  Value snapshot() const { return state_.snapshot(); }
+  Value snapshot(RawEventRef *completion = nullptr) const {
+    return state_.snapshot({}, completion);
+  }
+  RawTaskPresentation presentation_origin() const noexcept {
+    return active_presentation_ ? *active_presentation_ : RawTaskPresentation{};
+  }
   const TaskState &state() const noexcept { return state_; }
   std::function<void(const Value &)> changed;
 
 private:
   AuditLog &log_;
   TaskState state_;
+  const RawTaskPresentation *active_presentation_ = nullptr;
 };
 } // namespace blackbird

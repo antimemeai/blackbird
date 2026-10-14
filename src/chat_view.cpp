@@ -204,13 +204,23 @@ std::string chat_plain(const ChatRow &row) {
     text += s.text;
   return text;
 }
-void ChatView::trim() {
+void ChatView::trim(RawControlToken *credit) {
+  auto retire = [&](const Block &block, std::uint8_t reason, std::size_t offset,
+                    std::size_t length) {
+    (void)raw_ui_link(4032, block.identity,
+                      std::array{detail::raw_native_field(reason),
+                                 detail::raw_native_field(offset),
+                                 detail::raw_native_field(length),
+                                 detail::raw_native_field(generation_)},
+                      credit);
+  };
   bool removed = false;
   if (newlines_ > 2048 && !blocks_.empty()) {
     while (blocks_.size() > 1 && newlines_ > 1536) {
       newlines_ -= static_cast<std::size_t>(
           std::count(blocks_.front().text.begin(), blocks_.front().text.end(), '\n'));
       bytes_ -= blocks_.front().text.size();
+      retire(blocks_.front(), 1, 0, blocks_.front().text.size());
       blocks_.pop_front();
       removed = true;
     }
@@ -221,6 +231,7 @@ void ChatView::trim() {
         cut = text.find('\n', cut) + 1;
         --newlines_;
       }
+      retire(blocks_.front(), 2, 0, cut);
       text.erase(0, cut);
       bytes_ = text.size();
       removed = true;
@@ -230,6 +241,7 @@ void ChatView::trim() {
     bytes_ -= blocks_.front().text.size();
     newlines_ -= static_cast<std::size_t>(
         std::count(blocks_.front().text.begin(), blocks_.front().text.end(), '\n'));
+    retire(blocks_.front(), 1, 0, blocks_.front().text.size());
     blocks_.pop_front();
     removed = true;
   }
@@ -240,6 +252,7 @@ void ChatView::trim() {
       ++cut;
     newlines_ -= static_cast<std::size_t>(
         std::count(s.begin(), s.begin() + static_cast<std::ptrdiff_t>(cut), '\n'));
+    retire(blocks_.front(), 2, 0, cut);
     s.erase(0, cut);
     bytes_ = s.size();
     removed = true;
@@ -251,34 +264,85 @@ void ChatView::trim() {
     dirty_ = true;
   }
 }
-void ChatView::append(ChatKind kind, std::string_view text, bool merge) {
-  if (!merge || blocks_.empty() || blocks_.back().kind != kind)
-    blocks_.push_back({kind, {}, true, 0, 0, false, false});
-  auto &block = blocks_.back();
-  bool changed = block.dirty;
-  for (const char c : text) {
-    if (c == '\n') {
-      block.text += c;
-      ++bytes_;
-      block.line_bytes = 0;
-      ++newlines_;
-      changed = true;
-    } else if (block.line_bytes < line_limit ||
-               (block.line_bytes < line_limit + 4 &&
-                (static_cast<unsigned char>(c) & 0xc0) == 0x80)) {
-      block.text += c;
-      ++bytes_;
-      ++block.line_bytes;
-      changed = true;
-    } else if (!clipped_) {
-      clipped_ = true;
-      width_ = 0;
-      changed = true;
+void ChatView::append(ChatKind kind, std::string_view text, bool merge,
+                      RawEventRef source) {
+  const auto size = text.size();
+  const auto ranges = raw_ui_add(1027, size / line_limit);
+  const auto credit = raw_ui_add(raw_ui_multiply(ranges, 65), raw_ui_error_bytes + 72);
+  RawUiTrace trace{
+      raw_capture_,
+      {4030, 4033},
+      std::array{detail::raw_native_field(kind), detail::raw_native_field(merge),
+                 ByteView{source.lane}, detail::raw_native_field(source.ordinal),
+                 detail::raw_native_field(size), detail::raw_string_field(text)},
+      credit,
+      true};
+  trace.run([&] {
+    try {
+      if (!merge || blocks_.empty() || blocks_.back().kind != kind)
+        blocks_.push_back({kind, {}, true, 0, 0, 0, false, false, trace.reference()});
+      auto &block = blocks_.back();
+      bool changed = block.dirty;
+      std::optional<std::size_t> skipped;
+      auto close_skip = [&](std::size_t end) {
+        if (!skipped)
+          return;
+        const std::uint8_t reason = 4;
+        const auto length = end - *skipped;
+        (void)raw_ui_link(4032, trace.reference(),
+                          std::array{detail::raw_native_field(reason),
+                                     detail::raw_native_field(*skipped),
+                                     detail::raw_native_field(length),
+                                     detail::raw_native_field(generation_)},
+                          trace.credit());
+        skipped.reset();
+      };
+      for (std::size_t index = 0; index < text.size(); ++index) {
+        const char c = text[index];
+        if (c == '\n') {
+          close_skip(index);
+          block.text += c;
+          ++bytes_;
+          block.line_bytes = 0;
+          ++newlines_;
+          changed = true;
+        } else if (block.line_bytes < line_limit ||
+                   (block.line_bytes < line_limit + 4 &&
+                    (static_cast<unsigned char>(c) & 0xc0) == 0x80)) {
+          close_skip(index);
+          block.text += c;
+          ++bytes_;
+          ++block.line_bytes;
+          changed = true;
+        } else {
+          if (!skipped)
+            skipped = index;
+          if (!clipped_) {
+            clipped_ = true;
+            width_ = 0;
+            changed = true;
+          }
+        }
+      }
+      close_skip(text.size());
+      block.dirty = block.dirty || changed;
+      dirty_ = dirty_ || changed;
+      const auto identity = block.identity;
+      const auto current = block.text.size();
+      (void)trace.event(4031, std::array{ByteView{identity.lane},
+                                         detail::raw_native_field(identity.ordinal),
+                                         detail::raw_native_field(current)});
+      trim(trace.credit());
+      trace.close();
+    } catch (...) {
+      const auto count = blocks_.size();
+      (void)trace.event(4073, std::array{detail::raw_native_field(count),
+                                         detail::raw_native_field(bytes_),
+                                         detail::raw_native_field(newlines_),
+                                         detail::raw_native_field(generation_)});
+      throw;
     }
-  }
-  block.dirty = block.dirty || changed;
-  dirty_ = dirty_ || changed;
-  trim();
+  });
 }
 void ChatView::begin(ChatKind kind) {
   stream_kind_ = kind;
@@ -290,6 +354,24 @@ ChatView &ChatView::operator+=(std::string_view notice) {
   return *this;
 }
 void ChatView::clear() {
+  const auto count = blocks_.size();
+  RawUiTrace trace{raw_capture_,
+                   {4034, 4033},
+                   std::array{detail::raw_native_field(count),
+                              detail::raw_native_field(bytes_),
+                              detail::raw_native_field(generation_)},
+                   raw_ui_add(raw_ui_multiply(count, 65), 40 + raw_ui_error_bytes)};
+  const std::uint8_t reason = 3;
+  const std::size_t offset = 0;
+  for (const auto &block : blocks_) {
+    const auto size = block.text.size();
+    (void)raw_ui_link(4032, block.identity,
+                      std::array{detail::raw_native_field(reason),
+                                 detail::raw_native_field(offset),
+                                 detail::raw_native_field(size),
+                                 detail::raw_native_field(generation_)},
+                      trace.credit());
+  }
   blocks_.clear();
   rows_.clear();
   bytes_ = 0;
@@ -298,6 +380,7 @@ void ChatView::clear() {
   ++generation_;
   width_ = 0;
   dirty_ = true;
+  trace.finish();
 }
 const std::vector<ChatRow> &ChatView::rows(std::size_t width) {
   width = std::max<std::size_t>(width, 8);
@@ -432,6 +515,17 @@ void ChatGrid::line(std::size_t row, const ChatRow &content, std::size_t column)
     }
   }
 }
+std::uint64_t raw_ui_owned_grid_bound(const ChatGrid &grid) {
+  constexpr std::uint64_t max_color =
+      sizeof("\x1b[0;38;2;188;168;239;48;2;37;40;51m") - 1;
+  constexpr std::uint64_t digits = std::numeric_limits<std::size_t>::digits10 + 1;
+  constexpr std::uint64_t mode_bytes =
+      sizeof("\x1b[?2026h\x1b[?25l\x1b[0m\x1b[;H\x1b[?25h\x1b[?2026l") - 1;
+  return raw_ui_add(
+      raw_ui_add(raw_ui_multiply(grid.cells.size(), 4 + max_color), grid.tails.size()),
+      raw_ui_add(raw_ui_multiply(grid.height, 4 + 2 * digits),
+                 mode_bytes + 2 * digits));
+}
 const std::string &ChatPainter::prepare(const ChatGrid &next, std::size_t cursor_row,
                                         std::size_t cursor_column, bool full) {
   packet_.clear();
@@ -490,10 +584,44 @@ void ChatPainter::commit(const ChatGrid &next) {
   previous_ = next;
   valid_ = true;
 }
-ChatOutput::~ChatOutput() { detach(); }
-void ChatOutput::detach() noexcept {
-  if (descriptor_ >= 0)
-    (void)::fcntl(descriptor_, F_SETFL, flags_);
+ChatOutput::~ChatOutput() {
+  owner_.require_cleanup_thread();
+  detach();
+}
+void ChatOutput::detach() {
+  RawUiOwnerBinding binding{owner_};
+  if (raw_.terminal) {
+    RawUiOwnerBinding packet_binding{raw_.owner};
+    const std::uint8_t branch = 4;
+    (void)raw_ui_link(
+        4042, raw_.frame,
+        std::array{detail::raw_native_field(branch), detail::raw_native_field(offset_)},
+        &*raw_.terminal);
+    raw_.terminal.reset();
+  }
+  if (descriptor_ >= 0) {
+    const auto request = raw_ui_link(4047, attach_,
+                                     std::array{detail::raw_native_field(descriptor_),
+                                                detail::raw_native_field(flags_),
+                                                detail::raw_native_field(offset_)},
+                                     cleanup_ ? &*cleanup_ : nullptr);
+    const int result = ::fcntl(descriptor_, F_SETFL, flags_);
+    const int error = errno;
+    const bool failed = result < 0;
+    if (failed)
+      (void)raw_ui_link(4061, request,
+                        std::array{detail::raw_native_field(result),
+                                   detail::raw_native_field(failed),
+                                   detail::raw_native_field(error)},
+                        cleanup_ ? &*cleanup_ : nullptr);
+    else
+      (void)raw_ui_link(4061, request,
+                        std::array{detail::raw_native_field(result),
+                                   detail::raw_native_field(failed)},
+                        cleanup_ ? &*cleanup_ : nullptr);
+    errno = error;
+  }
+  cleanup_.reset();
   descriptor_ = -1;
   packet_ = {};
   offset_ = 0;
@@ -501,31 +629,109 @@ void ChatOutput::detach() noexcept {
 void ChatOutput::attach(int descriptor) {
   if (descriptor_ >= 0)
     throw std::logic_error("output already attached");
-  const auto flags = ::fcntl(descriptor, F_GETFL);
-  if (flags < 0 || ::fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) < 0)
-    throw std::runtime_error("cannot configure terminal output");
-  descriptor_ = descriptor;
-  flags_ = flags;
+  auto owner = RawUiOwner{raw_capture_};
+  RawUiOwnerBinding binding{owner};
+  RawUiTrace trace{raw_capture_,
+                   {4046, 4062},
+                   std::array{detail::raw_native_field(descriptor)},
+                   378};
+  trace.run([&] {
+    auto native_flags = [&](int operation, int argument) {
+      const auto request =
+          trace.event(4060, std::array{detail::raw_native_field(descriptor),
+                                       detail::raw_native_field(operation),
+                                       detail::raw_native_field(argument)});
+      const int result = ::fcntl(descriptor, operation, argument);
+      const int error = errno;
+      const bool failed = result < 0;
+      if (failed)
+        (void)raw_ui_link(4061, request,
+                          std::array{detail::raw_native_field(result),
+                                     detail::raw_native_field(failed),
+                                     detail::raw_native_field(error)},
+                          trace.credit());
+      else
+        (void)raw_ui_link(4061, request,
+                          std::array{detail::raw_native_field(result),
+                                     detail::raw_native_field(failed)},
+                          trace.credit());
+      errno = error;
+      return result;
+    };
+    const int flags = native_flags(F_GETFL, 0);
+    if (flags < 0 || native_flags(F_SETFL, flags | O_NONBLOCK) < 0)
+      throw std::runtime_error("cannot configure terminal output");
+    auto cleanup = trace.split(105);
+    owner_ = std::move(owner);
+    descriptor_ = descriptor;
+    flags_ = flags;
+    attach_ = trace.reference();
+    cleanup_ = std::move(cleanup);
+    trace.finish();
+  });
 }
-void ChatOutput::start(std::string_view packet) {
+void ChatOutput::start(std::string_view packet, RawUiPacket raw) {
+  owner_.require_thread();
+  RawUiOwnerBinding binding{raw.owner};
   if (pending())
     throw std::logic_error("cannot replace an in-flight terminal packet");
+  if ((owner_.selected() || (raw_capture_ && raw_enabled())) && !raw.terminal)
+    throw Error{ErrorCode::invalid_identity};
   packet_ = packet;
   offset_ = 0;
+  raw_ = std::move(raw);
+  if (raw_.terminal) {
+    const std::uint8_t branch = 2;
+    (void)raw_ui_link(
+        4042, raw_.frame,
+        std::array{detail::raw_native_field(branch), detail::raw_native_field(offset_)},
+        &*raw_.terminal);
+  }
 }
 bool ChatOutput::flush() {
+  owner_.require_thread();
+  RawUiOwnerBinding binding{raw_.owner};
   for (unsigned call = 0; pending() && call < 8; ++call) {
-    const auto count = ::write(descriptor_, packet_.data() + offset_,
-                               std::min<std::size_t>(packet_.size() - offset_, 8192));
+    auto credit = raw_ui_control(raw_capture_, 113);
+    const auto requested = std::min<std::size_t>(packet_.size() - offset_, 8192);
+    const auto request = raw_ui_link(4044, raw_.frame,
+                                     std::array{detail::raw_native_field(descriptor_),
+                                                detail::raw_native_field(offset_),
+                                                detail::raw_native_field(requested)},
+                                     credit ? &*credit : nullptr);
+    const auto count = ::write(descriptor_, packet_.data() + offset_, requested);
+    const int error = errno;
+    const bool failed = count < 0;
+    if (failed)
+      (void)raw_ui_link(4045, request,
+                        std::array{detail::raw_native_field(count),
+                                   detail::raw_native_field(failed),
+                                   detail::raw_native_field(error)},
+                        credit ? &*credit : nullptr);
+    else
+      (void)raw_ui_link(
+          4045, request,
+          std::array{detail::raw_native_field(count), detail::raw_native_field(failed)},
+          credit ? &*credit : nullptr);
+    errno = error;
     if (count > 0)
       offset_ += static_cast<std::size_t>(count);
-    else if (count < 0 && errno == EINTR)
+    else if (count < 0 && error == EINTR)
       continue;
-    else if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+    else if (count < 0 && (error == EAGAIN || error == EWOULDBLOCK))
       return false;
     else
       throw std::runtime_error("terminal output transport failed");
   }
-  return !pending();
+  const bool complete = !pending();
+  if (complete && raw_.terminal) {
+    const std::uint8_t branch = 3;
+    (void)raw_ui_link(
+        4042, raw_.frame,
+        std::array{detail::raw_native_field(branch), detail::raw_native_field(offset_)},
+        &*raw_.terminal);
+    raw_.terminal.reset();
+  }
+  return complete;
 }
 } // namespace blackbird

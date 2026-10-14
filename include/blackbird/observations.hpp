@@ -2,6 +2,7 @@
 #include "blackbird/context.hpp"
 #include <functional>
 namespace blackbird {
+struct RawAdapterContext;
 struct ObservationTime {
   std::int64_t utc_ns = 0, monotonic_ns = 0;
   std::uint64_t sampling_span_ns = 0;
@@ -15,7 +16,8 @@ public:
   Value time() const;
   Value sample(std::string_view name, const Value &value, const Value &source,
                std::string_view status = "observed");
-  Value git(const Value &query, const std::function<bool()> &cancelled = {});
+  Value git(const Value &query, const std::function<bool()> &cancelled = {},
+            const RawAdapterContext *context = nullptr);
   void doctrine(std::string_view content, InvocationId invocation,
                 OperationAttemptId attempt);
 

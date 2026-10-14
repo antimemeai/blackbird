@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/raw_ui.hpp"
 #include <cstdint>
 #include <deque>
 #include <string>
@@ -31,7 +32,9 @@ std::string chat_plain(const ChatRow &row);
 // Bounded derived display. No durable state or audit authority.
 class ChatView {
 public:
-  void append(ChatKind kind, std::string_view text, bool merge = false);
+  explicit ChatView(bool capture = false) : raw_capture_(capture) {}
+  void append(ChatKind kind, std::string_view text, bool merge = false,
+              RawEventRef source = {});
   void begin(ChatKind kind);
   void stream(std::string_view text);
   ChatView &operator+=(std::string_view notice);
@@ -48,7 +51,9 @@ private:
     bool dirty = true;
     std::size_t committed = 0, stable_rows = 0, line_bytes = 0;
     bool initialized = false, in_code = false;
+    RawEventRef identity{};
   };
+  bool raw_capture_ = false;
   std::deque<Block> blocks_;
   std::vector<ChatRow> rows_;
   std::size_t bytes_ = 0, width_ = 0;
@@ -56,7 +61,7 @@ private:
   ChatKind stream_kind_ = ChatKind::assistant;
   std::uint64_t reflows_ = 0, generation_ = 0;
   std::size_t newlines_ = 0;
-  void trim();
+  void trim(RawControlToken *credit = nullptr);
 };
 
 // Compact cells: scalar inline, complex cluster tail in a per-buffer arena.
@@ -75,6 +80,9 @@ struct ChatGrid {
   void reset(std::size_t columns, std::size_t rows);
   void line(std::size_t row, const ChatRow &content, std::size_t column = 0);
 };
+// Bound only for a grid owned by reset/line: each live tail has a distinct arena
+// extent.
+std::uint64_t raw_ui_owned_grid_bound(const ChatGrid &grid);
 // The returned packet is a complete frame delta. Commit only after successful I/O.
 class ChatPainter {
 public:
@@ -98,13 +106,19 @@ public:
   ~ChatOutput();
   ChatOutput(const ChatOutput &) = delete;
   ChatOutput &operator=(const ChatOutput &) = delete;
+  void raw_capture(bool enabled) noexcept { raw_capture_ = enabled; }
   void attach(int descriptor);
-  void detach() noexcept;
-  void start(std::string_view packet);
+  void detach();
+  void start(std::string_view packet, RawUiPacket raw = {});
   bool flush();
   bool pending() const noexcept { return offset_ < packet_.size(); }
 
 private:
+  bool raw_capture_ = false;
+  RawUiOwner owner_;
+  RawEventRef attach_{};
+  std::optional<RawControlToken> cleanup_;
+  RawUiPacket raw_{};
   int descriptor_ = -1, flags_ = 0;
   std::string_view packet_;
   std::size_t offset_ = 0;

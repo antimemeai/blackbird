@@ -5,17 +5,31 @@
 #include "blackbird/raw_audit.hpp"
 #include "blackbird/raw_auth.hpp"
 #include "blackbird/raw_authored.hpp"
+#include "blackbird/raw_backstop.hpp"
+#include "blackbird/raw_beads.hpp"
+#include "blackbird/raw_bridge.hpp"
+#include "blackbird/raw_caller.hpp"
+#include "blackbird/raw_candidate.hpp"
 #include "blackbird/raw_command.hpp"
+#include "blackbird/raw_complaint.hpp"
 #include "blackbird/raw_context.hpp"
+#include "blackbird/raw_file.hpp"
+#include "blackbird/raw_input.hpp"
 #include "blackbird/raw_operation.hpp"
 #include "blackbird/raw_participants.hpp"
+#include "blackbird/raw_plain.hpp"
+#include "blackbird/raw_program.hpp"
 #include "blackbird/raw_provider.hpp"
 #include "blackbird/raw_query.hpp"
+#include "blackbird/raw_restart.hpp"
 #include "blackbird/raw_retained.hpp"
 #include "blackbird/raw_sampler.hpp"
+#include "blackbird/raw_session.hpp"
+#include "blackbird/raw_station.hpp"
 #include "blackbird/raw_storage.hpp"
 #include "blackbird/raw_tasks.hpp"
 #include "blackbird/raw_turn.hpp"
+#include "blackbird/raw_ui.hpp"
 
 #include <algorithm>
 #include <array>
@@ -455,6 +469,20 @@ void write_descriptions(const std::string &path) {
   write_description(file.value, raw_operation_description());
   write_description(file.value, raw_storage_description());
   write_description(file.value, raw_retained_description());
+  write_description(file.value, raw_caller_description());
+  write_description(file.value, raw_ui_description());
+  write_description(file.value, raw_file_description());
+  write_description(file.value, raw_program_description());
+  write_description(file.value, raw_session_description());
+  write_description(file.value, raw_input_description());
+  write_description(file.value, raw_beads_description());
+  write_description(file.value, raw_bridge_description());
+  write_description(file.value, raw_station_description());
+  write_description(file.value, raw_restart_description());
+  write_description(file.value, raw_complaint_description());
+  write_description(file.value, raw_backstop_description());
+  write_description(file.value, raw_plain_description());
+  write_description(file.value, raw_candidate_description());
   for (unsigned code = 0; code <= static_cast<unsigned>(ErrorCode::provider_rate_limit);
        ++code) {
     const auto value = static_cast<ErrorCode>(code);
@@ -1487,9 +1515,39 @@ void recover_orphans(const std::filesystem::path &base, std::uint64_t failure_by
 thread_local RawThreadContext *bound_context = nullptr;
 thread_local RawThreadHandle *bound_handle = nullptr;
 thread_local RawWaitControl bound_wait_control{};
+thread_local RawCaptureFailureScope *bound_capture_failure = nullptr;
 } // namespace
 
 RawWaitControl raw_wait_control() noexcept { return bound_wait_control; }
+RawCaptureFailureScope::RawCaptureFailureScope(bool selected) noexcept
+    : previous_(bound_capture_failure), selected_(selected) {
+  if (selected_)
+    bound_capture_failure = this;
+}
+RawCaptureFailureScope::~RawCaptureFailureScope() { finish(); }
+void RawCaptureFailureScope::finish() noexcept {
+  if (!selected_)
+    return;
+  bound_capture_failure = previous_;
+  selected_ = false;
+  if (error_)
+    raw_capture_failed(*error_);
+}
+void RawCaptureFailureScope::require() const {
+  if (error_)
+    throw *error_;
+}
+bool RawCaptureFailureScope::consume(Error actual) noexcept {
+  if (!selected_ || bound_capture_failure != this || !error_ || *error_ != actual)
+    return false;
+  error_.reset();
+  return true;
+}
+void raw_capture_failed(Error error) noexcept {
+  if (bound_capture_failure && !bound_capture_failure->error_)
+    bound_capture_failure->error_ = error;
+}
+
 RawWaitScope::RawWaitScope(RawWaitControl control) : previous_(bound_wait_control) {
   if (control.cancellation_fds[0] == control.cancellation_fds[1])
     control.cancellation_fds[1] = -1;
@@ -1960,7 +2018,10 @@ Result<RawCapacityClaim> claim_capacity(std::uint64_t amount, RawPartition parti
 } // namespace
 Result<RawControlToken> raw_claim_control(std::uint64_t amount,
                                           RawWaitControl control) {
-  return claim_capacity(amount, RawPartition::control, control);
+  auto result = claim_capacity(amount, RawPartition::control, control);
+  if (!result.has_value())
+    raw_capture_failed(result.error());
+  return result;
 }
 Result<RawControlToken> raw_try_claim_control(std::uint64_t amount) noexcept {
   if (bound_context == nullptr || bound_context->fenced_ ||
@@ -1969,68 +2030,84 @@ Result<RawControlToken> raw_try_claim_control(std::uint64_t amount) noexcept {
     return Result<RawControlToken>::failure({ErrorCode::audit_unavailable});
   return bound_context->producer_->hold_capacity(RawPartition::control, amount);
 }
+Result<RawCapacityClaim> raw_try_claim_data(std::uint64_t amount) noexcept {
+  if (bound_context == nullptr || bound_context->fenced_ ||
+      (bound_context->state_ &&
+       bound_context->state_->known_fenced_.load(std::memory_order_acquire)))
+    return Result<RawCapacityClaim>::failure({ErrorCode::audit_unavailable});
+  return bound_context->producer_->hold_capacity(RawPartition::data, amount);
+}
 Result<RawCapacityClaim> raw_claim_data(std::uint64_t amount, RawWaitControl control) {
-  return claim_capacity(amount, RawPartition::data, control);
+  auto result = claim_capacity(amount, RawPartition::data, control);
+  if (!result.has_value())
+    raw_capture_failed(result.error());
+  return result;
 }
 Result<void> raw_wait_data(std::uint64_t amount, RawWaitControl control) {
-  if (bound_context == nullptr)
-    return Result<void>::success();
-  auto &context = *bound_context;
-  if (context.fenced_)
-    return Result<void>::failure({ErrorCode::audit_unavailable});
-  const auto admission = context.producer_->admission_ready(RawPartition::data);
-  if (!admission.has_value())
-    return admission;
-  try {
-    for (;;) {
-      check_wait_control(control);
-      if (context.state_ &&
-          context.state_->known_fenced_.load(std::memory_order_acquire))
-        return Result<void>::failure({ErrorCode::audit_unavailable});
-      const auto maximum = context.producer_->maximum_grant(RawPartition::data);
-      if (!maximum.has_value())
-        return Result<void>::failure(maximum.error());
-      if (amount > maximum.value())
-        return Result<void>::failure({ErrorCode::capacity});
-      const auto free = context.producer_->available(RawPartition::data);
-      if (!free.has_value())
-        return Result<void>::failure(free.error());
-      if (free.value() >= amount)
-        return Result<void>::success();
-      if (!context.state_)
-        return Result<void>::failure({ErrorCode::capacity});
-      const auto drained = raw_drain_notices(context.endpoint_.value);
-      if (!drained.has_value())
-        return drained;
-      const auto armed = context.channel_->arm_space();
-      if (!armed.has_value())
-        return armed;
-      const auto rechecked = context.producer_->available(RawPartition::data);
-      if (!rechecked.has_value())
-        return Result<void>::failure(rechecked.error());
-      if (rechecked.value() >= amount)
-        return Result<void>::success();
-      try {
-        const auto status =
-            context.state_->exchange(std::nullopt, {}, false, {}, control);
-        if (status.fenced)
+  auto result = [&]() -> Result<void> {
+    if (bound_context == nullptr)
+      return Result<void>::success();
+    auto &context = *bound_context;
+    if (context.fenced_)
+      return Result<void>::failure({ErrorCode::audit_unavailable});
+    const auto admission = context.producer_->admission_ready(RawPartition::data);
+    if (!admission.has_value())
+      return admission;
+    try {
+      for (;;) {
+        check_wait_control(control);
+        if (context.state_ &&
+            context.state_->known_fenced_.load(std::memory_order_acquire))
           return Result<void>::failure({ErrorCode::audit_unavailable});
-      } catch (const Error &error) {
-        return Result<void>::failure(error);
+        const auto maximum = context.producer_->maximum_grant(RawPartition::data);
+        if (!maximum.has_value())
+          return Result<void>::failure(maximum.error());
+        if (amount > maximum.value())
+          return Result<void>::failure({ErrorCode::capacity});
+        const auto free = context.producer_->available(RawPartition::data);
+        if (!free.has_value())
+          return Result<void>::failure(free.error());
+        if (free.value() >= amount)
+          return Result<void>::success();
+        if (!context.state_)
+          return Result<void>::failure({ErrorCode::capacity});
+        const auto drained = raw_drain_notices(context.endpoint_.value);
+        if (!drained.has_value())
+          return drained;
+        const auto armed = context.channel_->arm_space();
+        if (!armed.has_value())
+          return armed;
+        const auto rechecked = context.producer_->available(RawPartition::data);
+        if (!rechecked.has_value())
+          return Result<void>::failure(rechecked.error());
+        if (rechecked.value() >= amount)
+          return Result<void>::success();
+        try {
+          const auto status =
+              context.state_->exchange(std::nullopt, {}, false, {}, control);
+          if (status.fenced)
+            return Result<void>::failure({ErrorCode::audit_unavailable});
+        } catch (const Error &error) {
+          return Result<void>::failure(error);
+        }
+        std::array<pollfd, 2> watches{
+            {{context.endpoint_.value, POLLIN, 0},
+             {context.state_->death_.value, POLLIN | POLLHUP, 0}}};
+        wait_ready(watches, control);
+        if (watches[1].revents != 0)
+          return Result<void>::failure({ErrorCode::audit_unavailable});
       }
-      std::array<pollfd, 2> watches{
-          {{context.endpoint_.value, POLLIN, 0},
-           {context.state_->death_.value, POLLIN | POLLHUP, 0}}};
-      wait_ready(watches, control);
-      if (watches[1].revents != 0)
-        return Result<void>::failure({ErrorCode::audit_unavailable});
+    } catch (const Error &error) {
+      return Result<void>::failure(error);
     }
-  } catch (const Error &error) {
-    return Result<void>::failure(error);
-  }
+  }();
+  if (!result.has_value())
+    raw_capture_failed(result.error());
+  return result;
 }
 void raw_fence(Error error) noexcept {
   const RestoreErrno restore;
+  raw_capture_failed(error);
   if (bound_context == nullptr || bound_context->fenced_)
     return;
   bound_context->fenced_ = true;
@@ -2046,8 +2123,10 @@ Result<std::uint64_t> raw_emit(std::uint32_t site, std::span<const ByteView> par
   if (bound_context == nullptr)
     return Result<std::uint64_t>::success(0);
   auto &context = *bound_context;
-  if (context.fenced_ && claim == nullptr)
+  if (context.fenced_ && claim == nullptr) {
+    raw_capture_failed({ErrorCode::audit_unavailable});
     return Result<std::uint64_t>::failure({ErrorCode::audit_unavailable});
+  }
   std::uint64_t amount = raw_envelope_size;
   for (const auto part : parts) {
     if (part.size() > UINT32_MAX - amount) {

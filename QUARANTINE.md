@@ -745,6 +745,18 @@ curl -fL https://raw.githubusercontent.com/apple-oss-distributions/xnu/f6217f891
 shasum -a 256 quarantine/native-storage-2026-10-11/*.c
 ```
 
+## Terminal custody native flags — 2026-10-14
+
+Added intact pinned `bsd/sys/fcntl.h` beside the existing XNU kern_descrip.c.
+The real H pipe oracle exposed FWASWRITTEN0x10000 after the first write;
+F_GETFL returns this kernel history, while F_SETFL preserves it outside
+FCNTLFLAGS. The oracle compares owned configuration and retains all actual raw
+fields unchanged. No production transform or dependency is introduced.
+
+```sh
+curl -fL https://raw.githubusercontent.com/apple-oss-distributions/xnu/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/fcntl.h -o quarantine/native-storage-2026-10-11/xnu-fcntl.h
+```
+
 ## Native command wake — 2026-10-11
 
 Ignored `quarantine/command-wake-2026-10-11/` preserves source snapshots intact.
@@ -774,8 +786,8 @@ no source is built or adopted and no diagnostic is suppressed.
 
 ## Native file path and byte acquisition study — 2026-10-11
 
-`quarantine/file-native-2026-10-11/` preserves nine whole original source/manual
-files. [The manifest](papers/2026-10-11-file-native-acquisitions.json) records
+`quarantine/file-native-2026-10-11/` preserves fourteen whole original source/manual
+files, including the selected stream/stdio sources acquired for plan finding1. [The manifest](papers/2026-10-11-file-native-acquisitions.json) records
 URLs, the Apple source commit, original lengths and SHA-256 hashes, Linux manual
 archive member names and Darwin installed SDK source paths.
 [The proposed owner plan](papers/2026-10-11-file-owner-raw-subplan.md) separates

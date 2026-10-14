@@ -1,5 +1,6 @@
 #include "blackbird/decision_models.hpp"
 #include "blackbird/json.hpp"
+#include "blackbird/raw_caller.hpp"
 #include "native_process.hpp"
 #include <cmath>
 #include <set>
@@ -302,58 +303,129 @@ void validate_jev_response(const Value &request, const Value &response) {
   }
 }
 
-Value DecisionModels::evaluate(const Value &args) {
-  const auto started = detail::Clock::now();
-  const auto request = jev_request(args);
-  const auto encoded = take(dump_json(request, {config_.request_limit, 500000, 128}));
-  const auto seconds = timeout(args);
-  const auto deadline = started + std::chrono::seconds{seconds};
-  const auto key = credential(config_);
-  std::string input =
-      "url = \"https://api.typesafe.ai/v1/systemone\"\nheader = " +
-      quote("Authorization: Bearer " + key) +
-      "\nheader = \"Content-Type: application/json\"\ndata-binary = " + quote(encoded) +
-      "\n";
-  detail::Child child;
-  child.cancelled =
-      cancelled; // Quiet curl stderr follows the existing native OpenAI path.
-  child.deadline_error = {ErrorCode::provider_transport, 28};
-  child.output_observer = [&](std::string_view chunk) {
-    if (observer)
-      observer("decision_model.response", chunk);
-  };
-  child.start({config_.curl_executable, "--disable", "--silent", "--max-time",
-               std::to_string(seconds), "--proto", "=https", "--max-redirs", "0",
-               "--write-out", "\n%{http_code}", "--config", "-"});
-  child.send(input, deadline);
-  child.close_input();
-  if (observer)
-    observer("decision_model.request", encoded);
-  int exit = 0;
-  auto raw = child.collect(deadline, config_.response_limit, &exit);
-  if (exit != 0)
-    fail(ErrorCode::provider_transport, exit);
-  const auto split = raw.rfind('\n');
-  if (split == std::string::npos || raw.size() - split != 4)
-    fail(ErrorCode::corrupt);
-  int status = 0;
-  const auto code = std::string_view{raw}.substr(split + 1);
-  auto parsed = std::from_chars(code.data(), code.data() + code.size(), status);
-  if (parsed.ec != std::errc{} || parsed.ptr != code.data() + code.size())
-    fail(ErrorCode::corrupt);
-  if (status < 200 || status >= 300)
-    fail(ErrorCode::external_unknown, status);
-  raw.resize(split);
-  auto response = take(parse_json(raw, {config_.response_limit, 500000, 128}));
-  validate_jev_response(request, response);
-  return Value::object(
-      {{"status", Value{"ok"}},
-       {"provider", Value{"jev"}},
-       {"requested_model", need(request, "model", ErrorCode::corrupt)},
-       {"response", std::move(response)},
-       {"elapsed_us",
-        Value{Number{std::chrono::duration_cast<std::chrono::microseconds>(
-                         detail::Clock::now() - started)
-                         .count()}}}});
+Value DecisionModels::evaluate(const Value &args, const RawAdapterContext *context) {
+  RawCallerTrace trace{{3600, 3601},
+                       context,
+                       std::array{detail::raw_native_field(config_.request_limit),
+                                  detail::raw_native_field(config_.response_limit)}};
+  return trace.run([&] {
+    trace.stage(1);
+    const auto started = detail::Clock::now();
+    const auto request = jev_request(args);
+    trace.stage(2);
+    if (trace.enabled() && config_.request_limit > UINT32_MAX - 48)
+      throw Error{ErrorCode::overflow};
+    auto original = trace.data(48 + config_.request_limit);
+    const auto encoded = take(dump_json(request, {config_.request_limit, 500000, 128}));
+    trace.bytes(3602, encoded, original);
+    original.reset();
+    const auto seconds = timeout(args);
+    const auto deadline = started + std::chrono::seconds{seconds};
+    trace.stage(3);
+    const auto key = credential(config_);
+    trace.stage(4);
+    std::string input =
+        "url = \"https://api.typesafe.ai/v1/systemone\"\nheader = " +
+        quote("Authorization: Bearer " + key) +
+        "\nheader = \"Content-Type: application/json\"\ndata-binary = " +
+        quote(encoded) + "\n";
+    detail::Child child;
+    child.cancelled = cancelled;
+    child.deadline_error = {ErrorCode::provider_transport, 28};
+    if (trace.enabled())
+      child.raw_capture(trace.reference(), true, false);
+    const auto notify = [&](std::uint8_t channel, std::string_view label,
+                            std::string_view bytes) {
+      const auto owner = trace.context();
+      const auto child_ref = child.raw_reference();
+      const bool child_present = child_ref.ordinal != 0;
+      const bool present = static_cast<bool>(observer);
+      const auto length = bytes.size();
+      std::array<ByteView, 7> fields{};
+      std::size_t count = 0;
+      fields[count++] = detail::raw_native_field(channel);
+      fields[count++] = detail::raw_native_field(child_present);
+      if (child_present) {
+        fields[count++] = child_ref.lane;
+        fields[count++] = detail::raw_native_field(child_ref.ordinal);
+      }
+      fields[count++] = detail::raw_native_field(length);
+      fields[count++] = detail::raw_native_field(present);
+      RawCallerTrace callback{{3606, 3607}, &owner, std::span{fields}.first(count)};
+      callback.run([&] {
+        if (present)
+          observer(label, bytes);
+        else
+          callback.finish(RawOperationBranch::absent);
+      });
+    };
+    child.output_observer = [&](std::string_view chunk) {
+      notify(1, "decision_model.response", chunk);
+    };
+    trace.stage(5);
+    child.start({config_.curl_executable, "--disable", "--silent", "--max-time",
+                 std::to_string(seconds), "--proto", "=https", "--max-redirs", "0",
+                 "--write-out", "\n%{http_code}", "--config", "-"});
+    child.send(input, deadline);
+    child.close_input();
+    notify(2, "decision_model.request", encoded);
+    trace.stage(6);
+    auto exit_credit = trace.control(68);
+    int exit = 0;
+    auto raw = child.collect(deadline, config_.response_limit, &exit);
+    const auto child_ref = child.raw_reference();
+    trace.event(3603,
+                std::array{ByteView{child_ref.lane},
+                           detail::raw_native_field(child_ref.ordinal),
+                           detail::raw_native_field(exit)},
+                exit_credit);
+    trace.stage(7);
+    if (exit != 0)
+      fail(ErrorCode::provider_transport, exit);
+    trace.stage(8);
+    const auto owner = trace.context();
+    RawCallerTrace http{{3604, 3605}, &owner, {}, sizeof(int)};
+    const int status = http.run([&] {
+      const auto split = raw.rfind('\n');
+      if (split == std::string::npos || raw.size() - split != 4)
+        fail(ErrorCode::corrupt);
+      int observed = 0;
+      const auto code = std::string_view{raw}.substr(split + 1);
+      const auto parsed =
+          std::from_chars(code.data(), code.data() + code.size(), observed);
+      if (parsed.ec != std::errc{} || parsed.ptr != code.data() + code.size())
+        fail(ErrorCode::corrupt);
+      http.finish(RawOperationBranch::returned, nullptr,
+                  std::array{detail::raw_native_field(observed)});
+      raw.resize(split);
+      return observed;
+    });
+    if (status < 200 || status >= 300)
+      fail(ErrorCode::external_unknown, status);
+    trace.stage(9);
+    const auto input_size = raw.size();
+    RawCallerTrace parser{{3608, 3609},
+                          &owner,
+                          std::array{detail::raw_native_field(input_size)},
+                          sizeof(bool)};
+    auto parsed = parser.run([&] {
+      auto value = parse_json(raw, {config_.response_limit, 500000, 128});
+      const bool ok = value.has_value();
+      const auto error = ok ? Error{} : value.error();
+      parser.finish(RawOperationBranch::returned, ok ? nullptr : &error,
+                    std::array{detail::raw_native_field(ok)});
+      return value;
+    });
+    auto response = take(std::move(parsed));
+    trace.stage(10);
+    RawCallerTrace validator{{3610, 3611}, &owner};
+    validator.run([&] { validate_jev_response(request, response); });
+    trace.stage(11);
+    return Value::object(
+        {{"status", Value{"ok"}},
+         {"provider", Value{"jev"}},
+         {"requested_model", need(request, "model", ErrorCode::corrupt)},
+         {"response", std::move(response)}});
+  });
 }
 } // namespace blackbird
