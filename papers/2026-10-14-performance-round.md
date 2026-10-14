@@ -116,3 +116,48 @@ optimizations. Discuss the observed complete-call tails, preservation backlog,
 Linux reopening and the File integration defect before further performance work.
 Broader SystemA boundaries, logical clocks and audit-completeness work remain
 separate, along with the operator's eval/trajectory/multiplayer deferrals.
+
+
+## Follow-up: actual wiring and event production
+
+Read existing preserved runs; no native test or performance campaign is repeated.
+The actual launcher starts RawRuntime and binds its producer during normal
+session startup (src/main.cpp:236). Real CLI/PTY runs therefore produce events
+without the owner benchmark manually opting each surface in. Explicit native
+File, Session and Station benchmark calls also supply their adapter contexts;
+they are API-path measurements, not proof that every upstream caller propagates
+those contexts. CodingEngine's omitted LocalTools context remains arconaut-4by.
+
+For each host and body size, the capture-active owner batch produces these
+closed raw event counts per100 operations, including run overhead:
+
+| Actual owner operation | Events per100 operations |
+| --- | ---: |
+| Native File read | 1,201 |
+| Native File write | 2,601 |
+| Operator read_file | 15,901 |
+| Authored Lua read_file turn | 15,301 |
+| Local mock-provider turn | 35,086 |
+| Session settings save | 1,401 |
+| Station admit/finish/prompt triplet | 5,001 |
+
+The actual100-call workflow-registry seed emits91,183 events into13,522,365 bytes
+of event journal, including startup and shutdown. Its100 tool request/result
+pairs,100 workflow lookup request/result pairs and101 bridge pairs are present.
+Native storage/catalog hooks dominate its event count. The complete native PTY
+control sessions emit653,756 events into115,771,006 event-journal bytes on macOS,
+and692,862 into122,381,233 bytes on Linux. This includes all control work as well
+as319,234/348,282 transferred keyboard bytes; it is not a pure keyboard byte-
+amplification measurement. Site2042 accounts for316,775/346,217 keyboard-to-job
+routing events, recording both acceptance and refusal. No8000/8001 ingest-failure
+events appear in these three saved runs. These counts describe emitted records;
+they do not establish completeness of every intended hook or isolate their costs.
+
+Native raw_authored_emit overloads and Lua blackbird.emit are wired. Runtime
+registers the Lua function in src/coding.cpp:1026; programs/turn.lua emits step,
+call count and restart state at authored sites3880–3882. The previous performance
+round uses custom Lua sources and does not call blackbird.emit: its inspected
+real seed/control runs contain zero authored scalar/byte events at1510–1514.
+Consequently that round does not measure authored-emission API performance or
+production of the shipped turn program's three domain metrics. It does measure
+actual operation, bridge, storage, UI/input and lifecycle event production.

@@ -8394,3 +8394,21 @@ normalize only tracked presentation copies, preserve context originals, then
 checkpoint/push this text-only work
 branch using the existing operator-authorized hook override. No main integration
 is inferred from the request to measure. Discuss results before optimization.
+
+
+## 2026-10-14 — answer actual wiring and event-production question
+
+Trace launcher RawRuntime/binding, CodingEngine LocalTools context, Lua authored
+registration and shipped turn emission, then count existing closed raw journals.
+No tests or native timings rerun. Normal CLI/PTY capture is automatically wired;
+owner File/Session/Station API probes manually supply contexts, and File dispatch
+bug4by remains. Actual100-call registry seed emits91,183 events/13.52MB journal;
+Mac/Linux native control sessions emit653,756/692,862 events into115.77/122.38MB.
+Routing2042 contributes316,775/346,217 records; storage/catalog dominate registry
+seed counts. Report owner per100-operation counts and distinguish these native/
+lifecycle events from explicit authored metrics. Native and Lua authored APIs are
+wired in source and shipped turn uses them, but custom perf sources do not invoke
+emit and inspected runs have zero1510–1514 payloads. That API's full cost remains
+unmeasured by the last round. Add source-grounded follow-up to performance report;
+context/event-production-counts retains readback. Text-only checks/checkpoint;
+no optimization, source change, full suite or new coverage guarantee.
