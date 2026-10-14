@@ -1,0 +1,89 @@
+{
+  "acquired": "2026-10-14",
+  "policy": "Source read only; no dependencies or third-party code executed",
+  "sources": [
+    {
+      "name": "agent-hermes",
+      "repository": "https://github.com/NousResearch/hermes-agent",
+      "revision": "0e427d788d253630d38a3a51cd76849e73cd6925",
+      "commit_date": "2026-10-14T06:37:47Z",
+      "archive_url": "https://codeload.github.com/NousResearch/hermes-agent/tar.gz/0e427d788d253630d38a3a51cd76849e73cd6925",
+      "sha256": "ffc28641467e5c2ae4cab34416bee824e488de3be88ad8b7112c772eb429d52f",
+      "archive": "/Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-hermes-0e427d788d253630d38a3a51cd76849e73cd6925.tar.gz",
+      "extract": "/Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-hermes",
+      "extraction": "strip top component; omit Git/filesystem detritus and symlink/hardlink entries; source archive intact",
+      "restoration": "curl -L https://codeload.github.com/NousResearch/hermes-agent/tar.gz/0e427d788d253630d38a3a51cd76849e73cd6925 -o /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-hermes-0e427d788d253630d38a3a51cd76849e73cd6925.tar.gz; mkdir -p /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-hermes; tar -xzf /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-hermes-0e427d788d253630d38a3a51cd76849e73cd6925.tar.gz --strip-components=1 -C /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-hermes; remove nested .git/.DS_Store/__MACOSX"
+    },
+    {
+      "name": "agent-omp",
+      "repository": "https://github.com/can1357/oh-my-pi",
+      "revision": "ce932132ab871488c0678caf6fadfe0a768107d8",
+      "commit_date": "2026-10-14T14:24:11Z",
+      "archive_url": "https://codeload.github.com/can1357/oh-my-pi/tar.gz/ce932132ab871488c0678caf6fadfe0a768107d8",
+      "sha256": "ea7d356354424ff2475e7a77b53f0ddc23023adb8ac0e642c85756dc30618cb6",
+      "archive": "/Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-omp-ce932132ab871488c0678caf6fadfe0a768107d8.tar.gz",
+      "extract": "/Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-omp",
+      "extraction": "strip top component; omit Git/filesystem detritus and symlink/hardlink entries; source archive intact",
+      "restoration": "curl -L https://codeload.github.com/can1357/oh-my-pi/tar.gz/ce932132ab871488c0678caf6fadfe0a768107d8 -o /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-omp-ce932132ab871488c0678caf6fadfe0a768107d8.tar.gz; mkdir -p /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-omp; tar -xzf /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-omp-ce932132ab871488c0678caf6fadfe0a768107d8.tar.gz --strip-components=1 -C /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-omp; remove nested .git/.DS_Store/__MACOSX"
+    },
+    {
+      "name": "agent-langgraph",
+      "repository": "https://github.com/langchain-ai/langgraph",
+      "revision": "53cf85bece131f81408c388a783b3dee2932d80a",
+      "commit_date": "2026-10-14T14:31:24Z",
+      "archive_url": "https://codeload.github.com/langchain-ai/langgraph/tar.gz/53cf85bece131f81408c388a783b3dee2932d80a",
+      "sha256": "5e4d07b75e7dec441096575c26505cbb483a8ea6d2f87e3e48fb0f5caab57db4",
+      "archive": "/Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-langgraph-53cf85bece131f81408c388a783b3dee2932d80a.tar.gz",
+      "extract": "/Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-langgraph",
+      "extraction": "strip top component; omit Git/filesystem detritus and symlink/hardlink entries; source archive intact",
+      "restoration": "curl -L https://codeload.github.com/langchain-ai/langgraph/tar.gz/53cf85bece131f81408c388a783b3dee2932d80a -o /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-langgraph-53cf85bece131f81408c388a783b3dee2932d80a.tar.gz; mkdir -p /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-langgraph; tar -xzf /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-langgraph-53cf85bece131f81408c388a783b3dee2932d80a.tar.gz --strip-components=1 -C /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-langgraph; remove nested .git/.DS_Store/__MACOSX"
+    },
+    {
+      "name": "agent-framework",
+      "repository": "https://github.com/microsoft/agent-framework",
+      "revision": "95feea605dbbe879f678602585c76fdb5a963b63",
+      "commit_date": "2026-10-14T13:57:00Z",
+      "archive_url": "https://codeload.github.com/microsoft/agent-framework/tar.gz/95feea605dbbe879f678602585c76fdb5a963b63",
+      "sha256": "aa7377a25c769b86010f60844f66564a0860cc60903cc7af36b32c2bcc5233a8",
+      "archive": "/Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-framework-95feea605dbbe879f678602585c76fdb5a963b63.tar.gz",
+      "extract": "/Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-framework",
+      "extraction": "strip top component; omit Git/filesystem detritus and symlink/hardlink entries; source archive intact",
+      "restoration": "curl -L https://codeload.github.com/microsoft/agent-framework/tar.gz/95feea605dbbe879f678602585c76fdb5a963b63 -o /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-framework-95feea605dbbe879f678602585c76fdb5a963b63.tar.gz; mkdir -p /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-framework; tar -xzf /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-framework-95feea605dbbe879f678602585c76fdb5a963b63.tar.gz --strip-components=1 -C /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-framework; remove nested .git/.DS_Store/__MACOSX"
+    },
+    {
+      "name": "agent-crewai",
+      "repository": "https://github.com/crewAIInc/crewAI",
+      "revision": "b0c16c162aa34454d77d0f266c2b03aa5a3e5764",
+      "commit_date": "2026-10-14T13:37:57Z",
+      "archive_url": "https://codeload.github.com/crewAIInc/crewAI/tar.gz/b0c16c162aa34454d77d0f266c2b03aa5a3e5764",
+      "sha256": "e25b738d54be1cf01b9b9943ef7d891b8ed9bfde8737f9571dffb46d2edfbfb5",
+      "archive": "/Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-crewai-b0c16c162aa34454d77d0f266c2b03aa5a3e5764.tar.gz",
+      "extract": "/Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-crewai",
+      "extraction": "strip top component; omit Git/filesystem detritus and symlink/hardlink entries; source archive intact",
+      "restoration": "curl -L https://codeload.github.com/crewAIInc/crewAI/tar.gz/b0c16c162aa34454d77d0f266c2b03aa5a3e5764 -o /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-crewai-b0c16c162aa34454d77d0f266c2b03aa5a3e5764.tar.gz; mkdir -p /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-crewai; tar -xzf /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-crewai-b0c16c162aa34454d77d0f266c2b03aa5a3e5764.tar.gz --strip-components=1 -C /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-crewai; remove nested .git/.DS_Store/__MACOSX"
+    },
+    {
+      "name": "agent-gascity",
+      "repository": "https://github.com/gastownhall/gascity",
+      "revision": "2550c900350c28948eafecc4c5318350d28529e1",
+      "commit_date": "2026-10-14T14:26:04Z",
+      "archive_url": "https://codeload.github.com/gastownhall/gascity/tar.gz/2550c900350c28948eafecc4c5318350d28529e1",
+      "sha256": "c62dbf5e0d262d04d44b5e804bef33700106ead5650fa0df6ef2a39c9988535f",
+      "archive": "/Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-gascity-2550c900350c28948eafecc4c5318350d28529e1.tar.gz",
+      "extract": "/Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-gascity",
+      "extraction": "strip top component; omit Git/filesystem detritus and symlink/hardlink entries; source archive intact",
+      "restoration": "curl -L https://codeload.github.com/gastownhall/gascity/tar.gz/2550c900350c28948eafecc4c5318350d28529e1 -o /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-gascity-2550c900350c28948eafecc4c5318350d28529e1.tar.gz; mkdir -p /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-gascity; tar -xzf /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-gascity-2550c900350c28948eafecc4c5318350d28529e1.tar.gz --strip-components=1 -C /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-gascity; remove nested .git/.DS_Store/__MACOSX"
+    },
+    {
+      "name": "agent-pi",
+      "repository": "https://github.com/earendil-works/pi",
+      "revision": "b45e0ebcc5ae2fc42a6f2f23104d10e656e6bedb",
+      "commit_date": "2026-10-14T14:29:58Z",
+      "archive_url": "https://codeload.github.com/earendil-works/pi/tar.gz/b45e0ebcc5ae2fc42a6f2f23104d10e656e6bedb",
+      "sha256": "de0ff064f14e9b9f0c34ffbd24690b0ebcebd58aaae5e276f8a047ecf607fa44",
+      "archive": "/Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-pi-b45e0ebcc5ae2fc42a6f2f23104d10e656e6bedb.tar.gz",
+      "extract": "/Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-pi",
+      "restoration": "curl -L https://codeload.github.com/earendil-works/pi/tar.gz/b45e0ebcc5ae2fc42a6f2f23104d10e656e6bedb -o /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-pi-b45e0ebcc5ae2fc42a6f2f23104d10e656e6bedb.tar.gz; mkdir -p /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-pi; tar -xzf /Users/patrickbeam/projects/quarantine_proj/archives/workflows-2026-10-14/agent-pi-b45e0ebcc5ae2fc42a6f2f23104d10e656e6bedb.tar.gz --strip-components=1 -C /Users/patrickbeam/projects/blackbird/quarantine/workflows-2026-10-14/agent-pi; remove nested .git/.DS_Store/__MACOSX"
+    }
+  ]
+}

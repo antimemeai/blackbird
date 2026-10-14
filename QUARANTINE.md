@@ -1,5 +1,29 @@
 # Sources and restoration
 
+## Concurrent and durable workflows, 2026-10-14
+
+Fresh source study acquires Pi Durable/Pi, Oh My Pi, Hermes, LangGraph,
+Microsoft Agent Framework, CrewAI and Gas City at immutable revisions. Intact
+archives live under `../quarantine_proj/archives/workflows-2026-10-14/`; clean
+extracts are `quarantine/workflows-2026-10-14/agent-*`. Exact revisions, source
+URLs, archive SHA-256, excluded metadata/symlinks and restoration commands are
+in [the agent acquisition manifest](papers/workflows-2026-10-14/agent-acquisition.json).
+
+Fresh Temporal SDK and DBOS source archives remain intact under
+`../quarantine_proj/archives/blackbird-durable-workflows-2026-10-14/`; exact
+extraction roots, revisions/hashes and restoration are in
+[the durable source manifest](papers/workflows-2026-10-14/durable-source-manifest.md).
+The Temporal sdk-core URL redirects to sdk-rust; the actual archive root is
+recorded. Existing Restate/Windmill/Dagger/Fibers sources were studied in place.
+
+[Foundation acquisition](papers/workflows-2026-10-14/theory-acquisition.md)
+preserves original structured-concurrency HTML and a self-adjusting-computation
+PDF on the shared shelf. Acquired PDFs also remain in ignored papers. References
+are study-only: no implementation/test/installer/account call ran, no source was
+imported into the native product and no dependency was adopted. Archived
+instructions carry no current authority. Read the
+[synthesis](papers/workflows-2026-10-14/SYNTHESIS.md) for design consequences.
+
 ## Native sampler and Lua boundaries, 2026-10-11
 
 `quarantine/resource-sampler-2026-10-11/` retains primary Linux proc documentation,

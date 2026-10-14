@@ -1,5 +1,15 @@
 # Current Blackbird stock
 
+New design wave,2026-10-14: concurrent and durable workflows. The
+[proposed design](CONCURRENT_DURABLE_WORKFLOWS.md),
+[delivery sequence](WORKFLOW_DELIVERY.md) and
+[fresh research/review synthesis](../papers/workflows-2026-10-14/SYNTHESIS.md)
+are complete for discussion on work/workflow-design-2026-10-14, descended from
+the qualification/report branch. No workflow scheduler implementation, library
+adoption, main integration or running-executable activation is implied. Existing
+bugs and required tuning join the next implementation closeout; the source and
+performance stock below remains the prior watch's actual state.
+
 Latest watch: **2026-10-14**. Read [the handoff](HANDOFF.md) for exact source/
 branch state, qualification results, open defects and next discussion. The
 [performance notes](../papers/2026-10-14-performance-tuning-notes.md) track five

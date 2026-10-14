@@ -1,5 +1,16 @@
 # Blackbird workflow campaign — discussion and orders
 
+2026-10-14: the operator selects concurrent and durable workflows for the new
+wave and requests deep frumentarii research and a robust competitive design.
+Read the [new proposed design](CONCURRENT_DURABLE_WORKFLOWS.md),
+[delivery sequence](WORKFLOW_DELIVERY.md) and
+[research synthesis](../papers/workflows-2026-10-14/SYNTHESIS.md).
+Three source/research lanes and bounded independent design review are complete.
+The W2–W6 families below map to that proposal; historical timers and W0 failures
+do not restart or govern the new wave. Implementation awaits the requested
+design discussion. Performance tuning is non-negotiable; affected bugs and
+tuning join the next implementation closeout.
+
 Operator2026-10-07: fresh Hermes study; resume BB autodev on workflows; aim for a
 true superset and beyond of the workflow ecosystem. This authorizes the research
 run and preparing implementation orders, not selecting libraries or starting

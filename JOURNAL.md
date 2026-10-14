@@ -8445,3 +8445,62 @@ Only relevant text/diff/link and bead-state checks run. Supported bd backup,
 checked documentation-only commit with the existing authorized per-command hook
 override, and work-branch push finish the watch. New tasks stay open as optional
 investigation stock; nls.2 stays in progress. No owned implementation, testing or profiling work continues in the background.
+
+## 2026-10-14 — concurrent and durable workflow design begins
+
+Operator selects concurrent and durable workflows, requests deep source/corpus
+study, fresh frumentarii and a robust design seeking to transcend coding-agent
+workflow offerings. Performance tuning remains required work; the new wave moves
+away from instrumentation, with bugs/tuning to join implementation closeout.
+Create work/workflow-design-2026-10-14 from64d75fb, preserving unmerged repairs,
+art, stash and historical worktrees. Research task arconaut-30y records scope.
+Three conceptual lanes study current agent offerings, durable/data/build systems,
+and actual native ownership/recovery respectively. Root owns synthesis/design.
+Research and independent reports live in papers/workflows-2026-10-14; no product
+code, dependency adoption, native test/performance campaign, provider/eval call,
+main integration or executable activation. Written campaign names concrete
+questions, source acquisition practices, and two-layer design review boundaries.
+
+## 2026-10-14 — workflow research, design and bounded review delivered
+
+Three frumentarii complete native source inventory, refreshed coding-agent source
+study and durable/build/data/statechart/scheduling mechanisms. Fresh Pi Durable
+source materially changes the comparison: durable phases, shared ancestry,
+atomic documents/transcript, structured settlement and deterministic code-mode
+replay are real baseline mechanisms, not proposed Blackbird novelty. Seven fresh
+agent archives and Temporal/DBOS source remain intact on the shared shelf; PDFs
+remain in ignored papers, and foundation originals also have shared archive copies.
+Clean extractions and exact restoration/hash manifests are recorded. No reference
+runtime/test/provider or operator-account code executes.
+Rhizome research-watch directory is absent; no invented transfer evidence.
+
+Root writes CONCURRENT_DURABLE_WORKFLOWS, WORKFLOW_DELIVERY, behavioral comparison,
+synthesis and review resolutions. Proposed native session execution host retains
+one semantic owner; independent ready tasks and task-local Lua/context facades
+compose explicit durable segments and recorded-command functions. Stable commands,
+guarded release, per-attempt reconciliation, rich joins, protected cleanup/shared
+grants, versioned application cells, inbox/time/streams, incremental artifacts,
+context lineage, live revision and client/mode continuity share existing machinery.
+Performance tuning remains required across delivered paths and integrated closeout;
+no made-up speed result, universal superiority, library choice or arbitrary cutoff.
+
+Layer1 has three independent attacks. Fix recovered-attempt authority and
+cancellation-before-release, physical blocked-worker deadlock, late-original
+capture versus stale authority, independent host custody, rooted Lua suspension,
+observational settlement waits, referenced-byte retention, cumulative ACK gaps,
+deadline order, omitted replay commands, actual fresh execution, stale-demand
+publication, open membership/closure, atomic state, logical recovery identities
+and reservation lifetimes. Include a complete illustrative Lua campaign.
+Layer2 rechecks only these findings. Durability and expressiveness have no residual;
+native recheck supplies one final process-bound RawRetainedTransfer wording fix.
+Apply its exact remedy: host opens state/grants itself; transfer is host-thread
+local; moving an existing UI-owned session settles/closes/reopens unless separately
+qualified cross-process handoff exists. No third assurance layer.
+
+Update the old workflow-campaign/current-stock entry points without rewriting
+historical results. Close only research/design task30y on package delivery; record
+the implementation destination separately as pending discussion. Relevant text,
+local-link/fence/diff checks and supported bead backup precede text-only checkpoint
+and work-branch push. No product implementation, native tests/performance campaign,
+provider/eval requests, main merge, executable activation or unrelated cleanup.
+Untracked operator art and historical worktrees/stash remain untouched.
