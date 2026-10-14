@@ -8193,3 +8193,12 @@ authorized fast-forward master integration. Scope finishes here: no qualificatio
 new review, performance run, eval definition or next implementation starts.
 Nls.2 stays in_progress for the documented broader census/workload boundaries;
 nls.9 and broader P0 nls.10 remain open.
+
+
+Publication complete: source checkpoint 200fc5e8c16449281dab4c7b4c6d63eb0018aaf4 committed on
+work/nls2-remaining-owners, pushed there first, then fast-forwarded master from
+323f4c9 and pushed origin/master. Native131/131 Debug236.43s/all194 C++ checks
+and targeted completed Lua leg are recorded above. Both source branches point
+to the same tested checkpoint. This final followup records publication only;
+per the text-only/operator exception it runs diff/local-link checks, no source
+suite. No implementation, profile qualification or review starts after landing.

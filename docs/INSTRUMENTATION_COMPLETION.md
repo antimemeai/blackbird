@@ -292,6 +292,9 @@ source is unchanged from the successful checks; the checkpoint uses that
 operator-authorized hook override after completing only the remaining Lua leg.
 Logs: context/remaining-owner-source-gate-lua-declaration-failed.log and
 context/final-lua-declaration-check.log. No workload/profile qualification starts.
+Source checkpoint200fc5e is pushed on work/nls2-remaining-owners and merged by
+fast-forward into master, which is pushed to origin. The named-owner segment is
+delivered; qualification remains for operator discussion.
 
 Source and direct owner checks are separate from qualification. Publication of this source checkpoint requires the installed full Debug
 build/test/C++/Lua commit hook. The execution log is
