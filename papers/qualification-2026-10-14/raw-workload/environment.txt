@@ -1,0 +1,10 @@
+started=2026-10-14T05:04:00-0400
+platform=macOS-26.6-arm64-arm-64bit
+source=33e78d11b54411ad55d81c6e683884b12b60a2ce
+binary_sha256=58ea9840d0bf1de1f4281c408de57fc992389721539465a72734b5a13610ab28
+foundation_sha256=225cedc5bfd8bad4c2de9fe375c8079023d6ec3198070c6ff0e1429ac3cc6ad7
+load_before=(23.73779296875, 14.56103515625, 22.75146484375)
+compiler=LLVM23.1.2 std=c++20 O3 NDEBUG BLACKBIRD_DEBUG=0 macOS SDK native ARM64
+DATA=1048576 CONTROL=4096 FAILURE=4096 full-sync actual RawRuntime
+No CPU affinity, cache flush, provider calls, process profiling, optimization.
+load_after=(24.3994140625, 14.85009765625, 22.80517578125)

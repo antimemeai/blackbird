@@ -1,0 +1,13 @@
+{
+  "source_commit": "33e78d11b54411ad55d81c6e683884b12b60a2ce",
+  "product_source_commit": "200fc5e8c16449281dab4c7b4c6d63eb0018aaf4",
+  "host": "macOS-26.6-arm64-arm-64bit",
+  "host_memory_bytes": 137438953472,
+  "host_cpus": 16,
+  "compiler_limit": 6,
+  "native_executables": {
+    "build/release/blackbird": "d332b604760219d7c4d4196026e98e1f5885bb99daf00559955df0a547ca4c11",
+    "build/nls-storage-release/blackbird": "e550adcbbb7369066ff948feec3e82d4897557ed8b3ec9481d76fef8b12b6cd5"
+  },
+  "optimizations": []
+}

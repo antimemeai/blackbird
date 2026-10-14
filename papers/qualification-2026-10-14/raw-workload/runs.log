@@ -1,0 +1,56 @@
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'burst', '64', '40000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/burst-64-1']
+exit=0
+mode=burst size=64 count=40000 loop_ns=55129291 final_ack_ns=78006666 last_emit_ack_observed_ns=22877416 recorder_cpu_ns=720352 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'burst', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/burst-256-1']
+exit=0
+mode=burst size=256 count=20000 loop_ns=40180375 final_ack_ns=46691417 last_emit_ack_observed_ns=6511084 recorder_cpu_ns=740074 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'burst', '4096', '5000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/burst-4096-1']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=495286459 final_ack_ns=507168959 last_emit_ack_observed_ns=11882542 recorder_cpu_ns=2526809 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'burst', '64', '40000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/burst-64-2']
+exit=0
+mode=burst size=64 count=40000 loop_ns=33291375 final_ack_ns=42750250 last_emit_ack_observed_ns=9459000 recorder_cpu_ns=642556 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'burst', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/burst-256-2']
+exit=0
+mode=burst size=256 count=20000 loop_ns=37627791 final_ack_ns=44789583 last_emit_ack_observed_ns=7161792 recorder_cpu_ns=678135 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'burst', '4096', '5000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/burst-4096-2']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=100855250 final_ack_ns=107841709 last_emit_ack_observed_ns=6986750 recorder_cpu_ns=1727154 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'burst', '64', '40000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/burst-64-3']
+exit=0
+mode=burst size=64 count=40000 loop_ns=25104459 final_ack_ns=32145792 last_emit_ack_observed_ns=7041375 recorder_cpu_ns=520096 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'burst', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/burst-256-3']
+exit=0
+mode=burst size=256 count=20000 loop_ns=94312584 final_ack_ns=104123042 last_emit_ack_observed_ns=9810500 recorder_cpu_ns=830354 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'burst', '4096', '5000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/burst-4096-3']
+exit=0
+mode=burst size=4096 count=5000 loop_ns=395797541 final_ack_ns=400294208 last_emit_ack_observed_ns=4496708 recorder_cpu_ns=2363470 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'idle', '64', '30', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/idle-64-1']
+exit=0
+mode=idle size=64 count=30 loop_ns=238070000 final_ack_ns=238070083 last_emit_ack_observed_ns=797458 recorder_cpu_ns=647586 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'idle', '256', '30', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/idle-256-1']
+exit=0
+mode=idle size=256 count=30 loop_ns=252751708 final_ack_ns=252751791 last_emit_ack_observed_ns=3199458 recorder_cpu_ns=641226 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'idle', '4096', '30', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/idle-4096-1']
+exit=0
+mode=idle size=4096 count=30 loop_ns=222906833 final_ack_ns=222906916 last_emit_ack_observed_ns=1290833 recorder_cpu_ns=664067 reader_events=0 reader_snapshots=0 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'reader', '256', '20000', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/reader-256-1']
+exit=0
+mode=reader size=256 count=20000 loop_ns=32556458 final_ack_ns=37027000 last_emit_ack_observed_ns=4470542 recorder_cpu_ns=601875 reader_events=20000 reader_snapshots=6 capacity_refused=0 resumed_claim_emit_ns=0 oracle=exact_closed_disk
+
+command=['/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/probe', 'full', '256', '1', '/Users/patrickbeam/projects/blackbird/context/qualification-2026-10-14/raw-workload/full-256-1']
+exit=0
+mode=full size=256 count=3856 loop_ns=2379625 final_ack_ns=9025250 last_emit_ack_observed_ns=6645709 recorder_cpu_ns=123575 reader_events=0 reader_snapshots=0 capacity_refused=1 resumed_claim_emit_ns=1280417 oracle=exact_closed_disk
+

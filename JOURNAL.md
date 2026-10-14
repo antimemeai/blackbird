@@ -8202,3 +8202,60 @@ and targeted completed Lua leg are recorded above. Both source branches point
 to the same tested checkpoint. This final followup records publication only;
 per the text-only/operator exception it runs diff/local-link checks, no source
 suite. No implementation, profile qualification or review starts after landing.
+
+
+## 2026-10-14 — Qualification first state, no optimization
+
+Operator requested actual testing, case review and results before optimization.
+Tested unchanged source 200fc5e (HEAD 33e78d1 adds publication documentation).
+Reviewed existing native entrypoints and independent originals, disk and effect
+oracles. Delegated one raw-runtime measurement unit; root owned platform,
+startup and diagnosis lanes. Maximum six compiler workers and one Ninja writer
+per tree. Existing 131 Debug/all 194 owned-TU/Lua checks were not repeated.
+
+Selected macOS Release: 39/40 pass, 89.51 seconds. ASan/UBSan: 29/40 pass,
+464.34 seconds. Linux Candidate fails compilation because std::strlen lacks its
+direct <cstring> include. The 39 independently buildable Linux cases passed
+37/39 in Release (33.37 seconds) and 28/39 in ASan (313.68 seconds). An ignored
+packaging copy included check-main-input, which the source archive script omits.
+The copy continued through CTest failures and recorded both profile exits as 8;
+its inherited success footer is wrong. Original case outcomes determine counts.
+Remote cleanup preceded UI symbolization, so the unresolved Linux UI trace is
+retained as offsets/error rather than invented source attribution.
+
+File Helper::finish borrows the block-scoped failed flag past its lifetime.
+ASan identifies the same line 144/offset 1440 across callers: arconaut-834.
+Candidate missing include: 90u. Beads relies on an optimized-away stack symbol
+(bho); Station requires libc++ __tree on libstdc++ (iva). Their later existing
+case groups pass separately in context-only Release continuations. Failed fault
+cuts remain unqualified. UI fixture TLS credit outlives its producer (fir).
+Linux UI allocation mismatch still needs symbolization (ji3). PTY misses the
+composer output; one retained diagnostic replay advances then stalls under
+pressure (0oa). Station's diagnostic identifies the File defect. Seven concrete
+beads track these findings; no repair occurred during the measurements.
+
+Fourteen RawRuntime full-sync workloads compare 218,946 events byte for byte
+on closed disk runs, including 20,000 concurrent-reader events and stopped-
+recorder full-buffer refusal/resume. Small-body burst medians sit at the 41 ns
+observer floor; 4 KiB medians are 208–250 ns. Paced emission medians are 15–24 us.
+Emission max is 15.48 ms, capacity-claim max 72.80 ms and observed final-event
+preserved-ACK lag 4.50–22.88 ms. The dev driver initially mislabeled native CPU
+ticks as nanoseconds. Original data is retained; the consumer summary converts
+with the actual 125/3 Mach timebase and primary Apple source grounding. No native
+workload rerun or writer-side transformation. Host activity/load is recorded and
+uncontrolled; no intrinsic nanosecond cost or clean-host claim.
+
+Existing PTY startup driver ran 30 starts each of retained ca6747b and current
+200fc5e in serial pairs, with private sessions and an unsubmitted input marker.
+All 60 pass and exit zero, without forced stops, retries, exclusions or inference
+prompts. Current startup median 129.579 ms/max 551.415 ms; input median 2.730 ms/
+max 17.066 ms. The older executable is not the exact parent: no causal diff or
+tail-guarantee claim. No optimization or capacity tuning.
+
+Reports enumerate all 158 completed native invocations, blocked Candidate
+profiles, direct oracles, diagnostics and limits. Allocation/copy/RMW/syscall/
+wake counts, real owner loops, heavy/reopened sessions, sustained/Linux workloads
+and production sizing remain unmeasured. Broader SystemA hooks remain
+implementation scope. Nls.2 stays in progress; evals, trajectories and multiplayer
+remain deferred. Checkpoint the report branch with relevant text/link checks and
+supported bead backup; do not repeat the source gate for report files.

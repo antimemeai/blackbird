@@ -1,0 +1,50 @@
+{
+  "count_per_tool": 30,
+  "order": "round robin, serial",
+  "terminal": "110x35 PTY; Ghostty identity; consumer drains bytes and answers terminal queries",
+  "cache": "ordinary macOS caches; private APFS-cloned state per process; cloning excluded",
+  "measurement": "parent monotonic clock before spawn to input frame, then unsubmitted marker rendered",
+  "inference_prompts_submitted": 0,
+  "driver_sha256": "4d3225532bae81ebe2d0cf6723d96d4e8d7905c65e80c975107cb1e5f8e0b090",
+  "source_commit": "33e78d11b54411ad55d81c6e683884b12b60a2ce",
+  "started_utc": "2026-10-14T09:04:43Z",
+  "host_load_before": [
+    15.6669921875,
+    13.7265625,
+    22.07373046875
+  ],
+  "tools": {
+    "previous-segment": {
+      "command": [
+        "/Users/patrickbeam/projects/blackbird/scripts/blackbird",
+        "--session",
+        "{run}/session"
+      ],
+      "ready_text": [
+        "Enter send"
+      ],
+      "frame_end": "\\x1b[?2026l",
+      "notes": "Retained previous segment Release, recorded sourceca6747b/e550adc sha; not exact parent of final segment",
+      "executable_sha256": "f6508629cfa2bb84e91648ed465cf8266074a5635ad9dd36f4c069ed48533bd3"
+    },
+    "current-segment": {
+      "command": [
+        "/Users/patrickbeam/projects/blackbird/scripts/blackbird",
+        "--session",
+        "{run}/session"
+      ],
+      "ready_text": [
+        "Enter send"
+      ],
+      "frame_end": "\\x1b[?2026l",
+      "notes": "Unchanged final owner source200fc5e; fresh session, ordinary caches, no provider prompt",
+      "executable_sha256": "f6508629cfa2bb84e91648ed465cf8266074a5635ad9dd36f4c069ed48533bd3"
+    }
+  },
+  "finished_utc": "2026-10-14T09:05:05Z",
+  "host_load_after": [
+    12.03857421875,
+    13.025390625,
+    21.578125
+  ]
+}

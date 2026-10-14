@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Finite actual-runtime workloads; transformations occur in this dev consumer."""
+import csv
+import hashlib
+import os
+from pathlib import Path
+import platform
+import subprocess
+import time
+
+base = Path(__file__).resolve().parent
+binary = base / "probe"
+environment = (
+    f"started={time.strftime('%Y-%m-%dT%H:%M:%S%z')}\n"
+    f"platform={platform.platform()}\n"
+    f"source={subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=base, text=True).strip()}\n"
+    f"binary_sha256={hashlib.sha256(binary.read_bytes()).hexdigest()}\n"
+    f"foundation_sha256={hashlib.sha256((base.parents[2] / 'build/release/libblackbird_foundation.a').read_bytes()).hexdigest()}\n"
+    f"load_before={os.getloadavg()}\n"
+    "compiler=LLVM23.1.2 std=c++20 O3 NDEBUG BLACKBIRD_DEBUG=0 macOS SDK native ARM64\n"
+    "DATA=1048576 CONTROL=4096 FAILURE=4096 full-sync actual RawRuntime\n"
+    "No CPU affinity, cache flush, provider calls, process profiling, optimization.\n"
+)
+(base / "environment.txt").write_text(environment)
+clock_result = subprocess.run([str(binary), "clocks", str(base / "clocks.csv")], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+(base / "clocks.log").write_text(f"exit={clock_result.returncode}\n{clock_result.stdout}{clock_result.stderr}")
+if clock_result.returncode:
+    raise SystemExit("native clock acquisition failed; preserved samples remain")
+cases = [("burst", 64, 40000), ("burst", 256, 20000), ("burst", 4096, 5000)]
+cases = [(mode, size, count, trial) for trial in range(1, 4) for mode, size, count in cases]
+cases += [("idle", size, 30, 1) for size in (64, 256, 4096)]
+cases += [("reader", 256, 20000, 1), ("full", 256, 1, 1)]
+
+def percentile(values, p):
+    ordered = sorted(values)
+    return ordered[max(0, (len(ordered) * p + 99) // 100 - 1)]
+
+with (base / "summary.csv").open("w") as summary, (base / "runs.log").open("w") as log:
+    writer = csv.writer(summary)
+    writer.writerow(["case", "size", "count", "claim_p50_ns", "claim_p99_ns", "claim_max_ns",
+                     "emit_p50_ns", "emit_p99_ns", "emit_max_ns", "pipeline_body_MBps",
+                     "loop_ms", "final_ack_ms", "last_emit_ack_observed_ms", "recorder_cpu_ms",
+                     "reader_events", "reader_snapshots", "resumed_claim_emit_ms"])
+    for mode, size, count, trial in cases:
+        name = f"{mode}-{size}-{trial}"
+        command = [str(binary), mode, str(size), str(count), str(base / name)]
+        log.write("command=" + repr(command) + "\n")
+        log.flush()
+        result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        log.write(f"exit={result.returncode}\n{result.stdout}{result.stderr}\n")
+        log.flush()
+        print(name, result.returncode, result.stdout.strip(), result.stderr.strip(), flush=True)
+        if result.returncode:
+            raise SystemExit(f"direct workload failed: {name}; preserved files remain")
+        fields = dict(item.split("=", 1) for item in result.stdout.split())
+        rows = list(csv.DictReader((base / name / "latencies.csv").open()))
+        claims = [int(row["claim_ns"]) for row in rows]
+        emits = [int(row["emit_ns"]) for row in rows]
+        observed = int(fields["count"])
+        final_ack = int(fields["final_ack_ns"])
+        writer.writerow([name, size, observed, percentile(claims, 50), percentile(claims, 99), max(claims),
+                         percentile(emits, 50), percentile(emits, 99), max(emits), observed*size*1000/final_ack,
+                         int(fields["loop_ns"])/1e6, final_ack/1e6,
+                         int(fields["last_emit_ack_observed_ns"])/1e6,
+                         int(fields["recorder_cpu_ns"])/1e6, fields["reader_events"], fields["reader_snapshots"],
+                         int(fields["resumed_claim_emit_ns"])/1e6])
+        summary.flush()
+with (base / "environment.txt").open("a") as output:
+    output.write(f"load_after={os.getloadavg()}\n")

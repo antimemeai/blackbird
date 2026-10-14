@@ -344,3 +344,26 @@ failure paths implemented, independent source-to-preserved-byte checks pass,
 runtime failure/cleanup/consumer behavior matches the design, native/Lua authored
 events and read-only consumption work, and real costs/capacities are measured.
 The remaining sequence is not itself evidence that those conditions hold.
+
+
+## First qualification state, 2026-10-14
+
+Operator authorized testing and a state report before optimization. Unchanged
+source 200fc5e: selected macOS Release 39/40 and ASan/UBSan 29/40; independently
+buildable Linux Release 37/39 and ASan/UBSan 28/39. Candidate Linux is blocked by
+missing <cstring>. A production File terminal flag expires before publication
+(834); repeated sanitizer failures follow that defect. Fixture fault selection,
+lifetimes and unresolved command/Linux UI failures are recorded in
+90u/bho/iva/fir/0oa/ji3. Earlier Debug/source passes do not qualify these profiles.
+
+Fourteen raw workloads check 218,946 events exactly on disk, including reader,
+wrap, full refusal and resume. Thirty current Release startups all succeed:
+median 129.579 ms/max 551.415 ms; typing median 2.730 ms/max 17.066 ms.
+Small-body emission medians sit at the 41 ns observer floor; paced emission and
+preservation tails are larger. No guarantee, tuning or capacity choice follows.
+Owner-cost and broader workload gaps remain explicit. No repair was performed
+during this report.
+
+See [every case, findings and startup results](../papers/2026-10-14-instrumentation-qualification-first-state.md)
+and [raw runtime measurements](../papers/2026-10-14-raw-runtime-workloads.md).
+Nls.2 stays in progress. Evals, trajectories and multiplayer remain deferred.

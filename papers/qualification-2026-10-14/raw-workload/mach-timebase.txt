@@ -1,0 +1,3 @@
+numer=125
+denom=3
+proc_pid_rusage CPU fields are Mach absolute-time ticks
