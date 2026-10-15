@@ -38,3 +38,9 @@ The real launch options `--provider paper --model ultramarine-1-flash --effort m
 from the parent projects directory, with `--once /session`, succeed in a new
 private session and report the requested settings. This issues no provider call;
 the previous actual Paper tool-call qualification remains in QUALIFICATION.md.
+
+The normal source publication gate subsequently passes149/149 Debug tests and
+the full owned C++/header/Lua lint checks. Commit245d8e9 contains this repair and
+the previously staged Paper provider unit. context/fresh-start-commit.log retains
+the hook output. The command-job shutdown test passed this run without changes
+to that subsystem; its earlier intermittent failure has not been diagnosed here.

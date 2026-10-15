@@ -70,13 +70,31 @@ prerequisite present; its actual output remains in context/paper-commit.log.
 The recheck completed147/148 in259.33seconds. command_jobs_pty failed at
 scripts/check-command-jobs-pty:566: `quit did not complete job cleanup`.
 The other147 cases, including all provider cases, passed. The normal source hook
-therefore refused the commit. No hook override, source commit, push or merge was
-performed. The implementation remains staged in the requested worktree. Repair
+therefore refused that commit attempt. No hook override, source commit, push or
+merge was performed at that checkpoint. The implementation remained staged. Repair
 of the existing command-job quit path is outside this provider unit's declared
 scope; the blocker is recorded on arconaut-7fp. No third full-suite campaign is
-started. Separate source lint follows because the hook stopped before reaching it.
+was started for the provider unit. Separate source lint followed because the hook
+stopped before reaching it.
 
 `scripts/rigor lint` completed successfully: owned C++ formatting, native source
 and header analysis, Lua formatting/syntax and LuaLS all pass. It introduced no
-suppression annotation. The normal source gate remains failed on the command-job
-PTY quit case; full lint success does not override that failed test.
+suppression annotation. At that checkpoint the normal source gate remained failed
+on the command-job PTY quit case; full lint success did not override that failure.
+
+## Fresh-start follow-up and publication
+
+The operator then rejected implicit global-session resume after a launch without
+`--session` selected the old Arconaut history. The independently scoped
+[fresh-start repair](FRESH_START.md) removes that behavior in both launch paths.
+The rebuilt optimized executable passes the operator's actual Paper launch
+options with `--once /session`; no provider request was needed for that startup
+check. Release and Debug each pass the four affected session/restart cases.
+
+The normal source commit hook for the combined implementation now passes all
+149 Debug tests in316.27seconds, including command_jobs_pty in32.05seconds, plus
+full C++ formatting/native/header analysis and Lua formatting/syntax/LuaLS.
+Source commit: `245d8e9`. Log: context/fresh-start-commit.log. No source-hook
+override or source modification to the command-job shutdown path was used. The
+earlier timeout did not recur; this run does not establish its root cause.
+This successful normal gate supersedes the earlier publication blocker.

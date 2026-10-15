@@ -9767,3 +9767,12 @@ The operator's exact provider/model/effort options from the projects directory,
 with --once /session to avoid a provider request, create a fresh private path and
 report paper/ultramarine-1-flash/max. Existing global histories are preserved.
 Proceed to one normal source publication gate for this newly requested repair.
+
+The fresh-start publication gate passes all149 Debug tests in316.27seconds and
+the full owned C++ formatting/native/header analysis plus Lua formatting/syntax/
+LuaLS checks. Normal source-hook commit245d8e9 contains Paper routing and the
+operator-requested fresh default. command_jobs_pty passes32.05seconds without a
+change to its subsystem; the prior intermittent timeout is not diagnosed by this
+success. The earlier publication block is superseded by this actual full gate.
+Retain context/fresh-start-commit.log, update qualification/review notes, then
+push the requested work branch. No main integration or other-checkout activation.

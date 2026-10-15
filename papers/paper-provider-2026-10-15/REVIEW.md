@@ -32,3 +32,11 @@ became mandatory and read_file could not satisfy its own validator. Portable
 export now sets strict:false only on function definitions without an authored
 strict field, preserving the exact parameter schema and explicit strict choices.
 Direct export and native fake-transport checks cover the actual wire fields.
+
+The later operator-requested fresh-start repair received a focused code challenge.
+It found that maintenance flags could still select an older published UI through
+the shell wrapper. The shell now refuses pathless maintenance before selection
+and routes explicit maintenance to the native executable. The startup fixture
+checks both the actual launch paths and published-generation selection; the Debug
+recheck passes. Native allocation, explicit reopen and restart retention had no
+further concrete finding. This repair's plan and results are in FRESH_START.md.
