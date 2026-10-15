@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <iostream>
 #include <stdexcept>
+#include <type_traits>
 #include <unistd.h>
 using namespace blackbird;
 void require(bool yes, const char *why) {
@@ -29,13 +30,98 @@ std::string hex(std::string_view bytes) {
   }
   return result;
 }
+void presenter_pipe() {
+  static_assert(!std::is_move_constructible_v<ChatPresenter>);
+  int descriptors[2];
+  require(::pipe(descriptors) == 0, "presenter pipe setup");
+  (void)::fcntl(descriptors[0], F_SETFL, O_NONBLOCK);
+  {
+    ChatPresenter presenter;
+    presenter.attach(descriptors[1]);
+    auto &grid = presenter.grid();
+    grid.reset(20, 4);
+    grid.line(0, {{"A", Ink::normal}});
+    const auto initial = presenter.prepare(2, 3);
+    presenter.start();
+    require(presenter.flush() && !presenter.flush(), "completion consumed once");
+    require(presenter.geometry().rows == 4 && presenter.geometry().cursor_column == 3,
+            "completed normal geometry");
+    std::string received;
+    char data[16384];
+    auto count = ::read(descriptors[0], data, sizeof(data));
+    require(count > 0, "initial presenter bytes");
+    received.append(data, static_cast<std::size_t>(count));
+    require(received == initial, "initial exact packet");
+    presenter.grid().reset(20, 4);
+    presenter.grid().line(0, {{"B", Ink::normal}});
+    auto &packet = presenter.prepare(1, 8);
+    packet.append(256 * 1024, 'q'); // Final graphics-like augmentation is owned.
+    const auto expected = packet;
+    presenter.start();
+    require(!presenter.flush() && presenter.pending(), "owned backpressure");
+    require(presenter.geometry().cursor_column == 3,
+            "partial output does not publish cursor");
+    bool refused = false;
+    try {
+      (void)presenter.prepare_tiny(2, 8, 0, 1);
+    } catch (const std::logic_error &) {
+      refused = true;
+    }
+    require(refused, "inflight frame cannot be replaced");
+    received.clear();
+    unsigned completions = 0;
+    for (unsigned round = 0;
+         round < 1000 && (presenter.pending() || received.size() < expected.size());
+         ++round) {
+      count = ::read(descriptors[0], data, sizeof(data));
+      if (count > 0)
+        received.append(data, static_cast<std::size_t>(count));
+      completions += presenter.flush() ? 1U : 0U;
+    }
+    require(received == expected && completions == 1 &&
+                presenter.geometry().cursor_column == 8,
+            "owned exact suffix and matching completion");
+    auto &tiny = presenter.prepare_tiny(2, 8, 0, 1);
+    tiny = "x"; // Short string storage must remain inside the immovable owner.
+    presenter.start();
+    require(presenter.flush() && presenter.geometry().tiny,
+            "tiny completion is explicit");
+    require(::read(descriptors[0], data, sizeof(data)) == 1 && data[0] == 'x',
+            "short owned packet");
+    presenter.grid().reset(20, 4);
+    require(!presenter.prepare(1, 8).empty(), "tiny invalidates normal baseline");
+    presenter.abandon();
+  }
+  require((::fcntl(descriptors[1], F_GETFL) & O_NONBLOCK) == 0,
+          "presenter restores descriptor flags");
+  ::close(descriptors[0]);
+  ::close(descriptors[1]);
+}
 int main(int argc, char **) {
   try {
     (void)std::setlocale(LC_CTYPE, "en_US.UTF-8");
     if (argc > 1) {
-      ChatPainter delta;
-      ChatGrid frame;
-      for (int i = 0; i < 6; ++i) {
+      int descriptors[2];
+      require(::pipe(descriptors) == 0, "oracle presenter pipe");
+      ChatPresenter presenter;
+      presenter.attach(descriptors[1]);
+      for (int i = 0; i < 8; ++i) {
+        if (i == 6) {
+          auto &tiny = presenter.prepare_tiny(2, 8, 0, 1);
+          tiny = "\x1b[?2026h\x1b[H\x1b[2Jx\x1b[1;2H\x1b[?2026l";
+          const auto expected = tiny;
+          presenter.start();
+          require(presenter.flush(), "tiny oracle completion");
+          char data[4096];
+          const auto count = ::read(descriptors[0], data, sizeof(data));
+          require(count > 0, "tiny oracle bytes");
+          std::cout << "8 2\n"
+                    << hex(std::string_view{data, static_cast<std::size_t>(count)})
+                    << "\n"
+                    << hex(expected) << "\n";
+          continue;
+        }
+        auto &frame = presenter.grid();
         frame.reset(i == 4 ? 12 : 20, 4);
         frame.line(0, {{i == 0   ? "hello long"
                         : i == 1 ? "界éx"
@@ -44,14 +130,25 @@ int main(int argc, char **) {
                         Ink::assistant}});
         frame.line(1, {{"keyword", Ink::keyword}, {" string", Ink::string}});
         ChatPainter full;
-        const auto packet = delta.prepare(frame, 3, 2);
-        std::cout << frame.width << " " << frame.height << "\n"
+        (void)presenter.prepare(3, 2);
+        const auto cold = full.prepare(frame, 3, 2);
+        const auto width = frame.width, height = frame.height;
+        presenter.start();
+        require(presenter.flush(), "oracle presenter completion");
+        char data[4096];
+        const auto count = ::read(descriptors[0], data, sizeof(data));
+        require(count > 0, "oracle presenter bytes");
+        const std::string_view packet{data, static_cast<std::size_t>(count)};
+        std::cout << width << " " << height << "\n"
                   << hex(packet) << "\n"
-                  << hex(full.prepare(frame, 3, 2)) << "\n";
-        delta.commit(frame);
+                  << hex(cold) << "\n";
       }
+      presenter.detach();
+      ::close(descriptors[0]);
+      ::close(descriptors[1]);
       return 0;
     }
+    presenter_pipe();
     const auto &idle_sprite = blackbird_sprite(false, 0);
     require(&idle_sprite == &blackbird_sprite(false, 999), "idle mascot animates");
     require(blackbird_sprite(true, 0) != blackbird_sprite(true, 1),

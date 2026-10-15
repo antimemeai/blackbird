@@ -1,0 +1,27 @@
+[
+  {
+    "path": "/Users/patrickbeam/projects/blackbird/build/debug/.ninja_deps",
+    "bytes": 2922348,
+    "sha256": "33f03f88031100e30f5a2cbb8d393e8f1fcd1ba6db46af41b66bbc87c9798412",
+    "endian": "little",
+    "version": 4,
+    "valid_path_records": 1711,
+    "valid_dep_records": 592,
+    "first_failure": {
+      "record_offset": 2611704,
+      "body_size": 60,
+      "kind": "path",
+      "current_recovery_offset": 2611768,
+      "correct_recovery_offset": 2611704,
+      "record_hex": "3c000000434d616b6546696c65732f626c61636b626972645f666f756e646174696f6e2e6469722f7372632f7261775f706c61696e2e6370702e6f0052f9ffff",
+      "reason": "path checksum/index mismatch or duplicate path",
+      "path": "CMakeFiles/blackbird_foundation.dir/src/raw_plain.cpp.o",
+      "checksum": 4294965586,
+      "expected_id": 1709,
+      "actual_id": 1711,
+      "prior_id": 1709
+    },
+    "parsed_to": 2611768,
+    "unchanged_while_reading": true
+  }
+]

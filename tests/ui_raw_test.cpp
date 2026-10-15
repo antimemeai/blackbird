@@ -32,6 +32,7 @@ struct WriteObservation {
 };
 thread_local int observed_descriptor = -1;
 thread_local unsigned write_fault_phase = 0;
+thread_local std::size_t write_cut = 2;
 thread_local std::size_t observed_writes = 0;
 thread_local std::array<WriteObservation, 32> write_observations{};
 } // namespace
@@ -85,7 +86,7 @@ extern "C" ssize_t write(int descriptor, const void *bytes, std::size_t size) {
     result = -1;
     ++write_fault_phase;
   } else if (write_fault_phase == 2) {
-    result = native_write(descriptor, bytes, std::min<std::size_t>(2, size));
+    result = native_write(descriptor, bytes, std::min(write_cut, size));
     ++write_fault_phase;
   } else if (write_fault_phase == 3) {
     errno = EAGAIN;
@@ -101,6 +102,85 @@ namespace {
 void require(bool value, const char *message) {
   if (!value)
     throw std::runtime_error(message);
+}
+void presenter_completion() {
+  int descriptors[2];
+  require(::pipe(descriptors) == 0, "presenter completion pipe");
+  ChatPresenter presenter;
+  presenter.attach(descriptors[1]);
+  presenter.grid().reset(8, 2);
+  presenter.grid().line(0, {{"A", Ink::normal}});
+  (void)presenter.prepare(0, 1);
+  presenter.start();
+  require(presenter.flush(), "presenter first frame");
+  char data[4096];
+  require(::read(descriptors[0], data, sizeof(data)) > 0, "first frame drained");
+
+  // A cursor-only packet may be prepared and abandoned without moving the
+  // committed observation or changing the next cursor delta.
+  presenter.grid().reset(8, 2);
+  presenter.grid().line(0, {{"A", Ink::normal}});
+  require(!presenter.prepare(1, 6).empty(), "cursor-only packet prepared");
+  presenter.abandon();
+  require(presenter.geometry().cursor_column == 1, "abandoned cursor is not committed");
+  require(presenter.prepare(0, 1).empty(), "abandoned preparation retains cursor A");
+  presenter.abandon();
+
+  // Deny the actual allocation in a larger packet preparation. The previous
+  // cursor must still be A when construction fails.
+  presenter.grid().reset(500, 8);
+  presenter.grid().line(0, {{std::string(500, 'B'), Ink::normal}});
+  bool failed = false;
+  allocation_failed = false;
+  fail_allocation_after = 1;
+  try {
+    (void)presenter.prepare(7, 499);
+  } catch (const std::bad_alloc &) {
+    failed = true;
+  }
+  fail_allocation_after = 0;
+  require(failed && allocation_failed && presenter.geometry().cursor_column == 1,
+          "failed packet construction preserves committed cursor");
+
+  presenter.grid().reset(8, 2);
+  presenter.grid().line(0, {{"B", Ink::normal}});
+  (void)presenter.prepare(1, 7);
+  presenter.start();
+  allocation_failed = false;
+  fail_allocation_after = 1;
+  const bool complete = presenter.flush();
+  fail_allocation_after = 0;
+  require(complete && !allocation_failed && presenter.geometry().cursor_column == 7,
+          "post-write grid/cursor publication allocates nothing with capture disabled");
+  require(::read(descriptors[0], data, sizeof(data)) > 0, "second frame drained");
+
+  // Every byte cut includes cuts inside CSI and multibyte UTF-8. The final
+  // packet is changed graphics-like content, not another borrow from caller.
+  const std::string expected{"\x1b[1;2H界é\x1b_Ga=d\x1b\\"};
+  for (std::size_t cut = 1; cut < expected.size(); ++cut) {
+    auto &packet = presenter.prepare_tiny(2, 8, 0, 1);
+    packet = expected;
+    presenter.start();
+    observed_descriptor = descriptors[1];
+    observed_writes = 0;
+    write_fault_phase = 1;
+    write_cut = cut;
+    require(!presenter.flush() && presenter.pending(), "cut remains partial");
+    require(presenter.flush() && !presenter.pending(), "cut suffix completes");
+    observed_descriptor = -1;
+    write_fault_phase = 0;
+    require(observed_writes == 4 &&
+                write_observations[1].result == static_cast<ssize_t>(cut),
+            "EINTR short write EAGAIN exact cut");
+    const auto count = ::read(descriptors[0], data, sizeof(data));
+    require(count == static_cast<ssize_t>(expected.size()) &&
+                std::string_view{data, static_cast<std::size_t>(count)} == expected,
+            "every terminal packet cut emits exact final bytes");
+  }
+  write_cut = 2;
+  presenter.detach();
+  ::close(descriptors[0]);
+  ::close(descriptors[1]);
 }
 template <class T> T native(ByteView &body) {
   require(body.size() >= sizeof(T), "complete independent native field");
@@ -203,13 +283,14 @@ void direct_owners() {
     int pipe[2];
     require(::pipe(pipe) == 0, "real native outputpipe");
     {
-      ChatOutput output;
+      ChatPresenter output;
       output.raw_capture(true);
       output.attach(pipe[1]);
+      output.prepare_tiny(1, 5, 0, 0) = binary;
       RawUiFrame capture{true, binary.size()};
       frame = capture.reference();
       capture.capture(binary);
-      output.start(binary, capture.handoff());
+      output.start(capture.handoff());
       require(output.flush(), "real binary nativewrite completes");
     }
     char received[5];
@@ -387,13 +468,14 @@ void native_failures() {
     int pipe[2];
     require(::pipe(pipe) == 0, "faultoutput realpipe");
     {
-      ChatOutput output;
+      ChatPresenter output;
       output.raw_capture(true);
       output.attach(pipe[1]);
+      output.prepare_tiny(1, 5, 0, 0) = packet;
       RawUiFrame capture{true, packet.size()};
       output_frame = capture.reference();
       capture.capture(packet);
-      output.start(packet, capture.handoff());
+      output.start(capture.handoff());
       observed_descriptor = pipe[1];
       observed_writes = 0;
       write_fault_phase = 1;
@@ -1375,6 +1457,7 @@ void actual_terminal_queue(UiCut cut = UiCut::none) {
 } // namespace
 int main() {
   try {
+    presenter_completion();
     direct_owners();
     native_failures();
     full_control_cleanup();

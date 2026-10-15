@@ -1210,24 +1210,30 @@ void CommandJobs::start(const std::string &id, const Value &arguments,
 Value CommandJobs::wait(const std::string &id, JobWaitOptions options,
                         const std::function<void()> &tick,
                         const std::function<bool()> &cancelled) {
-  auto wait_credit = raw_command_claim(110);
-  const auto id_size = id.size();
-  const bool yield_present = options.yield_ms.has_value();
-  const auto yield_ms = options.yield_ms.value_or(0);
-  std::array<ByteView, 6> fields{raw_native_field(id_size),
-                                 raw_string_field(id),
-                                 raw_native_field(yield_present),
-                                 raw_native_field(yield_ms),
-                                 raw_native_field(options.max_output),
-                                 raw_native_field(options.stop_on_cancel)};
-  if (!yield_present) {
-    fields[3] = fields[4];
-    fields[4] = fields[5];
-  }
-  const auto request =
-      raw_command_data(2024, std::span{fields}.first(yield_present ? 6 : 5));
+  std::optional<RawControlToken> wait_credit;
+  RawEventRef request{};
   std::uint64_t epoch = 0;
-  bool finished = false;
+  bool request_admitted = false, finished = false, stopped_joined = false;
+  auto stop_and_join = [&] {
+    if (stopped_joined)
+      return;
+    std::shared_ptr<Impl::Job> stopped;
+    {
+      const std::lock_guard lock{impl_->mutex};
+      const auto found = impl_->jobs.find(id);
+      if (found == impl_->jobs.end())
+        return;
+      stopped = found->second;
+      // A published job belongs to this selected wait even if its first raw
+      // admission or tick is interrupted. Stop uses the already held credit.
+      impl_->caller_stop(*stopped, 5);
+    }
+    if (stopped->worker.joinable())
+      stopped->worker.join();
+    if (stopped->retained_loan)
+      stopped->retained_loan->joined();
+    stopped_joined = true;
+  };
   auto finish = [&](const Impl::Job *job, std::uint8_t branch, Error error = {}) {
     if (finished)
       return;
@@ -1244,11 +1250,29 @@ Value CommandJobs::wait(const std::string &id, JobWaitOptions options,
         wait_credit ? &*wait_credit : nullptr);
   };
   auto failure = [&](std::uint8_t branch, Error error) {
+    if (!request_admitted)
+      return;
     const std::lock_guard lock{impl_->mutex};
     const auto found = impl_->jobs.find(id);
     finish(found == impl_->jobs.end() ? nullptr : found->second.get(), branch, error);
   };
   try {
+    wait_credit = raw_command_claim(110);
+    const auto id_size = id.size();
+    const bool yield_present = options.yield_ms.has_value();
+    const auto yield_ms = options.yield_ms.value_or(0);
+    std::array<ByteView, 6> fields{raw_native_field(id_size),
+                                   raw_string_field(id),
+                                   raw_native_field(yield_present),
+                                   raw_native_field(yield_ms),
+                                   raw_native_field(options.max_output),
+                                   raw_native_field(options.stop_on_cancel)};
+    if (!yield_present) {
+      fields[3] = fields[4];
+      fields[4] = fields[5];
+    }
+    request = raw_command_data(2024, std::span{fields}.first(yield_present ? 6 : 5));
+    request_admitted = true;
     {
       const std::lock_guard lock{impl_->mutex};
       auto &job = impl_->find(id);
@@ -1277,16 +1301,7 @@ Value CommandJobs::wait(const std::string &id, JobWaitOptions options,
       tick();
       if (cancelled()) {
         if (options.stop_on_cancel) {
-          std::shared_ptr<Impl::Job> stopped;
-          {
-            const std::lock_guard lock{impl_->mutex};
-            stopped = impl_->jobs.at(id);
-            impl_->caller_stop(*stopped, 5);
-          }
-          if (stopped->worker.joinable())
-            stopped->worker.join();
-          if (stopped->retained_loan)
-            stopped->retained_loan->joined();
+          stop_and_join();
           // Cleanup progresses independently of capture backpressure; now retain
           // that command's actual terminal before propagating turn cancellation.
           for (unsigned pass = 0; pass < 4; ++pass)
@@ -1305,6 +1320,8 @@ Value CommandJobs::wait(const std::string &id, JobWaitOptions options,
       impl_->condition.wait_for(lock, std::chrono::milliseconds{10});
     }
   } catch (const Error &error) {
+    if (options.stop_on_cancel && error.code == ErrorCode::interrupted)
+      stop_and_join();
     failure(error.code == ErrorCode::interrupted ? 4 : 5, error);
     throw;
   } catch (const std::bad_alloc &) {

@@ -9801,3 +9801,32 @@ and papers counterpart. rhi.3.3 source publication remains blocked by host linke
 current authorization remains sufficient to finish gate/push when it works.
 Publish checked text/results/identities only. Original source archives, exact
 performance rounds, user artwork and AFL jobs/outputs remain untouched.
+
+Operator explicitly requests system study, analysis, written plan and repair of
+the remaining Mac build block. Current libproc snapshot22:36UTC shows prior
+owned linkers/probe gone and no current linker/compiler/Ninja/CMake/sample, a
+real host-state change. Parallel source owners study Apple/XNU process diagnostics
+and exact Ninja dependency-log recovery. Root owns controlled traced links,
+disposable-cache repair only after byte diagnosis, and eventual full source gate.
+Plan: papers/mac-link-repair-2026-10-15/PLAN.md. Preserve restored source, original
+archives, deadlines, user artwork and AFL state; no broad kills or toolchain swap.
+
+Read-only cache parser plus exact pinned upstream source establishes a complete
+invalid duplicate dependency record at2611704: checksumID1709, nextID1711. The
+Ninja reader retains that bad record during recovery. Preserve exact cache and
+remove only .ninja_deps with no builder active; same tools regenerate a valid log
+and regular coding/native links complete. A subsequent unchanged build reports
+no work, no EOF warning, no repeated foundation compile. Four Mac coding modes
+pass15.06seconds. No attribution of initial corrupt writer or previous kernelwait.
+
+Before cache repair, fresh traced configured-toolchain control0.336seconds and
+actual coding link0.270seconds both finish. Old pending ld/sample PIDs are gone
+at22:36UTC. Source research distinguishes thread state from misleading SRUN on
+SIGKILL, without further attachment/global process probes or securitytoolchanges.
+
+Root integration finding: eight new split PTY cases did not inherit the original
+RUN_SERIAL policy applied later to terminal_pty. Preserve that existing policy
+for the new episodes, not the whole suite; all30second/per-step deadlines remain.
+This CMake metadata change regenerates literal raw/workflow build identity tags,
+while production bodies/performance originals remain pinned. Stage intended
+source, papers and supported Beads backup, then run required full source hook.

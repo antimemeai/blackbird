@@ -210,6 +210,109 @@ const OwnedRecord &linked(const RecordMap &all, const RecordKey &response,
           "response links its actual earlier same-producer native request");
   return found->second;
 }
+void wait_cancellation(std::string_view fixture, const std::filesystem::path &root,
+                       bool before_admission) {
+  stage = before_admission ? "cancel before wait admission" : "cancel from wait tick";
+  const auto session = root / (before_admission ? "wait-admission" : "wait-tick");
+  const auto child =
+      root / (before_admission ? "wait-admission-child" : "wait-tick-child");
+  std::filesystem::create_directory(session);
+  std::filesystem::create_directory(child);
+  require(::chmod(session.c_str(), 0700) == 0, "private wait cancellation session");
+  IdentityBytes identity{};
+  identity[0] = before_admission ? std::byte{101} : std::byte{102};
+  const std::string id(32, before_admission ? 'a' : 'b');
+  {
+    auto runtime = unwrap(RawRuntime::open(session.string(),
+                                           unwrap(EnvironmentId::from_bytes(identity)),
+                                           {{2 * 1024 * 1024, 64 * 1024, 4096}, 4096}));
+    RawThreadBinding binding{unwrap(runtime->prepare_thread())};
+    const auto base_children = detail::owned_children.load();
+    CommandJobs jobs;
+    jobs.start(id,
+               Value::object(
+                   {{"argv", Value{Value::Array{Value{std::string{fixture}},
+                                                Value{"gate"}, Value{child.string()}}}},
+                    {"timeout_seconds", Value{Number{10}}}}));
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    while (!std::filesystem::exists(child / "ready") ||
+           field(jobs.read(Value::object({{"job_id", Value{id}}})), "received_bytes")
+                   .number()
+                   .text() != "6") {
+      require(std::chrono::steady_clock::now() < deadline,
+              "real child output acquired before wait cut");
+      std::this_thread::yield();
+    }
+    require(detail::owned_children.load() == base_children + 1,
+            "specific child is live at cancellation boundary");
+    const Error expected{ErrorCode::interrupted, before_admission ? ECANCELED : EINTR};
+    bool interrupted = false;
+    unsigned tick_calls = 0;
+    RawCommandWake canceled;
+    if (before_admission)
+      canceled.notify();
+    {
+      RawCaptureFailureScope capture{true};
+      RawWaitScope wait{{{before_admission ? canceled.read_fd() : -1, -1}, {}}};
+      try {
+        (void)jobs.wait(
+            id, {{}, 65536, true},
+            [&] {
+              if (++tick_calls > 1)
+                throw std::runtime_error("cleanup tick must not replace interruption");
+              throw expected;
+            },
+            [] { return false; });
+      } catch (const Error &error) {
+        interrupted = error == expected;
+        if (before_admission)
+          require(capture.consume(error), "consume actual refused raw acquisition");
+      }
+    }
+    require(interrupted && tick_calls == (before_admission ? 0U : 1U),
+            "original interruption and exact admission/tick boundary");
+    require(detail::owned_children.load() == base_children,
+            "interrupted selected wait stops and joins child before returning");
+    std::string output;
+    unsigned terminals = 0;
+    for (unsigned pass = 0; pass < 3; ++pass)
+      for (auto &event : jobs.drain()) {
+        require(event.job_id == id, "cancellation cleanup targets exact job");
+        if (event.bytes) {
+          require(event.offset == output.size(), "canceled output exact offsets");
+          output += *event.bytes;
+          jobs.retained(id, output.size());
+        } else {
+          ++terminals;
+          jobs.settled(id, event.result);
+        }
+      }
+    require(output == "READY\n" && terminals == 1 && jobs.debt() == 0,
+            "selected wait retains exact output and one terminal after cancellation");
+  }
+  unsigned requests = 0, registered = 0, stops = 0;
+  const auto all = records(session);
+  for (const auto &[key, record] : all) {
+    ByteView body = record.body;
+    if (record.site == 2024)
+      ++requests;
+    if (record.site == 2025) {
+      (void)linked(all, key, body, 2024);
+      ++registered;
+    }
+    if (record.site == 2026)
+      (void)linked(all, key, body, 2024);
+    if (record.site == 2029) {
+      require(text(body) == id && native<std::uint8_t>(body) == 5 && body.empty(),
+              "held stop belongs to exact interrupted wait");
+      require(record.partition == RawPartition::control, "wait stop is prepaid");
+      ++stops;
+    }
+  }
+  require(requests == (before_admission ? 0U : 1U) &&
+              registered == (before_admission ? 0U : 1U) && stops == 1,
+          "no invented refused request; one selected wait stop");
+}
 void canceled_exec_receipt(std::string_view fixture, const std::filesystem::path &root,
                            bool after_admission = false) {
   stage = after_admission ? "actual postadmission canceled exec"
@@ -1388,8 +1491,17 @@ void blocked_worker(std::string_view fixture, const std::filesystem::path &root)
 }
 int main(int argc, char **argv) {
   try {
-    require(argc == 2, "fixture executable argument");
+    require(argc == 2 || argc == 3, "fixture executable argument");
     Temporary temporary;
+    if (argc == 3) {
+      const std::string_view selection{argv[2]};
+      require(selection == "--wait-cancel-admission" ||
+                  selection == "--wait-cancel-tick",
+              "known focused cancellation case");
+      wait_cancellation(argv[1], temporary.root,
+                        selection == "--wait-cancel-admission");
+      return 0;
+    }
     live_recorder(temporary.root);
     registration_recorder_death(temporary.root);
     CommandJobs jobs;
@@ -1427,6 +1539,8 @@ int main(int argc, char **argv) {
     require(jobs.drain().empty() && jobs.debt() == 0,
             "acknowledgment settles exactly once");
     jobs.shutdown();
+    wait_cancellation(argv[1], temporary.root, true);
+    wait_cancellation(argv[1], temporary.root, false);
     canceled_exec_receipt(argv[1], temporary.root);
     canceled_exec_receipt(argv[1], temporary.root, true);
     raw_oracles(argv[1], temporary.root);

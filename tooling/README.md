@@ -194,3 +194,16 @@ The operator-selected [Microsoft driver and owned Neovim-style screen expectatio
 join native semantic/fault and actual PTY checks. Install the pinned development
 executable with `scripts/tui-test --install` before running the complete source
 gate on a new host. Tests fail when required tooling is absent; no silent skip.
+
+## Repeated dependency-log recovery
+
+The pinned Ninja has a known recovery-offset defect for complete semantically
+invalid records. If the same premature-EOF warning repeats and unchanged targets
+recompile, preserve and inspect the exact `.ninja_deps` bytes before invoking more
+Ninja commands; even a dry run can truncate a malformed log. The
+[observed repair](../papers/mac-link-repair-2026-10-15/BUILD_OWNERSHIP.md) identifies
+the duplicate ID/checksum and preserves the original. After establishing no
+builder is active, remove only that derived dependency log and rebuild with the
+pinned tools. One unchanged build should report no work. Do not automatically
+delete caches, infer another actor, replace the linker or erase application data
+from the warning alone. Original linker stalls remain a distinct host finding.

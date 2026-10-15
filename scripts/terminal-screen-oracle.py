@@ -58,10 +58,14 @@ class Screen:
                     elif cmd == 'm': self.style = values or '0'
                     elif cmd == 'K':
                         for key in list(self.cells):
-                            if key[0] == self.row and (values == '2' or key[1] >= self.col): del self.cells[key]
+                            if key[0] == self.row and (values == '2' or key[1] >= self.col):
+                                del self.cells[key]
+                                self.styles.pop(key, None)
                     elif cmd == 'J':
                         for key in list(self.cells):
-                            if values == '2' or key >= (self.row,self.col): del self.cells[key]
+                            if values == '2' or key >= (self.row,self.col):
+                                del self.cells[key]
+                                self.styles.pop(key, None)
                     elif cmd in ('h', 'l') and values == '?2026': self.synchronized_update = cmd == 'h'
                     elif cmd == 'h' and values == '?1049': self.cells.clear()
                     pos += len(match.group(0));continue
@@ -128,4 +132,15 @@ if __name__ == '__main__':
         assert incremental.styles == cold.styles, ('delta/full style mismatch', index//3)
         assert (incremental.row,incremental.col) == (cold.row,cold.col), 'cursor mismatch'
         assert not incremental.pending, 'incomplete control packet'
+        frame = index // 3
+        if frame == 6:
+            assert incremental.cells == {(0,0): 'x'}, 'tiny specification cells'
+            assert (incremental.row,incremental.col) == (0,1), 'tiny specification cursor'
+        else:
+            prefix = ('hello long', '界éx', 'h', '👩‍💻🇺🇸', '👩‍💻🇺🇸',
+                      '👩‍💻🇺🇸', '', '👩‍💻🇺🇸')[frame]
+            assert incremental.text().splitlines()[0] == prefix, 'specified first row'
+            assert incremental.text().splitlines()[1] == 'keyword string'[:width], 'specified styled row'
+            assert incremental.styles[1,0] == '1;38;2;188;168;239;48;2;37;40;51', 'specified keyword ink'
+            assert (incremental.row,incremental.col) == (3,2), 'specified normal cursor'
     print('Incremental/full styled VT cells agree: ASCII, CJK, combining, emoji, stale areas, resize, byte-fragment delivery, CAN/SUB recovery and malformed detection')
