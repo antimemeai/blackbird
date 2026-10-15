@@ -8594,3 +8594,23 @@ retry and partial-transfer/expired-file checks; those final deltas are qualified
 by the local source gate, not claimed executed in the earlier Linux snapshot.
 The installed full Debug/C++/Lua hook is the publication gate for this source
 checkpoint. No broader Linux suite or live storage destination is claimed.
+
+Source checkpoint c8bc5db passes the installed full source hook: 132/132 Debug
+cases (202.29s), owned C++ format/static checks and Lua format/syntax/type/contract
+checks. The final archive case includes real native launcher/drain/restore and an
+independent child process-group assertion. Exact local/SCP/S3 bytes, partial
+manifest-transfer progress preservation, corruption/path refusals and retained
+expired diagnostics pass. context/trace-archive-source-gate.log keeps execution;
+the earlier Linux snapshot passes Release and ASan in run-e5b7wa0c. No final-delta
+Linux claim is invented. No live destination is selected and no operator process
+is replaced. Note the concrete remaining archive efficiency limit: every pass
+hashes/stages retained local source files, although remote objects are reused.
+
+Operator accepts the delivery and selects token caching and broader tokenomics
+next, requesting a frumentarii pass after the merge. Close archive feature dc3;
+semantic cap continuation/cold-source reclamation remains separate, not implied
+by archive copies. Publish the archive branch/checkpoint, then fast-forward master
+through its inherited qualification repairs and workflow-design history and push.
+No source check repeats for this settled fast-forward plus text-only results.
+Fresh research/delegation begins only after mainline publication, on its own work
+branch; source, API facts and actual usage must ground the next tokenomics design.

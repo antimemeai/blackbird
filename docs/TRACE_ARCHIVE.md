@@ -26,6 +26,13 @@ build/release/blackbird-archive configure /absolute/session s3://bucket/blackbir
 Settings live at `SESSION/trace-archive.bbm`; they apply to that session's next
 launch. Configuration alone starts no process or upload. Normal Blackbird
 launches start the worker automatically. Existing running binaries are unaffected.
+The launcher can retain an older `blackbird-ui` generation. To select the newly
+built executable explicitly, set `BLACKBIRD_EXECUTABLE` when launching:
+
+```sh
+BLACKBIRD_EXECUTABLE="$PWD/build/debug/blackbird" ./scripts/blackbird --session /absolute/session
+```
+
 SCP uses existing OpenSSH authentication/configuration and requires `ssh`, `scp`
 and a remote POSIX shell with `mkdir`, `ln`, `cmp` and `rm`. Remote publication
 uses safely quoted paths and a temporary upload; published objects are never
@@ -89,9 +96,11 @@ Upload every referenced object before the manifest. Commit the local cursor only
 after manifest transfer succeeds. Destination changes invalidate local progress.
 Interrupted work may leave unreferenced objects; retry uses the same content IDs.
 Restore verifies each object's SHA-256 and length and creates a new inspection
-directory without overwriting existing material. Changed source files are hashed
-in bounded chunks; already transferred chunks are not uploaded again. This can
-read the growing audit again, but does not parse/replay its semantic history.
+directory without overwriting existing material. Each pass hashes the retained
+local source files in bounded chunks; already transferred chunks are not uploaded
+again. This rereads/stages local history and does not parse/replay its semantic
+history. Skipping unchanged files and reusing immutable source-prefix chunks is
+remaining efficiency work, not a measured performance claim for this delivery.
 Never load a complete history
 into RAM merely to copy it. No compression, metric transformation or filtering of
 already emitted events is added to producers or recorder.
@@ -133,4 +142,7 @@ The attempted independent Kimi design review returned subscription access 403
 before a reviewer session started. It is not recorded as a completed review.
 Root source analysis corrected published-prefix consistency, retry overwrites,
 expired-original retention, restore publication and child-allocation ownership.
-Execution results are recorded in the journal after the required source checks.
+The installed full source gate passes 132/132 Debug cases and owned C++/Lua lint.
+Linux Release and ASan pass the earlier copied implementation; later worker
+process-group/error-retry changes and expanded failure cases run in the final
+local gate. No live SCP account/S3 bucket or broader Linux suite is claimed.
