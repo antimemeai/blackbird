@@ -8974,3 +8974,118 @@ byte-budget/model-authored compaction is less automatic than competitors' token
 or window controls. No paid call, new source, benchmark or certification round.
 Check local links and diff, run supported beads backup, and publish the text-only
 research checkpoint under the existing documentation exception.
+
+## 2026-10-15 — Economical default observations
+
+Operator: send it, following the relative tokenomics assessment. Start
+work/economical-defaults-2026-10-15 from fa347eb; preserve operator art and existing
+worktrees/executables. arconaut-ns1 owns this unit. Source inspection finds whole
+file/command observations by default, existing explicit ranges/exec limits, full
+file originals and direct indexed retained-source lookup. Plan bounded default
+observations with explicit omission counts and immutable snapshot repair, retaining
+full custom Lua behavior and model/effort choice. Written scope/direct oracles in
+docs/ECONOMICAL_DEFAULTS.md. No new evaluator, measured-savings claim, automatic
+compaction or credential/provider change. One owner review lane and finding-driven
+fixes, required source gate and affected profiles only.
+
+Independent design review accepts scope and identifies canonical-range normalization
+dropping unrelated limits, path-only advertised schema, exact snapshot/count
+semantics and snapshot-preserving correction guidance. All accepted before product
+implementation; report in papers/economical-defaults-2026-10-15-review.md. Rhizome's
+read-only research-watch directory remains absent; no findings invented.
+New tools test fails on unchanged product source with corrupt (whole content/absent
+counts). Initial native fixture needs a compile correction supplying JournalHeader
+to open; compiled old product then fails with external_unknown after its provider
+observation check. Retain context/economical-defaults-red.log without claiming a
+more specific old-source provider outcome than captured.
+
+Implement per-call file projection, exact returned source reference, indexed snapshot
+reads and default Lua limit injection. No transcript scan, file reopening for repair,
+model/effort/credential change or forced compaction. First tools check passes; native
+check reaches correct next-provider payloads then fails during fixture reopen.
+Actual LLDB first-throw backtrace points to ContextStore history setup: fixture
+omitted confirm_recovery/recover_coding_session. Correct the fixture's real lifecycle;
+do not alter production recovery. Add review-requested direct edge oracles. Debug
+tools/economical_defaults pass2/2 in2.83s. Small path/journal validation and duplicate
+range-trace cleanup proceed to final source/profile checks. Independent reviewer
+finds no remaining blocker after checking finding-driven corrections. No third pass.
+
+Affected macOS Release coding/tools/economical_defaults pass3/3 in16.71s;
+ASan/UBSan pass3/3 in27.21s. Native default-loop oracle uses ten tools across two
+provider submissions, with one actual marker effect, immutable middle-fact repair,
+explicit large/zero limits and full custom Lua content. Linux scoped three-profile
+runner is active at context/linux/run-ybvzdgxr.47 local doc links and diff checks
+pass; supported bd backup preserves120 issues. Stage only owning source, tests,
+docs and issue backups; run installed source commit gate without override. Retain
+any actual gate failure, fix relevant findings and rerun the affected mechanism.
+
+Linux Debug/Release/ASan each pass3/3 in6.29s/3.43s/17.04s; runner and cleanup exit0.
+First installed full Debug passes137/137 in221.81s. Full analysis catches
+performance-unnecessary-value-param in new fixture's call helper: Value args is
+only read. Change it to const Value&; targeted actual clang-tidy passes. No
+production behavior changes. Stop the superseded gate's exact owned rigor process
+and six descendant analysis children after recording this finding, preserving
+context/economical-defaults-source-attempt1.log. Final required commit gate runs on
+the corrected tree; no second review or host-profile campaign. Existing inherited
+two NOLINT suppressions are printed by the baseline; none are added here.
+
+The final full hook passes136/137 but operation_raw times out120.15s after
+`provider variant 3`; total387.33s. Its earlier tracked timeout stopped at a
+different diagnostic phase. No root cause or association with this feature is
+established; append exact result to arconaut-7qn. Source commit is rejected and
+no source has been published. Stop whole-suite reruns under the operator's
+one-round/no-certification-chasing bound. Complete the remaining required owned
+analysis directly via scripts/rigor lint, retaining
+context/economical-defaults-analysis-complete.log. Source remains staged on its
+work branch, main unchanged, executables not activated. The explicit AGENTS rule
+against bypassing the source hook requires an operator exception before a commit
+and merge with this recorded gate failure; prepare the concrete result first.
+
+The lint CLI wrapper also builds Debug before analysis. It started a redundant
+rebuild of the unchanged source; an attempted process-tree query timed out before
+making changes. Stop that exact owned wrapper and its six child groups, keeping
+context/economical-defaults-analysis-preparation.log. Invoke its unchanged owned
+lint() function directly against the existing exact-source compilation database;
+no source changes, test rerun or new analysis rule. This single complete owned
+analysis exits0:204 actual C++ translation units, reached headers and formatting;
+owned Lua syntax/format, fresh LuaLS no problems, contract probe. No new suppression.
+
+All concrete implementation/review/affected-profile work is complete. The candidate
+is staged and reviewable, but source remains uncommitted/unmerged because the last
+required hook failed operation_raw. Update issue notes, run supported backup and
+relevant diff/document/link checks, preserve the staged patch under context, and
+request only the explicit source-hook exception needed to commit/push/merge with
+that actual recorded timeout. No implicit waiver, third whole-suite attempt,
+test disabling, source suppression or running-executable activation.
+
+Supported backup includes concurrent issue updates from the separate workflow
+owner (arconaut-45a and45a.1 plus its dependency). Preserve that emitted current
+database snapshot without editing the peer's issues or source. No workflow source
+change is present in this candidate. Recheck the owning path set before staging;
+operator artwork stays untracked and untouched.
+
+Operator requests twenty repetitions and study of the intermittent operation_raw
+failure. Complete exactly20 sequential executions of one copied unchanged Debug
+binary, with the existing120s per-run watchdog and timestamped output; no source
+edits or extra full-suite run. Results:19passes,1assertion failure,0timeouts;
+passing min/median/max27.051/29.041/47.818s, summed run durations691.705s. No run
+reaches the60s live-diagnostic threshold. Captures and exact executable SHA256
+are under context/operation-raw-study-20261015T071956Z; report in
+papers/2026-10-15-operation-raw-20-run-study.md.
+
+Run1 fails the full-DATA deadline wait assertion. Read its retained closed raw
+run with the existing native reader:terminal Error interrupted/ETIMEDOUT,
+no effect-request/return or native file-effect sites, target absent. Refusal and
+no-effect conditions hold, so the missing conjunction is space_wait. The20ms
+deadline can expire before the fixture observes an actual blocking poll; that
+correct earlier refusal fails a scheduling-dependent test assumption. Separately
+inspect recorder signal/flag/poll teardown:signal delivery after the final flag
+check and before entering indefinite poll can leave the recorder asleep with a
+nonzero stop flag, supervisor waiting for recorder, and application waiting for
+supervisor. This source defect is concrete, but no live stack/flag observation
+ties it to the earlier120s timeout. Keep those findings distinct. Sequential
+executions do not reproduce the gate's six-test concurrency; host load changed
+substantially during the experiment. Keep arconaut-7qn open and retain the source
+candidate staged/uncommitted/unmerged; document proposed direct repairs without
+implementing them or reopening certification work. Preserve this completed study
+as a checked text-only checkpoint and push the work branch.
