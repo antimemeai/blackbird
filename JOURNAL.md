@@ -8614,3 +8614,68 @@ through its inherited qualification repairs and workflow-design history and push
 No source check repeats for this settled fast-forward plus text-only results.
 Fresh research/delegation begins only after mainline publication, on its own work
 branch; source, API facts and actual usage must ground the next tokenomics design.
+
+## 2026-10-14 — tokenomics frumentarii after mainline publication
+
+Fast-forward and push master successfully through d74f248; both local master and
+origin/master resolve d74f248dd38b7cc601539b8dacf092e97e53284f. Archive source
+qualification is settled; no repeated tests for this integration and no running
+process replacement. Create work/tokenomics-research-2026-10-14 and arconaut-c8h.
+Operator explicitly asks for frumentarii; delegate native inventory, current
+provider contracts and harness/literature mechanisms as independent report units.
+Root integrates their actual findings in papers/tokenomics-2026-10-14/SYNTHESIS.md.
+
+Use OpenAI Docs: search then fetch official prompt-caching documentation before
+source analysis, preserve gpt-6.1-sol and distinguish public key/OAuth Responses
+from installed Codex compatibility. Current guide and generated reference
+disagree on breakpoint lookup and retain older key/retention descriptions; do
+not infer account support or resolve that discrepancy by guessing. Cache writes,
+reads, output/reasoning, plan allowance and API dollars are distinct observations.
+Anthropic, Kimi/Moonshot, Grok and MiMo contract findings remain dated public-doc
+facts; record account/origin/header qualification gaps under existing uaa.5.
+No sign-in, account probes, inference, paid warmup or credential migration occurs.
+
+Trace actual request assembly, default Lua loop, context projections/compaction,
+all main/colleague/helper routes and selected usage versus raw originals. Changing
+CURRENT_TASKS and triggered CONTEXT_BUDGET enter leading instructions. Owned
+OpenAI bypasses native-to-external call/result conversion and its typed429 bypasses
+the main retry classifier; these are source-derived defects, not observed live
+rejections. Record whole repair unit 1ud. Record tertiary per-attempt accounting
+wiq and provider/account-specific cache/layout nan (depending on both). Keep
+producer/recorder raw-only and preserve missing attempts as unknown consumption.
+
+Study existing pinned Aider/gptme/smolagents/CLM sources and seven primary
+literature leads; retain read scopes in mechanisms.md. No new implementation
+archive or library adoption. Prefix locality/fairness, authored recoverable
+views, exact artifact reuse and approximate suffix reuse are distinct mechanisms.
+Rhizome papers path remains absent. Read the existing six-query Jev retrieval
+pilot: 11/11 annotated facts and 28.1% less Codex input are historical cold-input
+observations, not net-cost/warm-cache/quality qualification for Blackbird. No Jev
+request or new retrieval campaign is run.
+
+Write a proposed native design and ordered direct checks; preserve editable
+context, original observations, exact external request/attempt linkage and task
+quality claims. Provider lane reviews synthesis cost/capability claims and finds
+no substantive correction; incorporate its clarification that final-boundary
+markers select reusable content endpoints, rather than blindly marking the last
+item after changing text. Native lane performs one design/source review. This
+research checkpoint contains no product implementation, eval selection, source
+test rerun or activation.
+
+Native review records six concrete decisions: bind account/route to request
+groups; select ephemeral developer-state role/order and explicit Lua suppression;
+count selected input before state injection; distinguish contribution/dispatch
+scopes; use final originals rather than context head as request provenance; keep
+conversion caller-owned and exclude negative refresh-backoff sentinels from the
+HTTP429 rule. Integrate them once in the synthesis, with exact direct checks for
+the future units. Proposed behavior remains unimplemented. No review-of-review
+or extra certification campaign. Run only relevant document/local-link/diff
+checks, supported bd backup and a text-only checkpoint/push on the research
+branch. Leave main, executable, art and existing worktrees/stashes untouched.
+
+Research delivery checks pass for all six reports: 152 local links/line references,
+code-fence/newline/whitespace checks and git diff --check. Close c8h as completed
+research, keep 1ud/wiq/nan open for implementation and run supported bd backup.
+Publish the checked text-only checkpoint on work/tokenomics-research-2026-10-14;
+the per-command hook override follows the explicit documentation-only exception.
+No source gate is rerun or source behavior/savings claimed from these checks.

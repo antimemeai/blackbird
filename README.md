@@ -246,6 +246,12 @@ The default policy is five total attempts with bounded exponential backoff. Prog
 
 An external campaign supervisor currently provides longer-lived provider-only recovery beyond a single request's retry budget. It is construction tooling in evotools, not a guarantee of survival across machine restart or every failure class. Audit capacity is not a network failure.
 
+The [tokenomics frumentarii](papers/tokenomics-2026-10-14/SYNTHESIS.md) studies
+prompt caching, request layout, per-attempt usage and recoverable context views.
+It proposes route fixes, a tertiary usage reader and provider-specific cache
+policy. Current `/stats` still reports selected last-response counters; the
+research does not deliver a cumulative bill or qualify subscription cache controls.
+
 ## Complaints, candidates, and the possibility of learning
 
 The model can complain. `rageshake` captures an observation together with context, program generation, model settings, actor/workflow identities, and audit locators. Local complaint detail is retained before advisory bead delivery. Delivery failure does not erase the observation or create an automatic retry of an uncertain effect. There is no obligation to interrupt the present task and repair the complaint immediately. The eventual external complaint database remains unconfigured.

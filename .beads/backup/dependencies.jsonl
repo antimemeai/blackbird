@@ -1,6 +1,7 @@
 {"created_at":"2026-10-09T18:33:28Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-05n","type":"parent-child"}
 {"created_at":"2026-10-14T04:59:22Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-0oa","type":"discovered-from"}
 {"created_at":"2026-09-30T04:18:44Z","created_by":"antimemeai","depends_on_id":"arconaut-dcg","issue_id":"arconaut-18i","type":"discovered-from"}
+{"created_at":"2026-10-14T21:36:45Z","created_by":"antimemeai","depends_on_id":"arconaut-c8h","issue_id":"arconaut-1ud","type":"discovered-from"}
 {"created_at":"2026-10-07T08:14:22Z","created_by":"antimemeai","depends_on_id":"arconaut-3oz","issue_id":"arconaut-3oz.1","type":"parent-child"}
 {"created_at":"2026-10-07T08:40:47Z","created_by":"antimemeai","depends_on_id":"arconaut-3oz","issue_id":"arconaut-3oz.2","type":"parent-child"}
 {"created_at":"2026-10-08T18:41:43Z","created_by":"antimemeai","depends_on_id":"arconaut-3sm","issue_id":"arconaut-3sm.1","type":"parent-child"}
@@ -27,6 +28,9 @@
 {"created_at":"2026-10-14T05:02:07Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-fir","type":"discovered-from"}
 {"created_at":"2026-10-14T05:02:07Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-iva","type":"discovered-from"}
 {"created_at":"2026-10-14T05:10:43Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-ji3","type":"discovered-from"}
+{"created_at":"2026-10-14T21:36:45Z","created_by":"antimemeai","depends_on_id":"arconaut-1ud","issue_id":"arconaut-nan","type":"blocks"}
+{"created_at":"2026-10-14T21:36:45Z","created_by":"antimemeai","depends_on_id":"arconaut-c8h","issue_id":"arconaut-nan","type":"discovered-from"}
+{"created_at":"2026-10-14T21:36:45Z","created_by":"antimemeai","depends_on_id":"arconaut-wiq","issue_id":"arconaut-nan","type":"blocks"}
 {"created_at":"2026-10-08T23:40:41Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-nls.1","type":"parent-child"}
 {"created_at":"2026-10-10T06:25:11Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-nls.10","type":"parent-child"}
 {"created_at":"2026-10-14T07:09:47Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-nls.11","type":"parent-child"}
@@ -73,3 +77,4 @@
 {"created_at":"2026-09-29T03:29:08Z","created_by":"antimemeai","depends_on_id":"arconaut-8n8","issue_id":"arconaut-w8q","type":"blocks"}
 {"created_at":"2026-09-29T03:28:07Z","created_by":"antimemeai","depends_on_id":"arconaut-dcg","issue_id":"arconaut-w8q","type":"discovered-from"}
 {"created_at":"2026-09-30T05:12:44Z","created_by":"antimemeai","depends_on_id":"arconaut-ahb","issue_id":"arconaut-we8","type":"discovered-from"}
+{"created_at":"2026-10-14T21:36:45Z","created_by":"antimemeai","depends_on_id":"arconaut-c8h","issue_id":"arconaut-wiq","type":"discovered-from"}
