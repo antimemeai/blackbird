@@ -6,7 +6,8 @@ Implementation sequence approved by the operator on2026-10-15. Read the
 W2–W6 families into coherent ownership units. Implementation proceeds in the
 isolated workflow worktree; library adoption and main integration remain separate.
 
-The first native host/state/executor/join path is under qualification; its
+The first native host/state/executor/join path is implemented and qualified
+(source checkpoint `7b99b6c` on the isolated work branch); its
 [usage and actual scope](NATIVE_WORKFLOW_HOST.md) distinguish the delivered
 substrate from the remaining F1–F12 capabilities. See the
 [implementation plans and code reviews](../papers/workflows-implementation-2026-10-15/PLAN.md).
@@ -68,8 +69,12 @@ Do not reopen closed W1 or bootstrap units just because an old queue says queued
 Research task arconaut-30y closes when the requested design package is delivered;
 it is not the implementation epic. Destination epic arconaut-45a records F1–F12
 and the flagship acceptance; it is now in progress. Child arconaut-45a.1 owns the
-first integrated native execution path. Subsequent owning tasks/dependencies are
-created when selected.
+first integrated native execution path, now delivered. Follow-up owners are
+arconaut-45a.2 (task-local participants/scopes), 45a.3 (durable segments and explicit
+recovery/frontier restore), 45a.4 (recorded Lua, depending on both), 45a.5 (required
+complete-work tuning), and 45a.6 (Linux ASAN symbolizer repair). Later owning
+tasks/dependencies are created when selected. The epic stays in progress until
+the complete campaign is delivered.
 
 ## Unit practice and bounded review
 

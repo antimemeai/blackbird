@@ -9056,3 +9056,25 @@ Track next units explicitly:45a.2 task-local participants/scopes,45a.3 durable
 segments/recovery/frontier restore,45a.4 recorded Lua (depends on both),45a.5
 required complete-work tuning and45a.6 Linux ASAN symbolizer repair. The epic
 remains in progress; no full continuation/repair-campaign completion claim.
+
+## 2026-10-15 — native workflow checkpoint qualified and published
+
+Source 7b99b6c passes the installed full source hook: 142/142 debug tests (249.76s),
+all owned C++ format/diagnostics and Lua checks, without bypass/suppression.
+Neuroses run-3v1rxc14 passes 9/9 changed-path cases in debug/release/ASAN; final
+API/guard cleanup additionally passes 9/9 ASAN in run-3ixzkegy (13.41s).
+Push source checkpoint to work/concurrent-durable-workflows-2026-10-15 succeeds.
+No main-tree source/index changes, main merge or executable activation.
+
+Final binary baseline passes 3/3 complete 32-task/four-client/all-join/reopen
+samples. Preserve those alongside the first 3/3; all calls, outputs, timing and raw
+session byte/hash inventories remain in ignored context. Tracked QUALIFICATION.md
+records every sample and precise fault/scope limits. The runs include external
+CLI/orchestration and ordinary development-host load, not competitive performance.
+
+Close arconaut-45a.1 as the delivered native host/state/executor/join unit. Keep
+45a open; 45a.2–45a.6 own the named participant/scope, durable segment/recovery/
+frontier, Lua continuation, required performance and tooling work. The complete
+decision-boundary crash matrix, proven-unreleased successor commands and flagship
+repair campaign remain there. Export the shared live Beads DB into this worktree
+only, check text/link changes, commit the closeout record and publish it.
