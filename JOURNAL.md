@@ -8911,3 +8911,23 @@ both corrected units passes. Four affected state/auth cases pass local Release
 parallel. Retry the full mandatory gate with CMAKE_BUILD_PARALLEL_LEVEL=4, matching
 our declared build windows; test scope/parallelism, compiler/profile and all lint
 rules remain intact. No source/index changes during the gate.
+
+Final source checkpoint56b3f62 passes the installed full hook:136/136 Debug in
+180.47s, all203 actual owned C++ translation units/reached headers/formatting,
+owned Lua formatting and syntax, fresh LuaLS (no problems) and contract probe.
+Four-worker build concurrency changes no compiler/profile/test/lint rule. The
+final layout/auth corrections also pass scoped Linux Release4/4 (1.25s) and
+ASan/UBSan4/4 (2.90s); broader Mac/Linux profile results remain in qualification.md.
+No further source edits follow this passing gate. Source push to
+origin/work/tokenomics-openrouter-2026-10-14 succeeds and sets upstream tracking.
+Close1ud/wiq/2aw/nan with actual result and limits. Live OpenRouter/cache benefit438
+and intermittent prior operation_raw timeout7qn remain open; source, assertions
+and watchdog were not altered to hide the timeout. No main merge or running
+executable/session activation. Operator art and existing worktrees remain untouched.
+
+Rewrite qualification's final results around the actual source checkpoint and
+retain failed runs/findings in journal/logs. Update current-stock navigation,
+run supported bd backup and relevant text/link/diff checks, then make the allowed
+text-only result/issue checkpoint with a per-command hook override (AGENTS's
+2026-10-10 exception); no settled source gate rerun for these documents. Push that
+result checkpoint and report the actual outcome in the final response.

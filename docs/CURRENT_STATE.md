@@ -1,12 +1,15 @@
 # Current Blackbird stock
 
-Tokenomics/OpenRouter implementation,2026-10-14, is being qualified on
-`work/tokenomics-openrouter-2026-10-14` after the pushed trace-archive merge.
+Tokenomics/OpenRouter implementation,2026-10-14, is qualified and pushed as
+`56b3f62` on `work/tokenomics-openrouter-2026-10-14`, after the trace-archive merge.
 The [using guide](TOKENOMICS.md) covers explicit OpenRouter main coding,
 account-bound retries, prompt-cache policy, changing-state layout and the separate
 raw usage reader. The [execution record](TOKENOMICS_IMPLEMENTATION.md) links the
-research and direct checks. Main integration, running-process activation, live
-OpenRouter compatibility and measured cache savings remain separate.
+research and direct checks. The [qualification record](../papers/tokenomics-2026-10-14/qualification.md)
+records136/136 Debug, full owned C++/Lua analysis and affected Mac/Linux optimized/
+sanitizer passes. Main integration, running-process activation, live OpenRouter
+compatibility and measured cache savings remain separate. Live follow-through is
+arconaut-438; intermittent baseline operation-capture timeout is arconaut-7qn.
 
 New design wave,2026-10-14: concurrent and durable workflows. The
 [proposed design](CONCURRENT_DURABLE_WORKFLOWS.md),

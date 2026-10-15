@@ -73,73 +73,74 @@ reviews, or third hardening layer.
 
 ## Final profile results
 
+Source checkpoint **`56b3f62`** passes the installed full source hook and is pushed
+to `origin/work/tokenomics-openrouter-2026-10-14`.
+
 | Profile | Scope | Result |
 | --- | --- | --- |
-| macOS Debug direct integration | Usage, OpenRouter, cache, native tool loop, tasks, settings, budget | 7/7,11.43s |
-| macOS Release/OFF | Fourteen affected cases, including route/account/raw/retry and program policy | 14/14,23.83s |
-| macOS ASan/UBSan | Same fourteen affected cases | 14/14,53.20s |
-| Linux Debug | Same fourteen affected cases | 14/14,15.51s |
-| Linux Release/OFF | Same fourteen affected cases | 14/14,7.31s |
+| macOS Debug full source gate | Complete suite | **136/136,180.47s** |
+| macOS owned source analysis | 203 actual C++ translation units, reached headers, formatting; owned Lua formatting/syntax, fresh LuaLS and contract probe | **Pass** |
+| macOS Release/OFF | Fourteen affected route/account/raw/retry/cache/settings/usage cases | 14/14,23.83s |
+| macOS ASan/UBSan | Same fourteen cases | 14/14,53.20s |
+| Linux Debug | Same fourteen cases | 14/14,15.51s |
+| Linux Release/OFF | Same fourteen cases | 14/14,7.31s |
+| macOS Release / ASan | Updated native provider/model handoff fixture | 1/1,2.19s / 1/1,8.11s |
 | Linux Debug / Release | Updated native provider/model handoff fixture | 1/1,1.34s / 1/1,0.51s |
-| Linux ASan/UBSan separate window | Fourteen affected cases plus updated native handoff | 15/15,50.06s |
+| Linux ASan/UBSan separate window | Fourteen affected cases plus native handoff | 15/15,50.06s |
+| macOS Release / ASan final state/auth edits | Cache, tasks, budget and OpenAI boundary | 4/4,3.48s / 4/4,7.53s |
+| Linux Release / ASan final state/auth edits | Same four cases | 4/4,1.25s / 4/4,2.90s |
 
-The first full local gate builds successfully and passes135/136 tests in218.72s,
-then stops at `main_input_native`: its handoff oracle hardcodes the old `/new`
-argument count. Update it to assert the exact added provider/model pair, using an
-explicit OpenRouter source session; the direct fixture passes. The fixture also passes local Release1/1 (2.19s) and ASan/UBSan1/1 (8.11s).
-The full gate is rerun after this test correction. Lint did not run after that initial failed suite. Targeted analysis of the
-modified native fixture then reports a preexisting compound optional access.
-Cancel our in-progress gate before editing, bind/check the optional explicitly,
-and retain the closed-snapshot assertion. Targeted analysis passes without a
-suppression; restart the complete gate.
+The complete C++ pass initially reported exactly two diagnostics: a moved state
+string in the request-field loop, and an implicit independent Value snapshot copy
+in an auth test. Exit the loop after inserting the one state item and explicitly
+construct the snapshot. Targeted analysis and the four affected profile cases
+pass, then the complete installed source gate above passes. No suppression was
+added. LuaLS reports no problems from its fresh report.
 
-The combined remote job completes Debug and Release, then reaches the existing
-600-second driver timeout in the last ASan case after13/14 pass. This does not
-qualify the unfinished case. Finish ASan as a separate profile and check the
-updated native handoff fixture on each supported profile. The first Linux Debug
-snapshot separately reproduced the now-corrected U2 merge defect (13/14 pass);
-that earlier snapshot is not a green qualification result.
+## Required-gate findings
 
-## Limits
+The failed runs remain recorded in the journal and ignored working logs; only
+the final passing source hook qualifies the checkpoint. Existing fixtures exposed
+three concrete assumptions:
+
+- `/new` hardcoded its old argument count. The corrected actual handoff fixture
+  launches with OpenRouter and its namespaced model, asserts the exact retained
+  provider/model operands and preserves raw selected/fallback linkage checks.
+  A compound optional access is made explicit without changing its assertion.
+- Raw overflow assumed stderr was always acquired first. A stderr poll can expire,
+  then stdout can arrive first and exceed the one-byte limit. The oracle now
+  permits exactly the original stdout-five/stderr-empty or stderr-three/stdout-empty
+  outcomes, retaining the exact bytes, endpoints, input and reap checks.
+- Task-pane PTY observation could return after draft cells but before a synchronized
+  frame's final cursor restoration. The existing VT parser tracks the renderer's
+  actual `?2026h/l` mode; the fixture waits for frame completion before applying
+  its unchanged pane, cursor, narrow-layout and shutdown assertions.
+
+A separate `operation_raw` run hit its120.09s watchdog before the third injected
+native diagnostic rejection returned. Other full runs passed that case; one
+unchanged-source direct recheck passes in12.11s, and both subsequent full suites
+pass136/136 (186.96s before the lint edits,180.47s finally). Root cause is not
+established. **`arconaut-7qn` remains open** with the exact phase/log references;
+neither concurrency, watchdog nor semantic assertions were changed for a pass.
+
+The initial Linux snapshot reproduced the usage merge conflict defect before
+its final correction. A later combined remote job completed Debug and Release,
+then reached its existing600s driver limit in the last ASan case after13 passes.
+That incomplete result is not qualified; the separate15/15 ASan window above
+finishes it. Temporary remote workspaces were cleaned up. No laptop mutation,
+review of reviews, third review panel, or live evaluator campaign.
+
+## Limits and publication
 
 No live OpenRouter account/inference request was made. No measured latency,
 cache-hit improvement, monetary saving, subscription allowance or general coding
-quality is established. Deterministic protocol checks establish only their named
-failure classes. Supported cache controls are limited to the documented exact
+quality is established. Explicit cache controls cover the documented exact
 GPT-6.1 Sol public-key and OpenRouter routes; provider-default remains the default.
-Live follow-through is tracked as `arconaut-438`.
-The running operator executable/session is not replaced. Branch publication does
-not imply a main merge.
+Raw-prefix usage remains incomplete coverage, never a complete session bill.
+Live follow-through is **`arconaut-438`**.
 
-The subsequent full local suite passes135/136 in297.58s and exposes an unrelated
-old raw-overflow oracle: stderr is not guaranteed acquired before stdout. A
-stderr poll can expire, then stdout's exact five bytes can arrive first and exceed
-the one-byte limit. The original assertion required stderr's exact three bytes.
-Correct only the fixture to accept either exact acquired stream with the other
-empty; retain endpoint/reap/input/original checks and unchanged runtime behavior.
-The direct test and required full gate cover this predicate correction; settled
-product platform cases are not repeated for an equivalent test-only assertion.
-
-The following full suite passes135/136 in187.20s, with both corrected native
-fixtures green, and exposes task-pane PTY observation during an unfinished
-synchronized frame. The existing screen oracle tracks cells as chunks arrive;
-seeing draft text does not establish that its final cursor restoration arrived.
-Track the renderer's actual ?2026h/l mode in the oracle and wait for frame
-completion before evaluating this fixture's unchanged predicates. The direct
-physical PTY recheck passes, including cursor and narrow fallback. No renderer,
-geometry bound, time allowance or test assertion is relaxed.
-
-The next full suite passes135/136 in188.94s, with the corrected task-pane, raw
-capture and handoff cases green. `operation_raw` hits its120.09s watchdog before
-the third diagnostic rejection case returns; previous full runs passed that case.
-A single unchanged-source direct recheck passes1/1 in12.11s. Root cause remains
-unestablished, tracked as `arconaut-7qn`. No concurrency/watchdog/semantic rule is
-changed to obtain a pass; preserve the timeout alongside the final gate outcome.
-
-The required full Debug suite passes136/136 in186.96s. Complete analysis of203
-owned C++ units reports two findings: make the state insertion exit its field
-loop after moving the string, and explicitly construct the independent Value
-snapshot in the auth boundary test. Both corrections pass targeted analysis.
-Four affected cases re-pass local Release4/4 (3.48s) and ASan/UBSan4/4 (7.53s);
-scoped Linux optimized/sanitizer rechecks follow. The final source gate retains
-all136 tests and all analysis, with four build workers to bound local contention.
+Implementation issues `arconaut-1ud`, `arconaut-wiq`, `arconaut-2aw` and
+`arconaut-nan` are closed. The source push succeeded; a text-only result/issue
+checkpoint records this outcome under the repository's documentation exception.
+Main integration and running-executable/session activation remain separate.
+Operator art, historical worktrees and other services retain their owners.
