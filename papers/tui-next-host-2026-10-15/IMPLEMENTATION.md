@@ -1,8 +1,8 @@
 # Owned frame implementation subplan
 
-Status: implemented in the [retained candidate](SOURCE_STATUS.md), now restored
-in the working tree after the operator reopened the failures.
-The required final source gate failed; this checkpoint publishes evidence.
+Status: delivered in source `676120c`; the installed source gate passes157/157
+and complete C++/Lua analysis. [Final results](../mac-link-repair-2026-10-15/RESULTS.md)
+distinguish current delivery from the earlier retained candidates.
 
 The presenter makes the existing one-frame output convention explicit. It owns
 the final packet, staged grid and painter; its writer borrows only that stable

@@ -38,8 +38,21 @@ workflow build-identity tags. Production C++/Lua bodies remain the measured
 presenter/cancellation candidate; existing performance datasets retain their exact
 source/binary identities and are not relabeled as a newly measured binary.
 
-The required full source hook is the remaining stage. Its actual result will be
-recorded after completion; direct checks and cached historical passes do not
-stand in for it. Current source stays restored in the working tree. No source
-gate bypass, main integration, live activation, host restart, global process kill,
-new library or AFL inspection occurs in this repair.
+The installed full source hook passes **157/157 in248.93s**, followed by complete
+owned C++ analysis and Lua formatting/syntax/diagnostics. It creates source commit
+`676120c` on `work/tui-reference-2026-10-15`, without a source-hook override.
+The earlier daemon restart lost the tool session handle, but the original Git,
+hook and CTest processes continued. Root verified their identity and followed
+the same run; no duplicate gate was launched.
+
+The presenter, cancellation cleanup and regression repairs are now committed,
+rather than retained outside the working source. `arconaut-rhi.3.3`,
+`arconaut-rln` and the exact dependency-cache fault `arconaut-cfj` are closed.
+The broader component/Lua host remains in progress. Historical native quit and
+linker-wait causes remain in their existing issues, distinguished from the
+repaired test/cache faults. No main integration or live activation occurred;
+source archives, original performance identities and AFL state remain intact.
+
+The final follow-up changes documentation and issue backup only, with relevant
+diff/data/link checks under the explicit text-only exception. Settled source
+checks are not rerun for that follow-up.

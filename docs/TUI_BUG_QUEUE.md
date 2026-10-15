@@ -50,3 +50,10 @@ step deadlines retained. Linux Release/ASan13/13 each and Mac9/9 selected PTY
 episodes pass. Source is restored in the working tree, with publication blocked
 by the Mac Debug linker (`arconaut-ew5`). Current [repair results](../papers/tui-settlement-repair-2026-10-15/RESULTS.md)
 keep the historical native-stall cause distinct from repaired fixture defects.
+
+Current source676120c passes157/157 plus full C++/Lua analysis. The exact
+Ninja invalid-record/recovery loop (`arconaut-cfj`) and coding aggregate-test
+shape (`arconaut-rln`) are repaired and closed; native presenter slice rhi.3.3 is
+closed. Source is committed. Historical native quit/linker causes remain open:
+passing current fixtures does not identify those earlier waits. [Build and delivery](../papers/mac-link-repair-2026-10-15/RESULTS.md)
+records the direct cache proof, same-tool repair and actual source gate.

@@ -1,9 +1,9 @@
-# Retained native frame candidate
+# Native frame delivery and retained candidates
 
-Current state: the operator reopened the two test failures. The candidate and
-repairs are **restored in the working tree, uncommitted**, with current
-[results and host-gate block](../tui-settlement-repair-2026-10-15/RESULTS.md).
-Original archives below remain unchanged.
+Current state: **delivered in source commit `676120c`**. The installed gate passes
+157/157 plus complete C++/Lua analysis. The [build recovery and delivery](../mac-link-repair-2026-10-15/RESULTS.md)
+records the concrete dependency-cache repair and actual qualification.
+Original candidate archives below remain unchanged historical snapshots.
 
 The original checkpoint retained the implementation without source publication.
 Final source hook:145/147 in372.14s, `coding`60.11s timeout and existing
@@ -19,9 +19,9 @@ patch, copied final LastTest log and compiled native executable remain under:
 `context/tui-next-host-2026-10-15/candidate/`
 
 The full base is `d987f6fb207e47106ce4f5fa6339065e88a89f03`.
-Active CMake, native implementation, tests and registered scripts have been
-restored to that commit. The new blocked fixture/driver are absent from the
-active tree. `build/debug/blackbird` was copied into candidate evidence and
+At that earlier inactive checkpoint, CMake, native implementation, tests and
+registered scripts were restored to that commit. The new blocked fixture/driver were absent from the
+active tree at that checkpoint. `build/debug/blackbird` was copied into candidate evidence and
 removed, preventing that path from executing the unqualified native candidate.
 No main merge or native activation occurred. Existing baseline tests were not
 rerun after restoring unchanged source.
@@ -41,9 +41,9 @@ remain associated with their actual identities. Retained remote resources are
 listed in the performance reports; none includes authority to inspect or alter
 the separate AFL campaign.
 
-Queue `arconaut-rln` and `arconaut-xbf` retain final failures. The concrete
+`arconaut-rln` is closed after the test-shape repair and current qualification;
+`arconaut-xbf` retains the historical native-stall observation. The concrete
 wait-admission/tick cancellation fix is preserved with deterministic red/green
 results, without claiming it explains every historical cancellation symptom.
 That checkpoint left the bounded source task inactive. The subsequent operator
-instruction explicitly reopened it; current source publication awaits the Mac
-linker and required full gate, with existing authorization intact.
+instruction explicitly reopened it; source was restored and now passes the full gate in `676120c`.

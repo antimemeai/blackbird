@@ -1,12 +1,10 @@
 # Owned native terminal frames
 
-The [source plan](SOURCE_PLAN.md) was implemented in an **inactive, unqualified
-source candidate** at the original checkpoint. It has since been
-[restored with test repairs](../tui-settlement-repair-2026-10-15/RESULTS.md) in the
-working tree; source publication is blocked by the Mac linker. The original final
-source hook failed145/147; no product source is
-published by this checkpoint. The [source status](SOURCE_STATUS.md) and
-[exact retained identities](CANDIDATE_SOURCES.json) describe restoration.
+Current delivery: **source commit `676120c`**, full Mac gate157/157 in248.93s
+plus complete C++/Lua analysis. See [build recovery and final delivery](../mac-link-repair-2026-10-15/RESULTS.md).
+The implementation, cancellation cleanup and repaired regression cases are
+committed. Original failed-gate observations and performance identities below
+remain historical evidence; they have not been relabeled or erased.
 
 The candidate implements `ChatPresenter` in the
 actual terminal loop. One immovable owner contains the final output string,

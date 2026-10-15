@@ -1,11 +1,11 @@
-# Two test repairs, source restored, Mac source gate blocked
+# Two test repairs and source delivery
 
-The operator reopened the failures and asked what inactive source meant. The
-previous checkpoint had saved the implementation, then restored baseline source
-after the mandatory gate failed. No deployment or feature flag was involved.
-This turn verifies and restores all12 files from that archive, then repairs the
-test structure and synchronization below. **The implementation and repairs remain
-in the working tree, uncommitted; they have not been set aside again.**
+Current delivery: **`676120c`**, installed Mac source gate157/157 in248.93s
+and complete C++/Lua analysis. [Build recovery and final results](../mac-link-repair-2026-10-15/RESULTS.md)
+record the cache repair and preserved PTY episode scheduling. The implementation
+and test repairs are committed. This report retains the intermediate restoration,
+test results and linker block from checkpoint `f5e3993`; its archived14-file
+manifest remains that exact snapshot, not a relabeled current-source identity.
 
 ## Coding timeout
 
@@ -50,7 +50,7 @@ execution remains. Failures retain their fixture directory for causal diagnosis.
 | Mac Debug PTY selected episodes, exact retained candidate binary |9/9; each below30s; state episode23.8772s|
 | Instrumented Mac coding monolith, before decomposition |1/1,16.48s|
 | Changed coding test, focused clang-tidy |Pass, no suppression|
-| Required full Mac source gate |Not run: Debug link blocked in Apple ld|
+| Required full Mac source gate at this intermediate checkpoint |Blocked in Apple ld; subsequently157/157 plus full C++/Lua pass in676120c|
 
 Linux cases include four coding modes and all nine independently selected PTY
 episodes, including actual busy-shell termination. Both profiles build the changed
@@ -61,7 +61,7 @@ New Mac coding modes compile but do not link, so no local run of those new modes
 is claimed. Root's one source challenge finds no removed distinct assertion or
 cross-episode dependency; no additional review hierarchy is introduced.
 
-## Remaining host block and retained source
+## Earlier host block and retained source
 
 The local build finishes its object/static-library work and stops before the
 coding executable link completes. A direct invocation of the exact configured
@@ -89,5 +89,6 @@ linker works; no new operator approval is needed for that already authorized ste
 Original logs: `context/tui-next-host-2026-10-15/reopen-*`,
 `context/tui-settlement-repair-2026-10-15/terminal-*.log`, and
 `context/linux/run-f1bp48bv/checks.log`. No complete current Mac source-gate or
-full C++/Lua-analysis pass is claimed. This checkpoint publishes checked text,
-results and identities only; current source remains available for inspection.
+full C++/Lua-analysis pass is claimed. That checkpoint published checked text, results and identities only. The later
+source delivery above resolves publication; historical linker/quit attribution
+remains distinguished from verified test/cache repairs.

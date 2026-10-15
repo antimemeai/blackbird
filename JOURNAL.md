@@ -9830,3 +9830,15 @@ for the new episodes, not the whole suite; all30second/per-step deadlines remain
 This CMake metadata change regenerates literal raw/workflow build identity tags,
 while production bodies/performance originals remain pinned. Stage intended
 source, papers and supported Beads backup, then run required full source hook.
+
+Installed source hook succeeds:157/157 in248.93seconds, then complete owned
+C++/Lua analysis. Original Git/hook/CTest survives a daemon restart despite loss
+of the tool session handle; verify exact process ancestry, follow same log, do
+not launch a duplicate. Source commit 676120c4b11de1496d1a9d9e7751fe87c1c3d009 created normally, without
+hook override. Presenter/cancel repair and meaningful test fixes now committed.
+Close rhi.3.3, rln and concrete cache fault cfj; keep broader rhi.3 active and
+historical native quit/linker attribution open. Correct component/source-status
+and delivery-plan docs to distinguish delivered native output from future
+renderer/Lua/shared application work. Preserve all original source/performance
+archives; final documentation/Beads-only follow-up uses relevant diff/data/link
+checks and explicit text-only exception, with no repeated source suite.

@@ -1,10 +1,9 @@
 # Next native TUI host slice: owned pending frames
 
-Outcome: [implementation and measurements](RESULTS.md) are retained; the source
-candidate was retained [inactive](SOURCE_STATUS.md) after the final failed gate.
-The operator subsequently reopened the failures; current source is restored,
-with [test repairs and a linker block](../tui-settlement-repair-2026-10-15/RESULTS.md).
-The proposal below records its original scope, not a delivered host claim.
+Outcome: [implementation and measurements](RESULTS.md) are delivered in source
+commit `676120c`, following the [cache repair and complete source gate](../mac-link-repair-2026-10-15/RESULTS.md).
+The proposal below records the original scoped slice. Scene-to-widget rendering,
+independent Lua composition and shared domain views remain later work.
 
 2026-10-15. Source grounding at `c2d4e2af49387433106007751a8d271f566c3cd3`.
 This is a read-only implementation proposal for the next part of

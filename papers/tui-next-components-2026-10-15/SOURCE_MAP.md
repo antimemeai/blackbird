@@ -4,9 +4,9 @@
 source gate runs. No implementation, build, test, dependency or runtime selection
 accompanies this paper. The candidate presenter subsequently failed source
 qualification and was retained [inactive](../tui-next-host-2026-10-15/SOURCE_STATUS.md).
-The operator subsequently reopened it and restored source with test repairs; the
-current source gate is blocked by the Mac linker. Source line references describe
-the studied candidate snapshot.
+The operator subsequently reopened it, restored source and delivered `676120c`
+after [build recovery and full source qualification](../mac-link-repair-2026-10-15/RESULTS.md).
+Source line references describe the studied candidate snapshot.
 Scope follows [Unit1/2](../../docs/TUI_IMPLEMENTATION_PLAN.md) and the
 [component contracts](../../docs/TUI_COMPONENTS.md).
 

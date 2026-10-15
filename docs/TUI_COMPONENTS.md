@@ -2,6 +2,13 @@
 
 2026-10-15. Proposed component architecture, grounded by [the source report](../papers/tui-program-2026-10-15/components/REPORT.md). Names and shapes below describe semantic contracts, not implemented APIs. The [TUI doctrine](TUI_DOCTRINE.md) governs this design; [view designs](TUI_VIEWS.md) apply it to particular domains. This document owns the shared presentation/control mechanisms they require.
 
+Current implementation includes checked native SceneHost/local-state primitives
+and the containing ChatPresenter integrated into actual terminal output. The
+remaining scene visual properties/renderer, separate Lua composition owner,
+invocation bridge and reuse across conversation/command center are design scope.
+See [delivered source results](../papers/mac-link-repair-2026-10-15/RESULTS.md) and
+the [next-slice source map](../papers/tui-next-components-2026-10-15/SOURCE_MAP.md).
+
 ## Boundary and data flow
 
 The reusable native layer should have no compile-time dependency on providers, tasks, colleagues, capabilities, workflow execution or Blackbird session selection. It may use owned values, owned result/error types and a narrow capture interface. Blackbird supplies adapters to its existing runtime and raw-event boundaries. The initial reusable code can live within this repository; reuse does not require publishing a separate package, plugin ABI or dependency ecosystem.

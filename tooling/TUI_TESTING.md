@@ -66,10 +66,11 @@ See [the options assessment](../papers/tui-regression-2026-10-15/OPTIONS.md) for
 fault-class boundaries and the [campaign](../docs/TUI_IMPLEMENTATION_PLAN.md)
 for component/application scope. VHS was considered and is not selected.
 
-The restored working candidate splits independent native PTY episodes into
+Source `676120c` splits independent native PTY episodes into
 `terminal_pty` (controls) and `terminal_pty_*` cases. Select the whole family with
 `-R '^terminal_pty($|_)'`; exact `^terminal_pty$` selects controls only. Each episode
-keeps its30second process limit and original3/5second input/exit deadlines.
+keeps its30second process limit, original3/5second input/exit deadlines and the
+original PTY RUN_SERIAL policy; other tests retain their parallelism.
 Manual `scripts/check-terminal-pty EXECUTABLE` still runs all episodes; `--case`
 selects one. Failed fixture directories are retained and reported. Coding uses
 `coding`, `coding_capacity`, `coding_routing` and `coding_stream_capture`, each
