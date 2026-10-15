@@ -26,6 +26,8 @@ enum class Cut : unsigned { none, partial, sync_error, synced, published };
 struct NativeCut {
   std::atomic<Cut> mode{Cut::none};
   std::atomic<unsigned> writes{0}, syncs{0}, reached{0};
+  std::atomic<pid_t> stop_recorder{0};
+  std::atomic<unsigned> stop_reached{0}, stop_wake{0};
   dev_t device{};
   ino_t inode{};
   std::array<char, 512> published{};
@@ -37,10 +39,13 @@ using Sync = int (*)(int);
 using Rename = int (*)(const char *, const char *);
 using Poll = int (*)(pollfd *, nfds_t, int);
 using Fork = pid_t (*)();
+using Send = ssize_t (*)(int, const void *, std::size_t, int);
 Sync native_sync = nullptr;
 Rename native_rename = nullptr;
 Poll native_poll = nullptr;
 Fork native_fork = nullptr;
+Send native_send = nullptr;
+thread_local bool stop_poll = false;
 pid_t fixture_owner = 0;
 std::atomic<pid_t> cleanup_group{0};
 std::array<char, 64> cleanup_directory{};
@@ -131,8 +136,36 @@ extern "C" int rename(const char *source, const char *destination) {
     park();
   return result;
 }
+extern "C" ssize_t send(int descriptor, const void *body, std::size_t size, int flags) {
+  // Select before forwarding: the parent can receive a registration reply and
+  // arm the later retirement cut before this send returns in the recorder.
+  const bool retirement = cut && cut->stop_recorder.load() == ::getpid() && size == 1 &&
+                          *static_cast<const std::byte *>(body) == std::byte{1};
+  const auto result = native_send(descriptor, body, size, flags);
+  if (retirement && result == 1)
+    stop_poll = true;
+  return result;
+}
 extern "C" int poll(pollfd *descriptors, nfds_t descriptor_count, int wait_ms) {
   const auto arguments = std::pair{descriptor_count, wait_ms};
+  if (stop_poll && arguments.second == -1) {
+    stop_poll = false;
+    sigset_t stops, previous, waiting;
+    if (sigemptyset(&stops) != 0 || sigaddset(&stops, SIGTERM) != 0 ||
+        sigaddset(&stops, SIGUSR1) != 0 ||
+        ::sigprocmask(SIG_BLOCK, &stops, &previous) != 0 || sigfillset(&waiting) != 0 ||
+        sigdelset(&waiting, SIGTERM) != 0 || sigdelset(&waiting, SIGUSR1) != 0)
+      std::abort();
+    cut->stop_reached.store(1);
+    // The real supervisor signal runs the real handler after the recorder's
+    // flag check and before the real poll. No scheduler-dependent signal race.
+    if (::sigsuspend(&waiting) != -1 || errno != EINTR ||
+        ::sigprocmask(SIG_SETMASK, &previous, nullptr) != 0)
+      std::abort();
+    const auto result = native_poll(descriptors, arguments.first, 1000);
+    cut->stop_wake.store(result > 0 ? 1U : 2U);
+    return result;
+  }
   if (space_notice >= 0 && arguments.second != 0) {
     for (nfds_t index = 0; index < arguments.first; ++index) {
       int type = 0;
@@ -588,14 +621,58 @@ void competing_lane_fairness() {
   }
   CHECK(seen_hot == count && seen_cold);
 }
+void stop_before_poll(bool recover) {
+  Directory directory;
+  ProcessGuard process_guard;
+  auto runtime = take(RawRuntime::open(directory.name.data(), environment()));
+  auto handle = take(runtime->prepare_thread());
+  IdentityBytes first_epoch{};
+  const std::array<ByteView, 1> parts{literal};
+  {
+    RawThreadBinding binding{handle};
+    first_epoch = raw_lane_epoch();
+    CHECK(take(raw_emit(9205, parts)) == 1);
+  }
+  const auto status = take(runtime->status());
+  const auto path = run_path(directory);
+  cut->stop_reached.store(0);
+  cut->stop_wake.store(0);
+  cut->stop_recorder.store(status.recorder);
+  handle.reset();
+  until([&] { return cut->stop_reached.load() == 1; });
+  IdentityBytes second_epoch{};
+  if (recover) {
+    take(runtime->recover());
+    CHECK(take(runtime->status()).recorder != status.recorder);
+    RawThreadBinding binding{take(runtime->prepare_thread())};
+    second_epoch = raw_lane_epoch();
+    CHECK(take(raw_emit(9206, parts)) == 1);
+  }
+  runtime.reset();
+  CHECK(cut->stop_wake.load() == 1);
+  cut->stop_recorder.store(0);
+  CHECK(std::filesystem::exists(path / "closed"));
+  const auto output = records(path);
+  CHECK(output.size() == (recover ? 2U : 1U));
+  CHECK(output[0].origin.lane == first_epoch &&
+        output[0].origin.partition == RawPartition::data &&
+        output[0].origin.source_start == 0 &&
+        output[0].raw == envelope<9205>(1, literal));
+  if (recover)
+    CHECK(second_epoch != first_epoch && output[1].origin.lane == second_epoch &&
+          output[1].origin.partition == RawPartition::data &&
+          output[1].origin.source_start == 0 &&
+          output[1].raw == envelope<9206>(1, literal));
+}
 } // namespace
 
-int main() {
+int main(int argc, char **argv) {
   native_sync = reinterpret_cast<Sync>(::dlsym(RTLD_NEXT, "fsync"));
   native_rename = reinterpret_cast<Rename>(::dlsym(RTLD_NEXT, "rename"));
   native_poll = reinterpret_cast<Poll>(::dlsym(RTLD_NEXT, "poll"));
   native_fork = reinterpret_cast<Fork>(::dlsym(RTLD_NEXT, "fork"));
-  CHECK(native_sync && native_rename && native_poll && native_fork);
+  native_send = reinterpret_cast<Send>(::dlsym(RTLD_NEXT, "send"));
+  CHECK(native_sync && native_rename && native_poll && native_fork && native_send);
   fixture_owner = ::getpid();
   struct sigaction abort_action{};
   abort_action.sa_handler = abort_cleanup;
@@ -609,15 +686,23 @@ int main() {
   cut = new (mapping) NativeCut;
   static_assert(std::atomic<unsigned>::is_always_lock_free);
   static_assert(std::atomic<Cut>::is_always_lock_free);
-  for (const auto mode : {Cut::partial, Cut::sync_error, Cut::synced, Cut::published}) {
-    std::fprintf(stderr, "raw_recorder_cuts: native cut %u\n",
-                 static_cast<unsigned>(mode));
-    native_cut(mode);
+  CHECK(argc == 1 || (argc == 2 && std::string_view{argv[1]} == "stop"));
+  if (argc == 1) {
+    for (const auto mode :
+         {Cut::partial, Cut::sync_error, Cut::synced, Cut::published}) {
+      std::fprintf(stderr, "raw_recorder_cuts: native cut %u\n",
+                   static_cast<unsigned>(mode));
+      native_cut(mode);
+    }
+    std::fputs("raw_recorder_cuts: two full owners\n", stderr);
+    two_waiting_owners();
+    std::fputs("raw_recorder_cuts: hot/cold source-count fairness\n", stderr);
+    competing_lane_fairness();
   }
-  std::fputs("raw_recorder_cuts: two full owners\n", stderr);
-  two_waiting_owners();
-  std::fputs("raw_recorder_cuts: hot/cold source-count fairness\n", stderr);
-  competing_lane_fairness();
+  std::fputs("raw_recorder_cuts: stop before poll, graceful drain\n", stderr);
+  stop_before_poll(false);
+  std::fputs("raw_recorder_cuts: stop before poll, explicit recovery\n", stderr);
+  stop_before_poll(true);
   cut->~NativeCut();
   cut = nullptr;
   CHECK(::munmap(mapping, sizeof(NativeCut)) == 0);

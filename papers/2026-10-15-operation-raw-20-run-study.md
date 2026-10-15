@@ -118,3 +118,6 @@ A direct native cut can deliver the stop signal immediately before the real poll
 and require teardown to finish while preserving originals; cover graceful drain
 and explicit recovery stop. Preserve exact interrupted/no-effect assertions for
 the deadline cases. Those are proposed repairs, not results of this experiment.
+
+The subsequent operator-authorized repair and affected-test results are recorded
+in [recorder stop repair](2026-10-15-recorder-stop-repair.md).

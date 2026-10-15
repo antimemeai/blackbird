@@ -9089,3 +9089,39 @@ substantially during the experiment. Keep arconaut-7qn open and retain the sourc
 candidate staged/uncommitted/unmerged; document proposed direct repairs without
 implementing them or reopening certification work. Preserve this completed study
 as a checked text-only checkpoint and push the work branch.
+
+Operator explicitly requests the two repairs and rerunning only affected tests.
+Write papers/2026-10-15-recorder-stop-repair.md before implementation. Add a
+native recorder retirement-reply/poll cut: block stop signals before announcing
+the cut, atomically receive the actual supervisor signal, then forward kernel
+poll and require a readable wake. Old flag-only code fails that oracle with
+SIGABRT (-6), context/recorder-stop-red.log. An initial test compile catches macOS
+signal-set macros requiring unqualified invocation; fix that compile error.
+
+Recorder now owns a nonblocking CLOEXEC wake pipe, installed before stop signals
+are unblocked. Handler preserves errno, sets the existing mode, writes a byte
+and retries EINTR. Every idle poll watches the read end. Stop requests persist
+across the flag-check/poll gap; clear the handler descriptor before closing it.
+No writer-side transforms, dependency or per-emission work. Test both actual
+supervisor SIGTERM graceful closure and SIGUSR1 explicit recovery; require exact
+literal envelopes/origins and no duplicate records, plus closed-run publication.
+
+Name operation admission cancellation, already-expired and future-deadline
+cases. Keep the actual blocking-poll requirement for injected cancellation;
+require already-expired refusal before blocking; allow a future deadline to
+expire before or during the wait. Preserve exact interrupted errors and absence
+of external file effects/raw failure sites. This removes the20ms scheduling
+assumption without replacing it with a larger timing assumption. The future
+case reports its observed timing path rather than claiming deterministic reach.
+
+Only affected Debug tests run once:raw_admission0.57s, raw_runtime0.45s,
+raw_recorder_cuts0.45s, operation_raw21.00s;4/4pass,22.47s total. Actual operation
+output proves expired=1/blocked=0 and expired=0/blocked=1 in this run. Qualified
+clang-format and clang-tidy pass the three changed C++ files with no suppression.
+Logs under context/recorder-stop-*. Close arconaut-7qn for these concrete repairs;
+do not claim retrospective attribution of the earlier unreproduced timeout.
+Preserve a source checkpoint limited to this repair, journal/reports and current
+supported issue backup; the latest explicit affected-tests-only instruction
+governs this checkpoint, so do not invoke the blanket full-suite commit hook.
+Keep the pre-existing economical-defaults source candidate staged and separate;
+no main merge or running-executable activation in this repair unit.
