@@ -8961,3 +8961,16 @@ actual single-attempt result and integration. Run supported bd backup and releva
 text/link/diff checks. Commit this text-only integration record under AGENTS's
 2026-10-10 exception, then push master normally and verify the published ref.
 The previously passed136-case/203-C++/Lua gate remains the source qualification.
+
+## 2026-10-15 — Relative tokenomics assessment
+
+Operator asks how Blackbird compares with leading harnesses. Read the delivered
+tokenomics/qualification/context-budget records and current official Claude Code,
+Codex/OpenAI, OpenCode and Aider documentation. Preserve the bounded comparison in
+[papers](papers/tokenomics-2026-10-15-harness-comparison.md). Competitive cache
+foundations and detailed raw accounting do not establish a cost ranking. Explicit
+cache-policy coverage remains narrow; provider-default is the default; opt-in
+byte-budget/model-authored compaction is less automatic than competitors' token
+or window controls. No paid call, new source, benchmark or certification round.
+Check local links and diff, run supported beads backup, and publish the text-only
+research checkpoint under the existing documentation exception.
