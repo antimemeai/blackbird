@@ -9591,3 +9591,60 @@ bridge and real conversation/command-center reuse. Record final qualification,
 back up beads, check the text-only diff and links, and publish a separate results
 checkpoint without rerunning the settled source gate. No main merge or live
 executable activation is requested by this delivery.
+
+Operator2026-10-15 requests performance tests/deltas between every TUI tranche,
+permits useful deeper/new cases, explicitly asks for AFL fuzzing, and saves ordinary
+bugs for collective action unless egregious. Latest steering: use a Python launcher
+to start fuzzing and then leave it alone. No findings inspection, automatic triage
+or product repair campaign follows. Record the procedure and collective queue.
+
+Acquire intact AFL++5.03c source at dbaf11913c1b2702dee5b4d3dcfffd52f1defe50,
+SHA256d5f4f72c830526654bebbc637f6164a93c22d7309ce8ba73979abadc42ce5974,
+and build/install development tools in the owned Neuroses campaign prefix.
+Install only required LLVM18 development packages, no project dependency or cloud
+resource. Correct upstream nested make's empty nproc to2; stop/restart only the
+owned build before proceeding. Its -h prints5.03c and exits1, an actual help-command
+behavior, not a failed compilation. Record tool originals/license/restoration.
+
+Root owns bounded native Composer/render and SceneHost stdin targets, fixed seeds,
+sanitizer build and Python service launcher. Independent target challenge finds
+one P2 armed-oracle blind spot: expected arming was reset from implementation
+state. Replace it with input-derived arming/removal/selection/consume transitions
+and assert exact target/armed state after each operation; no production defect
+is claimed by that harness correction. Keep source and fixed-seed gate required.
+
+The performance owner promotes actual PTY observer endpoints and separates raw
+timestamps from tertiary quantiles/deltas. Build exact pre-tranche4da8355 and
+currentb0b4759 Release sources on Neuroses with matched Clang18/libstdc++13/Lua5.4.8.
+Initial smoke reveals fixture assumptions: paste tail wraps across rows and
+footer geometry differs from assumed placement. Correct fixture expectations,
+not product source or timeouts. Root source challenge finds missing TERM cleanup
+and native-executable-change detection; owner corrects both. Corrected smoke
+passes all4 cases; actual TERM diagnostic retains interrupted sample, reaps its
+owned stopped native child and refuses comparison. Quiet30-trial round completes
+120 native processes with no failures. Preserve every sample and actual delta,
+including outliers, without turning scheduler noise into a product regression.
+
+The requested Python launcher confirms both AFL services for runa7057dd991c5,
+initial10million executions per mode, one low-priority CPU and1GiB each, with
+exact source/tool/target identities retained. It exits after initial startup.
+Do not inspect findings/counters, poll jobs, minimize cases or repair source.
+The operator subsequently directs moving on; leave the launched jobs alone.
+arconaut-0uq holds their native output inbox for later collective action, while
+arconaut-f8f retains the paired startup/paste tail observations.
+
+The full source hook passes145/147 with two failures in317.48seconds: terminal_pty misses its existing
+3second interrupted marker after local exec Ctrl-C (arconaut-3xf), and
+raw_recorder_cuts times out60.69seconds at explicit recovery (arconaut-3wt).
+The new fixed-seed case passes. No source-cause/data-loss claim, unchanged rerun,
+watchdog enlargement or unrelated repair. Full owned C++/Lua analysis does not
+run after this CTest failure, and no source commit is created. Focused harness
+analysis and Linux instrumented fixed seeds pass independently.
+
+Keep source qualification open inrhi.3.2. Preserve all experimental helper/target
+bytes and source/overlay identities under context/tui-perf-fuzz-2026-10-15/candidate,
+restore original CMake registration and keep the candidate out of the active build.
+Publish only documentation, exact measurements and launch/source identities via
+the explicitly permitted text-only checkpoint. No source-gate bypass, main merge
+or native activation. Return to independent TUI component/view source planning;
+ordinary findings remain queued for collective action.

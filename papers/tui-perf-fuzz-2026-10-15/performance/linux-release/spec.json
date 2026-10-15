@@ -1,0 +1,14 @@
+{
+  "before": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/previous-release/blackbird",
+    "source": "4da8355f490bc9a987f3cd8c8c5d0d9a7176c8be",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  },
+  "after": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/current-release/blackbird",
+    "source": "b0b4759465df543bd6d383d111aa64bb2f86d662",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  }
+}

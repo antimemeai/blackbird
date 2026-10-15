@@ -933,3 +933,11 @@ The [owned installer/launcher](scripts/tui-test) installs explicitly under ignor
 build/tools, validates original bytes and detects installed corruption.
 Only the adopted development executable runs; source references remain study-only.
 No production terminal dependency is added. See [usage/limits](tooling/TUI_TESTING.md).
+
+AFL++5.03c development-tool source and original release/commit metadata are retained
+under ignored quarantine/tui-perf-fuzz-2026-10-15/afl. The
+[manifest](papers/tui-perf-fuzz-2026-10-15/fuzz/MANIFEST.tsv) records exact commit,
+original hashes, source license and restoration commands. Extracted study copies
+omit nested Git metadata/detritus; original archives remain intact. Archived
+instructions are historical reference. The operator explicitly selects this
+fuzzer for native TUI testing; no production framework/library adoption follows.

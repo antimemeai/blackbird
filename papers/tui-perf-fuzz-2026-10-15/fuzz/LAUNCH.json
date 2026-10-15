@@ -1,0 +1,60 @@
+{
+  "host": "neuroses",
+  "remote_root": "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8",
+  "source": "b0b4759465df543bd6d383d111aa64bb2f86d662+native-overlay-sha256:eac90d6d7963496a8aad5d648a73ff53d762fb6dd49565df51276bbd2b1a31c0",
+  "run_id": "a7057dd991c5",
+  "executions_per_mode": 10000000,
+  "run_directory": "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/fuzz-a7057dd991c5",
+  "afl_sha256": "76940affce360ac61ba0c1c4dc8af858c6340e1a8074befe19dc07df39297919",
+  "target_sha256": "4e321993d43f43486105d752399227cd70722e8796a58943d50854c64bf30bbf",
+  "jobs": [
+    {
+      "mode": "composer",
+      "unit": "blackbird-tui-fuzz-a7057dd991c5-composer",
+      "command": [
+        "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/afl-tools/bin/afl-fuzz",
+        "-i",
+        "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/fuzz-a7057dd991c5/seeds-composer",
+        "-o",
+        "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/fuzz-a7057dd991c5/composer",
+        "-E",
+        "10000000",
+        "-G",
+        "8192",
+        "-t",
+        "2000",
+        "-m",
+        "none",
+        "--",
+        "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/fuzz-build/tui_fuzz",
+        "composer"
+      ],
+      "output": "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/fuzz-a7057dd991c5/composer",
+      "ready": true
+    },
+    {
+      "mode": "scene",
+      "unit": "blackbird-tui-fuzz-a7057dd991c5-scene",
+      "command": [
+        "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/afl-tools/bin/afl-fuzz",
+        "-i",
+        "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/fuzz-a7057dd991c5/seeds-scene",
+        "-o",
+        "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/fuzz-a7057dd991c5/scene",
+        "-E",
+        "10000000",
+        "-G",
+        "8192",
+        "-t",
+        "2000",
+        "-m",
+        "none",
+        "--",
+        "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/fuzz-build/tui_fuzz",
+        "scene"
+      ],
+      "output": "/home/patrick/.local/share/blackbird-campaigns/tui-20261015-8gtzY4y8/fuzz-a7057dd991c5/scene",
+      "ready": true
+    }
+  ]
+}

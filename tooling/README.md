@@ -1,5 +1,9 @@
 # Development rigor
 
+The TUI campaign additionally records [performance deltas and AFL input runs](TUI_PERFORMANCE_FUZZING.md)
+between tranches. These measurements and retained findings complement the existing
+source/semantic/fault gates; they do not replace them.
+
 The local macOS 26.6 arm64 tool profile is operational. This qualifies the
 development executables, build wiring and diagnostic gates, not the future
 agent's correctness. The first-core specification and reviewed implementation

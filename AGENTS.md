@@ -223,3 +223,13 @@ rigor. Deliberately retain stable presentation baselines, including understood
 imperfections. Read [TUI testing](tooling/TUI_TESTING.md); install the pinned
 development executable explicitly before a fresh host's full source gate.
 No production terminal framework or VHS adoption follows from this choice.
+
+Operator2026-10-15 requires performance runs and tracked deltas between every
+TUI tranche, permits useful deeper/new scenarios, and explicitly adopts AFL for
+native robustness testing. Read [the procedure](tooling/TUI_PERFORMANCE_FUZZING.md).
+Keep matched source/host/profile/scenario samples and failures; derive summaries
+outside producers. Save ordinary findings in the [collective bug queue](docs/TUI_BUG_QUEUE.md)
+unless egregious. The final steering is to use a Python launcher for AFL and then
+leave it alone: preserve its native output queue without inspecting, polling,
+minimizing or repairing findings during the campaign. Keep fuzzing off the laptop
+and out of measured host windows; no unrelated assurance, eval or cloud scope.

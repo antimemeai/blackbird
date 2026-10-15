@@ -1,0 +1,26 @@
+{
+  "base_source": "b0b4759465df543bd6d383d111aa64bb2f86d662",
+  "reason": "Full source gate failed145/147; candidate not selected in committed/default build. Preserve for collective qualification.",
+  "files": {
+    "CMakeLists.txt": {
+      "sha256": "5e3fa98da24d844d7f0a3b672c63b27e7938d7da647e4c424c9be435954588d0",
+      "retained": "context/tui-perf-fuzz-2026-10-15/candidate/CMakeLists.txt"
+    },
+    "tests/tui_fuzz.cpp": {
+      "sha256": "4e2323bcf9bb3afc8b7db60657e262dd153673e9cae28ac1df06c03362ed8ba5",
+      "retained": "context/tui-perf-fuzz-2026-10-15/candidate/tests/tui_fuzz.cpp"
+    },
+    "scripts/bench-tui": {
+      "sha256": "f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377",
+      "retained": "context/tui-perf-fuzz-2026-10-15/candidate/scripts/bench-tui"
+    },
+    "scripts/bench-tui-report": {
+      "sha256": "dd4227cf1b29825ccc758f3aeb6da39fab23670310149b1d1935f585eb73650c",
+      "retained": "context/tui-perf-fuzz-2026-10-15/candidate/scripts/bench-tui-report"
+    },
+    "scripts/start-tui-fuzz": {
+      "sha256": "3bfc2b925c8fc5604756bf5a593db024f1ecfedd2029f8c7b4ace987737a6810",
+      "retained": "context/tui-perf-fuzz-2026-10-15/candidate/scripts/start-tui-fuzz"
+    }
+  }
+}

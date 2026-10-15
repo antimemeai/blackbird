@@ -16,6 +16,12 @@ unit adds these regression paths, the existing ESC prerequisite repair, and
 native scene/collection/local-state primitives. Broader host/Lua/application
 work remains in arconaut-rhi.3 until its actual contracts are delivered.
 
+Run and record [matched performance deltas](../tooling/TUI_PERFORMANCE_FUZZING.md)
+between each subsequent tranche. Expand/deepen scenarios when they answer a real
+question; new cases establish their own baseline. Retain ordinary findings for
+[collective bug action](TUI_BUG_QUEUE.md). AFL runs through the Python launcher on
+Neuroses and is then left alone, following the operator's explicit instruction.
+
 ## Why this order
 
 The operator asks for enduring doctrine, reusable machinery and forthcoming
