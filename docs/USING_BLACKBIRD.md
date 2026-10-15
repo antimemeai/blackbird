@@ -156,6 +156,11 @@ persistent state. The model has a `lua` tool and the same APIs:
   `read_file`, `write_file`, `edit_file` access files. `exec` accepts `command` or
   `argv` and a timeout in seconds. Nonempty argv takes precedence; empty argv uses
   the command. File/process effects run without command-approval prompts.
+  The default coding workflow supplies a 16384-byte observation limit for `exec`
+  and un-ranged `read_file` calls unless `output_max_bytes` is explicit. An
+  explicit file range bypasses that workflow default. This bounds returned raw
+  bytes, not tokens, capture, memory or external encoding. Custom Lua callers keep
+  full-read defaults; zero or larger explicit limits are accepted.
   `read_file` accepts one optional `range` object: `{mode="lines", start=1,
   ["end"]=20}` (one-based inclusive) or `{mode="bytes", start=0, ["end"]=256}`
   (zero-based half-open). Omit `range` for the whole file. Only one mode is possible;
@@ -167,6 +172,15 @@ persistent state. The model has a `lua` tool and the same APIs:
   LF is retained, CR is ordinary data, and a trailing LF creates no extra line.
   Full original file bytes remain audited; invalid UTF-8 slices return hex.
   Reads still have the existing 16 MiB full-file capacity, even for small ranges.
+  A native session read returns `snapshot={journal=...,sequence=...}`. For repair,
+  call `read_file` with that `snapshot` instead of `path`, plus the desired range.
+  It reads the exact captured original after file changes/deletion and session
+  reopen; it never opens the current path or scans the transcript. Exactly one of
+  path/snapshot is required. Standalone LocalTools has no snapshot store.
+  Optional `output_max_bytes` limits a file's selected range. `file_bytes` is the
+  full original size, `selected_bytes` the clipped range size, `returned_bytes`
+  the returned prefix size, and `omitted_bytes` the selected bytes not returned.
+  These four fields appear when a limit is supplied. Original capture is complete.
   `exec` accepts `output_max_bytes` to bound the raw prefix bytes in its
   model-facing result (JSON encoding overhead is not included). With a budget,
   `output_bytes` and `omitted_bytes` describe the full and omitted counts. Normal

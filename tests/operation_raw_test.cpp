@@ -1081,46 +1081,59 @@ void fill_data(std::size_t leave) {
     (void)unwrap(raw_emit(2499, fields));
   }
 }
-void blocked_admission(bool deadline) {
+enum class AdmissionInterruption { cancellation, expired_deadline, deadline };
+void blocked_admission(AdmissionInterruption interruption) {
+  const bool deadline = interruption != AdmissionInterruption::cancellation;
+  const bool expired = interruption == AdmissionInterruption::expired_deadline;
   Fixture fixture{{65536, 4 * 1024 * 1024}};
   Pipe cancellation;
   const auto target = (fixture.directory.path / "never-written.bin").string();
-  const auto records = fixture.capture([&](RawRuntime &runtime,
-                                           const RawThreadHandle &) {
-    AuditLog log{*fixture.root};
-    ContextStore context{log};
-    Unused provider;
-    CodingEngine engine{log, context, provider, "native.fixture"};
-    const auto status = unwrap(runtime.status());
-    Resume resume{status.recorder};
-    std::optional<RawWaitScope> scope;
-    operation_cut::space_wait = false;
-    operation_cut::cancellation_watch = cancellation.descriptors[0];
-    engine.operation_started = [&](std::string_view) {
-      require(::kill(status.recorder, SIGSTOP) == 0, "stop actual recorder");
-      fill_data(4096);
-      RawWaitControl control;
-      control.cancellation_fds[0] = cancellation.descriptors[0];
-      if (deadline)
-        control.deadline =
-            std::chrono::steady_clock::now() + std::chrono::milliseconds{20};
-      else
-        operation_cut::space_cancel = cancellation.descriptors[1];
-      scope.emplace(control);
-    };
-    bool refused = false;
-    try {
-      (void)engine.operator_call(
-          "write_file",
-          Value::object({{"path", Value{target}}, {"content", Value{"no effect"}}}));
-    } catch (const Error &) {
-      refused = true;
-    }
-    scope.reset();
-    operation_cut::cancellation_watch = -1;
-    require(refused && operation_cut::space_wait && !std::filesystem::exists(target),
-            "actual blocked lane-space admission interrupts before external write");
-  });
+  const auto records =
+      fixture.capture([&](RawRuntime &runtime, const RawThreadHandle &) {
+        AuditLog log{*fixture.root};
+        ContextStore context{log};
+        Unused provider;
+        CodingEngine engine{log, context, provider, "native.fixture"};
+        const auto status = unwrap(runtime.status());
+        Resume resume{status.recorder};
+        std::optional<RawWaitScope> scope;
+        operation_cut::space_wait = false;
+        operation_cut::cancellation_watch = cancellation.descriptors[0];
+        engine.operation_started = [&](std::string_view) {
+          require(::kill(status.recorder, SIGSTOP) == 0, "stop actual recorder");
+          fill_data(4096);
+          RawWaitControl control;
+          control.cancellation_fds[0] = cancellation.descriptors[0];
+          if (deadline)
+            control.deadline = expired ? std::chrono::steady_clock::time_point::min()
+                                       : std::chrono::steady_clock::now() +
+                                             std::chrono::milliseconds{20};
+          else
+            operation_cut::space_cancel = cancellation.descriptors[1];
+          scope.emplace(control);
+        };
+        bool refused = false;
+        try {
+          (void)engine.operator_call("write_file",
+                                     Value::object({{"path", Value{target}},
+                                                    {"content", Value{"no effect"}}}));
+        } catch (const Error &) {
+          refused = true;
+        }
+        scope.reset();
+        operation_cut::cancellation_watch = -1;
+        require(refused && !std::filesystem::exists(target),
+                "actual lane-space admission interrupts before external write");
+        // Cancellation is injected only at a real blocking lane-space poll. A
+        // deadline can correctly expire earlier, regardless of scheduler speed.
+        require(deadline || operation_cut::space_wait,
+                "actual cancellation interrupts a blocked lane-space wait");
+        require(!expired || !operation_cut::space_wait,
+                "already expired deadline refuses before blocking");
+        if (deadline)
+          std::cerr << "deadline admission expired=" << expired
+                    << " blocked=" << operation_cut::space_wait << '\n';
+      });
   const auto owner = only(records, 2400).reference;
   terminal_branch(records, owner, RawOperationBranch::error,
                   Error{ErrorCode::interrupted, deadline ? ETIMEDOUT : ECANCELED});
@@ -1543,9 +1556,11 @@ int main(int argc, char **argv) {
     std::cerr << "outer dispatch refusal\n";
     refused_dispatch();
     std::cerr << "full DATA cancellation\n";
-    blocked_admission(false);
+    blocked_admission(AdmissionInterruption::cancellation);
+    std::cerr << "full DATA already-expired deadline\n";
+    blocked_admission(AdmissionInterruption::expired_deadline);
     std::cerr << "full DATA deadline\n";
-    blocked_admission(true);
+    blocked_admission(AdmissionInterruption::deadline);
     std::cerr << "post-effect cancellation\n";
     cancellation_after_effect();
     std::cerr << "maintenance loan\n";

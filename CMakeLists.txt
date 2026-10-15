@@ -363,6 +363,10 @@ add_test(NAME economy_pilot COMMAND useful_work_test ${CMAKE_SOURCE_DIR}/tests/e
 set_tests_properties(economy_pilot PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(program_config_test tests/program_config_test.cpp)
+add_executable(economical_defaults_test tests/economical_defaults_test.cpp)
+target_link_libraries(economical_defaults_test PRIVATE blackbird_coding)
+add_test(NAME economical_defaults COMMAND economical_defaults_test)
+set_tests_properties(economical_defaults PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 target_link_libraries(program_config_test PRIVATE blackbird_coding)
 add_test(NAME program_config COMMAND program_config_test)
 

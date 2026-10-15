@@ -656,6 +656,7 @@ struct RecorderLane {
 };
 volatile sig_atomic_t child_notice = -1;
 volatile sig_atomic_t recorder_stop = 0;
+volatile sig_atomic_t recorder_notice = -1;
 extern "C" void child_changed(int) {
   const int saved = errno;
   if (child_notice >= 0) {
@@ -665,7 +666,17 @@ extern "C" void child_changed(int) {
   errno = saved;
 }
 extern "C" void recorder_signal(int signal) {
+  const int saved = errno;
   recorder_stop = signal == SIGTERM ? 2 : 1;
+  if (recorder_notice >= 0) {
+    const char byte = 0;
+    ssize_t count;
+    do {
+      count = ::write(recorder_notice, &byte, 1);
+    } while (count < 0 && errno == EINTR);
+    // EAGAIN means the pipe already contains a persistent wake notification.
+  }
+  errno = saved;
 }
 void failure(RawProducer &producer, Error error, const RawAuditProgress &progress,
              std::uint64_t stage, const FailureSource &source) {
@@ -760,6 +771,23 @@ std::unique_ptr<RawAudit> open_audit(NativeJournalDirectory &directory,
 }
 int record(const std::string &path, JournalHeader header,
            std::vector<RecorderLane> &lanes, bool drain, int control = -1) {
+  Descriptor stop_read, stop_write;
+  try {
+    const auto endpoints = make_pipe();
+    stop_read = Descriptor{endpoints[0]};
+    stop_write = Descriptor{endpoints[1]};
+    for (int endpoint : endpoints) {
+      const int flags = ::fcntl(endpoint, F_GETFL);
+      if (flags < 0 || ::fcntl(endpoint, F_SETFL, flags | O_NONBLOCK) < 0)
+        return 70;
+    }
+  } catch (const Error &) {
+    return 70;
+  }
+  struct ClearNotice {
+    ~ClearNotice() { recorder_notice = -1; }
+  } clear_notice;
+  recorder_notice = stop_write.value;
   recorder_stop = drain ? 2 : 0;
   struct sigaction action{};
   action.sa_handler = recorder_signal;
@@ -804,9 +832,13 @@ int record(const std::string &path, JournalHeader header,
     // Publish that preserved cursor even when every source is already drained.
     publish_cursor(path, segment, audit->cursor());
     std::vector<pollfd> watches;
-    watches.reserve(max_lanes + 1);
+    watches.reserve(max_lanes + 2);
     const auto rebuild_watches = [&] {
       watches.clear();
+      // Stop requests stay readable even when their handler runs between the
+      // final flag check and entry into the kernel poll. This recorder exits
+      // after a stop request, so its wake bytes never need to be drained.
+      watches.push_back({stop_read.value, POLLIN, 0});
       if (control >= 0)
         watches.push_back({control, POLLIN, 0});
       for (const auto &lane : lanes)

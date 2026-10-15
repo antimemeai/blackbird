@@ -88,6 +88,14 @@ boundary. Do not use this opt-in for ordinary application data.
 
 ## Read usage independently
 
+The [default coding workflow](ECONOMICAL_DEFAULTS.md) returns bounded file/command
+observations when callers supply no explicit limit or file range. File results
+include omission counts and a retained snapshot for exact later recovery. Custom
+Lua can compose reads/loops and return selected useful facts with those recovery
+handles; it retains full reads by default. Model/effort, cache policy and context
+compaction choices remain explicit. This reduces specific returned payloads; net
+token, cost and task-quality improvements have not been measured.
+
 ```sh
 build/debug/blackbird-token-usage context/router-session
 build/debug/blackbird-token-usage context/router-session --max-records 100000 --max-bytes 67108864

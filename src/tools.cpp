@@ -198,6 +198,27 @@ std::string file_presentation(const std::string &raw, const Value &args,
   return raw;
 }
 } // namespace
+Value file_content_presentation(const std::string &raw, const Value &args,
+                                RawFileToolTrace *trace) {
+  const auto budget = range_index(args, "output_max_bytes", SIZE_MAX);
+  const auto range = file_range(args, trace);
+  auto selected = file_presentation(raw, range, trace);
+  const auto selected_bytes = selected.size();
+  if (selected.size() > budget)
+    selected.resize(budget);
+  const auto returned_bytes = selected.size();
+  if (trace)
+    trace->result(returned_bytes);
+  auto result = Value::object({{"content", display_bytes(selected)}});
+  if (args.find("output_max_bytes")) {
+    result.object().emplace_back("file_bytes", Value{Number{raw.size()}});
+    result.object().emplace_back("selected_bytes", Value{Number{selected_bytes}});
+    result.object().emplace_back("returned_bytes", Value{Number{returned_bytes}});
+    result.object().emplace_back("omitted_bytes",
+                                 Value{Number{selected_bytes - returned_bytes}});
+  }
+  return result;
+}
 Value process_output_presentation(const std::string &raw, const Value &args) {
   const auto shown = file_presentation(raw, args);
   return Value::object({{"output", display_bytes(shown)},
@@ -216,18 +237,19 @@ Value LocalTools::run(std::string_view name, const Value &args,
     return trace.run([&] {
       captured_.clear();
       if (name == "read_file") {
-        const auto range = file_range(args, &trace);
+        const auto *path_value = args.find("path");
+        if (args.find("snapshot") || !path_value ||
+            !std::holds_alternative<std::string>(path_value->value()))
+          throw Error{ErrorCode::invalid_range};
+        (void)file_range(args);
+        (void)range_index(args, "output_max_bytes", SIZE_MAX);
         const auto &path = string_field(args, "path");
         trace.argument(0, path);
         RawEventRef read_owner{};
         auto raw = read_file(path, original_limit_, trace.context(), &read_owner);
         trace.selection(1, read_owner, raw.size());
         capture("file.read", raw, &trace);
-        const auto presented = file_presentation(raw, range, &trace);
-        auto shown = display_bytes(presented);
-        auto result = Value::object({{"content", std::move(shown)}});
-        trace.result(presented.size());
-        return result;
+        return file_content_presentation(raw, args, &trace);
       }
       const auto &path = string_field(args, "path");
       trace.argument(0, path);
@@ -753,8 +775,14 @@ Value tool_definitions() {
           {{"type", Value{"function"}},
            {"name", Value{"read_file"}},
            {"description",
-            Value{"Read a local file, retaining full original bytes. Omit range for "
-                  "whole file, or supply ONE range object: {mode:lines,start:1,end:20} "
+            Value{"Read exactly one of path (current disk) or snapshot (retained "
+                  "original from a prior read; no disk access). Full originals are "
+                  "retained. Default coding workflow returns at most16384 raw bytes "
+                  "unless a range or output_max_bytes is explicit; custom Lua defaults "
+                  "to full content. output_max_bytes limits the selected range; "
+                  "file_bytes/selected_bytes/returned_bytes/omitted_bytes describe "
+                  "raw bytes before encoding. Fetch omitted facts with the returned "
+                  "snapshot and ONE range object: {mode:lines,start:1,end:20} "
                   "(one-based inclusive) or {mode:bytes,start:0,end:256} (zero-based "
                   "half-open). Missing start means first byte/line; missing end means "
                   "EOF. Beyond EOF clips/returns empty. LF retained; no phantom "
@@ -765,6 +793,22 @@ Value tool_definitions() {
                  {"properties",
                   Value::object(
                       {{"path", Value::object({{"type", Value{"string"}}})},
+                       {"snapshot",
+                        Value::object(
+                            {{"type", Value{"object"}},
+                             {"properties",
+                              Value::object(
+                                  {{"journal",
+                                    Value::object({{"type", Value{"string"}}})},
+                                   {"sequence",
+                                    Value::object({{"type", Value{"integer"}},
+                                                   {"minimum", Value{Number{1}}}})}})},
+                             {"required",
+                              Value{Value::Array{Value{"journal"}, Value{"sequence"}}}},
+                             {"additionalProperties", Value{false}}})},
+                       {"output_max_bytes",
+                        Value::object({{"type", Value{"integer"}},
+                                       {"minimum", Value{Number{0}}}})},
                        {"range",
                         Value::object(
                             {{"type", Value{"object"}},
@@ -783,7 +827,6 @@ Value tool_definitions() {
                                                    {"minimum", Value{Number{0}}}})}})},
                              {"required", Value{Value::Array{Value{"mode"}}}},
                              {"additionalProperties", Value{false}}})}})},
-                 {"required", Value{Value::Array{Value{"path"}}}},
                  {"additionalProperties", Value{false}}})}}),
       Value::object(
           {{"type", Value{"function"}},

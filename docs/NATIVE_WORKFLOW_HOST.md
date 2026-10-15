@@ -25,7 +25,10 @@ build/debug/blackbird-workflow --session /tmp/blackbird-native-demo --request '{
 `start` supports `echo`, `exec`, `read_file`, `write_file` and `edit_file`, using
 the existing LocalTools arguments. Tasks run relative to the host's working
 directory. Each owns its tool instance and captured output. The accepted input
-records the native build identity. Reusing an ID with the same tool/arguments
+records the native build identity. Explicit `output_max_bytes` bounds file
+presentation while retaining the acquired original. The default conversation
+turn program's 16 KiB budget does not apply to this host; `read_file` takes `path`,
+and conversational `snapshot` recovery handles belong to CodingEngine. Reusing an ID with the same tool/arguments
 returns the same invocation; changing those arguments rejects. Reopen keeps the
 accepted source identity rather than silently choosing the new build.
 

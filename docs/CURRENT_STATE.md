@@ -1,5 +1,20 @@
 # Current Blackbird stock
 
+Economical observations and recorder-stop repairs are integrated on **master**,
+2026-10-15: the default workflow supplies a 16 KiB
+file/command observation limit when no explicit choice is present; native file
+reads return a retained snapshot for exact repair after file changes and reopen.
+Explicit ranges/limits and full custom Lua reads remain available. The
+[unit record](ECONOMICAL_DEFAULTS.md) describes scope and direct checks; source
+publication/qualification is recorded there. No measured net-cost advantage or
+automatic compaction/model downgrade is claimed.
+Affected host profiles and full owned C++/Lua analysis pass. The final full hook
+encountered an intermittent `operation_raw` timeout. The operator-directed study
+identified a deadline-test timing assumption and a recorder stop/poll race;
+[both are repaired](../papers/2026-10-15-recorder-stop-repair.md), with all four
+affected Debug tests passing. The operator authorizes merge using those completed
+checks, without another full-suite run. Running-process activation stays separate.
+
 Tokenomics/OpenRouter is integrated on **master**,2026-10-15, by fast-forward
 through `4aa8f43` (qualified source `56b3f62`). The
 [using guide](TOKENOMICS.md) covers explicit OpenRouter main coding, retries bound
@@ -10,9 +25,9 @@ and [qualification record](../papers/tokenomics-2026-10-14/qualification.md) rec
 sanitizer passes. The operator authorizes one live round then merge: the native
 launch refuses with provider_auth because no OpenRouter credential is configured;
 no tool effect occurs, reopen preserves settings, usage remains unknown.
-Live continuation/cache behavior remains arconaut-438; intermittent baseline
-operation-capture timeout remains arconaut-7qn. Running-process activation is
-separate from source integration.
+Live continuation/cache behavior remains arconaut-438. The operation-capture
+repair is recorded above; arconaut-7qn is closed for the concrete race and test
+flaw. Running-process activation is separate from source integration.
 
 New design wave,2026-10-14: concurrent and durable workflows. The
 [proposed design](CONCURRENT_DURABLE_WORKFLOWS.md),

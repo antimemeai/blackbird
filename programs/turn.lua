@@ -9,7 +9,22 @@ for step = 1, 64 do
         error("Default workflow cannot dispatch a namespaced function call")
       end
       calls = calls + 1
-      local result = blackbird.call(item.name, item.arguments)
+      local args = item.arguments
+      if args.output_max_bytes == nil then
+        if item.name == "exec" then
+          args.output_max_bytes = 16384
+        elseif
+          item.name == "read_file"
+          and args.range == nil
+          and args.byte_start == nil
+          and args.byte_end == nil
+          and args.line_start == nil
+          and args.line_end == nil
+        then
+          args.output_max_bytes = 16384
+        end
+      end
+      local result = blackbird.call(item.name, args)
       blackbird.append({
         {
           type = "function_call_output",
