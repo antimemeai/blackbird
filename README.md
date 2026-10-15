@@ -19,6 +19,13 @@ and model ergonomics, expressive controls, and the SR-71's actual controls and
 pilot task saturation. It guides subsequent interaction design without claiming
 the present interface implements that whole ambition.
 
+The [TUI doctrine](docs/TUI_DOCTRINE.md) states enduring rules for future terminal
+work. Its [reusable component design](docs/TUI_COMPONENTS.md),
+[working-surface designs](docs/TUI_VIEWS.md) and [delivery plan](docs/TUI_IMPLEMENTATION_PLAN.md)
+cover existing views alongside command center/team/mods, capability and action-fabric
+management, expressive controls and multiple metrics instruments. These are designs;
+the current implementation remains described below.
+
 
 This repository contains a **C++20 core, Lua 5.4.8 turn programs, a terminal interface, and an operating self-development loop**. It is an early system in active use and reconstruction. Its ambitions exceed its present implementation; the distinctions below are part of the description, rather than small print.
 

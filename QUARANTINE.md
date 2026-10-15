@@ -891,3 +891,20 @@ Darwin manual records use the explicit installed SDK `restore` source path;
 check each hash rather than substituting a later SDK silently. All nine restored
 files must match the manifest byte length and SHA-256. References remain intact,
 without nested Git metadata, build output or filesystem detritus.
+
+
+## TUI doctrine and forthcoming surfaces — 2026-10-15
+
+The [program research](papers/tui-program-2026-10-15/README.md) retains28 new
+primary documentation/source originals and reuses the official pinned Codex ZIP.
+Current Codex command-center/plugin documentation, explicitly comparative Claude
+mods/hooks/settings, versioned MCP and pinned Pi extension/skill/template sources
+are archived under ignored `quarantine/tui-program-2026-10-15/`.
+The [coordination manifest](papers/tui-program-2026-10-15/coordination/sources.tsv),
+[restoration notes](papers/tui-program-2026-10-15/coordination/RESTORE.md) and
+[fabric manifest](papers/tui-program-2026-10-15/fabric/MANIFEST.tsv) record exact
+URLs, hashes, byte counts and restoration commands. Live pages can change; a
+later response is not automatically the recorded snapshot. No new source tree
+was extracted, dependency selected, plugin loaded or acquired program executed.
+Current native source and earlier TUI/provider/raw reference sets supply the
+component and metrics studies without duplicating those archives.

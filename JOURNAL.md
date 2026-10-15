@@ -9413,3 +9413,72 @@ written theory; retain arconaut-rhi open for subsequent theory-grounded interact
 design. Supported bd backup preserves130 issues and updated dependencies/events.
 Checkpoint/publish text-only on work/tui-reference-2026-10-15 using the authorized
 per-command hook override; no main integration or running-executable activation.
+
+
+## 2026-10-15 — enduring TUI doctrine and the forthcoming working surfaces
+
+Operator broadens the deliverable: improving the existing screen is insufficient.
+Write a TUI doctrine distinct from general design, a reusable owned component
+foundation, and designs for existing views alongside command center/team/mods,
+capability management/execution, action-fabric configuration and multiple metrics
+views. Human and model operations must both work. Research actual harnesses before
+importing names or assumed capabilities. arconaut-rhi.2 owns this design unit.
+
+Continue the three requested researcher/frumentarius lanes: coordination/harness
+views, capability/action fabric, and native/Lua component contracts. Root owns
+enduring doctrine, current-view integration, metrics and sequencing. Reports and
+original manifests go in papers/tui-program-2026-10-15; acquired originals remain
+ignored under quarantine with restoration commands. No dependency adoption.
+An optional implementation-scope question is pending; continue the full design
+and plan without making an answer a prerequisite for independent useful work.
+
+Direct checks will address local links, source/restoration identities, accurate
+current-versus-proposed capability labels and coherent component/view activation
+contracts. One integrated design challenge and fixes, then one direct recheck and
+fixes; no review of reviews. Documentation alone does not call for C++ test/lint.
+Do not run acquired harnesses with accounts or imply a selected eval campaign.
+
+
+Deliver the normative docs/TUI_DOCTRINE.md separately from explanatory theory,
+owned component contracts, domain view designs and delivery sequencing. Canonical
+TUI_COMPONENTS describes native local control plus typed keyed scenes and an
+independently owned Lua composition VM; existing ChatOutput partial-write/frame
+lifetimes remain. TUI_VIEWS maps existing and future domains, full/narrow routes,
+control/binding inspection, expressive controller semantics and activation classes.
+Dedicated current, coordination, fabric and metrics designs include human/model/
+Lua access, exact targets, conflicts, async states and truthful backend gaps.
+The concrete start-turn hook scenario persists config and activates a future
+pinned generation without process restart; the generic hook backend remains work.
+
+Three researchers complete component, coordination and capability/fabric units.
+Acquire28 new primary originals (10,980,122bytes), reuse the official pinned Codex
+archive unchanged, and record29 byte/hash identities plus20 internal Git-baseline
+identities. Current official Codex command center exists; Claude visual mods,
+Codex plugin packages and organizational Teams remain correctly distinguished.
+MCP current protocol profile is versioned explicitly. No acquired program executes,
+new dependency is selected, product code is changed or live instance activated.
+Read-only Rhizome watch finds transferable storage/publication/lifetime principles
+at its retained projects_old/inactive-2026-10-07 path; no new tool campaign.
+
+One integrated challenge across interaction/systems/BHI yields five distinct fixes:
+native effect-phase admission; acquisition-pinned coordinate target; per-invocation
+identity and honest ambiguous acknowledgment; preserving POWERWORDS on deliberate
+submission while text insertion remains literal; and an explicit Context/request/
+original-repair implementation slice. Integrate fixes and perform one direct
+consistency recheck; retain independent findings and resolution. No third review.
+
+All287 local links in28 checked Markdown documents resolve; new references pass
+regular-file/ignore/hash/length/metadata checks and internal sources match their
+recorded Git baseline. Source qualification, hardware trials, performance outcomes
+and evaluator selection are not claimed. Component implementation scope received
+no further steering; this pass completes research/design/plan and records source
+delivery as open arconaut-rhi.3 through rhi.7, dependent on the shared foundation.
+Preserve arconaut-600 ESC repair and existing workflow/peer owning work. Mark old
+October7 presentation/plan assumptions historical under the new doctrine.
+
+
+Close arconaut-rhi.2 for the completed design unit; rhi remains open as the delivery
+epic with five implementation units. Supported bd backup succeeds (136issues).
+Staged whitespace check passes; only text/research catalogs and beads backup state
+are staged. Publish on the existing candidate branch with the authorized text-only
+hook override; main integration and live activation remain separate.

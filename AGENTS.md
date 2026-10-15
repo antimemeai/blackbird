@@ -204,3 +204,14 @@ representations, skill, feedback, attention, coordination and continuity. It
 supplies conditional explanations and counterexamples, not a selected layout,
 controller, numerical workload limit or implementation plan. Existing C++/Lua
 contracts and the distinction between present capability and design intent remain.
+
+
+Operator2026-10-15 expands this into an enduring TUI program. Read the
+[TUI doctrine](docs/TUI_DOCTRINE.md) for terminal work, alongside the theory.
+The [component contracts](docs/TUI_COMPONENTS.md), [view designs](docs/TUI_VIEWS.md)
+and [delivery plan](docs/TUI_IMPLEMENTATION_PLAN.md) distinguish reusable machinery
+from present/future domain owners. New views follow the doctrine through shared
+C++/Lua composition; UI components never invent execution authority, shared-service
+governance or metric transforms on producers. Designs include current surfaces,
+command center/team/mods, capabilities/skills/API recipes, hooks/action fabric and
+multiple metrics families. Research/design publication does not claim implementation.

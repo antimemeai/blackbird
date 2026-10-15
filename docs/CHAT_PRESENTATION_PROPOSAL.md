@@ -1,5 +1,12 @@
 # Chat presentation: proposal
 
+Historical October7 proposal. The [TUI doctrine](TUI_DOCTRINE.md),
+[component design](TUI_COMPONENTS.md), [current/future views](TUI_VIEWS.md) and
+[delivery plan](TUI_IMPLEMENTATION_PLAN.md) now govern the expanded program.
+Retain the craft/source ideas below as reference; old mascot/sidebar exclusions,
+fixed animation/layout targets, renderer diagnoses and campaign cutoffs do not
+override current intent or implemented native output behavior.
+
 2026-10-07. The operator requests a substantial visual investment, source study
 and a proposal before coding. This extends TUI_PLAN with a concrete conversation
 design. Production remains unchanged in this unit.
