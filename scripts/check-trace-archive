@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""Exact archive/restore and failure oracles; private files and fake remotes."""
+import hashlib
+import os
+from pathlib import Path
+import subprocess
+import struct
+import sys
+import tempfile
+import runpy
+import time
+
+binary = str(Path(sys.argv[1]).resolve())
+native = str(Path(sys.argv[2]).resolve()) if len(sys.argv) > 2 else None
+raw_reader = str(Path(sys.argv[3]).resolve()) if len(sys.argv) > 3 else None
+write_packet = runpy.run_path(str(Path(__file__).with_name("native-packet.py")))["write_packet"]
+with tempfile.TemporaryDirectory(prefix="blackbird-archive-") as tmp:
+    root = Path(tmp)
+    source = root / "session"
+    source.mkdir(mode=0o700)
+    audit = bytes(range(256)) * 600
+    (source / "audit").write_bytes(audit)
+    (source / "credentials.bbm").write_bytes(b"DO_NOT_ARCHIVE_CREDENTIALS")
+    (source / "diagnostics").mkdir()
+    (source / "diagnostics" / "123.original").write_bytes(b"exact-stream\x00\xff")
+    run = source / "raw" / "example"
+    run.mkdir(parents=True)
+    for name, body in {"events.0": audit[:19000], "descriptions": b"schema\x00",
+                       "published": struct.pack("<Q16sQQ", 0, b"J" * 16, 1, 19000), "seed.1": b"seed",
+                       "closed": b"", "lanes": b"NO_PROCESS_HANDLES"}.items():
+        (run / name).write_bytes(body)
+
+    def call(*args, good=True, env=None):
+        result = subprocess.run([binary, *map(str, args)], capture_output=True,
+                                timeout=30, env=env)
+        assert (result.returncode == 0) == good, (args, result.returncode,
+                                                result.stdout, result.stderr)
+        return result.stdout.decode().strip()
+
+    destination = root / "long term storage"
+    call("configure", source, destination, "--chunk-bytes", 65536,
+         "--sweep-bytes", 65536, "--interval-seconds", 1)
+    first = call("sweep", source)
+    assert first.endswith(".bbm")
+    initial = {p.name: p.read_bytes() for p in destination.iterdir()}
+    for p in destination.glob("*.chunk"):
+        assert p.stem == hashlib.sha256(p.read_bytes()).hexdigest()
+    restored = root / "restored"
+    call("restore", destination, first, restored)
+    assert (restored / "audit").read_bytes() == audit
+    assert (restored / "diagnostics" / "123.original").read_bytes() == b"exact-stream\x00\xff"
+    assert (restored / "raw" / "example" / "events.0").read_bytes() == audit[:19000]
+    assert (restored / "raw" / "example" / "closed").read_bytes() == b""
+    assert not (restored / "credentials.bbm").exists()
+    assert not (restored / "raw" / "example" / "lanes").exists()
+    call("restore", destination, first, restored, good=False)
+    assert call("sweep", source) == first
+    assert initial == {p.name: p.read_bytes() for p in destination.iterdir()}
+    extension = b"new exact bytes\x00" * 5000
+    with (source / "audit").open("ab") as f:
+        f.write(extension)
+    second = call("sweep", source)
+    assert second != first
+    assert all((destination / name).read_bytes() == body for name, body in initial.items())
+    call("restore", destination, second, root / "second")
+    assert (root / "second" / "audit").read_bytes() == audit + extension
+    # Same-size in-place rewrite must not reuse stale prefix chunks.
+    (source / "audit").write_bytes(b"M" * (len(audit) + len(extension)))
+    third = call("sweep", source)
+    call("restore", destination, third, root / "third")
+    assert (root / "third" / "audit").read_bytes() == b"M" * (len(audit) + len(extension))
+    # Corruption refuses restore rather than publishing a successful partial tree.
+    chunks = list(destination.glob("*.chunk"))
+    originals = [(p, p.read_bytes()) for p in chunks]
+    for p, _ in originals:
+        p.write_bytes(b"corrupt")
+    failed_restore = root / "corrupt-restore"
+    call("restore", destination, third, failed_restore, good=False)
+    assert not failed_restore.exists()
+    for p, body in originals:
+        p.write_bytes(body)
+    malicious = root / "malicious.bbm"
+    write_packet(malicious, {"version": 1, "files": [
+        {"path": "../escape", "bytes": 0, "chunks": []}]})
+    bad_name = hashlib.sha256(malicious.read_bytes()).hexdigest() + ".bbm"
+    (destination / bad_name).write_bytes(malicious.read_bytes())
+    call("restore", destination, bad_name, root / "bad-tree", good=False)
+    assert not (root / "escape").exists()
+    (source / "audit").unlink()
+    (source / "audit").symlink_to(root / "outside")
+    (root / "outside").write_bytes(b"private outside")
+    call("sweep", source, good=False)
+    (source / "audit").unlink()
+    (source / "audit").write_bytes(audit)
+    call("configure", source, "relative/path", good=False)
+    call("configure", source, "host:relative/path", good=False)
+    call("configure", source, source / "diagnostics", good=False)
+    call("configure", source, "s3://bucket/prefix", "--region", "us-east-1",
+         "--chunk-bytes", 0, good=False)
+
+    # One actual fake executable implements the SCP argv or curl stdin protocol.
+    remote = root / "remote"
+    remote.mkdir()
+    helper = root / "transport"
+    helper.write_text('''#!/usr/bin/env python3
+import os, pathlib, shutil, sys, hashlib
+root = pathlib.Path(os.environ["ARCHIVE_FAKE_ROOT"])
+args = sys.argv[1:]
+if os.environ.get("ARCHIVE_FAKE_FAIL"):
+    sys.exit(9)
+if os.environ.get("ARCHIVE_FAKE_FAIL_MANIFEST") and ".bbm" in " ".join(args):
+    sys.exit(8)
+if "-T" in args:
+    import subprocess
+    subprocess.run(["/bin/sh", "-c", args[-1].replace("/archive", str(root))], check=True)
+elif "--config" in args:
+    cfg = sys.stdin.read()
+    assert "DUMMY_SECRET" not in " ".join(args)
+    assert "aws-sigv4" in cfg and "DUMMY_ACCESS:DUMMY_SECRET" in cfg
+    import shlex, base64
+    options = {}
+    for line in cfg.splitlines():
+        key, value = line.split(" = ", 1)
+        options[key] = shlex.split(value)[0]
+    name = options["url"].rsplit("/", 1)[-1]
+    if os.environ.get("ARCHIVE_FAKE_FAIL_MANIFEST") and name.endswith(".bbm"):
+        sys.exit(8)
+    path = root / name
+    if "upload-file" in options:
+        expected = base64.b64encode(hashlib.sha256(pathlib.Path(options["upload-file"]).read_bytes()).digest()).decode()
+        assert "x-amz-checksum-sha256: " + expected in cfg
+        assert "If-None-Match: *" in cfg
+        if path.exists():
+            sys.stdout.write("412")
+        else:
+            shutil.copyfile(options["upload-file"], path)
+            sys.stdout.write("200")
+    elif path.exists():
+        shutil.copyfile(path, options["output"])
+        sys.stdout.write("200")
+    else:
+        sys.stdout.write("404")
+else:
+    assert "-B" in args
+    source, target = args[-2:]
+    if ":" in target:
+        shutil.copyfile(source, root / target.rsplit("/", 1)[-1])
+    else:
+        shutil.copyfile(root / source.rsplit("/", 1)[-1], target)
+''')
+    helper.chmod(0o700)
+    env = dict(os.environ, ARCHIVE_FAKE_ROOT=str(remote),
+               BLACKBIRD_ARCHIVE_SCP=str(helper), BLACKBIRD_ARCHIVE_SSH=str(helper),
+               BLACKBIRD_ARCHIVE_CURL=str(helper),
+               AWS_ACCESS_KEY_ID="DUMMY_ACCESS", AWS_SECRET_ACCESS_KEY="DUMMY_SECRET")
+    for target in ("fixture@host:/archive", "s3://fixture/prefix"):
+        call("configure", source, target, "--region", "us-east-1",
+             "--chunk-bytes", 65536, env=env)
+        before_failure = (source / "trace-archive-state.bbm").read_bytes()
+        call("sweep", source, good=False,
+             env=dict(env, ARCHIVE_FAKE_FAIL_MANIFEST="1"))
+        assert before_failure == (source / "trace-archive-state.bbm").read_bytes()
+        assert list(remote.glob("*.chunk")), "fixture did not exercise partial transfer"
+        failed = dict(env, ARCHIVE_FAKE_FAIL="1")
+        call("sweep", source, good=False, env=failed)
+        manifest = call("sweep", source, env=env)
+        out = root / ("scp-restore" if target.startswith("fixture") else "s3-restore")
+        call("restore", target, manifest, out, "--region", "us-east-1", env=env)
+        assert (out / "audit").read_bytes() == audit
+        # Retry after losing local progress exercises immutable existing-object handling.
+        (source / "trace-archive-state.bbm").unlink()
+        assert call("sweep", source, env=env) == manifest
+    assert (source / "audit").read_bytes() == audit, "archiver changed live originals"
+    # Sweep preserves prior originals even after their local diagnostic is removed.
+    call("configure", source, destination, "--chunk-bytes", 65536)
+    call("sweep", source)
+    (source / "diagnostics" / "123.original").unlink()
+    retained = call("sweep", source)
+    call("restore", destination, retained, root / "expired-local")
+    assert (root / "expired-local" / "diagnostics" / "123.original").read_bytes() == b"exact-stream\x00\xff"
+    if native and raw_reader:
+        session = root / "actual-session"
+        store = root / "actual-store"
+        call("configure", session, store, "--sweep-bytes", 4096)
+        process = subprocess.Popen([native, "--session", str(session), "--plain"],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, start_new_session=True)
+        try:
+            deadline = time.monotonic() + 20
+            while not (session / "trace-archive-state.bbm").exists():
+                assert process.poll() is None, "configured native launcher exited early"
+                assert time.monotonic() < deadline, "archive worker did not start"
+                time.sleep(0.02)
+            worker = int(subprocess.check_output(
+                ["pgrep", "-P", str(process.pid), "-f", "blackbird-archive watch"], timeout=5))
+            assert os.getpgid(worker) == worker, "terminal Ctrl-C could kill the archive worker"
+            _, errors = process.communicate(b"/lua return 'archival fixture'\n", timeout=45)
+            assert process.returncode == 0, errors
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+        assert (session / "trace-archive-state.bbm").exists(), (session / "trace-archive.log").read_text()
+        # No sweep command here: this must be the worker's final capture after drain.
+        state = runpy.run_path(str(Path(__file__).with_name("native-packet.py")))["read_packet"](
+            session / "trace-archive-state.bbm")
+        actual = root / "actual-restored"
+        call("restore", store, state["manifest"], actual)
+        assert (actual / "audit").read_bytes() == (session / "audit").read_bytes()
+        listing = subprocess.check_output([raw_reader, "list", str(actual)], timeout=15).decode()
+        assert "closed" in listing and "error" not in listing, listing
+print("Trace archive exact-byte, retry, local/SCP/S3 restore and refusal checks passed")

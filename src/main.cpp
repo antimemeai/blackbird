@@ -14,6 +14,7 @@
 #include "blackbird/sprite.hpp"
 #include "blackbird/station.hpp"
 #include "blackbird/terminal.hpp"
+#include "blackbird/trace_archive.hpp"
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -221,6 +222,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       throw Error{ErrorCode::io, errno};
     const auto path = session / "audit";
     const JournalCapacity capacity{512ULL * 1024 * 1024, 200000};
+    std::unique_ptr<TraceArchiveWorker> archive_worker;
     std::unique_ptr<RawRuntime> instrumentation;
     std::optional<RawThreadBinding> instrumentation_binding;
     std::optional<RawRegion> startup;
@@ -233,6 +235,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     std::unique_ptr<NativeJournalDirectory> directory;
     const auto start_instrumentation = [&](EnvironmentId environment) {
       if (!inspect) {
+        archive_worker = TraceArchiveWorker::start(session);
         RawRuntimeOptions options;
         options.producer_capacities = {256 * 1024 * 1024, 1024 * 1024, 128 * 1024};
         instrumentation =

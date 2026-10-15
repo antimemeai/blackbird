@@ -82,6 +82,11 @@ add_executable(blackbird-resource-sampler src/raw_sampler_main.cpp)
 target_link_libraries(blackbird-resource-sampler PRIVATE blackbird_foundation)
 add_executable(blackbird-raw-reader src/raw_reader_main.cpp)
 target_link_libraries(blackbird-raw-reader PRIVATE blackbird_foundation)
+add_executable(blackbird-archive src/trace_archive_main.cpp)
+target_link_libraries(blackbird-archive PRIVATE blackbird_foundation)
+target_sources(blackbird_foundation PRIVATE src/trace_archive_worker.cpp)
+set_source_files_properties(src/trace_archive_worker.cpp PROPERTIES
+  COMPILE_DEFINITIONS BLACKBIRD_ARCHIVE_EXECUTABLE="$<TARGET_FILE:blackbird-archive>")
 file(GLOB_RECURSE raw_build_sources CONFIGURE_DEPENDS include/blackbird/*.hpp src/*.cpp)
 set(raw_build_input "")
 foreach(raw_source IN LISTS raw_build_sources)
@@ -116,6 +121,7 @@ target_link_libraries(blackbird_coding PUBLIC blackbird_foundation Threads::Thre
 add_executable(blackbird-candidate src/candidate.cpp)
 target_link_libraries(blackbird-candidate PRIVATE blackbird_foundation Threads::Threads)
 add_executable(blackbird src/main.cpp)
+add_dependencies(blackbird blackbird-archive)
 target_link_libraries(blackbird PRIVATE blackbird_coding)
 target_compile_definitions(blackbird PRIVATE BLACKBIRD_WORKFLOW="${CMAKE_SOURCE_DIR}/programs/turn.lua")
 target_compile_definitions(blackbird_coding PRIVATE BLACKBIRD_SPRITE_ASSET="${CMAKE_SOURCE_DIR}/assets/sr71.png")
@@ -672,6 +678,10 @@ add_test(NAME terminal_custody_native COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_SOURCE_DIR}/tests/terminal_custody_native_test.py
   $<TARGET_FILE:blackbird> $<TARGET_FILE:blackbird-raw-reader>)
 set_tests_properties(terminal_custody_native PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+add_test(NAME trace_archive COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-trace-archive $<TARGET_FILE:blackbird-archive>
+  $<TARGET_FILE:blackbird> $<TARGET_FILE:blackbird-raw-reader>)
+set_tests_properties(trace_archive PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
 add_test(NAME main_input_raw COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_SOURCE_DIR}/scripts/check-main-input $<TARGET_FILE:blackbird>)
 set_tests_properties(main_input_raw PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)

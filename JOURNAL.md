@@ -8538,3 +8538,59 @@ matter; compaction does not reclaim the original audit. Report these boundaries
 without treating older TTL permission or projected timing prose as current policy.
 Relevant text/diff checks and supported bd backup only; record this orientation as
 a text-only checkpoint on the existing work branch and push per repository policy.
+
+## 2026-10-14 — configurable long-term trace archive
+
+Operator requests a configurable local directory, SCP remote directory or S3
+bucket/prefix sweeping traces well before capacity. Create arconaut-dc3 and
+work/trace-archive-2026-10-14 from the pushed orientation checkpoint. Read the
+actual semantic capacity/successor/saved-state/catalog and raw recorder/reader
+paths before writing docs/TRACE_ARCHIVE.md. Explicitly ask whether continuation
+beyond the semantic cap is also wanted; no answer yet. Archival copies are useful
+independent work and cannot honestly be called journal capacity reclamation.
+
+Read primary OpenSSH, curl and S3 PutObject/GetObject/checksum documentation.
+Use existing OpenSSL/OpenSSH/curl executables, owned C++ and BBM2; no library or
+SDK adopted. The Kimi colleague skill's independent design-review attempt returns
+403 subscription access before reviewer-session creation. Keep its actual failure
+under context/kimi-review/run-shjvy_od; do not claim completed independent review.
+
+Implement a separate native blackbird-archive process with persistent per-session
+configuration, 16MiB growth/60-second default sweeps, initial/final sweeps,
+immutable SHA-256 chunks/manifests, retained prior diagnostics, local/SCP/S3
+transports and verified inspection restore. Normal configured sessions start the
+worker; read-only inspection does not. Shutdown drains normal recording before
+closing the worker pipe and waiting for its final pass. Exclude credentials,
+process custody/locks/shared-memory registrations and derived session state.
+Raw publication bytes are pinned before copying their event prefix. Semantic
+physical bytes remain observations, not inferred acknowledgement/settlement.
+No producer/recorder transformation, live-source deletion or replay is added.
+
+Layer-one source analysis/fixes address raw publication/event snapshot mismatch,
+SCP retry overwrites through temporary upload plus no-replace link/comparison,
+expired-original retention, source rewrite detection, restore path traversal/
+atomic no-replace publication, local-target recursion and allocation before child
+spawn. S3 uses stdin credentials, checksum headers and conditional writes with
+existing-object verification. Direct lint catches two adjacent primitive-argument
+interfaces; replace them with owned construction/named program fields, without
+suppression. The corrected new sources pass their direct lint.
+
+Initial real executable checks pass exact binary local/SCP/S3 round-trip,
+unchanged-object reuse, append/rewrite, corrupt chunks, traversal/symlink and
+invalid configuration refusal, transport failure/retry, no credential/process
+metadata inclusion and actual Blackbird launch/drain/raw-reader restore. Final
+finding-driven checks add partial-manifest-transfer progress preservation and
+retention after local diagnostic removal. Linux Release/ASan checks and the full
+installed Debug/C++/Lua source hook finish before publication; final execution
+results follow this entry. No real destination/account writes, main integration,
+running-executable replacement, mutation or unrelated performance work. Preserve
+operator art and old worktrees/stash. Copies retain local source and the semantic
+512MiB/200000-record cap; continuation/reclamation is not delivered by this unit.
+
+Linux Release and ASan archive checks pass on the copied source snapshot in
+context/linux/run-e5b7wa0c. Subsequent finding-driven local changes add independent
+worker process-group isolation (terminal Ctrl-C must not kill it), filesystem-error
+retry and partial-transfer/expired-file checks; those final deltas are qualified
+by the local source gate, not claimed executed in the earlier Linux snapshot.
+The installed full Debug/C++/Lua hook is the publication gate for this source
+checkpoint. No broader Linux suite or live storage destination is claimed.

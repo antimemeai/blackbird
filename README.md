@@ -31,6 +31,9 @@ with an indicator: muted idle, cyan active, amber tool work, red failure.
 For native CPU/allocation investigation, see [Profiling](docs/PROFILING.md).
 Master also includes `/trace`, `/variables`, `/correlate` and
 read-only `/git-observe`; see [trajectory usage and limits](docs/TRAJECTORIES.md).
+Configurable [long-term trace storage](docs/TRACE_ARCHIVE.md) copies originals
+to a local directory, SCP directory or S3 prefix using a separate native worker.
+Archival copies do not reset the current semantic session's capacity limit.
 
 ## Come aboard
 
