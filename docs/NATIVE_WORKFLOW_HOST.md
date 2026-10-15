@@ -4,7 +4,7 @@ The first concurrent-workflow implementation runs native tasks in an independent
 session owner. `blackbird-workflow` owns one RetainedState journal, four worker
 threads, a 32-task live limit and a private local socket. Clients may leave and
 reconnect while tasks continue. Build the executable with the existing debug or
-release CMake preset. The first source checkpoint is qualified and published;
+release CMake preset. The native execution slice is integrated on master;
 [checks, fault oracles and every baseline sample](../papers/workflows-implementation-2026-10-15/QUALIFICATION.md)
 record the actual scope.
 

@@ -125,3 +125,22 @@ remains unresolved and fences this first host read-only. No automatic replay,
 proven-unreleased successor command, model loop or Lua continuation is advertised.
 The broad workflow epic stays open; later F7–F11 capabilities retain their design
 and owning sequence. Required end-to-end tuning remains delivery work.
+
+## Integration with current master — 2026-10-15
+
+Operator explicitly authorizes merge. Combined-source merge `fe3b457` preserves
+master `6a20d61` (recorder-stop repair/economical defaults) and workflow checkpoint
+`5b427cd`. Source merges cleanly; both journal histories are retained and generated
+issue backups come from the shared live database. LocalTools keeps workflow
+original acquisition bounds and economical file presentation/snapshot behavior.
+The native host does not apply the conversational default program's display
+budget or accept CodingEngine snapshot handles.
+
+The installed full source hook passes **143/143 debug tests**, 248.34s, plus all
+owned C++ formatting/diagnostics and Lua checks, without override or new
+suppression. Capture: `context/workflows-implementation-2026-10-15/merge-source-gate.log`.
+These are combined-source macOS results. Earlier component/Linux qualification
+and all six benchmark samples above retain their exact build/capture scope;
+no new Linux or performance result is claimed for this merge. No additional
+review campaign or running-executable activation. Master promotion uses a normal
+fast-forward after fresh status/ancestry checks, preserving operator artwork.

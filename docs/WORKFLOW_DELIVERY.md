@@ -6,8 +6,8 @@ Implementation sequence approved by the operator on2026-10-15. Read the
 W2–W6 families into coherent ownership units. Implementation proceeds in the
 isolated workflow worktree; library adoption and main integration remain separate.
 
-The first native host/state/executor/join path is implemented and qualified
-(source checkpoint `7b99b6c` on the isolated work branch); its
+The first native host/state/executor/join path is implemented, qualified and
+integrated on master (initial source `7b99b6c`, combined-source merge `fe3b457`); its
 [usage and actual scope](NATIVE_WORKFLOW_HOST.md) distinguish the delivered
 substrate from the remaining F1–F12 capabilities. See the
 [implementation plans and code reviews](../papers/workflows-implementation-2026-10-15/PLAN.md).

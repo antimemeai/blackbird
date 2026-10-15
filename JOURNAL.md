@@ -9260,3 +9260,13 @@ boundary. The integrated source receives the required full debug/source hook;
 no new review campaign, provider/account calls or running executable activation.
 After qualification, publish the work branch, then fast-forward clean master
 under a fresh HEAD/status check and push normally. Never force a checked-out ref.
+
+Combined-source merge fe3b457 passes the full installed gate: 143/143 debug
+cases (248.34s), all owned formatting/diagnostics and Lua checks. No hook override,
+new suppression or extra review. Keep the capture in merge-source-gate.log;
+component Linux captures and six baseline samples retain their original scope.
+Update current stock, guide/delivery and qualification records; append the actual
+integration result to the closed native-slice issue and export supported backup
+into this worktree. Check the text-only diff/links, publish the integration branch,
+then fast-forward/push clean master after fresh ancestry/status checks. Preserve
+untracked artwork and all worktrees; do not activate running executables.

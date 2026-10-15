@@ -29,15 +29,17 @@ Live continuation/cache behavior remains arconaut-438. The operation-capture
 repair is recorded above; arconaut-7qn is closed for the concrete race and test
 flaw. Running-process activation is separate from source integration.
 
-New design wave,2026-10-14: concurrent and durable workflows. The
-[proposed design](CONCURRENT_DURABLE_WORKFLOWS.md),
-[delivery sequence](WORKFLOW_DELIVERY.md) and
-[fresh research/review synthesis](../papers/workflows-2026-10-14/SYNTHESIS.md)
-are complete for discussion on work/workflow-design-2026-10-14, descended from
-the qualification/report branch. No workflow scheduler implementation, library
-adoption, main integration or running-executable activation is implied. Existing
-bugs and required tuning join the next implementation closeout; the source and
-performance stock below remains the prior watch's actual state.
+Native concurrent workflow execution is integrated on **master**, 2026-10-15.
+The independent host owns bounded native workers, atomic task/result cells and
+retained joins; clients can detach and reconnect. Clean reopen preserves exact
+results/choices; crash-released effects remain unresolved, with no replay and
+read-only admission fencing. See the [native guide](NATIVE_WORKFLOW_HOST.md),
+[qualification and every baseline sample](../papers/workflows-implementation-2026-10-15/QUALIFICATION.md)
+and [remaining delivery sequence](WORKFLOW_DELIVERY.md). Merge source `fe3b457`
+passes all 143 debug tests and owned diagnostics/Lua checks. Task-local model
+scopes, durable decisions/reconciliation, recorded Lua, later workflow families
+and required integrated tuning remain delivery work; the flagship repair campaign
+is not complete. Running-executable activation remains separate.
 
 Latest watch: **2026-10-14**. Read [the handoff](HANDOFF.md) for exact source/
 branch state, qualification results, open defects and next discussion. The
@@ -140,7 +142,8 @@ further trajectory views remain separate.
 | Integrations/HUD | Opt-in trusted Lua packages; public GitHub releases and thematic text feed used in real work. | Feed display/context/action are separate; no broad integration catalog or graphical HUD. |
 | Multiplexing | Supported external phux launcher, actual TUI turn, detach/reattach and RRC checked. | Shell run probe timed out; native lifecycle projection is backlog. Relay TLS does not establish application E2EE. |
 | Decision models | Native Jev model tool, Lua `blackbird.decide`, `/decision JSON`; batched Choice/Score/Noul, lazy credentials, audited requests/results. | Jev only; workflows compose judgments and explicit retries. |
-| Callable workflows | Retained Lua definitions, configurable slash prefix/aliases and bare invocation, operator POWERWORDS and terminal colors; model/Lua discovery/invocation. | Sequential same-turn execution; no parallel or durable scheduler. |
+| Native workflow host | Independent session owner, bounded concurrent native tasks, atomic retained results, structured joins, explicit cancellation/drain and attachable local clients. | Conservative crash inspection without replay; model/scopes, durable continuations and frontier-scaled restore remain open. See [native usage](NATIVE_WORKFLOW_HOST.md). |
+| Callable workflows | Retained Lua definitions, configurable slash prefix/aliases and bare invocation, operator POWERWORDS and terminal colors; model/Lua discovery/invocation. | Sequential same-turn registry; recorded Lua continuations remain open. The separate native execution host is described above. |
 | Local efficiency | Saved current-state and suffix recovery for settled single-segment sessions; paged checked archive queries and original repair; checkpoint renewal prunes resident history. Earlier wrap-up heavy TUI first-frame p90 93.355ms in100runs; not a new task-pane-generation measurement. | Unresolved/station/pending-restart/multisegment states fall back to full recovery; catalog disk renewal still follows total key count. See [delivery](../papers/2026-10-08-saved-state-delivery.md) and [measurements](../papers/2026-10-08-startup-300-wrapup.md). |
 | Colleagues | `blackbird-colleague` CLI/library, selected-context OpenAI/Claude requests, explicit captures/results and fake-transport tests. `arco-colleague` remains compatible. Common model tool, Lua and operator calls plus native concurrent workers. | Main coding loop remains OpenAI; workers are context-only. OpenAI live review/edit demonstration worked; Claude source review completed on the authorized360-second attempt. |
 | Tasks | Durable session tasks/subtasks, typed model/Lua read/edit, below-sprite right pane, blockers/counts/version guards and explicit runtime bindings. | One owner/session; no cross-session synchronization, dependency scheduler or subsubtasks. See [tasks](TASKS.md). |
