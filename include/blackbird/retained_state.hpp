@@ -80,6 +80,7 @@ public:
   bool used_scan_checkpoint() const noexcept {
     return journal_->used_scan_checkpoint();
   }
+  EnvironmentId environment() const noexcept { return journal_->header().environment; }
   ~RetainedState();
   // Current projection only. Full ledger replay remains the safe fallback until
   // archive-locator migration covers all semantic predicates.
@@ -146,6 +147,11 @@ public:
                                std::span<const RetainedEvent> events,
                                std::span<PhysicalJournalRecord> acknowledged = {},
                                bool *proposed_batch_acknowledged = nullptr);
+  // Atomic application result plus terminal observations. No effect release.
+  Result<JournalCursor>
+  append_settlement(JournalCursor expected, std::span<const RetainedEvent> events,
+                    std::span<PhysicalJournalRecord> acknowledged = {},
+                    bool *proposed_batch_acknowledged = nullptr);
   Result<DispatchReport> dispatch(OperationAttemptId attempt, EffectBoundary &boundary);
   Result<DispatchReport> dispatch(OperationAttemptId attempt, EffectBoundary &boundary,
                                   RawRetainedExec *raw_exec);

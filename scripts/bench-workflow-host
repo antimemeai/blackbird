@@ -1,0 +1,484 @@
+#!/usr/bin/env python3
+"""Finite external-CLI native-host benchmark; development helper, no providers."""
+
+import argparse
+import concurrent.futures
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import stat
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import uuid
+
+
+class BenchmarkFailure(RuntimeError):
+    pass
+
+
+def require(condition, message):
+    if not condition:
+        raise BenchmarkFailure(message)
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while True:
+            block = stream.read(1024 * 1024)
+            if not block:
+                return digest.hexdigest()
+            digest.update(block)
+
+
+def write_json(path, value):
+    temporary = path.with_name(path.name + ".pending")
+    with temporary.open("w", encoding="utf-8") as stream:
+        json.dump(value, stream, indent=2, ensure_ascii=True)
+        stream.write("\n")
+    temporary.replace(path)
+
+
+class Calls:
+    def __init__(self, executable, session, sample_output, timeout):
+        self.executable = executable
+        self.session = session
+        self.timeout = timeout
+        self.lock = threading.Lock()
+        self.next_id = 1
+        self.events = []
+        self.stream = (sample_output / "calls.jsonl").open("x", encoding="utf-8")
+
+    def request(self, request, phase, timeout=None, tolerate=False):
+        with self.lock:
+            identity = self.next_id
+            self.next_id += 1
+        encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=True)
+        command = [str(self.executable), "--session", str(self.session),
+                   "--request", encoded]
+        started_wall = time.time_ns()
+        started = time.perf_counter_ns()
+        event = {"id": identity, "phase": phase, "request": request,
+                 "started_wall_ns": started_wall, "started_monotonic_ns": started,
+                 "response_received": False, "timed_out": False}
+        try:
+            process = subprocess.run(
+                command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, timeout=timeout or self.timeout,
+                start_new_session=True, check=False)
+            event.update(returncode=process.returncode,
+                         stdout=process.stdout.decode("utf-8", errors="replace"),
+                         stderr=process.stderr.decode("utf-8", errors="replace"),
+                         stdout_hex=process.stdout.hex(), stderr_hex=process.stderr.hex())
+        except subprocess.TimeoutExpired as error:
+            stdout = error.stdout or b""
+            stderr = error.stderr or b""
+            event.update(returncode=None, timed_out=True, error="CLI timeout",
+                         stdout=stdout.decode("utf-8", errors="replace"),
+                         stderr=stderr.decode("utf-8", errors="replace"),
+                         stdout_hex=stdout.hex(), stderr_hex=stderr.hex())
+        except BaseException as error:
+            event.update(returncode=None, error=repr(error))
+            raise
+        finally:
+            event["duration_ns"] = time.perf_counter_ns() - started
+            event["ended_monotonic_ns"] = started + event["duration_ns"]
+            if event.get("returncode") == 0:
+                try:
+                    response = json.loads(event["stdout"])
+                    event["response_received"] = True
+                except (ValueError, KeyError) as error:
+                    event["error"] = "invalid explicit JSON response: " + str(error)
+            with self.lock:
+                self.events.append(event)
+                self.stream.write(json.dumps(event, ensure_ascii=True) + "\n")
+                self.stream.flush()
+        if event["response_received"]:
+            return response
+        if tolerate:
+            return None
+        raise BenchmarkFailure(
+            "CLI call %d (%s/%s) failed: %s" %
+            (identity, phase, request.get("op"), event.get("error", event.get("stderr"))))
+
+    def counts(self):
+        with self.lock:
+            events = list(self.events)
+        phases = {}
+        for event in events:
+            row = phases.setdefault(event["phase"], {"requests": 0, "responses": 0,
+                                                     "timeouts": 0})
+            row["requests"] += 1
+            row["responses"] += int(event["response_received"])
+            row["timeouts"] += int(event["timed_out"])
+        return {"requests": len(events),
+                "responses": sum(int(event["response_received"]) for event in events),
+                "by_phase": phases}
+
+    def close(self):
+        self.stream.close()
+
+
+class Host:
+    def __init__(self, calls, output, arguments):
+        self.calls = calls
+        self.output = output
+        self.arguments = arguments
+        self.process = None
+        self.logs = []
+        self.launches = []
+
+    def launch(self, label):
+        require(self.process is None, "previous benchmark host still owned")
+        stdout = (self.output / (label + ".stdout")).open("xb")
+        self.logs = [stdout]
+        stderr = (self.output / (label + ".stderr")).open("xb")
+        self.logs.append(stderr)
+        started = time.perf_counter_ns()
+        self.process = subprocess.Popen(
+            [str(self.calls.executable), "--session", str(self.calls.session), "--serve"],
+            stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, start_new_session=True)
+        launch = {"label": label, "pid": self.process.pid,
+                  "started_monotonic_ns": started}
+        self.launches.append(launch)
+        deadline = time.monotonic() + self.arguments.ready_timeout
+        while time.monotonic() < deadline:
+            require(self.process.poll() is None,
+                    "host exited during %s readiness; inspect %s.stderr" % (label, label))
+            remaining = deadline - time.monotonic()
+            status = self.calls.request(
+                {"op": "status"}, label + "_readiness",
+                timeout=min(self.arguments.request_timeout, max(remaining, 0.001)),
+                tolerate=True)
+            if status is not None:
+                require(isinstance(status, dict) and not status.get("stopped", True),
+                        "host status did not establish readiness")
+                require(not status.get("admission_closed", True),
+                        "host ready transport has closed task admission")
+                require(not status.get("recovery_required", True),
+                        "host requires unresolved recovery")
+                launch["ready_ns"] = time.perf_counter_ns() - started
+                launch["ready_status"] = status
+                return status
+            time.sleep(min(0.05, max(deadline - time.monotonic(), 0)))
+        raise BenchmarkFailure(label + " readiness timeout")
+
+    def stop(self, label):
+        started = time.perf_counter_ns()
+        response = self.calls.request({"op": "shutdown"}, label + "_shutdown")
+        require(response == {"stopped": True}, "shutdown response changed")
+        try:
+            result = self.process.wait(timeout=self.arguments.exit_timeout)
+        except subprocess.TimeoutExpired as error:
+            raise BenchmarkFailure(label + " host exit timeout") from error
+        self.launches[-1]["returncode"] = result
+        self.launches[-1]["graceful_shutdown_ns"] = time.perf_counter_ns() - started
+        self._closed()
+        require(result == 0, label + " host returned failure")
+
+    def _closed(self):
+        self.process = None
+        for stream in self.logs:
+            stream.close()
+        self.logs = []
+
+    def cleanup(self):
+        if self.process is not None:
+            process = self.process
+            if process.poll() is None:
+                try:
+                    process.terminate()
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=self.arguments.exit_timeout)
+                except subprocess.TimeoutExpired:
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        process.wait(timeout=self.arguments.exit_timeout)
+                    except subprocess.TimeoutExpired as error:
+                        raise BenchmarkFailure(
+                            "could not join owned host PID %d after kill" % process.pid) from error
+            else:
+                process.wait()
+            self.launches[-1]["cleanup_returncode"] = process.returncode
+            self.launches[-1]["cleanup_required"] = True
+        self._closed()
+
+
+def parallel_map(clients, action, values):
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=clients)
+    futures = []
+    try:
+        futures = [pool.submit(action, value) for value in values]
+        return [future.result() for future in futures]
+    finally:
+        for future in futures:
+            future.cancel()
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
+def wait_task(calls, name, expected, identity, phase, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        row = calls.request({"op": "read", "id": name}, phase)
+        if row.get("outcome") != "pending":
+            require(row.get("outcome") == "success", name + " did not succeed")
+            require(row.get("result", {}).get("value") == expected,
+                    name + " exact echo result changed")
+            require(row.get("invocation") == identity["invocation"] and
+                    row.get("attempt") == identity["attempt"] and
+                    row.get("result_record") == identity["result_record"],
+                    name + " retained identity changed")
+            return row
+        time.sleep(0.01)
+    raise BenchmarkFailure(name + " result timeout")
+
+
+def wait_join(calls, name, members, results, phase, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        row = calls.request({"op": "join-read", "id": name}, phase)
+        if row.get("selected"):
+            selected = row["state"]["selection"]
+            require(selected["reason"] == 0, "all join did not satisfy")
+            observations = selected["observations"]
+            require([entry["member"] for entry in observations] == members,
+                    "all join changed ordered membership")
+            refs = []
+            for entry, result in zip(observations, results):
+                require(entry["outcome"] == 0 and entry["final"],
+                        "join selected a non-success/nonfinal task result")
+                require(entry["revision"] == result["revision"] and
+                        entry["result"]["revision"] == result["revision"],
+                        "join selected a different task result revision")
+                refs.append(entry["result"]["cell"])
+            require(len(set(refs)) == len(members) and
+                    all(isinstance(ref, str) and len(ref) == 32 for ref in refs),
+                    "join result cell identities are not distinct")
+            return row
+        time.sleep(0.01)
+    raise BenchmarkFailure(name + " selection timeout")
+
+
+def inventory(session):
+    """Never read named SHM or copy sparse extents; hash actual retained streams."""
+    files = []
+    totals = {"regular_logical_bytes": 0, "regular_allocated_bytes": 0,
+              "audit_logical_bytes": 0, "audit_allocated_bytes": 0,
+              "raw_logical_bytes": 0, "raw_allocated_bytes": 0,
+              "raw_event_logical_bytes": 0, "raw_event_allocated_bytes": 0}
+    for directory, subdirectories, names in os.walk(session, followlinks=False):
+        subdirectories[:] = [name for name in subdirectories
+                             if not (Path(directory) / name).is_symlink()]
+        for name in sorted(names):
+            path = Path(directory) / name
+            status = path.lstat()
+            if not stat.S_ISREG(status.st_mode):
+                continue
+            relative = path.relative_to(session).as_posix()
+            logical = status.st_size
+            allocated = status.st_blocks * 512
+            entry = {"path": relative, "logical_bytes": logical,
+                     "allocated_bytes": allocated}
+            groups = ["regular"]
+            if relative.startswith("audit"):
+                groups.append("audit")
+            if relative.startswith("raw/"):
+                groups.append("raw")
+                if name.startswith("events."):
+                    groups.append("raw_event")
+            if "audit" in groups or "raw_event" in groups:
+                entry["sha256"] = sha256(path)
+            for group in groups:
+                totals[group + "_logical_bytes"] += logical
+                totals[group + "_allocated_bytes"] += allocated
+            files.append(entry)
+    return {"session": str(session), "files": files, "totals": totals,
+            "named_shared_memory": "not traversed, copied, hashed or counted"}
+
+
+def sample(index, executable, output, arguments, run_id):
+    sample_output = output / ("sample-%03d" % index)
+    sample_output.mkdir(mode=0o700)
+    session = Path(tempfile.mkdtemp(prefix="bbwh-", dir="/tmp"))
+    calls = Calls(executable, session, sample_output, arguments.request_timeout)
+    host = Host(calls, sample_output, arguments)
+    record = {"sample": index, "status": "running", "session": str(session),
+              "output": str(sample_output), "started_wall_ns": time.time_ns(),
+              "tasks": arguments.tasks, "client_workers": arguments.clients,
+              "task_results": [], "host_launches": host.launches}
+    started = time.perf_counter_ns()
+    try:
+        host.launch("initial")
+        members = ["bench-%s-%03d-%06d" % (run_id, index, task)
+                   for task in range(arguments.tasks)]
+        inputs = [{"benchmark": run_id, "sample": index, "task": task,
+                   "text": "x" * arguments.payload_bytes}
+                  for task in range(arguments.tasks)]
+        task_phase = time.perf_counter_ns()
+
+        def submit(pair):
+            name, value = pair
+            return calls.request({"op": "start", "id": name, "tool": "echo",
+                                  "arguments": value}, "submit")
+
+        identities = parallel_map(arguments.clients, submit, zip(members, inputs))
+        record["submission_phase_ns"] = time.perf_counter_ns() - task_phase
+        join_id = "all-" + run_id + "-%03d" % index
+        calls.request({"op": "join", "id": join_id, "mode": "all",
+                       "members": members}, "join_create")
+
+        def settle(item):
+            name, value, identity = item
+            return wait_task(calls, name, value, identity, "settle",
+                             arguments.settle_timeout)
+
+        results = parallel_map(arguments.clients, settle,
+                               zip(members, inputs, identities))
+        selected = wait_join(calls, join_id, members, results, "join_settle",
+                             arguments.settle_timeout)
+        record["submit_to_verified_join_ns"] = time.perf_counter_ns() - task_phase
+        record["task_results"] = results
+        record["selected_join"] = selected
+        host.stop("initial")
+        snapshot_start = time.perf_counter_ns()
+        record["retained_before_reopen"] = inventory(session)
+        record["inventory_before_reopen_ns"] = time.perf_counter_ns() - snapshot_start
+        reopen = time.perf_counter_ns()
+        status = host.launch("reopen")
+        require(status["tasks"] == arguments.tasks and status["joins"] == 1,
+                "reopen changed task/join counts")
+        reopened = calls.request({"op": "join-read", "id": join_id}, "reopen_join")
+        require(reopened == selected, "reopen changed exact selected join snapshot")
+
+        def verify(item):
+            name, value, identity = item
+            return wait_task(calls, name, value, identity, "reopen_results",
+                             arguments.settle_timeout)
+
+        restored = parallel_map(arguments.clients, verify,
+                                zip(members, inputs, identities))
+        require(restored == results, "reopen changed exact task results")
+        record["reopen_to_verified_results_ns"] = time.perf_counter_ns() - reopen
+        host.stop("reopen")
+        record["status"] = "ok"
+    except BaseException as error:
+        record["status"] = "failed"
+        record["error"] = repr(error)
+        if isinstance(error, (KeyboardInterrupt, SystemExit)):
+            record["interrupted"] = True
+    finally:
+        try:
+            host.cleanup()
+        except BaseException as error:
+            record["status"] = "failed"
+            record["cleanup_error"] = repr(error)
+        record["total_wall_ns"] = time.perf_counter_ns() - started
+        record["total_wall_scope"] = (
+            "sample entry through host cleanup; includes pre-reopen inventory, "
+            "excludes final inventory")
+        record["counts"] = calls.counts()
+        calls.close()
+        try:
+            snapshot_start = time.perf_counter_ns()
+            record["retained_final"] = inventory(session)
+            record["final_inventory_ns"] = time.perf_counter_ns() - snapshot_start
+        except BaseException as error:
+            record["status"] = "failed"
+            record["inventory_error"] = repr(error)
+        write_json(sample_output / "sample.json", record)
+    return record
+
+
+def positive(value):
+    result = int(value)
+    if result <= 0:
+        raise argparse.ArgumentTypeError("must be positive")
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--executable", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True,
+                        help="new directory for all samples, CLI bytes and report")
+    parser.add_argument("--samples", type=positive, default=3)
+    parser.add_argument("--tasks", type=positive, default=32)
+    parser.add_argument("--clients", "--workers", dest="clients", type=positive, default=4,
+                        help="concurrent CLI client workers (not native pool size)")
+    parser.add_argument("--payload-bytes", type=positive, default=128)
+    parser.add_argument("--ready-timeout", type=positive, default=60)
+    parser.add_argument("--request-timeout", type=positive, default=30)
+    parser.add_argument("--settle-timeout", type=positive, default=60)
+    parser.add_argument("--exit-timeout", type=positive, default=30)
+    arguments = parser.parse_args()
+    executable = arguments.executable.resolve(strict=True)
+    require(executable.is_file() and os.access(executable, os.X_OK),
+            "--executable is not executable")
+    output = arguments.output.absolute()
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    run_id = uuid.uuid4().hex[:12]
+    report = {"format": "blackbird.workflow-host-benchmark.v1", "run": run_id,
+              "executable": str(executable), "executable_sha256": sha256(executable),
+              "configuration": vars(arguments).copy(), "samples": [],
+              "measurement": "External wall time includes CLI spawn, explicit JSON "
+              "interchange, BBM framing, owner/journal/executor/raw capture, and "
+              "phase Python orchestration/polling; not native hot-loop performance.",
+              "host_configuration": "Native executable owns its worker/capacity policy; "
+              "client --workers does not configure it.",
+              "retention": "Private /tmp sessions remain in place. Output keeps paths, "
+              "logical/allocated byte inventories and audit/raw-event hashes; no SHM "
+              "or sparse buffers copied. OS/operator /tmp cleanup can remove them.",
+              "count_semantics": "Requests count external CLI invocation attempts, "
+              "including readiness/connect failures; responses count zero-exit valid "
+              "JSON replies including service refusals. Host acceptance is not inferred.",
+              "provider_calls": 0, "samples_or_outliers_removed": 0}
+    report["configuration"]["executable"] = str(executable)
+    report["configuration"]["output"] = str(output)
+    original_stat = executable.stat()
+    fingerprint = (original_stat.st_dev, original_stat.st_ino,
+                   original_stat.st_size, original_stat.st_mtime_ns)
+
+    def interrupt(_signal, _frame):
+        raise KeyboardInterrupt("benchmark interrupted")
+
+    signal.signal(signal.SIGTERM, interrupt)
+    try:
+        for index in range(1, arguments.samples + 1):
+            record = sample(index, executable, output, arguments, run_id)
+            report["samples"].append(record)
+            if record.get("interrupted"):
+                raise KeyboardInterrupt("benchmark interrupted; failed sample retained")
+            current = executable.stat()
+            require((current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns)
+                    == fingerprint, "executable changed during benchmark")
+            write_json(output / "report.json", report)
+            print(json.dumps({"sample": index, "status": record["status"],
+                              "submit_to_verified_join_ns":
+                              record.get("submit_to_verified_join_ns"),
+                              "output": str(output)}), flush=True)
+    except BaseException as error:
+        report["error"] = repr(error)
+    finally:
+        report["successful_samples"] = sum(row["status"] == "ok" for row in report["samples"])
+        report["failed_samples"] = sum(row["status"] != "ok" for row in report["samples"])
+        report["attempted_samples"] = len(report["samples"])
+        write_json(output / "report.json", report)
+    return 0 if (not report.get("error") and report["successful_samples"] == arguments.samples) else 1
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, BenchmarkFailure) as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1) from error

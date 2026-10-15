@@ -1,6 +1,7 @@
 #include "blackbird/foundation.hpp"
 #include "blackbird/trace_archive.hpp"
 #include <cerrno>
+#include <csignal>
 #include <fcntl.h>
 #include <spawn.h>
 #include <sys/wait.h>
@@ -34,7 +35,12 @@ TraceArchiveWorker::start(const std::filesystem::path &session) {
     code = ::posix_spawnattr_init(&attributes);
     const bool attributes_ready = code == 0;
     if (code == 0)
-      code = ::posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
+      code = ::posix_spawnattr_setflags(&attributes,
+                                        POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK);
+    sigset_t mask;
+    sigemptyset(&mask);
+    if (code == 0)
+      code = ::posix_spawnattr_setsigmask(&attributes, &mask);
     if (code == 0)
       code = ::posix_spawnattr_setpgroup(&attributes, 0);
     if (code == 0)

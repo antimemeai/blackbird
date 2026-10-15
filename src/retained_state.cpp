@@ -1558,6 +1558,24 @@ RetainedState::append(JournalCursor expected, std::span<const ByteView> sources,
   return append_impl(expected, sources, events, false, false, acknowledged,
                      proposed_batch_acknowledged);
 }
+Result<JournalCursor> RetainedState::append_settlement(
+    JournalCursor expected, std::span<const RetainedEvent> events,
+    std::span<PhysicalJournalRecord> acknowledged, bool *proposed_batch_acknowledged) {
+  if (proposed_batch_acknowledged)
+    *proposed_batch_acknowledged = false;
+  if (events.size() < 2)
+    return Result<JournalCursor>::failure({ErrorCode::invalid_range});
+  const auto *record = std::get_if<ApplicationRecordEvent>(&events.front().body);
+  if (!record || record->channel != ApplicationChannel::program)
+    return Result<JournalCursor>::failure({ErrorCode::invalid_range});
+  for (std::size_t index = 1; index < events.size(); ++index) {
+    const auto *observation = std::get_if<AttemptObservationEvent>(&events[index].body);
+    if (!observation || observation->phase != AttemptPhase::terminal)
+      return Result<JournalCursor>::failure({ErrorCode::invalid_range});
+  }
+  return append_impl(expected, {}, events, false, true, acknowledged,
+                     proposed_batch_acknowledged);
+}
 Result<JournalCursor> RetainedState::append_exec(JournalCursor expected,
                                                  std::span<const RetainedEvent> events,
                                                  RawRetainedExec &raw_exec) {

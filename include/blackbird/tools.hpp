@@ -13,7 +13,9 @@ struct CapturedOutput {
 class LocalTools {
 public:
   using Observer = std::function<void(std::string_view, std::string_view)>;
-  explicit LocalTools(Observer observer = {}) : observer_(std::move(observer)) {}
+  explicit LocalTools(Observer observer = {},
+                      std::size_t original_limit = 16 * 1024 * 1024)
+      : observer_(std::move(observer)), original_limit_(original_limit) {}
   std::function<bool()> cancelled;
   Value run(std::string_view name, const Value &arguments,
             const RawAdapterContext *raw_context = nullptr,
@@ -23,6 +25,7 @@ public:
 private:
   std::vector<CapturedOutput> captured_;
   Observer observer_;
+  std::size_t original_limit_;
   void capture(std::string label, std::string raw, RawFileToolTrace * = nullptr);
 };
 std::string read_file_prefix(const std::filesystem::path &, std::size_t,

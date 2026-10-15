@@ -220,7 +220,7 @@ Value LocalTools::run(std::string_view name, const Value &args,
         const auto &path = string_field(args, "path");
         trace.argument(0, path);
         RawEventRef read_owner{};
-        auto raw = read_file(path, 16 * 1024 * 1024, trace.context(), &read_owner);
+        auto raw = read_file(path, original_limit_, trace.context(), &read_owner);
         trace.selection(1, read_owner, raw.size());
         capture("file.read", raw, &trace);
         const auto presented = file_presentation(raw, range, &trace);
@@ -241,7 +241,7 @@ Value LocalTools::run(std::string_view name, const Value &args,
         trace.argument(2, replacement);
         if (old.empty())
           throw Error{ErrorCode::invalid_range};
-        next = read_file(path, 16 * 1024 * 1024, trace.context(), &read_owner);
+        next = read_file(path, original_limit_, trace.context(), &read_owner);
         trace.selection(2, read_owner, next.size());
         capture("file.before", next, &trace);
         const auto pos = next.find(old);
@@ -256,12 +256,16 @@ Value LocalTools::run(std::string_view name, const Value &args,
         const auto base = next.size() - old.size();
         if (replacement.size() > SIZE_MAX - base)
           throw Error{ErrorCode::overflow};
+        if (base + replacement.size() > original_limit_)
+          throw Error{ErrorCode::capacity};
         auto proposal = trace.prepare_proposal(base + replacement.size());
         next.replace(pos, old.size(), replacement);
         input = trace.proposed(next, proposal);
         trace.selection(5, input.body, input.length);
       } else {
         const auto &content = string_field(args, "content");
+        if (content.size() > original_limit_)
+          throw Error{ErrorCode::capacity};
         trace.argument(3, content);
         auto proposal = trace.prepare_proposal(content.size());
         next = content;
@@ -269,7 +273,7 @@ Value LocalTools::run(std::string_view name, const Value &args,
         trace.selection(5, input.body, input.length);
         std::error_code error;
         if (raw_file_exists(path, error, trace.context())) {
-          auto before = read_file(path, 16 * 1024 * 1024, trace.context(), &read_owner);
+          auto before = read_file(path, original_limit_, trace.context(), &read_owner);
           trace.selection(2, read_owner, before.size());
           capture("file.before", before, &trace);
         }
@@ -331,7 +335,7 @@ Value LocalTools::run(std::string_view name, const Value &args,
     int status = 0;
     try {
       output = child.collect(detail::Clock::now() + std::chrono::seconds{seconds},
-                             16 * 1024 * 1024, &status);
+                             original_limit_, &status);
     } catch (...) {
       captured_.push_back({"process.partial", child.take_partial()});
       throw;

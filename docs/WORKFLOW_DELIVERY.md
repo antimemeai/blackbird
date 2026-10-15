@@ -1,10 +1,15 @@
 # Concurrent and durable workflow delivery sequence
 
-Proposed implementation sequence for operator discussion, 2026-10-14. Read the
+Implementation sequence approved by the operator on2026-10-15. Read the
 [design](CONCURRENT_DURABLE_WORKFLOWS.md) and
 [research campaign](../papers/workflows-2026-10-14/CAMPAIGN.md). This refines the
-W2–W6 families into coherent ownership units. It does not begin implementation,
-adopt a library or merge the inherited qualification branch into master.
+W2–W6 families into coherent ownership units. Implementation proceeds in the
+isolated workflow worktree; library adoption and main integration remain separate.
+
+The first native host/state/executor/join path is under qualification; its
+[usage and actual scope](NATIVE_WORKFLOW_HOST.md) distinguish the delivered
+substrate from the remaining F1–F12 capabilities. See the
+[implementation plans and code reviews](../papers/workflows-implementation-2026-10-15/PLAN.md).
 
 ## Destination and first actual use
 
@@ -62,8 +67,9 @@ dependencies, link this design/sequence and record the affected source boundarie
 Do not reopen closed W1 or bootstrap units just because an old queue says queued.
 Research task arconaut-30y closes when the requested design package is delivered;
 it is not the implementation epic. Destination epic arconaut-45a records F1–F12
-and the flagship acceptance; it remains open and unstarted pending operator
-discussion. Subsequent owning tasks/dependencies are created when selected.
+and the flagship acceptance; it is now in progress. Child arconaut-45a.1 owns the
+first integrated native execution path. Subsequent owning tasks/dependencies are
+created when selected.
 
 ## Unit practice and bounded review
 

@@ -217,12 +217,20 @@ public:
           }
           if (rc == 0) {
             native_stage = 10;
-            rc = ::posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
+            rc = ::posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP |
+                                                             POSIX_SPAWN_SETSIGMASK);
             spawn_errno = errno;
           }
           if (rc == 0) {
             native_stage = 11;
             rc = ::posix_spawnattr_setpgroup(&attributes, 0);
+            spawn_errno = errno;
+          }
+          if (rc == 0) {
+            native_stage = 13;
+            sigset_t mask;
+            sigemptyset(&mask);
+            rc = ::posix_spawnattr_setsigmask(&attributes, &mask);
             spawn_errno = errno;
           }
           if (rc == 0) {

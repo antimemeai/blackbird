@@ -1,0 +1,13 @@
+# F3 joins: single focused recheck
+
+2026-10-15. Layer two, limited to J1–J4 from [join-code-review.md](join-code-review.md), the owner's explicit finality repair and the agreed untimed acceptance contract. Read-only source/test review; root owns builds. No renewed broad attack or third layer.
+
+| Finding | Remedy checked | Disposition |
+| --- | --- | --- |
+| J1 finite closed quorum | `propose()` subtracts final nonqualifying members from finite membership and emits impossible when remaining potential is below k, without waiting for unknown/unseen members. Open membership still cannot invent a finite bound. Tests cover failed members plus unknown, k above cardinality, open pending and restored selection. | Resolved. |
+| J2 typed success | Success modes require typed success and then the pinned predicate. `select` independently permits a failure-matching predicate. Tests use always-true predicates against failures in all_success/first_success/quorum. | Resolved. |
+| J3 clock epochs | Measured observations must match the first observation/cutoff epoch, with equal-sequence timestamp consistency; mixed histories reject on restore. The explicit no-cutoff untimed contract requires positive retained sequence and epoch/ns both zero, never mixes with measured input, and cannot satisfy a measured cutoff. Tests cover these boundaries and BBM reopen. | Resolved under that explicit profile. Untimed order depends on the owner's durable global acceptance sequence, not process-local counter resets. |
+| J4 postcommit allocation | `prepare_acceptance()` builds the complete unpublished accepted reducer before persistence. The owner can commit its snapshot then adopt by declared noexcept move. Existing `accept_committed()` explicitly documents its allocation/predicate hazard. Tests prove preparation leaves live selection absent and adoption does not invoke the predicate after the commit marker. | Resolved at component API level; root must use preparation before commit, as the current integrated join path does. |
+| Terminal versus unresolved unknown | Observation `final` separates terminal logical unknown from pending unresolved unknown. First/all/collect can return final unknown; unresolved unknown remains pending. Success quorum never qualifies unknown, and final unknown reduces that selection's finite potential. Non-unknown observations cannot claim nonfinal state. | Resolved; finality remains distinct from physical settlement. |
+
+No remaining relevant defect was found in this focused scope. These dispositions establish reviewed source contracts; root's direct build/tests remain the execution evidence.

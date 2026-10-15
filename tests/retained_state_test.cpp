@@ -1417,6 +1417,48 @@ std::uint64_t transaction_cost(const RetainedEvent &event) {
   return 56 + journal_frame_header_size +
          require(encode_retained_event(event, header().limits.max_payload)).size();
 }
+void atomic_program_settlement() {
+  auto storage = std::make_shared<StorageState>();
+  auto state = require(RetainedState::create(std::make_unique<MemoryDirectory>(storage),
+                                             "journal", header(), {8192, 128}));
+  prepare(*state);
+  Counter counter;
+  require(require(state->dispatch(id<OperationAttemptId>(11), counter)).recording);
+  const RetainedEvent program{{},
+                              ApplicationRecordEvent{id<ApplicationRecordId>(70),
+                                                     ApplicationChannel::program,
+                                                     original}};
+  const RetainedEvent terminal{
+      {},
+      AttemptObservationEvent{id<OperationAttemptId>(11), AttemptPhase::terminal,
+                              AttemptDisposition::success, original}};
+  const std::array batch{program, terminal};
+  const auto bytes = transaction_cost(program) + transaction_cost(terminal) - 56;
+  auto scope = require(state->protect_settlement({bytes, 2}));
+  const auto before_invalid = state->cursor();
+  const std::array invalid{program, RetainedEvent{{}, admission(12)}};
+  error_is(state->append_settlement(before_invalid, invalid), ErrorCode::invalid_range);
+  CHECK(state->cursor().end_offset == before_invalid.end_offset);
+  const std::vector<std::byte> filler(128, std::byte{0x5a});
+  const std::array<ByteView, 1> sources{filler};
+  for (;;) {
+    const auto added = state->append(state->cursor(), sources, {});
+    if (!added.has_value()) {
+      error_is(added, ErrorCode::capacity);
+      break;
+    }
+  }
+  const auto before = state->cursor();
+  error_is(state->append(before, {}, batch), ErrorCode::capacity);
+  require(state->append_settlement(before, batch));
+  CHECK(state->cursor().sequence == before.sequence + 3);
+  CHECK(present(state->protected_settlement()).max_records == 0);
+  CHECK(present(state->protected_settlement()).max_file_bytes == 0);
+  const auto attempt = require(state->attempt(id<OperationAttemptId>(11)));
+  CHECK(attempt.observation &&
+        attempt.observation->disposition == AttemptDisposition::success);
+  scope.reset();
+}
 void protected_settlement_faults() {
   const RetainedEvent terminal{
       {},
@@ -1602,6 +1644,7 @@ int main(int argc, char **) {
   indexed_mode = argc > 1;
   try {
     indexed_errors_close_queries();
+    atomic_program_settlement();
     protected_settlement_faults();
     admission_references();
     duplicates_and_retries();

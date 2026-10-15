@@ -8991,3 +8991,68 @@ All subsequent workflow source edits/builds belong to this checkout. Existing
 untracked art and historical worktrees remain untouched. This setup changes only
 the worktree journal and Git worktree/branch metadata; no native tests or provider
 calls are needed. Check the isolated diff and publish the work branch.
+
+## 2026-10-15 — concurrent workflow native execution wave
+
+Implement the approved design in the isolated workflow checkout only. Reuse the
+three research colleagues as conceptual implementation owners: atomic state,
+bounded executor and joins; root owns composition/shared source/builds. Written
+plans and independent code attacks live under
+papers/workflows-implementation-2026-10-15/. Start arconaut-45a and45a.1.
+
+Native BBM2 application deltas share the existing RetainedState journal. The
+executor reserves result slots before admission and publishes on the sole owner.
+Joins retain selected result references before exposure. A separate local host
+retains execution authority when clients detach; no provider/account requests.
+Two compiler workers, one Ninja writer in this worktree. First direct component
+checks pass for store/executor/join/host; initial runtime fixture fails because it
+created a non-private session directory, which the existing journal correctly
+rejects. Integration qualification and failure cases are still in progress.
+
+The independent attack found aliasable executor input, join selection/finality/
+clock faults, and runtime output/stop/drain gaps. Fix within the declared one
+attack plus one focused recheck. Extend existing terminal credit narrowly for
+atomic program result plus terminal observations; fund result bytes and IDs before
+release. Runtime keeps completed originals alive until the owner commits them,
+retains ordinary stop intent first, and closes admission on retention failure.
+No full model/Lua continuation, station takeover or escaped-child containment is
+claimed by this first native path. Those remain delivery work.
+
+Worktree beads auto-discovery initially started an empty local Dolt directory on
+canonical13308. Stop only that newly owned server; ignored .beads/redirect now
+points to the canonical main-checkout database. No import/reinit/reset or colleague
+source/index changes. Export backups into this worktree at checkpoint, preserving
+the shared live database and colleague's tracked backup files.
+
+Integrated direct checks now establish real concurrent native children, exact file/
+process originals, queued/running cancellation, healthy destructor drain, atomic
+results under exhausted ordinary journal headroom, and whole-facade writer-failure
+containment. Actual process tests run two gated effects with raw capture, reject
+second ownership, survive client detach, then SIGKILL/reopen without replay.
+Join reopen exposes an ordering mismatch between canonical stored objects and the
+pure parser; repair object comparison with duplicate-key rejection and BBM numeric
+wire normalization. Direct composed and pure regressions pass. No extra review.
+
+The first full debug source gate passes142 tests. Linux debug and release pass9
+changed-path cases; ASAN passes8, exposing missing sized-delete replacements in
+the store's malloc-backed fault fixture. Match sized/unsized delete pairs using
+existing fixture practice; no sanitizer flags/suppressions. Mandatory lint exposes
+swappable intrusive-list head/tail references; replace them with one Queue value.
+Source grounding also finds native build identity omitted private headers and
+compiler configuration: include those, relative names and CMake content. Recheck
+the actual corrections and complete the mandatory clean source gate before push.
+Keep every baseline sample and raw session; no paid calls or main-tree edits.
+
+Corrected-source checks pass all six workflow debug cases and all ten affected
+clang-tidy units. The second Neuroses capture run-3v1rxc14 passes all nine affected
+cases in debug, release and ASAN, including the repaired allocation fixture.
+That archive predates final const-reference/optional-guard diagnostic cleanup;
+macOS compiles/checks the final source. The full source hook is next.
+
+First complete baseline records three successful 32-task/four-client/all-join and
+reopen samples with every call/output/raw inventory retained under ignored
+context/workflows-implementation-2026-10-15/benchmark-debug. No sample removed.
+Track next units explicitly:45a.2 task-local participants/scopes,45a.3 durable
+segments/recovery/frontier restore,45a.4 recorded Lua (depends on both),45a.5
+required complete-work tuning and45a.6 Linux ASAN symbolizer repair. The epic
+remains in progress; no full continuation/repair-campaign completion claim.
