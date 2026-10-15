@@ -52,6 +52,12 @@ ownership and async publication. Keep the Blackbird domain adapters outside it.
 The existing writer's borrowed packet must gain an explicit containing lifetime;
 retain complete pending suffixes and commit the painter only on complete output.
 
+The next source slice is the [native frame presenter](../papers/tui-next-host-2026-10-15/SOURCE_PLAN.md):
+one containing owner for final output bytes, matching staged grid and completion,
+integrated into the actual terminal loop. Keep input/cancellation service and the
+existing one-frame/coalescing policy. This prepares reusable presentation without
+coupling it to Lua composition or migrating domain views in the same slice.
+
 Separate terminal decoding from native editor/palette behavior while retaining
 present draft/history/paste/editor controls, including literal insertion followed
 by existing deliberate bare/POWERWORD workflow selection on submission. Resolve the known lone/incomplete

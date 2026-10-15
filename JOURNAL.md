@@ -9648,3 +9648,14 @@ Publish only documentation, exact measurements and launch/source identities via
 the explicitly permitted text-only checkpoint. No source-gate bypass, main merge
 or native activation. Return to independent TUI component/view source planning;
 ordinary findings remain queued for collective action.
+
+Following the operator's direction to move on, leave the launched AFL jobs and
+their outputs untouched. Return to Unit1's native host work. A source-grounded
+colleague plan selects one native frame presenter integrated into TerminalUI:
+own the exact emitted bytes (including graphics/tiny-frame paths), matching grid
+and raw handoff through partial writes; publish painter state only on completion.
+Keep the current input/cancel/poll branches and single in-flight frame. Current
+borrowed storage is protected by render gating; no existing use-after-free or
+measured speedup is claimed. Source plan: papers/tui-next-host-2026-10-15/SOURCE_PLAN.md.
+This checkpoint changes documentation only, with relevant diff/link checks; no
+new source gate, runtime activation or queued-defect investigation.
