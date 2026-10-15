@@ -19,10 +19,18 @@ class RawTurnTrace;
 class RawOperationTrace;
 class RawPolicyTrace;
 class CodingProvider {
+  friend class CodingEngine;
+  bool request_group_owned_ = false;
+
 public:
   virtual ~CodingProvider() = default;
   std::function<bool()> cancelled;
   virtual std::string_view provider_identity() const noexcept { return "unavailable"; }
+  // One final-assembly scope owns all transport attempts. Preparation may refuse;
+  // the engine calls noexcept end even when preparation throws.
+  virtual void begin_request_group(const Value &, const RawAdapterContext *) {}
+  virtual void end_request_group() noexcept {}
+  virtual bool supports_prompt_cache_policy() const noexcept { return false; }
   virtual Value respond(const Value &request,
                         const std::function<void(std::string_view)> &capture) = 0;
   virtual Value respond(const Value &request,
@@ -43,6 +51,9 @@ public:
   std::string_view provider_identity() const noexcept override {
     return "openai-codex";
   }
+  void begin_request_group(const Value &, const RawAdapterContext *) override;
+  void end_request_group() noexcept override;
+  bool supports_prompt_cache_policy() const noexcept override;
   Value respond(const Value &, const std::function<void(std::string_view)> &) override;
   Value respond(const Value &, const std::function<void(std::string_view)> &,
                 const RawProviderOwner *) override;
@@ -51,6 +62,8 @@ public:
 
 private:
   OpenAiConfig config_;
+  std::optional<Value> request_binding_;
+  bool responding_ = false;
 };
 enum class RecoveryMode { provider_only, acknowledge_local_unknowns };
 // Explicit local recovery records uncertainty; never redispatches old effects.
@@ -119,6 +132,7 @@ private:
   struct CommandTaskActivity;
   using CommandTaskMap = std::map<std::string, CommandTaskActivity>;
   bool turn_running_ = false, backstop_claimed_ = false;
+  bool request_group_active_ = false;
   RawTurnTrace *turn_trace_ = nullptr;
   RawOperationTrace *operation_trace_ = nullptr;
   std::optional<Error> failed_turn_;

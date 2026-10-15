@@ -28,6 +28,8 @@ struct ProviderAuthConfig {
   std::function<bool()> cancelled;
   ProviderHttp http; // Deterministic transport injection, not a model setting.
   std::function<std::int64_t()> now;
+  bool openrouter_metadata = false;
+  bool openrouter_no_response_cache = false;
 };
 ProviderHttpResponse
 provider_http(const ProviderHttpRequest &request, const ProviderAuthConfig &config = {},

@@ -8690,3 +8690,224 @@ translation make direct-only tuning premature; preserve reported charges apart
 from estimates. Record sources and scope in synthesis. Advice/doc-only, no main
 provider change, account request or implementation issue completion. Relevant
 diff/doc checks, documentation-only checkpoint and work-branch push.
+
+## 2026-10-14 — execute tokenomics/OpenRouter sequence
+
+Operator approves the proposed order and full Blackbird discipline. Create
+work/tokenomics-openrouter-2026-10-14 from pushed ad4a640, install source hook,
+read current instructions/research and write docs/TOKENOMICS_IMPLEMENTATION.md.
+User approval supersedes research-only scope for these implementation units;
+it does not authorize unrelated main merge, service/executable replacement or
+silent billing/model fallback. Activate 1ud/wiq/nan and create OpenRouter2aw.
+Native route owner and tertiary usage owner work as whole independent units;
+provider lane reads exact additional OpenRouter contracts and reviews execution
+plan; root owns main adapter/selection/cache layout and integration. No library,
+SDK or new credential acquisition. Exact external/native originals stay preserved,
+metric transformations remain tertiary and eval selection stays deferred.
+
+Fresh official OpenAI/OpenRouter function-call/Responses sources ground boundary
+types, stateless history, reasoning, errors and trailing routing metadata. Owned
+OpenAI source-derived conversion/HTTP429 defects receive actual old-source direct
+regression cases first. Shared build/debug has one writer; grant native lane its
+direct red/green window before root configures new targets. Existing operator art,
+worktrees/stashes, credentials and other processes remain untouched. Kimi access
+previously returned subscription403; do not invent an independent Kimi review or
+repeat a failed access campaign. Apply bounded independent agent code/oracle
+review and finding-driven recheck, no third assurance layer or arbitrary clock.
+
+Provider execution-plan review identifies required-tool/parameter support and
+independent response-cache opt-out. Adopt require_parameters:true, OR-only typed
+metadata/cache headers and exact terminal/opaque-history cases; no second plan
+review. Actual native launcher fixture against the old executable refuses
+--provider openrouter with invalid_range (context/tokenomics-openrouter-red.log).
+Root layout fixture against unchanged assembly fails exact unchanged-instructions
+oracle at request_cache line46. Usage stub red fails observation count; first
+implemented fixture exposes an incorrect independently declared ABI enum width,
+which the usage owner corrects instead of weakening reader validation. Native
+route owner preserves actual owned-wire and typed429 old-source reds.
+
+Root implements explicit persisted OpenRouter main selection, stateless Responses
+adapter, complete opaque output preservation, strict terminal parsing including
+trailing router metadata/DONE, required tool semantics and response-replay opt-out.
+No OpenRouter environment key is configured; no live account request has occurred.
+Cache assembly retains a typed local policy/boundary, consumed only after tool
+value encoding at the external boundary so native result JSON is never formatted
+inside context assembly. stable_prefix adds the reusable content boundary while
+keeping implicit caching; disabled chooses explicit-only without markers. Actual
+task/budget state becomes an ephemeral trailing developer item, with explicit
+local suppression and pre-state budget units. Direct green/review/profile results
+remain pending; no implementation/savings qualification inferred from code edits.
+
+Native direct route run passes openai_auth/provider_auth/provider_auth_raw/
+provider_exchange_raw; coding then exposes stale retained codec validators
+excluding provider_auth/provider_rate_limit. Independent new-code rejection bytes
+fail against the old library; extend all six enum bounds and check unknown255
+still refuses. Coding fixture correction gives new successful scenarios distinct
+call IDs in their shared retained history. Finding-driven coding/retained_events
+pass2/2 (14.55s); raw-active owned cases cover retry, switch/replacement, refresh
+and refresh429. Root's one independent route source/oracle review records no
+additional substantive finding; no live account or whole-audit claim.
+
+The single OpenRouter/cache code review finds four actual defects: native arrays
+mistaken for external content, marker checks inside arbitrary native data,
+contradictory completed envelopes/incomplete tool items accepted, and invented
+canonical auth names. Fix all four: ordinary values always encode at the boundary,
+deliberate protocol arrays use removed item-level blackbird_output_parts opt-in,
+marker checks inspect only protocol positions, terminal/item contradictions refuse
+before effects, and real authentication/permission_denied values map deliberately.
+Add exact native-data and real fake-curl zero-effect constructions. The default
+Lua workflow also explicitly refuses unsupported namespace/custom dispatch;
+programmable workflows retain the complete opaque structures. No rereview of
+these fixes: direct finding-driven recheck and installed source gate follow.
+
+Usage owner corrects independently declared raw ABI widths and distinguishes
+native1322 BBM2 packet roles from external1312/1404 JSON/SSE, without format guessing.
+Data/control recorder ordering requires resolving the whole source graph before
+classifying child bytes. Use existing packet/raw readers, bounded raw-only scope
+and exact source locators; source-prefix validation IO is outside the decoded-byte
+cap and must not be advertised as a total filesystem IO bound. Native lane now
+reviews this whole tertiary unit once. Root runs one integrated direct Debug
+batch while these stable reports are written; no overlapping Ninja writer.
+
+Integrated build first exposed a main backstop call still passing unique_ptr
+rather than CodingProvider; fix the dereference. The initial shell incorrectly
+continued into CTest after that failed build; its stale/missing-binary results
+are excluded. A successful rebuild then passes six of seven selected cases; the
+remaining context-budget fixture still expected the model inside instructions.
+Update its oracle to require stable instructions and the actual trailing state;
+that direct case passes. The actual native OpenRouter fixture also reads its raw
+producer records through blackbird-token-usage: two main observations produce
+2400 input,40 output,2000 cache-read and200 cache-write tokens. Append effects
+occur once; reopen makes no provider call. These are synthetic transport counts,
+not remote billing or cache-hit observations.
+
+Usage's single independent review finds currency/route ambiguity, conflicting
+terminal usage and tier scopes, missing injected-callback source linkage and the
+standalone colleague role11 external-JSON format. Owner accepts all four and
+implements direct finding-driven cases, keeping token validity independent from
+cost validity and cumulative progress distinct from terminal contradictions.
+Root adds retained cache-policy boundary/failure/override/reopen checks. The first
+reopen fixture expected budget state for an input below its own trigger; correct
+the fixture to cross the trigger. Policy replay passes. Targeted static analysis
+finds copied baseline test values; construct explicit independent Value snapshots,
+retaining meaningful immutability checks without a lint suppression.
+
+The terminal/item acceptance correction also refuses duplicate call IDs within
+one OpenRouter output before any dispatch; fake transport covers zero effects.
+Read Neuroses host/profile tooling and start the scoped Debug/Release/ASan Linux
+check from the stable reviewed source. Local optimized/sanitizer checks and final
+full source hook remain pending. Update operator navigation to implemented
+behavior and its raw-only/live-provider qualification limits.
+
+Finding-driven usage recheck exposes one actual remediation bug: the parser's
+terminal conflict flag did not propagate to the final merged observation. Fix
+that exact merge and qualify generic USD through the captured OpenRouter URL,
+not a reported upstream provider label. Owner's direct corrected case passes.
+The first Linux snapshot reproduces this defect (token_usage fails; other13/14
+Debug cases pass) and cleans its temporary workspace. Start one finalized-source
+Linux Debug/Release/ASan run, plus local Release and then ASan changed cases.
+The rebuilt integrated Debug batch passes7/7 in11.43s, including actual native
+producer→reader and nine zero-effect terminal/dispatch rejection cases. Record
+arconaut-438 for live continuation/cache qualification; no live claim follows
+from deterministic fixture success.
+
+Local Release/OFF qualifies14/14 changed cases in23.83s. All30 changed/new C++
+files pass formatter check; targeted static analysis passes for each owner/root
+set. Supported bd backup records118 issues and the new live follow-through.
+No further code review requested: all conceptual owners have completed their
+single review/remediation/recheck. Prepare the source checkpoint with current
+results; the mandatory installed source hook and remaining profile outcomes
+will be recorded before final branch publication.
+
+Local ASan/UBSan passes14/14 affected cases in53.20s, with no sanitizer findings.
+Finalized Linux Debug has passed; remote now builds Release and then ASan.
+Stage the complete intended source/docs/issue snapshot, excluding operator art,
+and invoke the installed full Debug/C++/Lua pre-commit gate. No tree or index
+edits during that gate; append its actual outcome afterward as a text-only
+result checkpoint, with supported issue backup updates.
+
+The installed source gate builds all302 Debug steps, then passes135/136 cases
+in218.72s. main_input_native stops at a hardcoded old /new successor argc11;
+new provider persistence correctly adds --provider/value. Strengthen the fixture:
+launch that scenario with OpenRouter and its namespaced model, expect13 operands,
+assert the exact provider/model pair and retain all actual raw selected/fallback
+operand/linkage checks. Direct rebuilt fixture passes; source commit did not occur
+and full lint was not reached. Run the revised fixture on local Release/ASan and
+Linux profiles before the full gate retry.
+
+Final Linux Debug14/14 (15.51s) and Release14/14 (7.31s) pass. The single combined
+remote driver expires its existing600s limit during the last ASan test, after13
+cases pass. Remote cleanup runs. Finish required ASan in its own profile window;
+check the new handoff fixture on Debug/Release without rerunning their settled
+fourteen cases. This is unfinished profile qualification and one concrete stale
+fixture correction, no new assurance/review campaign.
+
+The strengthened actual /new handoff fixture passes local Debug direct, Release
+1/1 (2.19s) and ASan/UBSan1/1 (8.11s). Only this fixture changed after the prior
+profile results; production source is unchanged. Stage that precise correction
+and updated records, and retry the full source hook. Remote profile-specific
+checks continue independently; no tree/index edits during the hook.
+
+The targeted main_input_native static pass reports unchecked optional access at
+the preexisting compound runs[0].snapshot predicate. Stop only our own in-progress
+git/hook process group before further source/index changes; that attempt is
+cancelled, not a passing gate. Bind the snapshot, explicitly reject its absence,
+then inspect closed. The assertion is preserved with a named optional borrow;
+no diagnostic suppression or production change. Targeted clang-tidy now passes.
+Stage this exact diagnostic correction and restart the installed full source gate.
+Linux Debug's updated provider/model handoff fixture passes1/1 in1.34s; other
+remote profiles continue from their existing snapshots of the same behavior.
+
+The full source retry builds and passes135/136 in297.58s, including the corrected
+main handoff. Existing provider_raw fails its stderr-only overflow expectation.
+Read Child::wait/read and the literal child writes: a100ms stderr poll can expire
+before the child runs; its following stdout read can acquire the five-byte stdout
+first and throw the one-byte capacity failure. Only acquired bytes are promised,
+so stderr need not be acquired at all. The original oracle incorrectly assumed
+one scheduling order. Preserve the exact original byte comparisons and permit
+exactly either stdout-five/stderr-empty or stderr-three/stdout-empty on overflow.
+No runtime/source behavior, polling, limits or diagnostic rules are changed.
+Direct fixture and targeted lint rechecks precede the mandatory source gate retry;
+this is one concrete existing test defect, not a new hardening campaign.
+
+Final remote profile windows pass: changed handoff Debug1/1 (1.34s), Release1/1
+(0.51s), and ASan/UBSan15/15 (50.06s), including the formerly unfinished provider
+exchange case. The last local optional-guard edit only makes the same test check
+explicit; no production edit follows the platform qualifications.
+
+The corrected raw-overflow direct fixture passes, and targeted clang-tidy passes
+without diagnostics. Stage only its exact predicate/comment correction and this
+result record, then retry the installed full source gate. No new review panel,
+mutation campaign, runtime change or repeated product profile campaign.
+
+The next full source gate passes135/136 in187.20s; corrected raw overflow and
+native handoff pass. Existing tasks_pty samples the cursor mid synchronized redraw:
+it returns when draft cells arrive, before the frame's final cursor restoration.
+Read the actual renderer's ?2026h/?2026l boundaries and VT oracle. Add that
+mode's boolean to the existing Screen parser; this fixture's wait now requires
+a completed synchronized frame before checking its unchanged pane/cursor
+predicates. Actual PTY direct recheck passes all task/cursor/narrow/exit assertions.
+No terminal/runtime behavior, cursor bounds, time allowance, or assertion is
+relaxed. These are corrections to concrete required-gate oracles, not additional
+reviews. Confirm no existing local Ninja/CMake/lint writers before retrying.
+
+The next full suite passes135/136 in188.94s: synchronized task pane, raw overflow
+and main handoff pass. operation_raw reaches its120.09s watchdog after completing
+the two ordinary stale-rejection diagnostic cases, before the injected native
+failure case reports its result. This path has passed prior full gates. One
+immediate unchanged-source direct CTest recheck passes1/1 in12.11s. Do not invent
+a root cause, change its concurrency/watchdog or weaken the original/error checks.
+Record arconaut-7qn with exact phase/logs for separate investigation. Retry the
+required whole gate with unchanged production/tests and preserve both outcomes.
+
+The required full Debug suite finally passes136/136 in186.96s. All203 actual
+owned C++ translation units are analyzed; the pass reports exactly two findings:
+state-string move inside an object-field loop, and implicit independent Value
+snapshot copy in openai_auth_test. Stop after inserting the one state item so
+that the move occurs once; make the independent snapshot construction explicit.
+No suppression, protocol/control change or new test oracle. Targeted analysis of
+both corrected units passes. Four affected state/auth cases pass local Release
+4/4 (3.48s) and ASan/UBSan4/4 (7.53s). Scoped Linux Release/ASan rechecks run in
+parallel. Retry the full mandatory gate with CMAKE_BUILD_PARALLEL_LEVEL=4, matching
+our declared build windows; test scope/parallelism, compiler/profile and all lint
+rules remain intact. No source/index changes during the gate.

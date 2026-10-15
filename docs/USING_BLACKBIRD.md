@@ -2,8 +2,10 @@
 
 From this repository, run `./scripts/blackbird` (the optimized release executable). In an interactive terminal it opens the
 TUI. Piped input and `--once` use the plain interface; `--plain` selects it explicitly.
-Blackbird uses your existing Codex ChatGPT sign-in; Codex supplies authentication only.
-Blackbird runs the requests, tools, context and workflows.
+The default OpenAI route can use your existing Codex ChatGPT sign-in; Codex supplies
+authentication only. Blackbird runs the requests, tools, context and workflows.
+Owned accounts and explicit OpenRouter main coding are described in
+[provider routing, prompt caching and usage](TOKENOMICS.md).
 
 ```sh
 ./scripts/blackbird --session context/live-bootstrap
@@ -13,8 +15,9 @@ Choose another `--session DIRECTORY` for a separate conversation. Default sessio
 `~/.local/state/blackbird/default`, reusing an existing legacy
 `~/.local/state/arconaut/default` when the new default does not exist. The working directory is the tool working
 directory. Only one process may hold a session. `--once 'prompt'` runs one turn.
-`--model NAME` selects the model; `--effort low|medium|high|xhigh` selects reasoning
-(initial default `medium`). Model, effort and absolute workflow path persist with
+`--provider openai|openrouter` selects the main route; switching providers requires
+an explicit `--model NAME`. `--effort low|medium|high|xhigh` selects reasoning
+(initial default `medium`). Provider, model, effort and absolute workflow path persist with
 the session; explicit launch options override and save them. Actor/conversation/
 workflow identities also survive restart. Lua request options can override model
 request defaults for a particular call. `/session` shows configuration and identities;
@@ -32,7 +35,7 @@ available. See [reopen behavior](SESSION_REOPEN.md) for unsupported cases.
 (default the selected session parent, Blackbird or legacy Arconaut) and ROOT itself if it is a session. `/sessions`
 lists the current session's parent. Results have stable absolute paths, Unix-second
 last activity from audit mtime (null with explicit unavailable status if stat fails),
-saved model/effort/workflow and a shell-quoted
+saved provider/model/effort/workflow and a shell-quoted
 explicit `./scripts/blackbird --session 'PATH'` resume command. Ordinary reopen does not
 consume a pending RRC intent; use `--resume-continue` explicitly when appropriate.
 
@@ -689,9 +692,10 @@ verification; no provider SDK/auth library is linked.
 Admissions retain protocol/origin/account/revision, never token material; an
 account change before dispatch refuses that admission. Requested/observed models
 and provider usage remain separate. HTTP401/403,429 and transport timeout have
-distinct outcomes. The main coding loop remains OpenAI and can use its owned
-ChatGPT-plan login or key. Existing Codex authentication remains the compatibility
-path when neither is selected; provider `claude` remains the explicit Claude CLI
+distinct outcomes. The main coding loop supports OpenAI and explicit OpenRouter
+Responses. OpenAI can use its owned ChatGPT-plan login or key; existing Codex
+authentication remains the compatibility path when neither is selected.
+Provider `claude` remains the explicit Claude CLI
 bridge, while `anthropic` uses owned direct authentication. The operator's current
 release process is unchanged by candidate development.
 

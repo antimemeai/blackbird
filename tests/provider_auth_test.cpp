@@ -213,6 +213,33 @@ int main() {
     }
     check(std::filesystem::file_size(count_file) == 1,
           "cross-process token rotation raced");
+    for (unsigned flags = 0; flags != 4; ++flags) {
+      auto header_config = config;
+      header_config.directory = std::filesystem::path{tmp} / "header-auth";
+      header_config.openrouter_metadata = (flags & 1U) != 0;
+      header_config.openrouter_no_response_cache = (flags & 2U) != 0;
+      header_config.http = [&](const ProviderHttpRequest &r,
+                               ProviderHttpResponseLease &response) {
+        bool metadata = false, bypass = false;
+        for (const auto &[key, value] : r.headers) {
+          if (key == "X-OpenRouter-Metadata")
+            metadata = value == "enabled";
+          if (key == "X-OpenRouter-Cache")
+            bypass = value == "false";
+        }
+        const bool router = r.url == "https://openrouter.ai/api/v1/responses";
+        check(metadata == (router && header_config.openrouter_metadata),
+              "metadata header scope");
+        check(bypass == (router && header_config.openrouter_no_response_cache),
+              "response-cache header scope");
+        return reply(response, 200, "{}");
+      };
+      ProviderAuth headers{header_config};
+      headers.set_key("openai", "fixture", "api-secret");
+      headers.set_key("openrouter", "fixture", "api-secret");
+      (void)headers.request("openai", "responses", Value::object({}), 10);
+      (void)headers.request("openrouter", "responses", Value::object({}), 10);
+    }
     // Owner-only mode and symlink policy are enforced before reading secrets.
     check(::chmod((root / "credentials.bbm").c_str(), 0644) == 0, "chmod");
     rejects([&] { (void)auth.status(); }, ErrorCode::conflict);

@@ -504,7 +504,12 @@ void child_originals(const std::string &executable, bool partial, bool overflow)
               stderr_bytes == std::string("E\0R", 3),
           "native original bytes changed");
   } else {
-    check(stderr_bytes == std::string("E\0R", 3), "overflowing acquired original lost");
+    // The stderr poll can time out before the child starts, then stdout can
+    // become readable first. Whichever read exceeds the one-byte limit must
+    // retain that exact acquired original; the other pipe need not be read.
+    check((stderr_bytes == std::string("E\0R", 3) && stdout_bytes.empty()) ||
+              (stdout_bytes == std::string("A\0B\xff\n", 5) && stderr_bytes.empty()),
+          "overflowing acquired original lost");
   }
   unwrap(RawChannel::unlink(name));
 }

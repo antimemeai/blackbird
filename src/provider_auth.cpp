@@ -1391,7 +1391,9 @@ ProviderAuth::request(std::string_view p, std::string_view route, const Value &b
                 return expected != current;
               }()) ||
               str(*expected_binding, "base_url") != base ||
-              str(*expected_binding, "protocol") != str(d, "protocol"))
+              str(*expected_binding, "protocol") != str(d, "protocol") ||
+              str(*expected_binding, "kind") !=
+                  (record ? str(*record, "kind") : std::string{"environment"}))
             throw Error{ErrorCode::conflict};
         }
         if (!active.empty()) {
@@ -1455,7 +1457,7 @@ ProviderAuth::request(std::string_view p, std::string_view route, const Value &b
               put(*a, "refresh_after", integer(next));
               trace.branch({1604, 3});
               s.save(&trace);
-              require_provider_success(reply.status);
+              throw Error{ErrorCode::provider_rate_limit, -reply.status};
             }
             if (reply.status < 200 || reply.status >= 300) {
               put(*a, "state", Value{"reauthorize"});
@@ -1535,6 +1537,10 @@ ProviderAuth::request(std::string_view p, std::string_view route, const Value &b
                           std::move(encoded),
                           {{"Content-Type", "application/json"}},
                           timeout_seconds};
+    if (p == "openrouter" && config_.openrouter_metadata)
+      r.headers.emplace_back("X-OpenRouter-Metadata", "enabled");
+    if (p == "openrouter" && config_.openrouter_no_response_cache)
+      r.headers.emplace_back("X-OpenRouter-Cache", "false");
     if ((p == "anthropic" || p == "kimi") && route == "messages") {
       r.headers.emplace_back("anthropic-version", "2023-06-01");
       if (kind == "api_key")

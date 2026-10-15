@@ -243,6 +243,28 @@ void dependencies_and_other_bodies() {
   CHECK(!later_failure.has_value() &&
         later_failure.error().code == ErrorCode::allocation);
 }
+void provider_error_bytes() {
+  for (const auto code : {ErrorCode::provider_auth, ErrorCode::provider_rate_limit}) {
+    const auto reason = static_cast<std::byte>(code);
+    const std::array rejected{
+        std::byte{1}, std::byte{0}, std::byte{10},   std::byte{0}, std::byte{0},
+        std::byte{0}, std::byte{0}, std::byte{0},    reason,       std::byte{0},
+        std::byte{0}, std::byte{0}, std::byte{0xad}, std::byte{1}, std::byte{0},
+        std::byte{0}, std::byte{0}, std::byte{0},    std::byte{0}, std::byte{0}};
+    const RetainedEvent rejection{{}, RejectedSubmissionEvent{{code, 429}}};
+    CHECK(require(decode_retained_event(rejected, 256)) == rejection);
+    const auto encoded = require(encode_retained_event(rejection, 256));
+    CHECK(std::equal(rejected.begin(), rejected.end(), encoded.begin(), encoded.end()));
+    const RetainedEvent receipt{
+        {}, AdapterReceiptEvent{id<OperationAttemptId>(8), Error{code, -429}}};
+    const auto receipt_bytes = require(encode_retained_event(receipt, 256));
+    CHECK(require(decode_retained_event(receipt_bytes, 256)) == receipt);
+    CHECK(receipt_bytes[26] == reason);
+    auto invalid = rejected;
+    invalid[8] = std::byte{255};
+    CHECK(!decode_retained_event(invalid, 256).has_value());
+  }
+}
 void rejection_and_receipt_bytes() {
   const RetainedEvent rejected{{}, RejectedSubmissionEvent{{ErrorCode::conflict, -2}}};
   const auto bytes = require(encode_retained_event(rejected, 256));
@@ -376,6 +398,14 @@ void continuation_wire() {
             {id<AuditStreamId>(12), 1, 48, CapturePurpose::ordinary_submission},
             {id<AuditStreamId>(12), 8, 511, CapturePurpose::rejected_proposal}});
   CHECK(require(encode_retained_event(populated, 228)) == full);
+  for (const auto code : {ErrorCode::provider_auth, ErrorCode::provider_rate_limit}) {
+    auto provider_problem = full;
+    provider_problem[98] = static_cast<std::byte>(code);
+    const auto event = require(decode_retained_event(provider_problem, 256));
+    CHECK(std::get<RecoveryChoiceEvent>(event.body).problem ==
+          std::optional<Error>{{code, -2}});
+    CHECK(require(encode_retained_event(event, 256)) == provider_problem);
+  }
   CHECK(std::get<ProvisionalCaptureEvent>(marker.body) ==
         ProvisionalCaptureEvent{id<AuditStreamId>(12), 1, 48,
                                 CapturePurpose::ordinary_submission});
@@ -512,6 +542,7 @@ int main() {
     decision_bytes();
     dependencies_and_other_bodies();
     rejection_and_receipt_bytes();
+    provider_error_bytes();
     continuation_wire();
     std::puts("PASS specified semantic bytes, identities, bounds and exact bodies");
     return 0;

@@ -5,6 +5,9 @@ for step = 1, 64 do
   local calls = 0
   for _, item in ipairs(response.output) do
     if item.type == "function_call" then
+      if item.namespace ~= nil and item.namespace ~= "" then
+        error("Default workflow cannot dispatch a namespaced function call")
+      end
       calls = calls + 1
       local result = blackbird.call(item.name, item.arguments)
       blackbird.append({
@@ -14,6 +17,8 @@ for step = 1, 64 do
           output = result,
         },
       })
+    elseif item.type == "custom_tool_call" then
+      error("Default workflow cannot dispatch a custom tool call")
     elseif item.type == "message" then
       blackbird.present(item)
     end

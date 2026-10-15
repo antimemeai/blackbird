@@ -42,6 +42,8 @@ void validate(const SessionSettings &value) {
       value.workflow.size() > 65536 || value.model.empty() ||
       value.model.find('\0') != std::string::npos || value.workflow.empty() ||
       value.workflow.find('\0') != std::string::npos ||
+      (value.provider != "openai" && value.provider != "openrouter") ||
+      (value.provider == "openrouter" && value.model.find('/') == std::string::npos) ||
       (value.effort != "low" && value.effort != "medium" && value.effort != "high" &&
        value.effort != "xhigh"))
     throw Error{ErrorCode::invalid_range};
@@ -61,6 +63,7 @@ void settings_source(RawSessionCall &call, const SessionSettings &settings,
   (void)call.source(2, settings.model, site);
   (void)call.source(3, settings.effort, site);
   (void)call.source(4, settings.workflow, site);
+  (void)call.source(11, settings.provider, site);
 }
 template <class F>
 bool filesystem_predicate(RawSessionCall &owner, std::uint8_t method,
@@ -130,6 +133,7 @@ void save_session_info(const std::filesystem::path &directory,
                        {"model", Value{settings.model}},
                        {"effort", Value{settings.effort}},
                        {"workflow", Value{settings.workflow}},
+                       {"provider", Value{settings.provider}},
                        {"actor", Value{hex_identity(id.actor.bytes())}},
                        {"conversation", Value{hex_identity(id.conversation.bytes())}},
                        {"workflow_id", Value{hex_identity(id.workflow.bytes())}}})));
@@ -281,6 +285,10 @@ Value list_sessions(const std::filesystem::path &requested,
             (void)metadata.source(3, effort, 4222);
             (void)metadata.source(4, workflow, 4222);
             SessionSettings settings{model, effort, workflow};
+            if (const auto *provider = packet.find("provider")) {
+              settings.provider = provider->string();
+              (void)metadata.source(11, settings.provider, 4222);
+            }
             if (const auto *name = packet.find("name")) {
               const auto &text = name->string();
               (void)metadata.source(1, text, 4222);
@@ -294,7 +302,8 @@ Value list_sessions(const std::filesystem::path &requested,
             config = Value::object({{"name", Value{settings.name}},
                                     {"model", Value{settings.model}},
                                     {"effort", Value{settings.effort}},
-                                    {"workflow", Value{settings.workflow}}});
+                                    {"workflow", Value{settings.workflow}},
+                                    {"provider", Value{settings.provider}}});
             status = "snapshot";
           }
         });
@@ -430,6 +439,10 @@ SessionStore::SessionStore(AuditLog &log, const RawAdapterContext *context)
         (void)call.source(4, workflow);
         auto assigned = call.control(41);
         settings_ = {model, effort, workflow};
+        if (const auto *provider = value.find("provider")) {
+          settings_.provider = provider->string();
+          (void)call.source(11, settings_.provider);
+        }
         const std::uint8_t restored = 1;
         (void)call.event(4215, std::array{detail::raw_native_field(restored)},
                          assigned);
@@ -490,7 +503,8 @@ void SessionStore::save(const SessionSettings &value,
                                    {"name", Value{next.name}},
                                    {"model", Value{next.model}},
                                    {"effort", Value{next.effort}},
-                                   {"workflow", Value{next.workflow}}}));
+                                   {"workflow", Value{next.workflow}},
+                                   {"provider", Value{next.provider}}}));
     (void)call.bytes(4213, recorded, locator);
     settings_ = std::move(next);
     const std::uint8_t action = 2;

@@ -157,10 +157,14 @@ int main() {
         std::cerr << unwrap(dump_json(engine.workflow_result())) << '\n';
         throw;
       }
-      check(string_field(provider.request, "instructions").find("CURRENT_TASKS") !=
+      const auto &state_item = field(provider.request, "input").array().back();
+      check(field(state_item, "role") == Value{"developer"} &&
+                string_field(provider.request, "instructions").find("CURRENT_TASKS") ==
                     std::string::npos &&
-                string_field(provider.request, "instructions")
-                        .find("waiting for operator") != std::string::npos &&
+                string_field(state_item, "content").find("CURRENT_TASKS") !=
+                    std::string::npos &&
+                string_field(state_item, "content").find("waiting for operator") !=
+                    std::string::npos &&
                 string_field(
                     field(tasks.read(json(R"({"id":"t2"})")), "items").array()[0],
                     "note") == "Lua update",
@@ -173,10 +177,12 @@ int main() {
       check(std::get<bool>(field(context.edit(compacted), "accepted").value()),
             "fixture compaction rejected");
       engine.turn({"after compaction", "blackbird.request()"});
-      check(string_field(provider.request, "instructions").find("Renamed panel") !=
+      const auto &compacted_state = field(provider.request, "input").array().back();
+      check(field(compacted_state, "role") == Value{"developer"} &&
+                string_field(compacted_state, "content").find("Renamed panel") !=
                     std::string::npos &&
-                string_field(provider.request, "instructions")
-                        .find("waiting for operator") != std::string::npos,
+                string_field(compacted_state, "content").find("waiting for operator") !=
+                    std::string::npos,
             "context compaction lost native task projection");
       std::set<std::string> tools;
       for (const auto &tool : field(provider.request, "tools").array())

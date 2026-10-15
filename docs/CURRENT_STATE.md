@@ -1,5 +1,13 @@
 # Current Blackbird stock
 
+Tokenomics/OpenRouter implementation,2026-10-14, is being qualified on
+`work/tokenomics-openrouter-2026-10-14` after the pushed trace-archive merge.
+The [using guide](TOKENOMICS.md) covers explicit OpenRouter main coding,
+account-bound retries, prompt-cache policy, changing-state layout and the separate
+raw usage reader. The [execution record](TOKENOMICS_IMPLEMENTATION.md) links the
+research and direct checks. Main integration, running-process activation, live
+OpenRouter compatibility and measured cache savings remain separate.
+
 New design wave,2026-10-14: concurrent and durable workflows. The
 [proposed design](CONCURRENT_DURABLE_WORKFLOWS.md),
 [delivery sequence](WORKFLOW_DELIVERY.md) and

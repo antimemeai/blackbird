@@ -1,4 +1,7 @@
+#include "blackbird/json.hpp"
 #include "blackbird/openai.hpp"
+#include "blackbird/provider_auth.hpp"
+#include "blackbird/tools.hpp"
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -61,6 +64,23 @@ int curl_helper(int argc, char **argv) {
       return 7;
   std::string config{std::istreambuf_iterator<char>{std::cin},
                      std::istreambuf_iterator<char>{}};
+  if (config.find("https://api.openai.com/v1/responses") != std::string::npos) {
+    const auto start = config.find("data-binary = ");
+    if (start == std::string::npos)
+      return 11;
+    const auto first = start + std::string_view{"data-binary = "}.size();
+    const auto end = config.find('\n', first);
+    const auto encoded = unwrap(parse_json(config.substr(first, end - first)));
+    const auto request = unwrap(parse_json(encoded.string()));
+    const auto &input = field(request, "input").array();
+    if (input.size() != 2 ||
+        field(input[0], "arguments") != Value{"{\"path\":\"README.md\"}"} ||
+        field(input[1], "output") != Value{"{\"content\":\"hello\"}"})
+      return 12;
+    std::cout << "data: {\"type\":\"response.completed\",\"response\":{\"status\":"
+                 "\"completed\",\"output\":[]}}\n\n\n200";
+    return 0;
+  }
   if (config.find("Authorization: Bearer private-") == std::string::npos ||
       config.find("ChatGPT-Account-ID: private-account") == std::string::npos)
     return 8;
@@ -120,6 +140,8 @@ int main(int argc, char **argv) {
     config.codex_executable = std::filesystem::absolute(argv[0]).string();
     config.curl_executable = config.codex_executable;
     config.codex_home = tmp.home;
+    const auto pinned_compatibility = openai_request_binding(config);
+    check(pinned_compatibility.has_value());
     auto login = codex_login(config);
     check(login.has_value());
     auto models = openai_http(config, login.value(), "models?client_version=0.160.0");
@@ -153,7 +175,10 @@ int main(int argc, char **argv) {
     auto bounded = openai_http(config, login.value(), "models?client_version=0.160.0");
     check(!bounded.has_value() && bounded.error().code == ErrorCode::capacity);
     config.response_limit = 1024;
-    check(codex_login(config, true).has_value());
+    check(codex_login(config, true, &pinned_compatibility.value()).has_value());
+    fixture(tmp.home, "private-access", "other-account");
+    const auto changed = codex_login(config, false, &pinned_compatibility.value());
+    check(!changed.has_value() && changed.error().code == ErrorCode::conflict);
     fixture(tmp.home);
     {
       std::ofstream{tmp.home / "mode"} << "switch";
@@ -169,6 +194,21 @@ int main(int argc, char **argv) {
     fixture(tmp.home, "private-access", "private-account", "apikey");
     auto wrong_mode = codex_login(config);
     check(!wrong_mode.has_value() && wrong_mode.error().code == ErrorCode::unsupported);
+    check(::setenv("BLACKBIRD_AUTH_HOME", (tmp.home / "owned").c_str(), 1) == 0);
+    ProviderAuth auth;
+    auth.set_key("openai", "fixture", "private-owned");
+    OpenAiConfig owned;
+    owned.curl_executable = config.curl_executable;
+    auto owned_login = codex_login(owned);
+    check(owned_login.has_value());
+    const auto native = unwrap(parse_json(
+        R"({"input":[{"type":"function_call","call_id":"c","name":"read_file","arguments":{"path":"README.md"}},{"type":"function_call_output","call_id":"c","output":{"content":"hello"}}]})"));
+    const auto before = Value{native};
+    auto owned_response = openai_http(owned, owned_login.value(), "responses", &native);
+    check(owned_response.has_value() && native == before);
+    auth.set_key("openai", "fixture", "private-replaced");
+    const auto replaced = openai_http(owned, owned_login.value(), "responses", &native);
+    check(!replaced.has_value() && replaced.error().code == ErrorCode::conflict);
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
     return 1;

@@ -7,6 +7,7 @@ std::filesystem::path default_session_directory(const std::filesystem::path &hom
 struct SessionSettings {
   std::string model = "gpt-6.1-sol", effort = "medium", workflow;
   std::string name{};
+  std::string provider = "openai";
   bool operator==(const SessionSettings &) const = default;
 };
 struct SessionIdentity {

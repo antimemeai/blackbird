@@ -13,6 +13,7 @@
 #include "blackbird/raw_restart.hpp"
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/raw_turn.hpp"
+#include "blackbird/request_cache.hpp"
 #include "stream_capture.hpp"
 extern "C" {
 #include <lauxlib.h>
@@ -315,6 +316,28 @@ void validate_protocol(const Value::Array &items,
   });
 }
 } // namespace
+void OpenAiCodingProvider::begin_request_group(const Value &,
+                                               const RawAdapterContext *context) {
+  if (request_binding_)
+    throw Error{ErrorCode::busy};
+  auto config = config_;
+  config.cancelled = cancelled;
+  config.raw_context = context;
+  request_binding_ = unwrap(openai_request_binding(config));
+}
+void OpenAiCodingProvider::end_request_group() noexcept { request_binding_.reset(); }
+bool OpenAiCodingProvider::supports_prompt_cache_policy() const noexcept {
+  if (!request_binding_)
+    return false;
+  const auto matches = [&](std::string_view key, std::string_view expected) {
+    const auto *value = request_binding_->find(key);
+    const auto *text = value ? std::get_if<std::string>(&value->value()) : nullptr;
+    return text && *text == expected;
+  };
+  return matches("kind", "api_key") &&
+         matches("base_url", "https://api.openai.com/v1") &&
+         matches("protocol", "responses");
+}
 Value OpenAiCodingProvider::respond(
     const Value &request, const std::function<void(std::string_view)> &capture) {
   return respond(request, capture, nullptr);
@@ -337,12 +360,32 @@ Value OpenAiCodingProvider::respond(
   RawProviderPhase adapter;
   return adapter.run([&] {
     adapter.start(5, context);
+    if (responding_)
+      throw Error{ErrorCode::busy};
+    responding_ = true;
+    struct Responding {
+      bool &active;
+      ~Responding() { active = false; }
+    } responding{responding_};
     auto config = config_;
     config.raw_owner = owner;
     config.raw_context = context;
     config.response_observer = capture;
     config.cancelled = cancelled;
-    auto login = unwrap(codex_login(config));
+    const bool temporary_group = !request_binding_;
+    if (temporary_group)
+      begin_request_group(request, context);
+    struct End {
+      OpenAiCodingProvider &provider;
+      bool temporary;
+      ~End() {
+        if (temporary)
+          provider.end_request_group();
+      }
+    } end{*this, temporary_group};
+    if (!request_binding_)
+      throw Error{ErrorCode::corrupt};
+    auto login = unwrap(codex_login(config, false, &*request_binding_));
     auto raw = unwrap(openai_http(config, login, "responses", &request));
     return unwrap(completed_response(raw, {}, context));
   });
@@ -2141,7 +2184,7 @@ Value CodingEngine::program_config(const Value &arguments) {
       for (const auto &[key, value] : proposal->object()) {
         (void)value;
         if (key != "modules" && key != "model" && key != "effort" &&
-            key != "workflows" && key != "workflow_prefix")
+            key != "workflows" && key != "workflow_prefix" && key != "prompt_cache")
           throw Error{ErrorCode::invalid_range};
       }
       const auto &model = string_field(*proposal, "model");
@@ -2150,6 +2193,8 @@ Value CodingEngine::program_config(const Value &arguments) {
           (!effort.empty() && effort != "low" && effort != "medium" &&
            effort != "high" && effort != "xhigh"))
         throw Error{ErrorCode::invalid_range};
+      if (const auto *cache = proposal->find("prompt_cache"))
+        (void)prompt_cache_mode(*cache);
       const auto &modules = field(*proposal, "modules").array();
       trace.stage(2);
       if (modules.size() > 32 || program_encoded(trace, 0, *proposal).size() > 65536)
@@ -4046,10 +4091,26 @@ void CodingEngine::drain_workflows() {
   });
 }
 Value CodingEngine::request(Value options) {
+  struct RequestGroup {
+    CodingProvider &provider;
+    bool &active;
+    bool owned = false;
+    bool began = false;
+    ~RequestGroup() {
+      if (!owned)
+        return;
+      if (began)
+        provider.end_request_group();
+      provider.request_group_owned_ = false;
+      active = false;
+    }
+  } request_group{provider_, request_group_active_};
   RawProviderPhase assembly{2 * provider_scalar_credit + sizeof(IdentityBytes) +
                             sizeof(std::size_t) + 32};
   return assembly.run([&] {
     assembly.start(1);
+    if (request_group_active_ || provider_.request_group_owned_)
+      throw Error{ErrorCode::busy};
     assembly.stage(10);
     RawRegion preparation{raw_regions::provider_prepare};
     if (restart_note_)
@@ -4059,6 +4120,7 @@ Value CodingEngine::request(Value options) {
     assembly.stage(12);
     drain_workflows();
     auto items = context_.items();
+    const auto origin = context_.head();
     validate_protocol(items, assembly.reference());
     auto request = Value::object(
         {{"model", Value{string_field(program_config_, "model").empty()
@@ -4126,8 +4188,18 @@ Value CodingEngine::request(Value options) {
           throw Error{ErrorCode::invalid_range};
       }
     }
+    const auto cache_mode =
+        options.find("cache_policy") ? prompt_cache_mode(field(options, "cache_policy"))
+        : program_config_.find("prompt_cache")
+            ? prompt_cache_mode(field(program_config_, "prompt_cache"))
+            : PromptCacheMode::provider_default;
+    const auto *state_choice = options.find("state_context");
+    if (state_choice && *state_choice != Value{"auto"} &&
+        *state_choice != Value{"omit"})
+      throw Error{ErrorCode::invalid_range};
+    const bool state_context = !state_choice || *state_choice == Value{"auto"};
     for (auto &[key, value] : options.object()) {
-      if (key == "retry_policy")
+      if (key == "retry_policy" || key == "cache_policy" || key == "state_context")
         continue;
       auto &fields = request.object();
       auto found = std::find_if(fields.begin(), fields.end(),
@@ -4138,13 +4210,10 @@ Value CodingEngine::request(Value options) {
         found->second = std::move(value);
     }
     const auto *store = std::get_if<bool>(&field(request, "store").value());
-    if (!tasks_.state().empty() || tasks_.state().revision() != 0) {
-      auto &instructions =
-          std::find_if(request.object().begin(), request.object().end(),
-                       [](const auto &f) { return f.first == "instructions"; })
-              ->second;
-      instructions = Value{
-          instructions.string() + "\nCURRENT_TASKS " +
+    std::string operational_state;
+    if (state_context && (!tasks_.state().empty() || tasks_.state().revision() != 0)) {
+      operational_state +=
+          "CURRENT_TASKS " +
           unwrap(format_value(tasks_.read(Value::object({{"status", Value{"open"}},
                                                          {"limit", Value{Number{"16"}}},
                                                          {"compact", Value{true}}})))) +
@@ -4157,7 +4226,7 @@ Value CodingEngine::request(Value options) {
           "op_id "
           "and arguments for retries; resolve conflicts by reading before a new edit. "
           "Use exec task_id for observed activity; a running command does not itself "
-          "complete a task. Unfinished tasks remain across turns and compaction."};
+          "complete a task. Unfinished tasks remain across turns and compaction.\n";
     }
     const auto *stream = std::get_if<bool>(&field(request, "stream").value());
     if (store == nullptr || *store || stream == nullptr || !*stream)
@@ -4166,13 +4235,10 @@ Value CodingEngine::request(Value options) {
     const auto budget =
         budget_view(string_field(request, "model"),
                     unwrap(encode_packet_string(field(request, "input"))).size());
-    if (std::get<bool>(field(budget, "triggered").value())) {
-      auto &instructions =
-          std::find_if(request.object().begin(), request.object().end(),
-                       [](const auto &f) { return f.first == "instructions"; })
-              ->second;
-      instructions = Value{
-          instructions.string() + "\nCONTEXT_BUDGET " + unwrap(format_value(budget)) +
+    if (state_context && std::get<bool>(field(budget, "triggered").value())) {
+      operational_state +=
+          "CONTEXT_BUDGET basis=selected_input_before_state " +
+          unwrap(format_value(budget)) +
           "\nThe configured advisory trigger is reached. Inspect the working map "
           "and propose managed context "
           "with context_manage or Lua toward target_bytes, or revise/defer policy "
@@ -4186,9 +4252,34 @@ Value CodingEngine::request(Value options) {
           "Repair may exceed the target; retrieve bounded originals and restore "
           "when useful. "
           "Neither target nor trigger is a token estimate, hard provider limit, or "
-          "audit reclamation."};
+          "audit reclamation.";
     }
+    const auto reusable_input_items = field(request, "input").array().size();
+    if (!operational_state.empty())
+      for (auto &[key, input] : request.object())
+        if (key == "input") {
+          input.array().push_back(
+              Value::object({{"role", Value{"developer"}},
+                             {"content", Value{std::move(operational_state)}}}));
+          break;
+        }
     assembly.stage(14);
+    request_group_active_ = true;
+    provider_.request_group_owned_ = true;
+    request_group.owned = true;
+    const RawAdapterContext preparation_context{nullptr, assembly.reference(), nullptr,
+                                                nullptr};
+    provider_.cancelled = [this] {
+      poll_commands();
+      return cancelled && cancelled();
+    };
+    request_group.began = true;
+    provider_.begin_request_group(request, &preparation_context);
+    prepare_request_cache(request,
+                          {cache_mode, provider_.supports_prompt_cache_policy(),
+                           provider_.provider_identity(), reusable_input_items});
+    if (context_.head() != origin)
+      throw Error{ErrorCode::conflict};
     ProviderOriginalLease final_packet{{ProviderOriginalRole::request_packet,
                                         ProviderOriginalMode::codec_adopt,
                                         ValueLimits{}.bytes,
@@ -4203,7 +4294,6 @@ Value CodingEngine::request(Value options) {
                                           last_request_bytes_.number().text() +
                                           " native request bytes]\n");
     assembly.stage(15);
-    const auto origin = context_.head();
     if (origin.size() > 32)
       throw Error{ErrorCode::invalid_range};
     const auto origin_bytes = origin.size();
@@ -4408,9 +4498,11 @@ Value CodingEngine::request(Value options) {
               (e.detail == 5 || e.detail == 6 || e.detail == 7 || e.detail == 16 ||
                e.detail == 18 || e.detail == 28 || e.detail == 52 || e.detail == 55 ||
                e.detail == 56 || e.detail == 92 || e.detail == 95 || e.detail == 96);
+          const bool typed_http429 =
+              e.code == ErrorCode::provider_rate_limit && e.detail == 429;
           group.stage(27);
           const bool eligible = ordinal < max_attempts &&
-                                (transient_http || transient_curl) &&
+                                (transient_http || transient_curl || typed_http429) &&
                                 log_.root().state() == JournalWriterState::live;
           const auto attempt_ref = attempt_phase.reference();
           const std::array decision_fields{ByteView{group_ref.lane},

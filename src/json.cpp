@@ -1,4 +1,5 @@
 #include "blackbird/json.hpp"
+#include "blackbird/request_cache.hpp"
 #include <algorithm>
 #include <stdexcept>
 
@@ -458,17 +459,44 @@ Value export_provider_request(Value request) {
           continue;
         const bool output = *type == Value{"function_call_output"};
         const bool call = *type == Value{"function_call"};
+        const auto *parts_choice = item.find("blackbird_output_parts");
+        const bool explicit_parts =
+            output && parts_choice && *parts_choice == Value{true};
+        if (parts_choice && !explicit_parts)
+          throw Error{ErrorCode::invalid_range};
+        if (explicit_parts) {
+          const auto *parts = item.find("output");
+          if (!parts || !std::holds_alternative<Value::Array>(parts->value()))
+            throw Error{ErrorCode::invalid_range};
+          for (const auto &part : parts->array()) {
+            const auto *kind = part.find("type");
+            if (!kind ||
+                (*kind != Value{"input_text"} && *kind != Value{"input_image"} &&
+                 *kind != Value{"input_file"}))
+              throw Error{ErrorCode::unsupported};
+            if (*kind == Value{"input_text"}) {
+              const auto *text = part.find("text");
+              if (!text || !std::holds_alternative<std::string>(text->value()))
+                throw Error{ErrorCode::invalid_range};
+            }
+          }
+        }
         for (auto &[field, value] : item.object()) {
           if (!((output && field == "output") || (call && field == "arguments")))
             continue;
-          if (!std::holds_alternative<std::string>(value.value())) {
+          if (!std::holds_alternative<std::string>(value.value()) &&
+              !(output && explicit_parts)) {
             auto encoded = dump_json(value);
             if (!encoded.has_value())
               throw encoded.error();
             value = Value{std::move(encoded).value()};
           }
         }
+        std::erase_if(item.object(), [](const auto &entry) {
+          return entry.first == "blackbird_output_parts";
+        });
       }
+  export_request_cache(request);
   return request;
 }
 } // namespace blackbird

@@ -395,6 +395,9 @@ void main_handoff_selection() {
     std::vector<std::string> words{"fixture-blackbird", "--session", session.native(),
                                    "--plain"},
         next, fallback;
+    if (scenario == "new")
+      words.insert(words.end(),
+                   {"--provider", "openrouter", "--model", "openai/gpt-6.1-sol"});
     std::vector<char *> args;
     for (auto &word : words)
       args.push_back(word.data());
@@ -411,13 +414,17 @@ void main_handoff_selection() {
       require_native(next.empty() && fallback.empty(),
                      "missing audit changed successor arguments");
     else {
-      require_native(next.size() == (scenario == "new" ? 11U : 5U) &&
+      require_native(next.size() == (scenario == "new" ? 13U : 5U) &&
                          next[0] == "fixture-blackbird" && next[1] == "--session" &&
                          std::filesystem::is_directory(next[2]) &&
                          std::find(next.begin(), next.end(), "--plain") != next.end() &&
                          std::find(next.begin(), next.end(),
                                    "--new-session-instance") != next.end(),
                      "actual selected successor argv");
+      if (scenario == "new")
+        require_native(next[3] == "--model" && next[4] == "openai/gpt-6.1-sol" &&
+                           next[5] == "--provider" && next[6] == "openrouter",
+                       "new session must preserve selected provider and model");
       if (scenario == "resume")
         require_native(next[2] == std::filesystem::canonical(destination).native() &&
                            fallback.size() == 5 && fallback[2] == session.native(),
@@ -425,8 +432,11 @@ void main_handoff_selection() {
     }
     handoff.consume();
     const auto runs = unwrap(discover_raw_runs(session.native()));
-    require_native(runs.size() == 1 && runs[0].snapshot && runs[0].snapshot->closed,
-                   "actual handoff raw close");
+    require_native(runs.size() == 1, "actual handoff raw run count");
+    const auto &snapshot = runs.front().snapshot;
+    if (!snapshot.has_value())
+      throw std::runtime_error("actual handoff raw snapshot absent");
+    require_native(snapshot->closed, "actual handoff raw close");
     auto reader = unwrap(RawRunReader::open((session / "raw" / runs[0].name).native()));
     std::vector<std::byte> scratch(2 * 1024 * 1024);
     unsigned selected = 0, consumed = 0, missing_error = 0, argv_rows = 0;

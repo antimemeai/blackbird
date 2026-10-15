@@ -21,11 +21,21 @@ public:
     ++calls;
     if (calls == 1) {
       require(string_field(request, "model") == "request-override");
-      require(string_field(request, "instructions").find("request-override") !=
+      require(string_field(request, "instructions").find("request-override") ==
               std::string::npos);
     }
-    require((string_field(request, "instructions").find("CONTEXT_BUDGET") !=
-             std::string::npos) == expect_trigger);
+    require(string_field(request, "instructions").find("CONTEXT_BUDGET") ==
+            std::string::npos);
+    const auto &input = field(request, "input").array();
+    const bool has_state =
+        !input.empty() && input.back().find("role") &&
+        field(input.back(), "role") == Value{"developer"} &&
+        string_field(input.back(), "content").find("CONTEXT_BUDGET") !=
+            std::string::npos;
+    require(has_state == expect_trigger);
+    if (calls == 1)
+      require(string_field(input.back(), "content").find("request-override") !=
+              std::string::npos);
     if (calls == 2)
       require(unwrap(dump_json(field(request, "input"))).find("REPAIR_REQUIRED_42") !=
               std::string::npos);

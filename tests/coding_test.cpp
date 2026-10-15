@@ -1,6 +1,7 @@
 #include "blackbird/coding.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/packet.hpp"
+#include "blackbird/raw_runtime.hpp"
 #include <cerrno>
 #include <chrono>
 #include <iostream>
@@ -557,11 +558,31 @@ void retained_output_test(const std::string &path) {
 class FlakyProvider final : public CodingProvider {
 public:
   unsigned calls = 0, failures = 1;
+  unsigned begins = 0, ends = 0;
+  bool active = false, refuse_preparation = false;
+  std::function<void()> prepared;
   Error fault{ErrorCode::provider_transport, 92};
   Value first_request;
+  std::string accepted_id = "accepted";
+  void begin_request_group(const Value &, const RawAdapterContext *) override {
+    if (active)
+      throw Error{ErrorCode::busy};
+    active = true;
+    ++begins;
+    if (prepared)
+      prepared();
+    if (refuse_preparation)
+      throw Error{ErrorCode::unsupported};
+  }
+  void end_request_group() noexcept override {
+    active = false;
+    ++ends;
+  }
   Value respond(const Value &request,
                 const std::function<void(std::string_view)> &capture) override {
     ++calls;
+    if (!active)
+      throw Error{ErrorCode::corrupt};
     if (calls == 1)
       first_request = request;
     if (request != first_request || request.find("retry_policy"))
@@ -577,7 +598,7 @@ public:
     }
     return Value::object(
         {{"output", Value{Value::Array{Value::object({{"type", Value{"function_call"}},
-                                                      {"call_id", Value{"accepted"}},
+                                                      {"call_id", Value{accepted_id}},
                                                       {"name", Value{"context_stats"}},
                                                       {"arguments", Value{"{}"}}})}}}});
   }
@@ -661,7 +682,8 @@ void retry_tests(const std::string &path) {
         ++tool_count;
     };
     engine.turn({"retry test", program});
-    if (provider.calls != 2 || tool_count != 1 ||
+    if (provider.calls != 2 || tool_count != 1 || provider.begins != 1 ||
+        provider.ends != 1 || provider.active ||
         unwrap(dump_json(Value{context.items()})).find("UNACCEPTED") !=
             std::string::npos)
       throw Error{ErrorCode::corrupt};
@@ -695,6 +717,8 @@ void retry_tests(const std::string &path) {
   for (const auto fault :
        {Error{ErrorCode::provider_transport, 92},
         Error{ErrorCode::external_unknown, 429},
+        Error{ErrorCode::provider_rate_limit, 429},
+        Error{ErrorCode::provider_rate_limit, -429},
         Error{ErrorCode::external_unknown, 401},
         Error{ErrorCode::provider_transport, 60}, Error{ErrorCode::interrupted},
         Error{ErrorCode::corrupt}, Error{ErrorCode::capacity}, Error{ErrorCode::io, 92},
@@ -712,10 +736,12 @@ void retry_tests(const std::string &path) {
     }
     const unsigned expected =
         (fault.code == ErrorCode::provider_transport && fault.detail == 92) ||
-                (fault.code == ErrorCode::external_unknown && fault.detail == 429)
+                (fault.code == ErrorCode::external_unknown && fault.detail == 429) ||
+                (fault.code == ErrorCode::provider_rate_limit && fault.detail == 429)
             ? 3U
             : 1U;
-    if (!failed || provider.calls != expected)
+    if (!failed || provider.calls != expected || provider.begins != 1 ||
+        provider.ends != 1 || provider.active)
       throw Error{ErrorCode::corrupt};
   }
   {
@@ -781,6 +807,212 @@ void retry_tests(const std::string &path) {
     }
     if (!failed || provider.calls != 1 ||
         std::chrono::steady_clock::now() - began > std::chrono::seconds{1})
+      throw Error{ErrorCode::corrupt};
+  }
+  {
+    ContextStore context{log};
+    FlakyProvider provider;
+    provider.refuse_preparation = true;
+    provider.accepted_id = "preparation-recovery";
+    CodingEngine engine{log, context, provider, "test"};
+    bool failed = false;
+    try {
+      engine.turn({"", "arco.request()"});
+    } catch (const Error &e) {
+      failed = e.code == ErrorCode::unsupported;
+    }
+    if (!failed || provider.calls != 0 || provider.begins != 1 || provider.ends != 1 ||
+        provider.active)
+      throw Error{ErrorCode::corrupt};
+    provider.refuse_preparation = false;
+    engine.turn({"", program});
+    if (provider.calls != 2 || provider.begins != 2 || provider.ends != 2 ||
+        provider.active)
+      throw Error{ErrorCode::corrupt};
+  }
+  {
+    ContextStore context{log}, other_context{log};
+    FlakyProvider provider;
+    provider.accepted_id = "nested-group";
+    CodingEngine engine{log, context, provider, "test"};
+    CodingEngine other{log, other_context, provider, "test"};
+    bool nested_refused = false;
+    provider.prepared = [&] {
+      try {
+        other.turn({"", "arco.request()"});
+      } catch (const Error &e) {
+        nested_refused = e.code == ErrorCode::busy;
+      }
+    };
+    engine.turn({"", program});
+    if (!nested_refused || provider.begins != 1 || provider.ends != 1 ||
+        provider.active || provider.calls != 2)
+      throw Error{ErrorCode::corrupt};
+  }
+  {
+    ContextStore context{log};
+    FlakyProvider provider;
+    CodingEngine engine{log, context, provider, "test"};
+    provider.prepared = [&] {
+      context.append(
+          {Value::object({{"role", Value{"assistant"}},
+                          {"content", Value{"changed during preparation"}}})},
+          "preparation-oracle");
+    };
+    provider.accepted_id = "preparation-conflict";
+    bool conflicted = false;
+    try {
+      engine.turn({"", "arco.request()"});
+    } catch (const Error &e) {
+      conflicted = e.code == ErrorCode::conflict;
+    }
+    if (!conflicted || provider.calls != 0 || provider.begins != 1 ||
+        provider.ends != 1 || provider.active)
+      throw Error{ErrorCode::corrupt};
+    provider.prepared = {};
+    engine.turn({"", program});
+    if (provider.calls != 2 || provider.begins != 2 || provider.ends != 2)
+      throw Error{ErrorCode::corrupt};
+  }
+}
+void owned_route_tests(const std::string &path) {
+  for (const std::string mode :
+       {"retry", "switch", "replace", "refresh", "refresh429"}) {
+    const auto selected = std::filesystem::path{path} / mode;
+    std::filesystem::create_directories(selected);
+    std::filesystem::permissions(selected, std::filesystem::perms::owner_all);
+    auto root = unwrap(
+        RetainedState::create(std::make_unique<NativeJournalDirectory>(unwrap(
+                                  NativeJournalDirectory::open(selected.string()))),
+                              "audit",
+                              {id<EnvironmentId>(71),
+                               id<AuditStreamId>(72),
+                               3,
+                               {4 * 1024 * 1024, 16 * 1024 * 1024},
+                               std::nullopt},
+                              {64 * 1024 * 1024, 10000}));
+    AuditLog log{*root};
+    ContextStore context{log};
+    const auto native_input = unwrap(parse_json(
+        R"([{"type":"function_call","call_id":"route","name":"read_file","arguments":{"path":"README.md"}},{"type":"function_call_output","call_id":"route","output":{"content":"hello"}}])"));
+    context.append(native_input.array(), "route-oracle");
+    std::int64_t clock = 1000;
+    unsigned calls = 0, refreshes = 0;
+    std::string first_body;
+    OpenAiConfig config;
+    config.owned_auth.directory = selected / "auth";
+    config.owned_auth.now = [&] { return clock; };
+    const auto tokens = unwrap(parse_json(
+        R"({"access_token":"fixture-access","refresh_token":"fixture-refresh","expires_in":3600})"));
+    ProviderAuth auth{config.owned_auth};
+    auth.set_key("openai", "other", "fixture-other");
+    if (mode == "refresh" || mode == "refresh429")
+      auth.save_oauth("openai", "bound", tokens, "fixture-client",
+                      string_field(auth.descriptor("openai"), "token_url"));
+    else
+      auth.set_key("openai", "bound", "fixture-key");
+    config.owned_auth.http = [&](const ProviderHttpRequest &request,
+                                 ProviderHttpResponseLease &response) {
+      const auto respond = [&](int status, std::string body) {
+        auto destination = response.prepare(body.size());
+        std::copy(body.begin(), body.end(), destination.begin());
+        response.commit(body.size());
+        return status;
+      };
+      if (request.url.ends_with("oauth/token")) {
+        ++refreshes;
+        if (mode == "refresh429")
+          return respond(429, "{}");
+        return respond(
+            200,
+            R"({"access_token":"fixture-renewed","refresh_token":"fixture-rotated","expires_in":3600})");
+      }
+      ++calls;
+      if (mode == "refresh") {
+        const auto expected =
+            calls == 1 ? "Bearer fixture-access" : "Bearer fixture-renewed";
+        const auto header = std::find_if(
+            request.headers.begin(), request.headers.end(),
+            [](const auto &value) { return value.first == "Authorization"; });
+        if (header == request.headers.end() || header->second != expected)
+          throw Error{ErrorCode::corrupt};
+      }
+      if (request.url != "https://api.openai.com/v1/responses")
+        throw Error{ErrorCode::corrupt};
+      const auto submitted = unwrap(parse_json(request.body));
+      const auto &items = field(submitted, "input").array();
+      if (field(items[0], "arguments") != Value{"{\"path\":\"README.md\"}"} ||
+          field(items[1], "output") != Value{"{\"content\":\"hello\"}"})
+        throw Error{ErrorCode::corrupt};
+      if (calls == 1) {
+        first_body = request.body;
+        if (mode == "switch")
+          auth.use("openai", "other");
+        if (mode == "replace")
+          auth.set_key("openai", "bound", "fixture-replaced");
+        if (mode == "refresh" || mode == "refresh429")
+          clock = 4550;
+        return respond(429, "{}");
+      }
+      if (request.body != first_body)
+        throw Error{ErrorCode::corrupt};
+      return respond(200,
+                     "data: {\"type\":\"response.completed\",\"response\":{\"status\":"
+                     "\"completed\",\"output\":[]}}\n\n");
+    };
+    OpenAiCodingProvider provider{config};
+    auto runtime = unwrap(RawRuntime::open(selected.string(), id<EnvironmentId>(71)));
+    auto raw_handle = unwrap(runtime->prepare_thread());
+    RawThreadBinding raw_binding{raw_handle};
+    provider.begin_request_group(Value::object({}), nullptr);
+    if (provider.supports_prompt_cache_policy() !=
+        (mode != "refresh" && mode != "refresh429"))
+      throw Error{ErrorCode::corrupt};
+    bool nested_refused = false;
+    try {
+      provider.begin_request_group(Value::object({}), nullptr);
+    } catch (const Error &e) {
+      nested_refused = e.code == ErrorCode::busy;
+    }
+    if (!nested_refused)
+      throw Error{ErrorCode::corrupt};
+    provider.end_request_group();
+    CodingEngine engine{log, context, provider, "gpt-6.1-sol"};
+    bool refused = false;
+    try {
+      engine.turn(
+          {"", "arco.request({retry_policy={max_attempts=3,base_ms=0,cap_ms=0}})"});
+    } catch (const Error &e) {
+      refused = (mode == "switch" || mode == "replace")
+                    ? e.code == ErrorCode::conflict
+                    : mode == "refresh429" &&
+                          e.code == ErrorCode::provider_rate_limit && e.detail == -429;
+      if (!refused)
+        throw;
+    }
+    const bool success = mode == "retry" || mode == "refresh";
+    if (refused == success || calls != (success ? 2U : 1U) ||
+        refreshes != ((mode == "refresh" || mode == "refresh429") ? 1U : 0U) ||
+        Value{context.items()} != native_input ||
+        provider.supports_prompt_cache_policy())
+      throw Error{ErrorCode::corrupt};
+    std::set<std::string> attempts;
+    std::string group;
+    for (const auto &fact : root->committed_facts()) {
+      const auto *record = std::get_if<ApplicationRecordEvent>(&fact.event.body);
+      if (!record || record->channel != ApplicationChannel::log)
+        continue;
+      const auto packet = unwrap(read_packet(record->payload));
+      if (packet.find("label") && string_field(packet, "label") == "provider.request") {
+        const auto &metadata = field(packet, "metadata");
+        attempts.insert(string_field(metadata, "attempt"));
+        const auto next = string_field(metadata, "retry_group");
+        if (!group.empty() && group != next)
+          throw Error{ErrorCode::corrupt};
+        group = next;
+      }
+    }
+    if (attempts.size() != 2)
       throw Error{ErrorCode::corrupt};
   }
 }
@@ -1132,6 +1364,8 @@ int main(int argc, char **argv) {
       workflow_capacity_test(std::string{path} + "/workflow-records", true);
       stage = "retry_tests";
       retry_tests(std::string{path} + "/retries");
+      stage = "owned_route_tests";
+      owned_route_tests(std::string{path} + "/owned-routes");
       JournalHeader h{id<EnvironmentId>(1),
                       id<AuditStreamId>(2),
                       3,
@@ -1222,6 +1456,8 @@ int main(int argc, char **argv) {
     capacity_warning_test(std::string{path} + "/capacity");
     stage = "retry_tests";
     retry_tests(std::string{path} + "/retries");
+    stage = "owned_route_tests";
+    owned_route_tests(std::string{path} + "/owned-routes");
     stage = "retained_output_test";
     retained_output_test(std::string{path} + "/output");
     stage = "ordinary coding";

@@ -153,22 +153,103 @@ auto private_auth_operation(RawAuthTrace &trace, RawAuthExchangeSites sites,
     throw;
   }
 }
+Value compatibility_binding(std::string account) {
+  return Value::object({{"provider", Value{"openai"}},
+                        {"account", Value{std::move(account)}},
+                        {"revision", Value{Number{"-1"}}},
+                        {"kind", Value{"codex_chatgpt"}},
+                        {"base_url", Value{"https://chatgpt.com/backend-api/codex"}},
+                        {"protocol", Value{"responses"}}});
+}
+std::optional<RawAuthParent> auth_parent(const OpenAiConfig &config) {
+  if (config.raw_context && config.raw_context->parent)
+    return RawAuthParent{*config.raw_context->parent, nullptr, nullptr};
+  return std::nullopt;
+}
 } // namespace
-Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh) {
+Result<Value> openai_request_binding(const OpenAiConfig &config) {
+  std::optional<RawAuthTrace> owner;
+  try {
+    const auto parent = auth_parent(config);
+    const bool probe = config.codex_home.empty() && config.codex_executable == "codex";
+    owner.emplace(RawAuthEntry{RawAuthAction::resolve_codex,
+                               {"openai", {}},
+                               parent ? &*parent : nullptr,
+                               nullptr,
+                               false,
+                               probe});
+    auto &trace = *owner;
+    trace.start();
+    const auto child = trace.child();
+    if (probe) {
+      auto owned = config.owned_auth;
+      owned.cancelled = config.cancelled;
+      ProviderAuth auth{std::move(owned)};
+      if (auth.selected("openai", &child)) {
+        const RawAuthParent binding_parent{trace.reference(), nullptr, nullptr};
+        auto binding = auth.binding("openai", &binding_parent);
+        trace.branch({1607, 1});
+        trace.finish(1);
+        return Result<Value>::success(std::move(binding));
+      }
+    }
+    const auto before = private_auth_operation(trace, {1617, 1618}, 1,
+                                               [&] { return auth_file(config); });
+    if (required(before, "auth_mode") != "chatgpt")
+      fail(ErrorCode::unsupported);
+    const auto *tokens = before.find("tokens");
+    if (!tokens)
+      fail(ErrorCode::corrupt);
+    auto binding = compatibility_binding(required(*tokens, "account_id"));
+    trace.branch({1607, 2});
+    trace.finish(1);
+    return Result<Value>::success(std::move(binding));
+  } catch (const Error &e) {
+    if (owner)
+      owner->finish(2, &e);
+    return Result<Value>::failure(e);
+  } catch (const std::bad_alloc &) {
+    if (owner)
+      owner->finish(3);
+    return Result<Value>::failure({ErrorCode::allocation});
+  } catch (const std::length_error &) {
+    if (owner)
+      owner->finish(4);
+    return Result<Value>::failure({ErrorCode::capacity});
+  } catch (...) {
+    if (owner)
+      owner->finish(5);
+    throw;
+  }
+}
+Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh,
+                                const Value *expected_binding) {
   std::optional<RawAuthTrace> owner;
   try {
     const bool probe = config.codex_home.empty() && config.codex_executable == "codex";
-    owner.emplace(RawAuthEntry{
-        RawAuthAction::resolve_codex, {"openai", {}}, nullptr, nullptr, false, probe});
+    const auto parent = auth_parent(config);
+    owner.emplace(RawAuthEntry{RawAuthAction::resolve_codex,
+                               {"openai", {}},
+                               parent ? &*parent : nullptr,
+                               nullptr,
+                               expected_binding != nullptr,
+                               probe});
     auto &trace = *owner;
     trace.start();
     trace.boolean(2, refresh);
     const auto child_parent = trace.child();
     if (config.codex_home.empty() && config.codex_executable == "codex") {
-      ProviderAuth auth;
+      auto owned = config.owned_auth;
+      owned.cancelled = config.cancelled;
+      ProviderAuth auth{std::move(owned)};
       if (auth.selected("openai", &child_parent)) {
+        const RawAuthParent binding_parent{trace.reference(), nullptr, nullptr};
+        auto binding = auth.binding("openai", &binding_parent);
+        if (expected_binding && *expected_binding != binding)
+          fail(ErrorCode::conflict);
         OpenAiLogin login{OpenAiLogin::Credentials{"", ""}};
         login.owned_auth_ = true;
+        login.binding_ = std::move(binding);
         login.resolution_ = trace.reference();
         trace.branch({1607, 1});
         trace.stage(109);
@@ -186,6 +267,9 @@ Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh) {
     if (tokens == nullptr)
       fail(ErrorCode::corrupt);
     const auto account = required(*tokens, "account_id");
+    auto binding = compatibility_binding(account);
+    if (expected_binding && *expected_binding != binding)
+      fail(ErrorCode::conflict);
     Child child;
     child.cancelled = config.cancelled;
     std::vector<std::string> args{
@@ -224,6 +308,7 @@ Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh) {
     if (!header_safe(access) || !header_safe(account))
       fail(ErrorCode::corrupt);
     OpenAiLogin login{OpenAiLogin::Credentials{std::move(access), account}};
+    login.binding_ = std::move(binding);
     login.resolution_ = trace.reference();
     trace.branch({1607, 2});
     trace.stage(109);
@@ -267,15 +352,17 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
     adapter.emplace(provider_adapter_extra);
     adapter->start(5, &call);
     if (login.owned_auth_) {
-      ProviderAuthConfig owned;
+      auto owned = config.owned_auth;
       owned.curl_executable = config.curl_executable;
       owned.cancelled = config.cancelled;
       ProviderAuth auth{std::move(owned)};
       if (route != "responses")
         throw Error{ErrorCode::unsupported};
-      const auto response = auth.request(
-          "openai", route, request ? *request : Value::object({}),
-          config.timeout_seconds, config.response_observer, nullptr, call.owner, &call);
+      const auto response =
+          auth.request("openai", route,
+                       request ? export_provider_request(*request) : Value::object({}),
+                       config.timeout_seconds, config.response_observer,
+                       &login.binding_, call.owner, &call);
       adapter->finish(1);
       return Result<std::string>::success(response.body);
     }
@@ -416,6 +503,10 @@ std::vector<TextPreview> ResponsePreview::feed(std::string_view bytes,
         line.remove_suffix(1);
       if (line.empty()) {
         if (!data_.empty()) {
+          if (data_ == "[DONE]") {
+            data_.clear();
+            continue;
+          }
           RawProviderPhase event_phase{provider_scalar_credit};
           RawAdapterContext event_context{nullptr, phase.reference(), nullptr, nullptr};
           event_phase.run([&] {

@@ -930,6 +930,62 @@ void decoder_and_codec(const Directory &directory) {
   check(begun.empty() && completed == 1 && malformed == 2 && previewed == 1,
         "decoder/preview owner outcomes missing or multiply closed");
 }
+class RefusingPreparation final : public CodingProvider {
+public:
+  unsigned ended = 0;
+  std::optional<RawEventRef> parent;
+  void begin_request_group(const Value &, const RawAdapterContext *context) override {
+    check(context && context->parent, "group preparation has no assembly owner");
+    parent = context->parent;
+    throw Error{ErrorCode::unsupported, 73};
+  }
+  void end_request_group() noexcept override { ++ended; }
+  Value respond(const Value &, const std::function<void(std::string_view)> &) override {
+    throw std::runtime_error{"refused preparation reached transport"};
+  }
+};
+void preparation_refusal(const Directory &directory) {
+  const auto session = directory.child("preparation-refusal");
+  const JournalHeader header{id<EnvironmentId>(68),
+                             id<AuditStreamId>(69),
+                             3,
+                             {4 * 1024 * 1024, 16 * 1024 * 1024},
+                             std::nullopt};
+  auto root =
+      unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(unwrap(
+                                       NativeJournalDirectory::open(session.string()))),
+                                   "audit", header, {64 * 1024 * 1024, 10000}));
+  RefusingPreparation provider;
+  bool refused = false;
+  {
+    auto runtime = unwrap(RawRuntime::open(session.string(), header.environment));
+    auto handle = unwrap(runtime->prepare_thread());
+    {
+      RawThreadBinding binding{handle};
+      AuditLog log{*root};
+      ContextStore context{log};
+      CodingEngine engine{log, context, provider, "fixture-model"};
+      try {
+        engine.turn({"", "arco.request()"});
+      } catch (const Error &e) {
+        refused = e == Error{ErrorCode::unsupported, 73};
+      }
+    }
+    handle.reset();
+  }
+  check(refused && provider.ended == 1, "preparation refusal cleanup changed");
+  const auto all = records(session);
+  const auto &assembly = only(all, 1320);
+  check(provider.parent && same(*provider.parent, assembly.reference()),
+        "preparation linked to a fabricated phase");
+  ByteView terminal{only(all, 1321, assembly.reference()).body};
+  check(same(read_ref(terminal), assembly.reference()) &&
+            read_native<std::uint8_t>(terminal) == 2 &&
+            read_native<std::uint8_t>(terminal) == 14 &&
+            read_native<ErrorCode>(terminal) == ErrorCode::unsupported &&
+            read_native<std::int64_t>(terminal) == 73 && terminal.empty(),
+        "preparation lost actual assembly failure");
+}
 class RetryingProvider final : public CodingProvider {
 public:
   unsigned calls = 0;
@@ -1325,6 +1381,8 @@ int main(int argc, char **argv) {
     decoder_and_codec(directory);
     std::cerr << "coding retry\n";
     coding_retry(directory);
+    std::cerr << "preparation refusal\n";
+    preparation_refusal(directory);
     for (unsigned mode = 0; mode < 3; ++mode)
       wire_allocation(directory, mode, std::filesystem::absolute(argv[0]).string());
     standalone_original(directory, std::filesystem::absolute(argv[0]).parent_path() /

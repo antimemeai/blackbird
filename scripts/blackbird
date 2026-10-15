@@ -29,7 +29,7 @@ for blackbird_argument in "$@"; do
   case "$blackbird_argument" in
     --help|--list-sessions|--audit-last|--expire-diagnostics) blackbird_probe=true ;;
     --session) blackbird_value=session ;;
-    --model|--effort|--workflow) blackbird_value=skip ;;
+    --model|--effort|--workflow|--provider) blackbird_value=skip ;;
     --once) blackbird_once=true; blackbird_value=skip ;;
     --resume-once) blackbird_once=true ;;
     --plain) blackbird_plain=true ;;

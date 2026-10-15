@@ -13,6 +13,7 @@ class Screen:
         self.prior = None
         self.join = self.regional = False
         self.saved_cursor = (0, 0)
+        self.synchronized_update = False
         self.row = self.col = 0
         self.pending = ''
         self.decoder = codecs.getincrementaldecoder('utf-8')('replace')
@@ -61,6 +62,7 @@ class Screen:
                     elif cmd == 'J':
                         for key in list(self.cells):
                             if values == '2' or key >= (self.row,self.col): del self.cells[key]
+                    elif cmd in ('h', 'l') and values == '?2026': self.synchronized_update = cmd == 'h'
                     elif cmd == 'h' and values == '?1049': self.cells.clear()
                     pos += len(match.group(0));continue
                 pos += 2;continue

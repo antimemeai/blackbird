@@ -38,7 +38,13 @@ int main() {
                                        "audit", header, capacity));
       AuditLog log{*root};
       ContextStore context{log};
+      log.record(ApplicationChannel::program,
+                 Value::object({{"label", Value{"session.settings"}},
+                                {"model", Value{"legacy"}},
+                                {"effort", Value{"medium"}},
+                                {"workflow", Value{"/absolute/legacy.lua"}}}));
       SessionStore store{log};
+      check(store.settings().provider == "openai");
       store.save({"chosen", "high", "/absolute/turn.lua", "My session"});
       const auto count = root->committed_facts().size();
       bool refused = false;
@@ -90,6 +96,15 @@ int main() {
             "damaged");
       check(read_file(std::filesystem::path{path} / "audit") == audit_before);
       save_session_info(path, store.settings(), identity);
+      auto routed = store.settings();
+      routed.provider = "openrouter";
+      routed.model = "vendor/chosen";
+      store.save(routed);
+      save_session_info(path, routed, identity);
+      const auto routed_sessions = list_sessions(path);
+      check(string_field(
+                field(field(routed_sessions, "sessions").array()[0], "configuration"),
+                "provider") == "openrouter");
       store.restart("Retain this note");
       const auto &fact = root->committed_facts().back();
       const auto &record = std::get<ApplicationRecordEvent>(fact.event.body);
@@ -111,8 +126,9 @@ int main() {
       AuditLog log{*root};
       ContextStore context{log};
       SessionStore store{log};
-      check(store.settings() ==
-            SessionSettings{"chosen", "high", "/absolute/turn.lua", "My session"});
+      check(store.settings() == SessionSettings{"vendor/chosen", "high",
+                                                "/absolute/turn.lua", "My session",
+                                                "openrouter"});
       const auto identity = session_identity(log);
       check(actor == hex_identity(identity.actor.bytes()) &&
             conversation == hex_identity(identity.conversation.bytes()) &&

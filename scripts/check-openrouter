@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Check real native OpenRouter selection, continuation and failure without network."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import shlex
+
+
+def fake_curl():
+    wire = sys.stdin.read()
+    assert "https://openrouter.ai/api/v1/responses" in wire
+    assert "X-OpenRouter-Metadata: enabled" in wire
+    assert "X-OpenRouter-Cache: false" in wire
+    assert all("fixture-secret" not in x for x in sys.argv)
+    encoded = next(x.split(" = ", 1)[1] for x in wire.splitlines()
+                   if x.startswith("data-binary = "))
+    request = json.loads(json.loads(encoded))
+    assert request["model"] == "openai/gpt-6.1-sol"
+    assert request["provider"]["require_parameters"] is True
+    assert request["stream"] is True and request["store"] is False
+    assert "state_context" not in request and "cache_policy" not in request
+    log = Path(os.environ["BLACKBIRD_OR_FIXTURE_LOG"])
+    with log.open("a") as out:
+        out.write(json.dumps(request) + "\n")
+    mode = os.environ.get("BLACKBIRD_OR_FIXTURE_MODE", "success")
+    marker = os.environ["BLACKBIRD_OR_FIXTURE_OUTPUT"]
+    command = "printf X >> " + shlex.quote(marker)
+    if mode == "failed":
+        result = {"type": "response.failed", "response": {
+            "status": "failed", "error_type": "authentication",
+            "error": {"code": "server_error", "message": "fixture failure"}}}
+    elif mode == "incomplete":
+        result = {"type": "response.incomplete", "response": {"status": "incomplete"}}
+    else:
+        calls = [x for x in request["input"] if x.get("type") == "function_call_output"]
+        if not calls:
+            output = [
+                {"id": "r1", "type": "reasoning", "status": "completed",
+                 "encrypted_content": "opaque-fixture==", "format": "fixture-format",
+                 "signature": "fixture-signature", "summary": []},
+                {"id": "f1", "type": "function_call", "status": "completed",
+                 "call_id": "call1", "name": "exec",
+                 "arguments": json.dumps({"command": command, "yield_ms": 1000,
+                                          "output_max_bytes": 1024})}]
+            if mode == "duplicate_call":
+                output.append(dict(output[-1], id="f2"))
+            if mode == "namespaced":
+                output[-1]["namespace"] = "fixture-namespace"
+            if mode == "custom":
+                output[-1]["type"] = "custom_tool_call"
+            if mode in ("partial_item", "in_progress_item"):
+                output[-1]["status"] = "incomplete" if mode == "partial_item" else "in_progress"
+        else:
+            assert len(calls) == 1 and calls[0]["call_id"] == "call1"
+            value = calls[0]["output"]
+            if isinstance(value, list):
+                value = next(x["text"] for x in value if x["type"] == "input_text")
+            assert json.loads(value)["state"] == "completed"
+            reasoning = next(x for x in request["input"] if x.get("type") == "reasoning")
+            assert reasoning["encrypted_content"] == "opaque-fixture=="
+            assert reasoning["signature"] == "fixture-signature"
+            assert reasoning["format"] == "fixture-format"
+            call = next(x for x in request["input"] if x.get("type") == "function_call")
+            assert json.loads(call["arguments"])["command"] == command
+            output = [{"id": "m1", "type": "message", "role": "assistant",
+                       "status": "completed", "phase": "final_answer",
+                       "content": [{"type": "output_text", "text": "fixture completed"}]}]
+        result = {"type": "response.completed", "response": {
+            "id": "resp1", "status": "completed", "model": "openai/gpt-6.1-sol",
+            "output": output, "usage": {"input_tokens": 1200, "output_tokens": 20,
+            "input_tokens_details": {"cached_tokens": 1000, "cache_write_tokens": 100},
+            "output_tokens_details": {"reasoning_tokens": 5}, "cost": 0.000123}}}
+        if mode == "contradictory_error":
+            result["response"]["error"] = {"code": "server_error"}
+            result["response"]["error_type"] = "authentication"
+    stream = "data: " + json.dumps(result) + "\n\n"
+    if mode == "malformed_tail":
+        stream += "data: {broken}\n\n"
+    else:
+        stream += "data: " + json.dumps({"openrouter_metadata": {
+            "provider": "fixture-upstream", "fixture_extension": True}}) + "\n\n"
+    stream += "data: [DONE]\n\n"
+    sys.stdout.write(stream + "\n200")
+
+
+def main():
+    executable = Path(sys.argv[1]).resolve()
+    with tempfile.TemporaryDirectory(prefix="blackbird-openrouter-") as temporary:
+        root = Path(temporary)
+        curl = root / "curl"
+        curl.write_text("#!/bin/sh\nexec " + __import__("shlex").quote(sys.executable) +
+                        " " + __import__("shlex").quote(str(Path(__file__).resolve())) +
+                        " --fake-curl \"$@\"\n")
+        curl.chmod(0o700)
+        env = dict(os.environ, BLACKBIRD_AUTH_HOME=str(root / "auth"),
+                   OPENROUTER_API_KEY="fixture-secret", BLACKBIRD_OPENROUTER_CURL=str(curl),
+                   BLACKBIRD_OR_FIXTURE_LOG=str(root / "requests"),
+                   BLACKBIRD_OR_FIXTURE_OUTPUT=str(root / "effect"))
+        session = root / "session"
+        run = subprocess.run([str(executable), "--plain", "--session", str(session),
+                              "--provider", "openrouter", "--model", "openai/gpt-6.1-sol",
+                              "--once", "write the fixture"], env=env,
+                             capture_output=True, text=True, timeout=30)
+        assert run.returncode == 0, (run.returncode, run.stderr, run.stdout)
+        assert (root / "effect").read_text() == "X"
+        requests = [json.loads(x) for x in (root / "requests").read_text().splitlines()]
+        assert len(requests) == 2
+        usage = subprocess.run([str(executable.with_name("blackbird-token-usage")), str(session)],
+                               capture_output=True, text=True, timeout=30)
+        assert usage.returncode == 0, usage.stderr
+        subtotals = [x for x in usage.stdout.splitlines()
+                     if x.startswith("known_subtotal actor=main provider=openrouter ")]
+        assert len(subtotals) == 1, usage.stdout
+        assert " input=2400 output=40 " in subtotals[0], usage.stdout
+        assert " cache_read=2000 cache_write=200 " in subtotals[0], usage.stdout
+        assert usage.stdout.count("observation actor=main scope=aggregate") == 2, usage.stdout
+        reopened = subprocess.run([str(executable), "--plain", "--session", str(session)],
+                                 input="/session\n/quit\n", env=env,
+                                 capture_output=True, text=True, timeout=30)
+        assert reopened.returncode == 0, reopened.stderr
+        assert '"provider":"openrouter"' in reopened.stdout
+        assert len((root / "requests").read_text().splitlines()) == 2
+        for mode in ("failed", "incomplete", "malformed_tail", "namespaced", "custom",
+                     "partial_item", "in_progress_item", "contradictory_error", "duplicate_call"):
+            (root / "effect").unlink(missing_ok=True)
+            failed_env = dict(env, BLACKBIRD_OR_FIXTURE_MODE=mode)
+            failed = subprocess.run([str(executable), "--plain", "--session", str(root / mode),
+                                     "--provider", "openrouter", "--model", "openai/gpt-6.1-sol",
+                                     "--once", "refuse incomplete tools"], env=failed_env,
+                                    capture_output=True, text=True, timeout=30)
+            assert failed.returncode != 0, (mode, failed.stdout, failed.stderr)
+            assert not (root / "effect").exists(), mode
+        assert "fixture-secret" not in run.stdout + run.stderr + reopened.stdout
+        print("OpenRouter native continuation/reopen/failure checks pass")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--fake-curl":
+        fake_curl()
+    else:
+        main()

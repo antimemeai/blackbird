@@ -49,7 +49,9 @@ with tempfile.TemporaryDirectory(prefix="blackbird-task-pane-") as work:
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             drain(0.04)
-            if predicate():
+            # Text and cursor moves arrive in separate PTY chunks. Inspect the
+            # published synchronized frame, after its final cursor restoration.
+            if not screen.synchronized_update and predicate():
                 return
         raise AssertionError(f"{label}\n{screen.text()}")
 

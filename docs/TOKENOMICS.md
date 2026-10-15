@@ -1,0 +1,136 @@
+# Provider routing, prompt caching and usage
+
+Blackbird's main coding loop can use OpenAI or OpenRouter Responses. Choose the
+provider explicitly; changing a model string alone does not switch accounts or
+billing routes. Native context-only colleagues keep their existing provider registry.
+
+## OpenRouter main coding
+
+Use an existing OpenRouter key through the owned authentication interface:
+
+```sh
+BLACKBIRD_EXECUTABLE="$PWD/build/debug/blackbird" ./scripts/blackbird auth key openrouter default
+BLACKBIRD_EXECUTABLE="$PWD/build/debug/blackbird" ./scripts/blackbird \
+  --session context/router-session --provider openrouter --model openai/gpt-6.1-sol
+```
+
+The auth command prompts privately; never put a key in a chat command or argument.
+Alternatively, with no selected owned account, the adapter uses the existing
+`OPENROUTER_API_KEY` environment variable. A selected logged-out/broken account
+does not fall back to another credential. Provider/model choices are retained
+through reopen, native restart and `/new`; `/session` displays them. A provider
+switch requires an explicit model. Older settings default to OpenAI.
+
+The adapter sends full required history with `store:false`, preserves opaque
+reasoning and assistant phases, requires parameter support for coding tools,
+requests routing metadata and disables whole-response caching. Prefix caching
+remains independent. A valid complete response is required before tool dispatch;
+failed/incomplete/malformed streams retain their observed originals. The default
+Lua program refuses namespaced/custom tool execution rather than guessing a local
+tool; custom programs can handle retained structures deliberately.
+
+Existing OpenAI paths remain available. No automatic model, account or paid-route
+fallback is added. `BLACKBIRD_OPENROUTER_CURL` selects a transport executable for
+deterministic/local transport checks; ordinary use keeps the existing system curl.
+
+## Prompt policy and changing state
+
+Request-local Lua choices:
+
+```lua
+local result = blackbird.request({cache_policy = "stable_prefix"})
+-- Or: cache_policy = "provider_default" / "disabled"
+-- state_context = "omit" deliberately omits the automatic task/budget message.
+```
+
+`provider_default` is the default and preserves authored upstream controls.
+`stable_prefix` adds one explicit boundary at the latest eligible text part before
+the automatic state message, retaining implicit caching. Native tool results are
+encoded once at the external boundary before a result string becomes a text part.
+`disabled` uses explicit-only caching with no markers. Explicit native policies
+reject conflicting authored cache controls and unsupported model/account routes;
+they never silently change the model, credentials or billing destination.
+
+The initial explicit-policy support is deliberately limited to `gpt-6.1-sol` on
+the owned public OpenAI API-key route, and `openai/gpt-6.1-sol` on OpenRouter.
+Subscription/compatibility and other models retain provider defaults or directly
+authored request fields; this implementation does not establish their cache-control
+acceptance. No paid prewarm or keepalive runs. A marker does not prove a cache hit.
+
+Retain a policy through the existing program configuration tool:
+
+```lua
+local config = blackbird.call("program_config", {})
+local proposal = config.effective
+proposal.prompt_cache = "stable_prefix"
+return blackbird.call("program_config", {base = config.revision, proposal = proposal})
+```
+
+A successful workflow boundary activates it. Failure/cancel keeps the effective
+policy. Request-local `cache_policy` overrides the retained default. Main provider
+selection stays in session settings; it is not an unannounced program override.
+
+Task/budget facts now appear in one request-local trailing developer message,
+after complete selected input and tool groups. They do not accumulate in retained
+context. `state_context=auto` is the default; `omit` is explicit model policy.
+Budget bytes still describe selected native input before adding that message,
+including any Lua input override. They are neither tokens nor final wire bytes.
+Retries retain one assembled request; the next request/restart derives fresh
+state. Historical request inspection preserves the actual native request and
+external bytes, while context inspection shows retained items.
+
+For deliberate external tool-content arrays, an authored native
+`function_call_output` item may set `blackbird_output_parts=true`; its `output`
+must then be a supported typed text/image/file content array. The discriminator
+is removed by the external encoder. Ordinary native data, including arrays that
+look like content blocks or contain marker-shaped keys, remains JSON text at that
+boundary. Do not use this opt-in for ordinary application data.
+
+## Read usage independently
+
+```sh
+build/debug/blackbird-token-usage context/router-session
+build/debug/blackbird-token-usage context/router-session --max-records 100000 --max-bytes 67108864
+```
+
+The native tertiary reader opens pinned preserved raw prefixes without taking the
+semantic writer/recovery lock. It shows reported counters, known subtotals,
+unknown/invalid consumption, main/colleague/decision scopes and source locators.
+Copies of the same response are not independent calls; failed or locally rejected
+responses can still have reported usage. A known local refusal differs from a
+dispatched request with missing usage. Alternative Claude per-model scopes are
+not added to its aggregate.
+
+Generic numeric costs retain an unspecified currency unless the actual route
+establishes OpenRouter USD or an explicit USD field supplies its unit. Invalid
+charge metadata does not invalidate independently valid token counters. Conflicting
+terminal usage is marked invalid; incomplete usage remains partial and cannot
+produce a confident price estimate.
+
+Observed OpenRouter account charges stay separate from upstream breakdowns and
+optional list-price estimates. Supply explicit dated USD/million rates with:
+
+```sh
+build/debug/blackbird-token-usage context/router-session \
+  --price 2026-10-14 openrouter openai/gpt-6.1-sol - 2 10 0.10 2.50
+```
+
+This is an example tariff input, not an invoice or a guaranteed current rate.
+Use the actual model/provider/tier/date; `-` means absent tier/cache rate.
+The estimate refuses missing/contradictory partitions and unsupported TTL-specific
+write pricing rather than inventing zeroes. Inclusive reasoning is not charged
+twice. Public API estimates do not determine subscription allowance.
+
+Coverage is explicitly raw-prefix-only, never a complete session bill. Missing
+runs, older/unlinked/unsupported/corrupt data and scan limits remain visible.
+`--max-bytes` bounds decoded scan work; the existing raw reader also validates
+its pinned audit prefix, so this is not a total filesystem-I/O limit. Original
+locators point into the preserved run; later bytes require a new snapshot.
+`/stats` remains selected last-response information in the main process.
+
+The [execution plan](TOKENOMICS_IMPLEMENTATION.md),
+[provider research](../papers/tokenomics-2026-10-14/provider-contracts.md) and
+[OpenRouter contract](../papers/tokenomics-2026-10-14/openrouter-contract.md) and
+[qualification record](../papers/tokenomics-2026-10-14/qualification.md)
+record the contracts and qualification boundaries. No cache-saving or general
+task-quality result is established by deterministic protocol checks alone.

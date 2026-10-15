@@ -69,7 +69,9 @@ The working directory is the tool working directory. New default sessions live a
 Blackbird owns provider account storage, selection and refresh. Explicit OpenAI
 sign-in uses browser OAuth; Kimi and Grok use device login; Anthropic has a
 PKCE/copy-code flow; MiMo and other providers accept keys. The main coding loop
-remains OpenAI. Direct context-only colleagues can use the wider provider registry.
+uses OpenAI by default, with explicit OpenRouter Responses support. See
+[provider routing, prompt caching and usage](docs/TOKENOMICS.md) for selection and
+limits. Direct context-only colleagues can use the wider provider registry.
 Installed Codex/Claude compatibility paths remain available until owned accounts
 are selected. Live account sign-in and remote logout revocation remain follow-through.
 See [provider authentication](docs/USING_BLACKBIRD.md) for commands and limits.
@@ -248,9 +250,12 @@ An external campaign supervisor currently provides longer-lived provider-only re
 
 The [tokenomics frumentarii](papers/tokenomics-2026-10-14/SYNTHESIS.md) studies
 prompt caching, request layout, per-attempt usage and recoverable context views.
-It proposes route fixes, a tertiary usage reader and provider-specific cache
-policy. Current `/stats` still reports selected last-response counters; the
-research does not deliver a cumulative bill or qualify subscription cache controls.
+The resulting [implementation](docs/TOKENOMICS.md) adds account-bound retries,
+OpenRouter main coding, explicit prompt-cache policy and a native tertiary usage
+reader. Changing task/budget state follows reusable input rather than changing
+the leading instructions. `/stats` retains selected last-response counters; the
+separate reader reports known consumption and missing coverage, never a complete
+session bill. Subscription cache controls and actual cache savings remain unqualified.
 
 ## Complaints, candidates, and the possibility of learning
 
@@ -266,7 +271,7 @@ The [pilot report](papers/2026-10-06-useful-work-pilot.md) retains measured outc
 
 ## Beyond one seat
 
-Blackbird is designed toward heterogeneous colleagues: OpenAI, Kimi, MiMo, Claude, Grok, and whatever future providers make possible. The desired limit is upstream capability and explicitly configured operating policy. Cross-provider delegation and model limits belong in that design. The main coding connection is OpenAI. The native `blackbird-colleague` library/CLI and shared model/Lua/operator surface support bounded selected-context OpenAI/Claude calls. Native participants provide concurrent requests, addressed direction at request boundaries, observe/await/join, explicit cancellation requests and task badges. A live OpenAI colleague/main-model repair worked; the single Claude trial timed out unknown. Workers remain context-only; useful live heterogeneous coding and remote tool-using outposts remain unfinished. See the [campaign results](papers/2026-10-08-collaboration-campaign.md).
+Blackbird is designed toward heterogeneous colleagues: OpenAI, Kimi, MiMo, Claude, Grok, and whatever future providers make possible. The desired limit is upstream capability and explicitly configured operating policy. Cross-provider delegation and model limits belong in that design. The main coding connection defaults to OpenAI and also supports explicit OpenRouter Responses. The native `blackbird-colleague` library/CLI and shared model/Lua/operator surface support bounded selected-context OpenAI/Claude calls. Native participants provide concurrent requests, addressed direction at request boundaries, observe/await/join, explicit cancellation requests and task badges. A live OpenAI colleague/main-model repair worked; the single Claude trial timed out unknown. Workers remain context-only; useful live heterogeneous coding and remote tool-using outposts remain unfinished. See the [campaign results](papers/2026-10-08-collaboration-campaign.md).
 
 Two operating styles are also on the road ahead. **Campaign mode** is the operator in the seat, steering sustained work. **Station mode** is an agent listening for an explicit feed or trigger and acting in the background. Campaigns have run with Lua and external supervision. An opt-in native local-file station is delivered, with retained event admission/deduplication and boundary inspect/steer/pause/resume/stop controls. Bounded local asynchronous participants are delivered separately. General trigger connectors and live TUI attachment remain future work.
 

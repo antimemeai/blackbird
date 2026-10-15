@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/provider_auth.hpp"
 #include "blackbird/provider_original.hpp"
 #include "blackbird/value.hpp"
 #include <filesystem>
@@ -17,6 +18,7 @@ struct OpenAiConfig {
   std::function<bool()> cancelled;
   const RawProviderOwner *raw_owner = nullptr;
   const RawAdapterContext *raw_context = nullptr;
+  ProviderAuthConfig owned_auth;
 };
 class OpenAiLogin {
 public:
@@ -34,14 +36,18 @@ private:
         account_id_(std::move(credentials.account)) {}
   RawEventRef resolution_;
   std::string access_token_, account_id_;
+  Value binding_;
   bool owned_auth_ = false;
-  friend Result<OpenAiLogin> codex_login(const OpenAiConfig &, bool);
+  friend Result<OpenAiLogin> codex_login(const OpenAiConfig &, bool, const Value *);
   friend Result<std::string> openai_http(const OpenAiConfig &, const OpenAiLogin &,
                                          std::string_view, const Value *);
 };
-// Codex performs token renewal; Arco never rotates or writes shared auth.json.
-Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh = false);
-// Fixed subscription endpoint. A caller cannot redirect credentials to another host.
+// Metadata-only request-group identity; no refresh or account probe.
+Result<Value> openai_request_binding(const OpenAiConfig &config);
+// Compatibility renewal stays with Codex; owned accounts use ProviderAuth.
+Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh = false,
+                                const Value *expected_binding = nullptr);
+// Bound owned Responses route or fixed Codex compatibility endpoint.
 Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &login,
                                 std::string_view route, const Value *request = nullptr);
 struct TextPreview {

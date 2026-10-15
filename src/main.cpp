@@ -2,6 +2,7 @@
 #include "blackbird/coding.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/local_timing.hpp"
+#include "blackbird/openrouter.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/provider_auth.hpp"
 #include "blackbird/raw_command.hpp"
@@ -84,6 +85,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     bool one = false, inspect = false, plain = false, rebuild_session = false,
          expire_diagnostics = false, recover_unknown_effects = false;
     std::string effort = "medium";
+    std::string provider_name = "openai";
+    bool provider_option = false;
     bool model_option = false, effort_option = false, workflow_option = false;
     bool resume_requested = false, discovery = false, switched_session = false;
     auto discovery_root = session.parent_path();
@@ -94,7 +97,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         continue;
       }
       if (arg == "--help") {
-        std::cout << "blackbird [--session DIRECTORY] [--model NAME] [--workflow FILE] "
+        std::cout << "blackbird [--session DIRECTORY] [--provider openai|openrouter] "
+                     "[--model NAME] [--workflow FILE] "
                      "[--once "
                      "PROMPT] [--audit-last] [--effort low|medium|high|xhigh] "
                      "[--plain] [--list-sessions [ROOT]] [--seed-session JSON] "
@@ -156,6 +160,9 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       } else if (arg == "--workflow") {
         workflow = argv[++i];
         workflow_option = true;
+      } else if (arg == "--provider") {
+        provider_name = argv[++i];
+        provider_option = true;
       } else if (arg == "--model") {
         model = argv[++i];
         model_option = true;
@@ -406,6 +413,11 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     SessionStore session_store{log, &session_capture};
 
     auto settings = session_store.settings();
+    if (provider_option) {
+      if (provider_name != settings.provider && !model_option)
+        throw Error{ErrorCode::invalid_range};
+      settings.provider = provider_name;
+    }
     if (model_option)
       settings.model = model;
     if (effort_option)
@@ -416,6 +428,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     (void)read_file(settings.workflow, 16 * 1024 * 1024, &session_capture);
     session_store.save(settings, &session_capture);
     model = settings.model;
+    provider_name = settings.provider;
     effort = settings.effort;
     workflow = settings.workflow;
     bool resume_turn =
@@ -425,8 +438,15 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     std::atomic_bool restart_pending{false};
     std::atomic_bool new_pending{false};
     RawAdapterContext restart_capture;
-    OpenAiCodingProvider provider;
-    CodingEngine engine{log, context, provider, model};
+    std::unique_ptr<CodingProvider> provider;
+    if (provider_name == "openrouter") {
+      OpenRouterConfig config;
+      if (const auto *curl = std::getenv("BLACKBIRD_OPENROUTER_CURL"); curl && *curl)
+        config.auth.curl_executable = curl;
+      provider = std::make_unique<OpenRouterCodingProvider>(std::move(config));
+    } else
+      provider = std::make_unique<OpenAiCodingProvider>();
+    CodingEngine engine{log, context, *provider, model};
     if (engine.uncontained_command_custody())
       warning("Prior command custody remains unknown; restart and automatic "
               "backstop stay fenced. No old PID adopted or effect replayed.\n");
@@ -787,6 +807,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                          Value{hex_identity(identity.conversation.bytes())}},
                         {"workflow_id", Value{hex_identity(identity.workflow.bytes())}},
                         {"model", Value{model}},
+                        {"provider", Value{provider_name}},
                         {"effort", Value{effort}},
                         {"workflow", Value{workflow.string()}}}))) +
                    "\n");
@@ -889,7 +910,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                 for (const auto value :
                      {std::string_view{argv[0]}, std::string_view{"--session"},
                       std::string_view{directory_text}, std::string_view{"--model"},
-                      std::string_view{model}, std::string_view{"--effort"},
+                      std::string_view{model}, std::string_view{"--provider"},
+                      std::string_view{provider_name}, std::string_view{"--effort"},
                       std::string_view{effort}, std::string_view{"--workflow"},
                       std::string_view{workflow_text}})
                   arguments.emplace_back(
@@ -1065,7 +1087,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
           if (!backstop_path.empty() && e.code != ErrorCode::interrupted &&
               !engine.cancelled()) {
             const auto outcome = run_backstop(engine, log, session, backstop_mission,
-                                              provider, session_store.settings(),
+                                              *provider, session_store.settings(),
                                               engine.cancelled, emit, &command_context);
             emit("\nBackstop: " + unwrap(dump_json(outcome)) + "\n");
             if (string_field(outcome, "phase") == "useful-work-observed")

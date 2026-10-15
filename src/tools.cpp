@@ -691,7 +691,7 @@ Value tool_definitions() {
                 "Inspect or stage retained named Lua modules and request defaults "
                 "(model/effort; empty uses launch defaults). Proposal is complete "
                 "{modules:[{name,source}],model,effort}, with optional workflow_prefix "
-                "and "
+                "and prompt_cache:provider_default|stable_prefix|disabled, and "
                 "workflows:[{name,description,source,aliases:[string],bare:boolean,"
                 "powerwords:[{token,color}]}]. Workflows source is a Lua function body "
                 "with args. Omitted workflow fields disable registered workflows. "
