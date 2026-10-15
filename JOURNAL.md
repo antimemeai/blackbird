@@ -9842,3 +9842,13 @@ and delivery-plan docs to distinguish delivered native output from future
 renderer/Lua/shared application work. Preserve all original source/performance
 archives; final documentation/Beads-only follow-up uses relevant diff/data/link
 checks and explicit text-only exception, with no repeated source suite.
+
+Operator reports Ultramarine paper-provider pane corruption and capacity failures.
+Find exact default session-nIWneY after source-only initial triage. Read original
+audit/diagnostics metadata/raw records without reopening or replaying commands.
+34 exec starts,32 admissions/worker launch requests,2 pre-launch capacity
+refusals with max_records32. Generic exec settlement incorrectly presents an
+unknown effect; model invents interruption and retries, also refused. No failed
+build worker launched. Queue arconaut-zh2 and independent unresolved pane bug
+arconaut-6ao; report papers/ultramarine-triage-2026-10-15.md. No source change,
+provider call, live-session mutation or AFL inspection.
