@@ -9565,3 +9565,29 @@ unidentified; no claim that this oracle correction repaired a product deadlock.
 The required hook retries after this concrete fixture correction; no new review
 or broad assurance campaign. Existing passing production-source profile results
 remain, with the corrected fixture directly checked separately on Linux.
+
+The required source hook completes successfully and creates a68fec4 on
+work/tui-reference-2026-10-15: full Mac Debug146/146 in286.00seconds, then owned
+C++/Lua analysis with no new diagnostic or suppression. All21 affected Linux
+Debug/Release/ASan cases pass on final native sources; the subsequent corrected
+PTY fixture separately passes Linux Debug9.01seconds and that full Mac gate.
+The11 readable styled baselines, real Microsoft Ghostty/Alacritty scenarios,
+native scene semantics and50 allocation cuts remain the direct scoped results.
+
+Additional affected Mac Release/ASan builds compile through action60/68 then four
+Apple ld processes fail to complete at archive-helper/conversation-test linking.
+Their output timestamps remain older; ps/sample inspection also fails to return,
+and no stack/root cause is obtained. Preserve process identities and logs in
+context/tui-implementation-2026-10-15/mac-link-stall.json and profile logs. Stop
+only those owned build/probe jobs with TERM/KILL. No tool policy change, running
+operator process interruption or Mac Release/ASan pass is implied. Track this
+incomplete host qualification as arconaut-ew5. The unrelated transient quit
+observation stays open as arconaut-xbf; stronger retry completion is not a claimed
+product deadlock fix.
+
+Close arconaut-rhi.3.1 and arconaut-600 with these scoped results. Keep rhi.3 in
+progress for output-lifetime/async native host, independent Lua composition/action
+bridge and real conversation/command-center reuse. Record final qualification,
+back up beads, check the text-only diff and links, and publish a separate results
+checkpoint without rerunning the settled source gate. No main merge or live
+executable activation is requested by this delivery.

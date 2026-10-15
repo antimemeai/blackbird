@@ -40,6 +40,7 @@
 {"created_at":"2026-09-29T03:27:42Z","created_by":"antimemeai","depends_on_id":"arconaut-dcg","issue_id":"arconaut-ahb","type":"discovered-from"}
 {"created_at":"2026-10-14T04:54:22Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-bho","type":"discovered-from"}
 {"created_at":"2026-10-09T18:33:28Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-c54","type":"parent-child"}
+{"created_at":"2026-10-15T13:31:52Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3.1","issue_id":"arconaut-ew5","type":"discovered-from"}
 {"created_at":"2026-10-14T05:02:07Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-fir","type":"discovered-from"}
 {"created_at":"2026-10-14T05:02:07Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-iva","type":"discovered-from"}
 {"created_at":"2026-10-14T05:10:43Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-ji3","type":"discovered-from"}

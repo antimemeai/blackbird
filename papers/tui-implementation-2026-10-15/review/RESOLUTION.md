@@ -25,3 +25,11 @@ by normal test runs. Review produced no demand to repaint existing imperfections
 Root recheck covers final source, actual interrupt cleanup, stale-profile refusal,
 normal external driver behavior and the required source/platform profiles, recorded
 in the campaign qualification document. No new third assurance layer or evaluator.
+
+The required full gate separately exposes a pre-existing PTY fixture's completion
+gap at its final save-refusal retry. A unique post-native-call marker replaces the
+historical completion-row match without enlarging a timeout or removing actual
+busy-quit coverage. The corrected full gate passes. The observed transient stall
+itself remains unexplained in `arconaut-xbf`; this fixture correction does not
+claim a product hang repair. Additional Mac profile linker noncompletion remains
+`arconaut-ew5`. See [qualification](../QUALIFICATION.md) for exact result boundaries.
