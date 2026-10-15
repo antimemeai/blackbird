@@ -1,0 +1,31 @@
+Test project /tmp/arconaut-linux-ZX2ozOhm/build/asan
+      Start  23: terminal_pty
+ 1/13 Test  #23: terminal_pty .....................   Passed    1.54 sec
+      Start  24: terminal_pty_palette
+ 2/13 Test  #24: terminal_pty_palette .............   Passed    0.79 sec
+      Start  25: terminal_pty_palette_capacity
+ 3/13 Test  #25: terminal_pty_palette_capacity ....   Passed    0.31 sec
+      Start  26: terminal_pty_editor
+ 4/13 Test  #26: terminal_pty_editor ..............   Passed    0.55 sec
+      Start  27: terminal_pty_composer
+ 5/13 Test  #27: terminal_pty_composer ............   Passed    0.36 sec
+      Start  28: terminal_pty_state
+ 6/13 Test  #28: terminal_pty_state ...............   Passed    3.65 sec
+      Start  29: terminal_pty_comfort
+ 7/13 Test  #29: terminal_pty_comfort .............   Passed    3.68 sec
+      Start  30: terminal_pty_avatar
+ 8/13 Test  #30: terminal_pty_avatar ..............   Passed    1.46 sec
+      Start  31: terminal_pty_graphics
+ 9/13 Test  #31: terminal_pty_graphics ............   Passed    0.60 sec
+      Start  39: coding
+10/13 Test  #39: coding ...........................   Passed    3.81 sec
+      Start  40: coding_capacity
+11/13 Test  #40: coding_capacity ..................   Passed    5.85 sec
+      Start  41: coding_routing
+12/13 Test  #41: coding_routing ...................   Passed    3.54 sec
+      Start 111: coding_stream_capture
+13/13 Test #111: coding_stream_capture ............   Passed    1.28 sec
+
+100% tests passed, 0 tests failed out of 13
+
+Total Test time (real) =  27.43 sec

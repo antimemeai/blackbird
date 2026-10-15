@@ -1,0 +1,27 @@
+CASE controls
+PTY paste, resize, Lua/process interruption, continued work, restoration and reopen pass
+RESULT controls exit 0 seconds 6.043636083
+CASE palette
+PTY palette search, cancel, draft recovery, busy selection and narrow resize pass
+RESULT palette exit 0 seconds 5.8232888339999995
+CASE palette-capacity
+PTY palette capacity refusal preserves original draft and cursor
+RESULT palette-capacity exit 0 seconds 1.623649834
+CASE editor
+PTY external editor handoff, explicit send, busy refusal and failed-draft preservation pass
+RESULT editor exit 0 seconds 7.898195792000001
+CASE composer
+PTY multiline movement, editing, history cursor restoration and saved draft pass
+RESULT composer exit 0 seconds 2.6875835419999987
+CASE state
+PTY draft/history reopen, RRC queued draft isolation and explicit once submission pass
+RESULT state exit 0 seconds 23.877207958000003
+CASE comfort
+PTY turn/tool timing, anchored streaming scroll, resize/composer cursor and outcomes pass
+RESULT comfort exit 0 seconds 9.485783917
+CASE avatar
+PTY startup, square idle/tool/failure avatar and short-height bounds pass
+RESULT avatar exit 0 seconds 4.294140917
+CASE graphics
+Launcher PTY supplied PNG, 80x24 startup, cached corner, cursor, compact erase and exit release pass
+RESULT graphics exit 0 seconds 3.481416290999995

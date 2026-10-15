@@ -65,3 +65,13 @@ source analysis, OS qualification and the existing bounded review rules remain.
 See [the options assessment](../papers/tui-regression-2026-10-15/OPTIONS.md) for
 fault-class boundaries and the [campaign](../docs/TUI_IMPLEMENTATION_PLAN.md)
 for component/application scope. VHS was considered and is not selected.
+
+The restored working candidate splits independent native PTY episodes into
+`terminal_pty` (controls) and `terminal_pty_*` cases. Select the whole family with
+`-R '^terminal_pty($|_)'`; exact `^terminal_pty$` selects controls only. Each episode
+keeps its30second process limit and original3/5second input/exit deadlines.
+Manual `scripts/check-terminal-pty EXECUTABLE` still runs all episodes; `--case`
+selects one. Failed fixture directories are retained and reported. Coding uses
+`coding`, `coding_capacity`, `coding_routing` and `coding_stream_capture`, each
+with60seconds and its distinct assertions. See the [repair status](../papers/tui-settlement-repair-2026-10-15/RESULTS.md)
+for current source publication and actual checked profiles.

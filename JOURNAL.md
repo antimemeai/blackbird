@@ -9751,3 +9751,53 @@ properties/renderer, owner-published roster and independent composition VM;
 Participants::read drains and cannot be called as an effect-free paint query.
 A later shared collection/command-result inspector can serve conversation and
 current-session command center. This paper plans no new implementation or gate.
+
+Operator asks to solve the two failing tests and explain inactive source. Explain
+plainly: previous source was preserved then restored because mandatory gate
+failed; no implementation lost or deployed. This explicitly reopens arconaut-rln
+and arconaut-xbf. Verify all12 retained file hashes and restore the candidate.
+Independent conceptual owners diagnose cumulative coding stage cost and the
+specific restored-draft quit episode; retain failed synthetic sessions, keep
+deadlines/assertions and distinguish historical screen output from current
+settlement. New written scope: papers/tui-settlement-repair-2026-10-15/PLAN.md.
+No AFL interaction, artwork inspection, library adoption or blanket retry.
+
+The instrumented Mac coding monolith passes16.48seconds; retained timestamps and
+stage output show cumulative independent fixtures before ordinary cancellation,
+not a located stuck command. Split capacity/routing into separately registered
+cases, keep ordinary shared-journal phases intact and remove only exact duplicated
+prefix fixtures from stream capture. Every distinct assertion remains and all
+four coding registrations have60seconds; unknown mode exits2.
+
+The unchanged retained-native PTY diagnostic passes12.78seconds. Correct stale
+normal-recovered [exit0] screen matching with unique post-call split markers;
+keep actual busyquit separately, wait for a real shell READY/PID and require its
+leader/group disappear within the same5seconds. The corrected whole driver passes
+46.37seconds despite each step deadline passing, exceeding aggregate CTest30.
+Split nine independent episodes with30seconds each, preserving dependent state/
+restart/reopen sequence and per-step assertions. Preserve failing fixture dirs.
+Root's one integrated source challenge finds no dropped distinct case/deadline
+or remaining dependency on earlier selected episodes.
+
+Affected changed sources pass Linux Release13/13 in12.28seconds and ASan/UBSan
+13/13 in27.43seconds; owned remote workspace cleaned up. Mac retained exact-native
+PTY episodes9/9 pass, state23.88seconds, all below30seconds. Coding changed test
+passes focused clang-tidy. Presenter/cancellation production inputs still match
+the measured archive exactly, so preserve prior performance identities/rounds.
+
+Current Mac Debug build completes objects/static libraries but waits inside
+Apple ld before the new coding modes link. Interrupt only owning Ninja exit130;
+direct exact configured link with diagnostic-v reaches actual Xcode ld and also
+waits with negligible CPU. A targeted sampling probe also fails to return.
+Known-process libproc reads identify only owned linker/probe PID/start/cwd; send
+SIGKILL to exact owned jobs and stop their compiler/parent. Native ld/sample
+processes remain reported by the OS despite kill requests; no complete cleanup
+or kernelcause claim. Existing arconaut-ew5 records the Debug extension. No host
+restart, linker substitution, tool-policy change or full source-hook bypass.
+
+Keep restored implementation and test fixes in working tree this time, with
+complete14-file archive/hash manifest under context/tui-settlement-repair-2026-10-15
+and papers counterpart. rhi.3.3 source publication remains blocked by host linker;
+current authorization remains sufficient to finish gate/push when it works.
+Publish checked text/results/identities only. Original source archives, exact
+performance rounds, user artwork and AFL jobs/outputs remain untouched.

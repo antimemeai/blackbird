@@ -28,7 +28,7 @@ or data loss. `arconaut-cfj` retains repeated Mac Ninja cache recovery and uncha
 source recompilation during the frame-presenter tranche. Its final source hook
 passes145/147: `arconaut-rln` records the coding-test timeout with no stage trace;
 `arconaut-xbf` records another existing quit-during-exec failure. The presenter
-source stays [inactive](../papers/tui-next-host-2026-10-15/SOURCE_STATUS.md),
+source was retained [inactive](../papers/tui-next-host-2026-10-15/SOURCE_STATUS.md),
 including the concrete wait-admission/tick cleanup repair. `arconaut-0uq`
 holds the launched AFL run's untriaged inbox; it is left alone for collective work.
 
@@ -43,3 +43,10 @@ effects, lost originals, or a broad repeatable crash/hang on routine input. A
 fuzzer's crash/timeout counter alone does not establish that. Routine findings
 remain queued for the subsequent collective action rather than expanding the
 current unit's hardening scope.
+
+The operator then reopens both final test failures. Test grouping and current-call
+synchronization are repaired, with actual busy-shell cleanup and all existing
+step deadlines retained. Linux Release/ASan13/13 each and Mac9/9 selected PTY
+episodes pass. Source is restored in the working tree, with publication blocked
+by the Mac Debug linker (`arconaut-ew5`). Current [repair results](../papers/tui-settlement-repair-2026-10-15/RESULTS.md)
+keep the historical native-stall cause distinct from repaired fixture defects.

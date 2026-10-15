@@ -1,7 +1,10 @@
 # Owned native terminal frames
 
 The [source plan](SOURCE_PLAN.md) was implemented in an **inactive, unqualified
-source candidate**. The final source hook failed145/147; no product source is
+source candidate** at the original checkpoint. It has since been
+[restored with test repairs](../tui-settlement-repair-2026-10-15/RESULTS.md) in the
+working tree; source publication is blocked by the Mac linker. The original final
+source hook failed145/147; no product source is
 published by this checkpoint. The [source status](SOURCE_STATUS.md) and
 [exact retained identities](CANDIDATE_SOURCES.json) describe restoration.
 

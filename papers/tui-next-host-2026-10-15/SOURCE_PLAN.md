@@ -1,7 +1,9 @@
 # Next native TUI host slice: owned pending frames
 
 Outcome: [implementation and measurements](RESULTS.md) are retained; the source
-candidate remains [inactive](SOURCE_STATUS.md) after the final failed gate.
+candidate was retained [inactive](SOURCE_STATUS.md) after the final failed gate.
+The operator subsequently reopened the failures; current source is restored,
+with [test repairs and a linker block](../tui-settlement-repair-2026-10-15/RESULTS.md).
 The proposal below records its original scope, not a delivered host claim.
 
 2026-10-15. Source grounding at `c2d4e2af49387433106007751a8d271f566c3cd3`.

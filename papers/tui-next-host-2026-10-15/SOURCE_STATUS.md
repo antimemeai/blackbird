@@ -1,6 +1,11 @@
-# Inactive native frame candidate
+# Retained native frame candidate
 
-The implementation is retained, but **not qualified or published as source**.
+Current state: the operator reopened the two test failures. The candidate and
+repairs are **restored in the working tree, uncommitted**, with current
+[results and host-gate block](../tui-settlement-repair-2026-10-15/RESULTS.md).
+Original archives below remain unchanged.
+
+The original checkpoint retained the implementation without source publication.
 Final source hook:145/147 in372.14s, `coding`60.11s timeout and existing
 `terminal_pty` quit-during-exec failure. Full C++/Lua analysis is not reached.
 The preceding repaired run passed147/147, then found one test-helper lint issue;
@@ -39,4 +44,6 @@ the separate AFL campaign.
 Queue `arconaut-rln` and `arconaut-xbf` retain final failures. The concrete
 wait-admission/tick cancellation fix is preserved with deterministic red/green
 results, without claiming it explains every historical cancellation symptom.
-The bounded source task remains inactive pending explicit new operator scope.
+That checkpoint left the bounded source task inactive. The subsequent operator
+instruction explicitly reopened it; current source publication awaits the Mac
+linker and required full gate, with existing authorization intact.

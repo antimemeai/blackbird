@@ -1,6 +1,7 @@
 # Owned frame implementation subplan
 
-Status: implemented only in the [inactive retained candidate](SOURCE_STATUS.md).
+Status: implemented in the [retained candidate](SOURCE_STATUS.md), now restored
+in the working tree after the operator reopened the failures.
 The required final source gate failed; this checkpoint publishes evidence.
 
 The presenter makes the existing one-frame output convention explicit. It owns
