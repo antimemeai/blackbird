@@ -78,6 +78,7 @@
 {"created_at":"2026-10-15T12:16:59Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-rhi.3","type":"parent-child"}
 {"created_at":"2026-10-15T12:40:35Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3","issue_id":"arconaut-rhi.3.1","type":"parent-child"}
 {"created_at":"2026-10-15T13:45:51Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3","issue_id":"arconaut-rhi.3.2","type":"parent-child"}
+{"created_at":"2026-10-15T15:46:12Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3","issue_id":"arconaut-rhi.3.3","type":"parent-child"}
 {"created_at":"2026-10-15T12:17:00Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-rhi.4","type":"parent-child"}
 {"created_at":"2026-10-15T12:17:00Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3","issue_id":"arconaut-rhi.4","type":"blocks"}
 {"created_at":"2026-10-15T12:17:00Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-rhi.5","type":"parent-child"}
@@ -86,6 +87,7 @@
 {"created_at":"2026-10-15T12:17:00Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3","issue_id":"arconaut-rhi.6","type":"blocks"}
 {"created_at":"2026-10-15T12:17:00Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-rhi.7","type":"parent-child"}
 {"created_at":"2026-10-15T12:17:01Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3","issue_id":"arconaut-rhi.7","type":"blocks"}
+{"created_at":"2026-10-15T16:42:06Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3.3","issue_id":"arconaut-rln","type":"discovered-from"}
 {"created_at":"2026-10-06T23:51:27Z","created_by":"antimemeai","depends_on_id":"arconaut-7iy","issue_id":"arconaut-scs","type":"parent-child"}
 {"created_at":"2026-10-06T23:20:12Z","created_by":"antimemeai","depends_on_id":"arconaut-uaa.14.3","issue_id":"arconaut-scs","type":"blocks"}
 {"created_at":"2026-10-01T04:03:56Z","created_by":"antimemeai","depends_on_id":"arconaut-w8q","issue_id":"arconaut-uaa","type":"discovered-from"}

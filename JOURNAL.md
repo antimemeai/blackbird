@@ -9776,3 +9776,14 @@ change to its subsystem; the prior intermittent timeout is not diagnosed by this
 success. The earlier publication block is superseded by this actual full gate.
 Retain context/fresh-start-commit.log, update qualification/review notes, then
 push the requested work branch. No main integration or other-checkout activation.
+
+Operator now explicitly requests merging the Paper/fresh-start work, retiring its
+worktree, and a bead replacing session PATH with session NAME. Filed arconaut-vk5
+for the user-facing name interface while retaining fresh unnamed startup. Fetched
+origin: master remains626b51a and is an ancestor of this qualified branch; use a
+fast-forward, without combining the separately active TUI branch or touching the
+operator artwork. Preserve private context and reference files under the primary
+checkout's ignored context before removal. A live Blackbird in ttys008 still uses
+this worktree; ask its operator to exit or authorize a graceful stop while the
+independent Git merge proceeds. Keep its sessions and global auth intact.
+The supported Beads backup includes the new issue and is parsed before publication.
