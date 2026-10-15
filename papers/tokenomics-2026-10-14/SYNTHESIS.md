@@ -230,6 +230,36 @@ time to first token and completion. Stable bytes alone prove no provider hit;
 lower input alone proves no bill reduction; a shorter successful transcript alone
 proves no general quality preservation. Integrated eval selection remains deferred.
 
+## Sequencing with OpenRouter compatibility
+
+Operator asks whether tokenomics should precede or follow OpenRouter support.
+Recommendation: do the common correctness/accounting foundation first or alongside
+the adapter, bring OpenRouter into the main coding path, then tune route-specific
+cache policy on both. Stable fragments and recoverable views remain common design
+work. Do not finish a direct-OpenAI-only cache layer before that integration.
+
+Currently `openrouter` is a builtin Chat-protocol registry descriptor, available
+to context-only native colleagues; main still instantiates OpenAiCodingProvider.
+OpenRouter documents a stateless Responses endpoint requiring full history,
+compatible in shape with our existing request ownership; its tool/reasoning/error
+behavior still needs direct qualification.
+[Responses overview](https://openrouter.ai/docs/api_reference/responses/overview).
+
+Its cache behavior includes provider stickiness, optional `session_id`, fallback
+and cross-provider marker translation without TTL translation. Thus policy needs
+the actual routed provider/model, not only the OpenRouter origin; stickiness is
+not guaranteed cache residency. Treat adapter normalization as another boundary
+when assessing stable prefix layout.
+[Caching](https://openrouter.ai/docs/guides/best-practices/prompt-caching).
+It also reports cost and token/cache usage in responses, including the terminal
+stream chunk; preserve these observed charges separately from local estimates.
+[Accounting](https://openrouter.ai/docs/cookbook/administration/usage-accounting).
+
+This recommendation refines sequencing; it does not authorize API calls, select
+a downstream model or claim that current colleague support is full main-loop
+compatibility. Account/route pinning fixes Blackbird's selected credentials;
+downstream OpenRouter routing is separately observed and configured.
+
 ## Design review disposition
 
 One [native/source review](design-review-native.md) found six ownership/semantic

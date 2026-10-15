@@ -8679,3 +8679,14 @@ research, keep 1ud/wiq/nan open for implementation and run supported bd backup.
 Publish the checked text-only checkpoint on work/tokenomics-research-2026-10-14;
 the per-command hook override follows the explicit documentation-only exception.
 No source gate is rerun or source behavior/savings claimed from these checks.
+
+Operator asks whether tokenomics belongs before or after OpenRouter compatibility.
+Check actual registry/colleague/main paths and current official OpenRouter caching,
+Responses and accounting guides. Existing OpenRouter descriptor is Chat-format
+context-only colleague support; main remains OpenAI. Recommend common correctness
+and usage-capture foundation first/alongside main-loop OpenRouter integration,
+then route-specific cache tuning. Gateway stickiness/fallback and marker/TTL
+translation make direct-only tuning premature; preserve reported charges apart
+from estimates. Record sources and scope in synthesis. Advice/doc-only, no main
+provider change, account request or implementation issue completion. Relevant
+diff/doc checks, documentation-only checkpoint and work-branch push.
