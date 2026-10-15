@@ -183,3 +183,14 @@ Read docs/INSTRUMENTATION.md. Operator2026-10-11 approved the raw design and
 implementation and excludes host power loss from its losslessness contract.
 Preserve emitted bytes through process/recorder failure; do not add per-emission
 disk waits or power-loss qualification. Evals remain deferred until discussion.
+
+Operator2026-10-15 adds expressive, meticulously presented TUI research intent:
+permissive key/control systems, MIDI controllers, possible haptics, useful density
+and responsiveness under load. The acquired
+[TUI supplement](papers/tui-2026-10-15/README.md) and
+[synthesis](papers/tui-2026-10-15/SYNTHESIS.md) ground the next UX/HCI/BHI
+discussion (`arconaut-rhi`); BHI means bot-harness interaction/model ergonomics.
+No framework or device is selected. Preserve current native partial-write output
+and exact originals/raw capture when studying Lua presentation and display
+coalescing. Current ESC-recovery source finding is tracked separately in
+`arconaut-600`; source acquisition did not implement a repair.

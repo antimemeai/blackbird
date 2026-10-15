@@ -9270,3 +9270,59 @@ integration result to the closed native-slice issue and export supported backup
 into this worktree. Check the text-only diff/links, publish the integration branch,
 then fast-forward/push clean master after fresh ancestry/status checks. Preserve
 untracked artwork and all worktrees; do not activate running executables.
+
+
+## 2026-10-15 — TUI frumentarii supplement and uji/Ito source study
+
+Operator requests research/acquisition for the Blackbird repository: uji.sh,
+C++/Lua TUIs, fast responsive control, MIDI/exotic bindings/haptics, dense
+presentation and control ergonomics, then a UX/HCI/BHI pivot. Work on branch
+work/tui-reference-2026-10-15 from626b51a. Read current doctrine, foundation/core
+contracts, state and earlier terminal research; preserve untracked artwork and
+all other worktrees. Three explicitly requested frumentarii own performance,
+expressive input and ergonomics; root owns uji/Ito, terminal substrate and synthesis.
+
+Acquire34 fresh pinned source archives (217,407,621bytes), reuse existing
+Notcurses unchanged, and capture26 documents including seven HCI/BHI papers,
+libremidi paper, official MIDI specifications, protocol/platform/Unicode material
+and public uji pages. All six public uji-labs repositories are retained, including
+Ito and plugins; uji-skills contains only a README. ZIP/tar originals remain intact
+under ignored quarantine/tui-2026-10-15; sanitized extracts omit metadata/detritus
+and symlinks. Existing owned acquisition/extraction helpers compare retained bytes
+with ZIP contents. Record URLs/pins/byte hashes/restoration/omissions/licenses in
+tracked TSV/Markdown. No acquired program/test/installer/firmware/account call,
+production edit, dependency adoption or comparative benchmark.
+
+Five source studies and synthesis live in papers/tui-2026-10-15. Preserve current
+ChatView/delta painter/nonblocking ChatOutput progress; do not repeat stale Oct7
+renderer gaps. Findings include display-queue interference with cancellation,
+blocking output despite async input, cooperative Lua limits, target stability,
+controller-relative/absolute/feedback/lifetime semantics and physical haptics
+outside the PTY. Literature scope and uncompleted deep readings are explicit;
+SHOPPING_LIST records unavailable originals and hardware-specific future inputs.
+Rhizome C++ findings were read-only at their projects_old archived location.
+
+Track delivery in arconaut-64s, next task-centered UX/HCI/BHI discussion in
+arconaut-rhi, and focused lone/incomplete ESC recovery in arconaut-600. The latter
+is a current source finding, not a reproduced all-purpose hang explanation.
+Append the research pointer/current hardening correction to existing visual issue
+arconaut-os3. Link current reference corpus through QUARANTINE.md and AGENTS.md.
+Direct checks for this text/research unit: manifest file/digest/path inventory,
+local links/placeholder/whitespace checks, quarantine metadata exclusions and Git
+ignore boundaries. No source tests/lint for documentation alone. Close completed
+research, back up Beads, then checkpoint/push the candidate branch under the
+text-only hook rule; no main merge or executable activation is implied.
+
+Direct corpus check passes:61 archive/document byte-length+SHA256 identities,
+140 existing local links, and metadata/symlink exclusions across51,255 ignored
+reference files. Exact inventory is34 fresh archives +1 reused +26 documents.
+Ignore checks confirm quarantine, context and acquired papers/PDFs are excluded.
+All five reports/manifests complete; no essential selected download blocked.
+Close arconaut-64s with follow-on issues retained; supported bd backup succeeds.
+Install the local source hook, then use the explicitly authorized per-command
+text-only override for this research/documentation checkpoint.
+
+The staged diff check catches default CSV CRLF endings and empty final TSV
+fields as trailing whitespace. Normalize owned catalogs to LF and quote empty
+final fields; parsed tabular values remain unchanged. Recheck the staged diff;
+this formatting change does not alter downloaded source/doc bytes or their hashes.

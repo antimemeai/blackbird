@@ -1,5 +1,35 @@
 # Sources and restoration
 
+## TUI frumentarii supplement, 2026-10-15
+
+The [research index](papers/tui-2026-10-15/README.md) links five source studies,
+restoration manifests and primary-document catalogs: uji/Ito, native C++/Lua
+rendering and responsiveness, expressive input/MIDI/OSC/haptics, dense operator
+interfaces and HCI/BHI, and terminal capabilities/display behavior.
+
+Fresh intact archives and cleaned extracts live in ignored
+`quarantine/tui-2026-10-15/` by lane. Thirty-four source archives total
+217,407,621 bytes; the existing unchanged Notcurses snapshot is reused in place
+as a thirty-fifth reference. Twenty-six document captures include seven HCI/BHI
+papers, keyboard/Unicode/platform specifications, MIDI standards and supporting
+pages/diagrams. Reports distinguish source traces, initial readings and material
+acquired for later close reading.
+
+Each source manifest records full commit or release identity, download URL,
+archive byte/hash identity, retained paths, exclusions and restoration commands.
+Original archives retain all bytes; extracts omit nested Git metadata,
+filesystem detritus and symlinks through the existing owned ingestion utility.
+Use absent destinations and the repository root when restoring. Live documents
+and regenerated upstream ZIP containers can differ; investigate hash mismatches
+without silently replacing the recorded capture. No acquired code, installer,
+test or firmware ran, and no product dependency was selected.
+
+Read the [synthesis](papers/tui-2026-10-15/SYNTHESIS.md) for current Blackbird
+source observations and the UX/HCI/BHI follow-on agenda. The
+[shopping list](papers/tui-2026-10-15/SHOPPING_LIST.md) records unavailable
+literature and later hardware inputs. Prior terminal research remains live;
+this supplement does not reinstate stale renderer criticisms or modify doctrine.
+
 ## Concurrent and durable workflows, 2026-10-14
 
 Fresh source study acquires Pi Durable/Pi, Oh My Pi, Hermes, LangGraph,

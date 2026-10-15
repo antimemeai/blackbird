@@ -1,0 +1,4 @@
+name	url	status	path_or_error	bytes	sha256
+uji.sh.html	https://uji.sh	acquired	quarantine/tui-2026-10-15/uji/documents/uji.sh.html	32736	e444d096c23c62a75aec70c63db41968892d86aec3fa2389b727608618e1a789
+ito-workshop.html	https://uji.sh/ito/	acquired	quarantine/tui-2026-10-15/uji/documents/ito-workshop.html	29765	489781ed6df3657e1890e8d173865d87429dd1137ec01f917765f94f6c37be5e
+docs-index.html	https://docs.uji.sh/	acquired	quarantine/tui-2026-10-15/uji/documents/docs-index.html	23231	db33a9d47dd488d2593ebfc6f060455882d62c4c3fcef2d1336b3390426fdfae
