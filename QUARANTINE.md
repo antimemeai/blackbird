@@ -1,5 +1,34 @@
 # Sources and restoration
 
+## Explicit interaction theory and SR-71 controls, 2026-10-15
+
+The [theory research pack](papers/interaction-theory-2026-10-15/README.md) preserves
+six conceptual contributions: HCI foundations, BHI/ACI, systems and
+coordination, skilled instrument/aesthetic experience, SR-71 cockpit controls and
+pilot task saturation. The integrated account is
+[INTERACTION_THEORY](docs/INTERACTION_THEORY.md); one conceptual challenge and its
+two integrated corrections are retained alongside the research.
+
+Original PDFs remain ignored in each research lane. Original HTML and reading
+derivatives remain under ignored `quarantine/interaction-theory-2026-10-15/` and
+`context/interaction-theory-2026-10-15/`. Lane TSV manifests record source versions,
+URLs, bytes, hashes, paths and restoration; explicit reuse retains previous originals
+unchanged. Download failures, unknown handbook edition date, alternate author
+pagination and partially read sources remain stated rather than filled by guesses.
+
+The SR-71 study retains two 248-page original-manual reproductions and a 151-page
+Lockheed technical-handbook scan. The aircraft manual's larger effective-page
+list is not a claim that the acquired reproduction is complete. Relevant cockpit,
+autopilot and crew plates were visually inspected; exact PDF/printed pages and
+raster restoration are in the aviation reading scope. NASA handling-quality and
+workload/task-management originals ground the separate saturation study. These
+are technical source studies, not copied cockpit design, pilot instructions,
+universal workload thresholds or an empirical test of Blackbird.
+
+No product source, acquired executable, installer, firmware, account integration,
+new library or evaluator campaign was involved. The written theory distinguishes
+operator values, source claims, proposed mechanisms and discriminating predictions.
+
 ## TUI frumentarii supplement, 2026-10-15
 
 The [research index](papers/tui-2026-10-15/README.md) links five source studies,

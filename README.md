@@ -12,6 +12,13 @@ The machine should make those things possible. The operator should be able to st
 
 That is the project. It is also the reason Blackbird is being built inside Blackbird. An agent that can change its own harness, rebuild it, resume the same conversation, and continue useful work gives us a direct way to improve the system we inhabit.
 
+The [interaction theory](docs/INTERACTION_THEORY.md) explains Blackbird as a
+programmable instrument for joint work: acting, understanding, delegating and
+changing the instruments themselves. Its primary-source research includes human
+and model ergonomics, expressive controls, and the SR-71's actual controls and
+pilot task saturation. It guides subsequent interaction design without claiming
+the present interface implements that whole ambition.
+
 
 This repository contains a **C++20 core, Lua 5.4.8 turn programs, a terminal interface, and an operating self-development loop**. It is an early system in active use and reconstruction. Its ambitions exceed its present implementation; the distinctions below are part of the description, rather than small print.
 

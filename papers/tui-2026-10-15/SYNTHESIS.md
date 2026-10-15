@@ -148,3 +148,21 @@ model ergonomics beyond that earlier scope.
 The work is ready to pivot from acquisition into that task-centered discussion.
 The acquired sources provide mechanisms and counterexamples; the operator's
 work will determine which ones Blackbird must solve first.
+
+## Subsequent explicit theory
+
+The operator accepts the feedback-loop intuition in spirit and requires it to
+become an explicit written theory with researchers and frumentarii. Read
+[INTERACTION_THEORY](../../docs/INTERACTION_THEORY.md) and its
+[primary-source research](../interaction-theory-2026-10-15/README.md). It adds
+epistemic work on representations, generative agency, skilled instruments,
+delegation, attention and continuity, including actual SR-71 controls and pilot
+task saturation. The investigative cases above remain conditional examples,
+not design priorities established by an implementation plan.
+
+The theory research also records a current-source scope correction:
+`src/coding.cpp` installs a Lua instruction-count hook and polls cancellation.
+Current non-yielding pure-Lua workflows are not necessarily uninterruptible.
+Long native callbacks and a future Lua UI composition path remain distinct
+questions. Preserve the existing hook rather than infer its absence from
+cooperative scheduling in another reference implementation.

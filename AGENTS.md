@@ -194,3 +194,13 @@ No framework or device is selected. Preserve current native partial-write output
 and exact originals/raw capture when studying Lua presentation and display
 coalescing. Current ESC-recovery source finding is tracked separately in
 `arconaut-600`; source acquisition did not implement a repair.
+
+The operator then requires an explicit written theory developed with researchers
+and frumentarii, adding actual SR-71 controls and pilot task saturation. Read
+[INTERACTION_THEORY](docs/INTERACTION_THEORY.md) and its
+[primary-source research](papers/interaction-theory-2026-10-15/README.md) before
+deriving interaction priorities. The theory covers practical/generative agency,
+representations, skill, feedback, attention, coordination and continuity. It
+supplies conditional explanations and counterexamples, not a selected layout,
+controller, numerical workload limit or implementation plan. Existing C++/Lua
+contracts and the distinction between present capability and design intent remain.

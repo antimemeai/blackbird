@@ -9326,3 +9326,90 @@ The staged diff check catches default CSV CRLF endings and empty final TSV
 fields as trailing whitespace. Normalize owned catalogs to LF and quote empty
 final fields; parsed tabular values remain unchanged. Recheck the staged diff;
 this formatting change does not alter downloaded source/doc bytes or their hashes.
+
+
+## 2026-10-15 — explicit theory for Blackbird interaction
+
+Operator accepts the observe/target/act/feedback intuition in spirit and corrects
+our premature use of priorities: Blackbird requires explicit written theory.
+Produce one with independent researchers and frumentarii. Continue the published
+TUI research branch, preserving user artwork and product source. arconaut-rhi
+owns this theoretical step; wider design/plan delivery remains subsequent work.
+
+Read current doctrine/operator intent/core contracts/current stock and prior
+source studies. Three researchers own HCI theoretical foundations, model/ACI
+ergonomics and systems/coordination; root owns expressive instrument/aesthetic
+reasoning and integration. Acquire primary papers where useful, retain originals
+and restoration manifests, and save independent reports under
+papers/interaction-theory-2026-10-15. Distinguish explicit operator aims,
+empirical/theoretical source claims, proposed Blackbird explanations and derived
+hypotheses. Develop constructs, causal mechanisms, scope, tensions, counterexamples
+and discriminating predictions rather than rename a feature list as theory.
+
+The useful delivery is a coherent theory in docs/INTERACTION_THEORY.md, with
+source-grounded derivations and worked human/model/controller/concurrent-work
+scenarios. It should explain beauty/skill/expressiveness as well as responsiveness,
+without assuming human/model cognitive equivalence or a compulsory human feedback
+step for autonomous work. No implementation/eval campaign or library adoption.
+Direct checks are source/manifest/document consistency and one independent
+conceptual challenge of the written theory; integrate valid findings once under
+the two-layer doctrine. No review of reviews or arbitrary wall-clock cutoffs.
+
+
+Operator adds the actual SR-71 aircraft controls and pilot task saturation to
+the theory study. Retain original scope and extend it: systems researcher owns
+manual/cockpit/crew close reading; BHI researcher completes its original report,
+then owns NASA handling/workload/task-management evidence as a distinct unit.
+Acquire public declassified/manual and NASA originals with host/provenance and
+page-scope limits, visually inspect control plates, and distinguish SR-71 data
+from general aviation studies. No flight procedure advice or cockpit imitation
+is the task. Examine compatible/failed transfer to autonomous programmable work.
+Root instrument research acquires Buxton1986 corrected author paper, Wessel/Wright
+NIME2001 conference original and Tractinsky2000 article. Initial CNMAT2002 URL
+fails404; preserve the failure and do not relabel the successful4-page conference
+copy as the12-page journal version. Researchers correct another scope issue:
+current coding.cpp already has a Lua instruction-count interruption hook. Carry
+that source fact into theory and correct any overgeneralized prior wording.
+
+
+Written theory delivered in docs/INTERACTION_THEORY.md: the unit is an episode
+of joint work; acting, arranging representations to understand, delegating and
+changing instruments are related forms of interaction. Explain practical and
+generative agency, representation relationships, learned stable meaning,
+instrument response versus observed effect, service under competing demand,
+coordination, continuity and aesthetic value. Keep values, sources, Blackbird
+hypotheses, counterexamples and proposed discriminating observations distinct.
+No interface layout, new numerical bound, implementation sequence or evaluator
+is selected by the theory.
+
+SR-71 case uses actual visually inspected forward/right/aft plates, autopilot
+control semantics, artificial feel and pilot–RSO crosschecks/mode communication.
+NASA TM4791 changes the account toward actual feedback variables and pilot
+compensation despite desired performance. Task-management/workload sources add
+coverage, deferred intentions, peak/reorientation demand and the cost of messages;
+software queue pressure, human attention and model costs remain different.
+Aviation procedures/hierarchies/thresholds do not become coding-agent policy.
+
+One HCI researcher challenge of the written core identifies two refinements:
+reject/narrow failed local explanations without post-hoc intention redefinition;
+compare newly possible/lost intentions and invention/revision of methods beyond
+familiar-task speed. Integrate both and retain challenge/resolution. Aircraft
+studies are their owners' primary-source contributions, not claimed validated
+by that earlier core challenge. No review-of-reviews or third assurance layer.
+
+Keep six research reports and manifests under papers/interaction-theory-2026-10-15.
+Direct checks pass32 distinct original byte-length/hash/ignore identities
+(142,302,360source bytes),58 initial local links and explicit failed-source state.
+Two earlier originals are reused unchanged; failures/edition/reading limits are
+recorded in shopping lists. Normalize owned TSV line endings/empty trailing
+fields without changing parsed values. Link theory from README/AGENTS/quarantine
+and qualify earlier TUI investigative targets through it; preserve all current
+product source and unrelated artwork.
+
+
+Final changed theory/pack/supplement check passes88 local links and placeholder
+checks; staged diff/TSV whitespace checks pass. Close arconaut-rhi.1 for the
+written theory; retain arconaut-rhi open for subsequent theory-grounded interaction
+design. Supported bd backup preserves130 issues and updated dependencies/events.
+Checkpoint/publish text-only on work/tui-reference-2026-10-15 using the authorized
+per-command hook override; no main integration or running-executable activation.

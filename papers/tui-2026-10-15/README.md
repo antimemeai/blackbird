@@ -1,6 +1,8 @@
 # TUI frumentarii supplement for Blackbird
 
-2026-10-15. Start with [SYNTHESIS.md](SYNTHESIS.md). This pack supplements the
+2026-10-15. Read the subsequent explicit
+[interaction theory](../../docs/INTERACTION_THEORY.md), then
+[SYNTHESIS.md](SYNTHESIS.md) for this acquisition's source findings. This pack supplements the
 Blackbird **repository**, with pinned source, primary documents, source studies
 and the questions for the next UX/HCI/BHI discussion. It does not revise the
 workspace doctrine or select a UI framework.
