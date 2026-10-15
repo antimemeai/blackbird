@@ -9787,3 +9787,10 @@ checkout's ignored context before removal. A live Blackbird in ttys008 still use
 this worktree; ask its operator to exit or authorize a graceful stop while the
 independent Git merge proceeds. Keep its sessions and global auth intact.
 The supported Beads backup includes the new issue and is parsed before publication.
+
+The operator authorizes final Paper worktree removal. Process inspection confirms
+no remaining executable is running from that directory, and its tracked files
+are clean. Refresh the private context/quarantine archive under the primary
+checkout's context/retired-worktrees/paper-provider-2026-10-15, retain the merged
+source on master and session-name bead arconaut-vk5, then remove only this worktree.
+The live conversation files and provider authentication remain outside it.
