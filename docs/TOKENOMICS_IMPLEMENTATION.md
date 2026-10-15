@@ -139,5 +139,7 @@ Source and oracle reviews are complete with accepted findings integrated.
 actual results and limits. Each conceptual unit received one independent code
 review and finding-driven corrections. No further review layer or evaluator
 campaign is introduced. Live OpenRouter continuation/cache observation is
-`arconaut-438`; branch integration and running-executable activation remain
-separate operator work.
+`arconaut-438`. Operator2026-10-15 authorizes one bounded live round and master
+integration: the native launch refuses for missing OpenRouter credentials, so
+actual continuation/cache behavior remains unqualified. The qualified branch is
+fast-forwarded into master; running-executable activation remains separate.

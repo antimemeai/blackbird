@@ -1,6 +1,25 @@
 # Blackbird branch integrations
 
-## Current integration — 2026-10-10
+## Current integration — 2026-10-15
+
+The operator directs one bounded OpenRouter check and merge, with no further
+certification round. Fast-forward `master` from trace-archive `d74f248` through
+`work/tokenomics-openrouter-2026-10-14` at `4aa8f43`. The four commits include
+research `27349a9`, sequencing `ad4a640`, qualified source `56b3f62` and result/
+issue closeout `4aa8f43`. Remote master has no divergent commits; source merging
+requires no conflict resolution, squash or history rewrite.
+
+The [qualification record](../papers/tokenomics-2026-10-14/qualification.md)
+records the passed full source gate and affected host profiles. One native live
+launch refuses locally with provider_auth because no OpenRouter credential is
+configured; no tool effect occurs. Reopen and raw usage inspection work, while
+actual service continuation/cache behavior remains unqualified (arconaut-438).
+The existing intermittent capture-test timeout remains arconaut-7qn. No further
+source/test changes or certification round. The added integration record is
+text-only under AGENTS's existing exception. Push master normally; retain the
+work branch, operator artwork, historical worktrees and running executables.
+
+## Earlier integration — 2026-10-10
 
 The operator directed merging the pending work into the default main line,
 `master`. The ready branches form a single ancestry chain: `provider-auth`

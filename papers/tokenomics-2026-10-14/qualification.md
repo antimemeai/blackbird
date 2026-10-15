@@ -132,9 +132,17 @@ review of reviews, third review panel, or live evaluator campaign.
 
 ## Limits and publication
 
-No live OpenRouter account/inference request was made. No measured latency,
-cache-hit improvement, monetary saving, subscription allowance or general coding
-quality is established. Explicit cache controls cover the documented exact
+On2026-10-15 the operator directs one bounded live round then merge, without a
+further certification campaign. Native auth status reports no OpenRouter accounts;
+OPENROUTER_API_KEY and a matching variable in the known workspace env file are
+absent. One native launch in `context/tokenomics-live-20261015T051616Z` refuses
+with provider_auth before a tool effect. Read-only reopen preserves the explicit
+OpenRouter/model selection; the native usage reader reports unknown consumption
+and coverage gaps rather than zero. The prepared workflow permits at most two
+submissions, no retries or warmup; credentials prevent service continuation from
+being exercised. No actual provider/cache benefit is inferred from this refusal.
+No measured latency, cache-hit improvement, monetary saving, subscription allowance
+or general coding quality is established. Explicit cache controls cover the documented exact
 GPT-6.1 Sol public-key and OpenRouter routes; provider-default remains the default.
 Raw-prefix usage remains incomplete coverage, never a complete session bill.
 Live follow-through is **`arconaut-438`**.
@@ -142,5 +150,8 @@ Live follow-through is **`arconaut-438`**.
 Implementation issues `arconaut-1ud`, `arconaut-wiq`, `arconaut-2aw` and
 `arconaut-nan` are closed. The source push succeeded; a text-only result/issue
 checkpoint records this outcome under the repository's documentation exception.
-Main integration and running-executable/session activation remain separate.
-Operator art, historical worktrees and other services retain their owners.
+Master integration is authorized and fast-forwards from d74f248 through4aa8f43,
+including the unchanged qualified source. This text-only integration record uses
+the repository's existing documentation exception; settled source checks are not
+repeated. Running-executable/session activation remains separate. Operator art,
+historical worktrees, the work branch and other services retain their owners.

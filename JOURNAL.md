@@ -8931,3 +8931,33 @@ run supported bd backup and relevant text/link/diff checks, then make the allowe
 text-only result/issue checkpoint with a per-command hook override (AGENTS's
 2026-10-10 exception); no settled source gate rerun for these documents. Push that
 result checkpoint and report the actual outcome in the final response.
+
+
+## 2026-10-15 — One bounded OpenRouter attempt and master integration
+
+Operator: send it; one round only, no certification chasing. Accept explicit
+merge authorization. Re-read current auth/qualification/using contracts, fetch
+origin and confirm master d74f248 has zero divergent commits, candidate4aa8f43
+is four ahead. Source is already qualified at56b3f62; no extra review, benchmark,
+mutation or repeated source gate is introduced.
+
+Native auth status contains no OpenRouter accounts. OPENROUTER_API_KEY is absent;
+the known workspace .env has no matching OpenRouter variable. Request only a
+local credential locator, never a pasted key, while preparing the merge; none
+arrives during preparation. Do not search unrelated credential stores, acquire
+accounts, change model/billing routes or invent successful live qualification.
+Prepare an ignored native Lua smoke workflow limited to two provider submissions,
+max_attempts1, forced single tool append, continuation, reopen and usage reading.
+The single native launch at context/tokenomics-live-20261015T051616Z exits1 with
+provider_auth(0); no local effect exists. Read-only reopen exits0 with persisted
+`openrouter` / `openai/gpt-6.1-sol` selection; usage CLI exits0 and preserves unknown
+consumption/coverage. No actual remote continuation or cache saving is observed.
+Append exact outcome to arconaut-438 and leave it open;7qn remains separate.
+
+Fast-forward master to4aa8f43 after confirming no tracked changes. Preserve the
+work branch, operator art, existing historical worktrees and running executables.
+Update branch inventory, current stock and qualification/delivery records with
+actual single-attempt result and integration. Run supported bd backup and relevant
+text/link/diff checks. Commit this text-only integration record under AGENTS's
+2026-10-10 exception, then push master normally and verify the published ref.
+The previously passed136-case/203-C++/Lua gate remains the source qualification.

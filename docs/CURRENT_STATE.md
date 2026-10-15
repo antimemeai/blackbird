@@ -1,15 +1,18 @@
 # Current Blackbird stock
 
-Tokenomics/OpenRouter implementation,2026-10-14, is qualified and pushed as
-`56b3f62` on `work/tokenomics-openrouter-2026-10-14`, after the trace-archive merge.
-The [using guide](TOKENOMICS.md) covers explicit OpenRouter main coding,
-account-bound retries, prompt-cache policy, changing-state layout and the separate
-raw usage reader. The [execution record](TOKENOMICS_IMPLEMENTATION.md) links the
-research and direct checks. The [qualification record](../papers/tokenomics-2026-10-14/qualification.md)
-records136/136 Debug, full owned C++/Lua analysis and affected Mac/Linux optimized/
-sanitizer passes. Main integration, running-process activation, live OpenRouter
-compatibility and measured cache savings remain separate. Live follow-through is
-arconaut-438; intermittent baseline operation-capture timeout is arconaut-7qn.
+Tokenomics/OpenRouter is integrated on **master**,2026-10-15, by fast-forward
+through `4aa8f43` (qualified source `56b3f62`). The
+[using guide](TOKENOMICS.md) covers explicit OpenRouter main coding, retries bound
+to the selected account, prompt-cache policy, changing-state layout and the
+separate raw usage reader. The [execution record](TOKENOMICS_IMPLEMENTATION.md)
+and [qualification record](../papers/tokenomics-2026-10-14/qualification.md) record
+136/136 Debug, full owned C++/Lua analysis and affected Mac/Linux optimized/
+sanitizer passes. The operator authorizes one live round then merge: the native
+launch refuses with provider_auth because no OpenRouter credential is configured;
+no tool effect occurs, reopen preserves settings, usage remains unknown.
+Live continuation/cache behavior remains arconaut-438; intermittent baseline
+operation-capture timeout remains arconaut-7qn. Running-process activation is
+separate from source integration.
 
 New design wave,2026-10-14: concurrent and durable workflows. The
 [proposed design](CONCURRENT_DURABLE_WORKFLOWS.md),
