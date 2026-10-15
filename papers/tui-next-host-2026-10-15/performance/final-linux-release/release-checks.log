@@ -1,0 +1,10 @@
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-presenter-20261015-E0ODIPF4/after-release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-presenter-20261015-E0ODIPF4/after-release
+    Start  23: terminal_pty
+1/2 Test  #23: terminal_pty .....................   Passed    9.09 sec
+    Start 114: command_raw
+2/2 Test #114: command_raw ......................   Passed    1.38 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =  10.47 sec

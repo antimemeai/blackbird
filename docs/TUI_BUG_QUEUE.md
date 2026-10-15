@@ -21,9 +21,15 @@ Neither is repaired by a passing fixture or a later benchmark. New performance
 failures keep failed trials in the dataset and refuse a misleading numeric delta.
 `arconaut-f8f` retains the paired round's startup/paste tail outliers; source
 causation is unknown, and all120 observed processes complete normally.
-`arconaut-3xf` retains the later Ctrl-C exec-settlement observation, and
-`arconaut-3wt` the raw-recorder explicit-recovery timeout. They block source
-qualification, without demonstrating source causation or data loss. `arconaut-0uq`
+`arconaut-3xf` retains the later slash `/cancel` exec-settlement observation, and
+`arconaut-3wt` the raw-recorder explicit-recovery timeout. They prevented source
+publication of the helper/target candidate, without demonstrating source causation
+or data loss. `arconaut-cfj` retains repeated Mac Ninja cache recovery and unchanged
+source recompilation during the frame-presenter tranche. Its final source hook
+passes145/147: `arconaut-rln` records the coding-test timeout with no stage trace;
+`arconaut-xbf` records another existing quit-during-exec failure. The presenter
+source stays [inactive](../papers/tui-next-host-2026-10-15/SOURCE_STATUS.md),
+including the concrete wait-admission/tick cleanup repair. `arconaut-0uq`
 holds the launched AFL run's untriaged inbox; it is left alone for collective work.
 
 The AFL run manifest identifies its native queue, crashes, hangs and logs in an

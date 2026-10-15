@@ -1,0 +1,14 @@
+{
+  "before": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-presenter-20261015-E0ODIPF4/before-release/blackbird",
+    "source": "d987f6fb207e47106ce4f5fa6339065e88a89f03",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  },
+  "after": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-presenter-20261015-E0ODIPF4/after-release/blackbird",
+    "source": "d987f6fb207e47106ce4f5fa6339065e88a89f03+native-tree-a12e20b409819e4c761f7de4c2d17669b3286c928d8e5c9299e41f0d6cf721a4",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  }
+}

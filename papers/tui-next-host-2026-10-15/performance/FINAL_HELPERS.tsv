@@ -1,0 +1,5 @@
+helper	original_path	sha256	status
+observer	context/tui-perf-fuzz-2026-10-15/candidate/scripts/bench-tui	f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377	retained experimental development source; not active owned tooling
+tertiary-report	context/tui-perf-fuzz-2026-10-15/candidate/scripts/bench-tui-report	dd4227cf1b29825ccc758f3aeb6da39fab23670310149b1d1935f585eb73650c	retained experimental development source; not active owned tooling
+final-source-archiver	context/tui-next-host-2026-10-15/performance/final/capture-final.py	777430ba0938e1d03423ca9220efc4334eb98553b64cc6281429519b825589de	retained experimental development source; not active owned tooling
+incremental-build-driver	context/tui-next-host-2026-10-15/performance/final/incremental-build.py	b64dd0fe7e9219567bd03829c3ad81e6fa934fdd4ea059f8217a1cfcb810532c	retained experimental development source; not active owned tooling

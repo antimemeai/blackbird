@@ -1,5 +1,9 @@
 # Next native TUI host slice: owned pending frames
 
+Outcome: [implementation and measurements](RESULTS.md) are retained; the source
+candidate remains [inactive](SOURCE_STATUS.md) after the final failed gate.
+The proposal below records its original scope, not a delivered host claim.
+
 2026-10-15. Source grounding at `c2d4e2af49387433106007751a8d271f566c3cd3`.
 This is a read-only implementation proposal for the next part of
 [Unit 1](../../docs/TUI_IMPLEMENTATION_PLAN.md#unit-1-native-component-host-and-preserved-current-controls),
@@ -8,6 +12,14 @@ No source change, build, test rerun, dependency or review campaign accompanies i
 The queued Ctrl-C exec-settlement and raw-recorder recovery failures are outside
 this slice; this note neither investigates nor repairs them. AFL work is outside
 this unit.
+
+Implementation exception: the full gate repeats the existing cancellation
+failure. A [narrow source diagnosis](CANCEL_BOUNDARY.md) identifies a launched
+job whose wait can propagate interruption before issuing its required stop.
+That concrete missed-stop obligation receives the operator's egregious-fault
+exception: deterministic tests and one specific-job cleanup repair, within the
+same bounded fix/recheck. The original failure's exact native path remains
+unconfirmed. Other queued issues retain their owning work.
 
 ## Proposed deliverable
 

@@ -9659,3 +9659,95 @@ borrowed storage is protected by render gating; no existing use-after-free or
 measured speedup is claimed. Source plan: papers/tui-next-host-2026-10-15/SOURCE_PLAN.md.
 This checkpoint changes documentation only, with relevant diff/link checks; no
 new source gate, runtime activation or queued-defect investigation.
+
+Operator says "send it": begin arconaut-rhi.3.3 from the written native-frame
+plan. One colleague owns the presenter and actual terminal integration; root
+owns an independent actual-TerminalUI control fixture and the integrated code
+challenge; the measurement owner prepares matched Release sources. Keep the
+launched AFL jobs and outputs untouched. Direct checks cover owned exact suffixes,
+each byte cut through escape/UTF-8 packets, cursor/grid publication, preparation
+allocation failure, allocation-denied completion, raw lifecycle, physical stdout
+backpressure and native controls, existing Microsoft/readable expectations and
+affected sanitizer profiles. Source publication still requires the full existing
+gate. No new runtime, library, workflow owner or live activation.
+
+Owned-frame implementation lane: wrote the short subplan in papers/tui-next-host-2026-10-15/IMPLEMENTATION.md, then red-compiled direct presenter tests before adding the API. Integrated immutable-in-flight packet/grid ownership in the actual TerminalUI, staged cursor and graphics observations, and nonallocating grid swap on complete output. Kept low-level ChatOutput, native write budgets and existing input paths. Focused chat_view/ui_raw pass; new explicit VT expectation initially omitted narrow-column clipping, corrected the fixture and rechecked successfully. Root owns the single independent product challenge and remaining qualification/performance. Independently challenged root-owned blocked-controls fixture once; no actionable finding. No AFL interaction.
+
+Root's one integrated source challenge finds no actionable presenter defect.
+The actual TerminalUI blocked-output fixture passes on Mac Debug: physical
+EAGAIN, cancellation acknowledgment before any stdout draining, exact native
+draft/cursor, scrolled ROW034–063 after32→36row resize, retained byte cursor on
+exit and restored input mode. Its colleague challenge found no actionable issue.
+Keep the serialized Ninja premature-EOF/recompile observation in arconaut-cfj;
+no tool/cache repair campaign. An initial Linux command named a nonexistent
+target; correct it to the actual tui_snapshot_test/tui_snapshots owning names,
+retaining the failed invocation log and the corrected qualification separately.
+Run the required full source hook on this frozen candidate while affected Linux
+profiles finish; preserve actual outcomes rather than infer a global pass.
+
+The source hook finishes146/147 in278.18seconds: existing terminal_pty line165
+again misses interrupted after slash /cancel; no source commit or full lint runs.
+All27 affected Linux Debug/Release/ASan cases pass, including actual stdout-blocked
+controls. The paired Release round completes120/120 runs and960 observations;
+input medians rise about0.07ms and wide startup/paste tails worsen under shared
+load. Retain all samples and add to arconaut-f8f, without a source-cause claim.
+
+One narrow source diagnosis identifies a real escaped stop obligation:
+CommandJobs::wait can throw interrupted during raw admission before its try, or
+from tick before its cancellation predicate, without stopping the already
+launched job. This is an egregious routine-cancellation boundary for the current
+unit, rather than an ordinary outlier to tune. Its exact role in the latest PTY
+failure remains inference because fixture cleanup removed the raw trace. Repair
+only the selected job's stop-on-cancel path before cancellable admission, using
+existing prepaid cleanup and join outside the mutex; prove both entry points with
+deterministic tests. Keep existing PTY assertions/deadlines, ordinary bug queue,
+source gate and the same bounded fix/recheck. Preserve the intermediate measured
+binary and add a final-source comparison if the repair qualifies.
+
+Both deterministic command-wait cases fail on the old implementation at the
+return-time child ownership assertion. The narrow repair now covers raw wait
+admission and interrupted tick through one prepaid specific-job stop/join path;
+refused admission records no invented wait request. Root's integration check
+finds no actionable issue in cleanup ownership, mutex release, original-error
+propagation or existing explicit-predicate behavior. Repaired command_raw passes
+6.43seconds including existing false/yield/raw cases. Recheck the complete source
+gate once on this repaired candidate, with scoped Linux ASan/Release checks and a
+separate final-source performance round. No further independent review layer or
+unrelated bug repair follows.
+
+The repaired source recheck passes147/147 in306.79seconds, including the original
+slash-cancel episode. Its full native analysis reports one root-authored test
+helper diagnostic: adjacent int/char parameters may be swapped. No other native
+analysis failure is reported. Replace the two-argument expectation helper with
+read_control(int) returning the actual byte; each caller compares its required
+P/F phase. Focused clang-tidy passes without suppression. This changes only
+tests/terminal_blocked_fixture.cpp; all measured production inputs remain exact,
+so preserve the7df6/0e6f benchmark originals and note the qualification-only test
+difference rather than rerunning or relabeling timings. The mandatory source hook
+reruns on the corrected helper; no fresh review or broader campaign.
+
+Final repaired-source Linux Release terminal_pty/command_raw pass2/2 in10.47seconds;
+ASan terminal_pty/command_raw/command_jobs_engine pass3/3 in28.91seconds. The final
+matched round again completes120/120 runs and960 observations. All original
+quantiles, outliers and exact identities remain in the final performance report.
+A local metadata-only ps probe fails to return; interrupt only its own process
+group. This does not diagnose static-analysis progress or product behavior.
+
+Final mandatory hook fails145/147 in372.14seconds: coding times out60.11seconds
+without stage output (new arconaut-rln), and terminal_pty line460 again misses
+quit during exec settlement (existing arconaut-xbf). Earlier slash-cancel and
+blocked-output cases pass. No full C++/Lua analysis runs after this failed CTest.
+Do not retry unchanged, increase timeouts or expand the exhausted two-layer unit.
+Preserve12 source files, modes/hashes/base, source-overlay archive and patch,
+final LastTest and compiled native under context/tui-next-host-2026-10-15/candidate.
+Restore active source to d987f6f and remove build/debug/blackbird after retaining
+its copy. arconaut-rhi.3.3 is blocked, not complete. No product source commit,
+source-hook bypass, main merge or live activation. Publish only documentation,
+original measurement data and source identities through the authorized text-only
+path after relevant checks and supported Beads backup.
+
+The independent next-component source map identifies actual missing visual
+properties/renderer, owner-published roster and independent composition VM;
+Participants::read drains and cannot be called as an effect-free paint query.
+A later shared collection/command-result inspector can serve conversation and
+current-session command center. This paper plans no new implementation or gate.
