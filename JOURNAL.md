@@ -9482,3 +9482,23 @@ epic with five implementation units. Supported bd backup succeeds (136issues).
 Staged whitespace check passes; only text/research catalogs and beads backup state
 are staged. Publish on the existing candidate branch with the authorized text-only
 hook override; main integration and live activation remain separate.
+
+
+## 2026-10-15 — TUI regression testing options
+
+Operator asks what regression testing options fit the owned C++/Lua stack. Inspect
+current native composer/renderer, independent VT-subset oracle and actual launcher
+PTY/custody tests and CTest integration. Read current primary Microsoft tui-test,
+Neovim Screen, VHS, Tuistory and Tuibot material. Preserve pinned selected original
+documentation/source and commit metadata with restoration manifest; no dependency
+adopted, acquired code executed or test/GUI/fleet/model campaign started.
+
+Save papers/tui-regression-2026-10-15/OPTIONS.md. Recommend owned deterministic
+semantic scenarios plus styled cell/cursor expectations and existing PTY tests,
+optional independent emulator-tool qualification and a small actual Ghostty/phux
+compatibility set. Microsoft tui-test is the strongest external candidate to
+evaluate, not an adopted tool. Keep emulator-core artifacts distinct from GUI
+font/GPU/input behavior, snapshot change detection distinct from correctness, and
+virtual scheduling distinct from host-latency observations. Capture/replay or agent
+exploration needs actual outcome oracles. Current tests were inspected, not rerun.
+The note informs arconaut-rhi.3 rather than silently selecting a new framework.

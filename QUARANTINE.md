@@ -908,3 +908,15 @@ later response is not automatically the recorded snapshot. No new source tree
 was extracted, dependency selected, plugin loaded or acquired program executed.
 Current native source and earlier TUI/provider/raw reference sets supply the
 component and metrics studies without duplicating those archives.
+
+
+## TUI regression testing options — 2026-10-15
+
+The [assessment](papers/tui-regression-2026-10-15/OPTIONS.md) compares native,
+cell-snapshot, PTY, emulator, actual-terminal and exploration mechanisms.
+The [source manifest](papers/tui-regression-2026-10-15/SOURCES.tsv) pins selected
+Microsoft tui-test, VHS, Tuistory and Tuibot originals plus acquisition metadata
+under ignored `quarantine/tui-regression-2026-10-15/`. Restore each file with its
+recorded command and verify length/SHA-256; create its parent directory first.
+No source tree was extracted, dependency adopted or acquired program executed.
+Neovim Screen/terminal fixtures reuse the prior pinned performance corpus.
