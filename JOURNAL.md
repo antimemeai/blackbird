@@ -9125,3 +9125,15 @@ supported issue backup; the latest explicit affected-tests-only instruction
 governs this checkpoint, so do not invoke the blanket full-suite commit hook.
 Keep the pre-existing economical-defaults source candidate staged and separate;
 no main merge or running-executable activation in this repair unit.
+
+Operator now explicitly directs merge. Fetch origin and confirm master remains
+fa347eb, an ancestor of the work branch, with no remote divergence. Preserve the
+twelve staged economical-defaults paths and the already published e73b379
+recorder repair; no peer workflow source or untracked artwork enters this unit.
+Update current delivery records, close arconaut-ns1 and emit supported bd backup.
+Commit/push the remaining reviewed economical-defaults implementation, then
+fast-forward master to that work-branch checkpoint and push origin/master.
+The prior instruction to run only affected tests and this merge authorization
+govern delivery: reuse completed feature host-profile/full analysis results and
+the four affected recorder/admission/operation passes; no new full-suite hook
+run, certification campaign, test suppression or running-executable activation.

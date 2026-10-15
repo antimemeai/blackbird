@@ -3421,15 +3421,20 @@ Value CodingEngine::operation(
           effect_error->code == ErrorCode::invalid_range) {
         result.object().emplace_back(
             "message",
-            Value{"Use one range object with mode lines or bytes and optional "
-                  "start/end; omit range for the whole file. Lines are one-based "
+            Value{"Provide exactly one of path or snapshot. Use one range object "
+                  "with mode lines or bytes and optional start/end; omit range for "
+                  "the whole file. output_max_bytes must be a nonnegative integer. "
+                  "Lines are one-based "
                   "inclusive, bytes zero-based half-open. Do not combine range "
                   "with legacy byte_/line_ fields. Endpoints must be nonnegative "
                   "integers, line start >=1, end >=start."});
         const auto *path = input.find("path");
+        const auto *snapshot = input.find("snapshot");
         result.object().emplace_back(
             "example",
-            Value::object({{"path", path ? *path : Value{"file"}},
+            Value::object({{snapshot ? "snapshot" : "path", snapshot ? *snapshot
+                                                            : path   ? *path
+                                                                     : Value{"file"}},
                            {"range", Value::object({{"mode", Value{"lines"}},
                                                     {"start", Value{Number{"1"}}},
                                                     {"end", Value{Number{"20"}}}})}}));
@@ -4129,6 +4134,13 @@ Value CodingEngine::request(Value options) {
          {"instructions",
           Value{"You are Blackbird, a programmable coding colleague for an expert "
                 "operator. Use local file/process tools without approval ceremony. "
+                "Gather source with targeted searches and ranges; expand when the "
+                "question remains unresolved. Inspect omission counts and recover "
+                "needed facts from captured originals. Compose mechanical reads, "
+                "loops and projections in Lua rather than requesting a model decision "
+                "for each step; return useful results with recovery handles. Preserve "
+                "constraints and complete tool groups. Select model/effort explicitly "
+                "for the task; smaller prompts alone do not prove cheaper work. "
                 "Context is ordinary editable data: inspect it, transform it with Lua, "
                 "repair it from originals. A timed-out tool returns a result: inspect "
                 "its "
@@ -5319,11 +5331,36 @@ Value CodingEngine::call(std::string name, Value arguments) {
         }
         if (name == "lua")
           return runtime_->eval(string_field(arguments, "code"));
+        if (name == "read_file" && arguments.find("snapshot")) {
+          if (arguments.find("path"))
+            throw Error{ErrorCode::invalid_range};
+          const auto &snapshot = field(arguments, "snapshot");
+          if (!std::holds_alternative<Value::Object>(snapshot.value()) ||
+              snapshot.object().size() != 2 || !snapshot.find("journal") ||
+              !snapshot.find("sequence") ||
+              !std::holds_alternative<std::string>(field(snapshot, "journal").value()))
+            throw Error{ErrorCode::invalid_range};
+          const auto journal =
+              parse_id<AuditStreamId>(string_field(snapshot, "journal"));
+          const auto sequence = command_number(snapshot, "sequence", UINT64_MAX);
+          if (sequence == 0)
+            throw Error{ErrorCode::invalid_range};
+          const auto raw = unwrap(log_.root().source({journal, sequence}));
+          const std::string bytes{reinterpret_cast<const char *>(raw.data()),
+                                  raw.size()};
+          auto result = file_content_presentation(bytes, arguments);
+          result.object().emplace_back("snapshot", snapshot);
+          return result;
+        }
+        std::optional<SourceReference> file_snapshot;
         LocalTools tools{[&](std::string_view label, std::string_view raw) {
           try {
-            log_.original(
+            const auto source = log_.original(
+                log_.issue(),
                 {label, raw,
                  Value::object({{"attempt", Value{hex_identity(attempt.bytes())}}})});
+            if (label == "file.read")
+              file_snapshot = source;
           } catch (const Error &e) {
             if (e.code == ErrorCode::capacity)
               unretained_bytes_ += raw.size();
@@ -5337,6 +5374,12 @@ Value CodingEngine::call(std::string name, Value arguments) {
           return cancelled && cancelled();
         };
         auto result = tools.run(name, arguments);
+        if (name == "read_file" && file_snapshot)
+          result.object().emplace_back(
+              "snapshot",
+              Value::object(
+                  {{"journal", Value{hex_identity(file_snapshot->journal.bytes())}},
+                   {"sequence", Value{Number{file_snapshot->sequence}}}}));
         if (name == "exec" && process_output)
           process_output("\n[exit " + field(result, "exit_code").number().text() +
                          "]\n");

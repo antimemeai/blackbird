@@ -78,6 +78,62 @@ int main() {
       throw Error{ErrorCode::corrupt};
     }
     write_file(file, "a\r\n\nb");
+    const auto projected = tools.run(
+        "read_file",
+        Value::object({{"path", Value{file}},
+                       {"range", Value::object({{"mode", Value{"bytes"}},
+                                                {"start", Value{Number{1}}}})},
+                       {"output_max_bytes", Value{Number{2}}}}));
+    if (string_field(projected, "content") != "\r\n" ||
+        field(projected, "file_bytes") != Value{Number{5}} ||
+        field(projected, "selected_bytes") != Value{Number{4}} ||
+        field(projected, "returned_bytes") != Value{Number{2}} ||
+        field(projected, "omitted_bytes") != Value{Number{2}} ||
+        tools.captured()[0].bytes != "a\r\n\nb")
+      throw Error{ErrorCode::corrupt};
+    for (const auto *bad : {"-1", "1.5", "18446744073709551616"}) {
+      bool rejected = false;
+      try {
+        tools.run("read_file",
+                  Value::object({{"path", Value{file}},
+                                 {"output_max_bytes", Value{Number{bad}}}}));
+      } catch (const Error &e) {
+        rejected = e.code == ErrorCode::invalid_range;
+      }
+      if (!rejected)
+        throw Error{ErrorCode::corrupt};
+    }
+    const auto empty_view = tools.run(
+        "read_file",
+        Value::object({{"path", Value{file}}, {"output_max_bytes", Value{Number{0}}}}));
+    if (string_field(empty_view, "content") != "" ||
+        field(empty_view, "omitted_bytes") != Value{Number{5}})
+      throw Error{ErrorCode::corrupt};
+    for (const auto &selector :
+         {Value::object({{"range", Value::object({{"mode", Value{"lines"}},
+                                                  {"start", Value{Number{1}}},
+                                                  {"end", Value{Number{2}}}})}}),
+          Value::object(
+              {{"line_start", Value{Number{1}}}, {"line_end", Value{Number{2}}}})}) {
+      auto args = Value{selector};
+      args.object().emplace_back("path", Value{file});
+      args.object().emplace_back("output_max_bytes", Value{Number{2}});
+      const auto limited = tools.run("read_file", args);
+      if (string_field(limited, "content") != "a\r" ||
+          field(limited, "selected_bytes") != Value{Number{4}} ||
+          field(limited, "omitted_bytes") != Value{Number{2}})
+        throw Error{ErrorCode::corrupt};
+    }
+    write_file(file, std::string{"x\xc3\xa9\xff", 4});
+    const auto binary_prefix = tools.run(
+        "read_file",
+        Value::object({{"path", Value{file}}, {"output_max_bytes", Value{Number{2}}}}));
+    if (string_field(field(binary_prefix, "content"), "bytes") != "78c3" ||
+        field(binary_prefix, "returned_bytes") != Value{Number{2}} ||
+        field(binary_prefix, "omitted_bytes") != Value{Number{2}} ||
+        tools.captured()[0].bytes != std::string{"x\xc3\xa9\xff", 4})
+      throw Error{ErrorCode::corrupt};
+    write_file(file, "a\r\n\nb");
     auto range = [&](const std::string &fields, const std::string &expected) {
       auto args = unwrap(parse_json("{\"path\":\"" + file + "\"," + fields + "}"));
       auto got = tools.run("read_file", args);

@@ -36,5 +36,7 @@ std::string read_file(const std::filesystem::path &, std::size_t,
 void write_file(const std::filesystem::path &, std::string_view,
                 const RawAdapterContext *, const RawFileInput * = nullptr);
 Value process_output_presentation(const std::string &raw, const Value &args);
+Value file_content_presentation(const std::string &raw, const Value &args,
+                                RawFileToolTrace *trace = nullptr);
 Value tool_definitions();
 } // namespace blackbird
