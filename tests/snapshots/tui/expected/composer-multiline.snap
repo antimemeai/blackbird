@@ -1,0 +1,10 @@
+styled-grid-v1
+size 20 5
+cursor 0 6
+state draft=abcd\x0ax\x0a12345 cursor_bytes=4 pasted=false
+|{normal:> abcd              }|
+|{normal:x                   }|
+|{normal:12345               }|
+|{normal:                    }|
+|{normal:                    }|
+cell-widths

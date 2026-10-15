@@ -9502,3 +9502,66 @@ font/GPU/input behavior, snapshot change detection distinct from correctness, an
 virtual scheduling distinct from host-latency observations. Capture/replay or agent
 exploration needs actual outcome oracles. Current tests were inspected, not rerun.
 The note informs arconaut-rhi.3 rather than silently selecting a new framework.
+
+
+## 2026-10-15 — adopt Microsoft tui-test and Neovim-style screen regressions
+
+Operator explicitly selects BOTH Microsoft tui-test and the Neovim approach, in
+addition to usual rigor/qualification. Stable visual mistakes are acceptable
+baselines; no test set alone is the whole story. This supersedes the options
+assessment's unadopted status for Microsoft; VHS is not selected. Proceed with
+development-tool adoption, readable owned screen expectations and native semantic
+regressions as the component campaign starts. No production toolkit dependency.
+
+Three conceptual implementation owners cover native scene/collection/local state,
+Neovim-style cell/cursor snapshots, and the existing arconaut-600 ESC recovery
+prerequisite. Root owns Microsoft installation/profile/launcher, actual app-level
+terminal scenarios, CMake integration and bounded review/qualification. Preserve
+user artwork and current branch. Write subplans, observe direct red/green outcomes,
+challenge concrete code once, integrate findings, run required source checks and
+publish checkpoints. No change to the standing two-layer bound.
+
+
+First source unit complete for qualification: Microsoft release0.1.0 is explicitly
+installed/pinned as a development executable, registered actual-app checks use
+Ghostty VT with direct Alacritty qualification, and11 reviewed Neovim-style
+component snapshots retain current layout imperfections. The real local workflow
+uses native exec with an independently read one-line effect; no provider calls.
+Native scene/collection primitives preserve identity/local state and pass50 actual
+allocation-failure cuts. This is not yet the full UI host/Lua/action bridge or
+command-center migration, and rhi.3 remains in progress.
+
+The one independent code challenge finds four substantive P2 corrections: late
+duplicate effect count, cleanup/diagnostic masking, installed cache not tied to
+changed source/archive pin, and the new PTY timing oracle's unsynchronized parser
+precondition. Root fixes the three adoption boundaries and replaces that flaky
+PTY suspension with a deterministic actual poll-turn dispatch seam, checking
+explicit before/due times and ready/idle/hangup/error flags. The existing real
+PTY suite remains separate. No sleeps or production timeout are enlarged.
+
+Direct root recheck accepts known cells and rejects a deliberately wrong external
+expectation with a structured artifact. Actual interrupted-body qualification
+retains the primary SIGTERM failure and commands.json and closes its unique
+terminal session. A stale installed artifact/profile receipt is rejected before
+execution. The first attempted signal probe arrived after body completion and
+was not counted as interruption evidence; the causally suspended active-body
+case supplies the actual check. Source/profile gate is launched below; passing
+results will be recorded after completion, without rerunning settled gates for
+the later text-only results checkpoint.
+
+
+The first required Mac full gate passes145/146; terminal_pty fails at final quit
+after deliberate UI-state-save failure and explicit retry. No lint phase ran
+after CTest failed and no source commit was created. All21 selected Linux cases
+pass across Debug/Release/ASan, including Microsoft and snapshots. A retained-
+failure rerun of the unchanged Mac fixture passes; no stability claim follows.
+Source inspection identifies an actual oracle gap: the final retry waits for a
+retained prior [exit0] row, then checks the shell effect, neither establishing
+that current native-call settlement has returned. Give this retry a unique Lua
+print after native exec returns, wait for it and keep the independent exact
+effect count. Do not enlarge timeouts or remove busy-quit cases. Track the
+observed transient quit-at-settlement stall separately because its cause remains
+unidentified; no claim that this oracle correction repaired a product deadlock.
+The required hook retries after this concrete fixture correction; no new review
+or broad assurance campaign. Existing passing production-source profile results
+remain, with the corrected fixture directly checked separately on Linux.

@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Pinned Microsoft tui-test development launcher. Installation is explicit."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+
+ROOT = Path(__file__).resolve().parent.parent
+PROFILE = json.loads((ROOT / "tooling/tui-test-profile.json").read_text())
+
+
+def selected():
+    machine = {"arm64": "aarch64", "aarch64": "aarch64", "x86_64": "x86_64"}.get(platform.machine())
+    suffix = {"Darwin": "apple-darwin", "Linux": "unknown-linux-gnu"}.get(platform.system())
+    if not machine or not suffix:
+        raise RuntimeError("tui-test profile supports macOS and glibc Linux arm64/x86_64 only")
+    name = f"tui-test-{machine}-{suffix}.tar.gz"
+    return name, PROFILE["assets"][name]
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def paths(name):
+    directory = ROOT / "build/tools/tui-test" / PROFILE["version"] / name.removesuffix(".tar.gz")
+    return directory, directory / "tui-test", directory / "installed.json"
+
+
+def install():
+    name, asset = selected()
+    originals = ROOT / "quarantine/tui-implementation-2026-10-15"
+    originals.mkdir(parents=True, exist_ok=True)
+    archive = originals / (PROFILE["version"] + "-" + name)
+    if archive.exists():
+        data = archive.read_bytes()
+    else:
+        with urllib.request.urlopen(asset["url"], timeout=45) as response:
+            data = response.read()
+        if len(data) != asset["bytes"] or digest(data) != asset["sha256"]:
+            raise RuntimeError("tui-test release archive identity mismatch")
+        archive.write_bytes(data)
+    if len(data) != asset["bytes"] or digest(data) != asset["sha256"]:
+        raise RuntimeError("retained tui-test archive identity mismatch")
+    with tarfile.open(archive, "r:gz") as bundle:
+        entries = [m for m in bundle.getmembers() if m.isfile() and m.name == "tui-test"]
+        if len(entries) != 1:
+            raise RuntimeError("unexpected tui-test archive executable layout")
+        stream = bundle.extractfile(entries[0])
+        if stream is None:
+            raise RuntimeError("tui-test executable missing")
+        binary = stream.read()
+    if asset.get("binary_sha256") and digest(binary) != asset["binary_sha256"]:
+        raise RuntimeError("tui-test executable does not match the qualified platform identity")
+    directory, executable, receipt = paths(name)
+    directory.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=directory, delete=False) as temporary:
+        temporary.write(binary)
+        staged = Path(temporary.name)
+    staged.chmod(0o755)
+    staged.replace(executable)
+    receipt.write_text(json.dumps({"version": PROFILE["version"], "revision": PROFILE["revision"],
+                                   "asset": name, "archive_sha256": asset["sha256"],
+                                   "binary_sha256": digest(binary)}, indent=2) + "\n")
+    print(f"Installed {PROFILE['name']} {PROFILE['version']} from SHA256 {asset['sha256']}")
+
+
+def main():
+    if sys.argv[1:] == ["--install"]:
+        install()
+        return
+    name, asset = selected()
+    _, executable, receipt = paths(name)
+    if not executable.is_file() or not receipt.is_file():
+        raise RuntimeError("Microsoft tui-test is required; run scripts/tui-test --install explicitly")
+    installed = json.loads(receipt.read_text())
+    expected = {"version": PROFILE["version"], "revision": PROFILE["revision"],
+                "asset": name, "archive_sha256": asset["sha256"]}
+    if any(installed.get(key) != value for key, value in expected.items()):
+        raise RuntimeError("tui-test profile changed; explicitly reinstall the pinned tool")
+    actual_digest = digest(executable.read_bytes())
+    if actual_digest != installed.get("binary_sha256") or (
+            asset.get("binary_sha256") and actual_digest != asset["binary_sha256"]):
+        raise RuntimeError("installed tui-test executable changed; reinstall from the pinned archive")
+    if sys.argv[1:] == ["--check"]:
+        output = subprocess.check_output([str(executable), "--version"], text=True).strip()
+        if output != "tui-test " + PROFILE["version"]:
+            raise RuntimeError("tui-test version mismatch")
+        print(output)
+        return
+    os.execv(executable, [str(executable), *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, RuntimeError, tarfile.TarError) as error:
+        print(f"tui-test: {error}", file=sys.stderr)
+        sys.exit(1)

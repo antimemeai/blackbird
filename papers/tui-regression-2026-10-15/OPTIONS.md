@@ -1,8 +1,10 @@
 # TUI regression testing under Blackbird's C++/Lua stack
 
 2026-10-15. Options assessment requested after the doctrine/component/view program.
-Source inspection and primary-tool documentation, not a new execution/benchmark
-campaign. No testing dependency is adopted. Pinned acquired originals and restoration
+Historical options assessment. The subsequent operator decision adopts Microsoft
+tui-test and the Neovim approach; see [current tooling](../../tooling/TUI_TESTING.md).
+The comparison below records the pre-adoption source inspection, not an execution
+or benchmark campaign. Pinned acquired originals and restoration
 commands are in [SOURCES.tsv](SOURCES.tsv).
 
 ## Recommendation

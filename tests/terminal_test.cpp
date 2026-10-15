@@ -4,6 +4,7 @@
 #include <clocale>
 #include <cstdlib>
 #include <iostream>
+#include <poll.h>
 #include <source_location>
 #include <stdexcept>
 #include <sys/stat.h>
@@ -81,6 +82,60 @@ int main() {
   }
   try {
     (void)std::setlocale(LC_CTYPE, "en_US.UTF-8");
+    for (const auto prefix : {std::string_view{"\x1b"}, std::string_view{"\x1b["},
+                              std::string_view{"\x1b[1;"}, std::string_view{"\x1bO"}}) {
+      using Clock = std::chrono::steady_clock;
+      const auto deadline = Clock::time_point{std::chrono::milliseconds{50}};
+      for (const short events :
+           {short{0}, short{POLLIN}, short{POLLHUP}, short{POLLERR}}) {
+        Composer polled;
+        polled.draft("draft");
+        feed(polled, prefix);
+        const auto early = terminal_input_dispatch(
+            polled, deadline - std::chrono::milliseconds{1}, deadline, events);
+        check(early.read_input == (events != 0) && !early.redraw &&
+              polled.escape_pending());
+        const auto due = terminal_input_dispatch(polled, deadline, deadline, events);
+        check(due.read_input == (events != 0) && due.redraw &&
+              !polled.escape_pending());
+        feed(polled, "x");
+        check(polled.text() == "draftx");
+      }
+      Composer expired;
+      expired.draft("draft");
+      feed(expired, "\x1b[D");
+      feed(expired, prefix);
+      check(expired.escape_pending());
+      check(expired.flush_escape()); // The owner has observed the deadline.
+      check(!expired.escape_pending() && !expired.flush_escape());
+      check(expired.text() == "draft" && expired.cursor() == 4);
+      feed(expired, "X");
+      check(expired.text() == "drafXt" && expired.cursor() == 5);
+      check(feed(expired, "\x03").action == InputAction::cancel);
+    }
+    Composer fragmented;
+    fragmented.draft("one two");
+    for (const char byte : std::string_view{"\x1b[1;5D"})
+      check(fragmented.feed(byte).action == InputAction::none);
+    check(!fragmented.escape_pending() && fragmented.cursor() == 4);
+    for (const char byte : std::string_view{"\x1bOH"})
+      check(fragmented.feed(byte).action == InputAction::none);
+    check(!fragmented.escape_pending() && fragmented.cursor() == 0);
+    feed(fragmented, "\x1b"
+                     "f");
+    check(fragmented.cursor() == 3);
+    check(feed(fragmented, "\x1b[6~").action == InputAction::page_down);
+    Composer paste_timeout;
+    feed(paste_timeout, "\x1b[200~/stats\r\x03");
+    check(paste_timeout.pasted() && paste_timeout.text() == "/stats\n\x03");
+    // Fragmented paste termination stays recognized even when deadline service
+    // occurs between its bytes. Pasted controls remain literal until termination.
+    for (const char byte : std::string_view{"\x1b[201~"}) {
+      check(paste_timeout.feed(byte).action == InputAction::none);
+      check(!paste_timeout.flush_escape());
+    }
+    check(!paste_timeout.pasted() && !paste_timeout.escape_pending());
+    check(feed(paste_timeout, "\r").text == "/stats\n\x03");
     Composer palette_key;
     palette_key.draft("unsent draft");
     feed(palette_key, std::string_view{"\0stats", 6});

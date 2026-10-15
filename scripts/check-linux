@@ -27,6 +27,7 @@ def main():
     paths.append("scripts/check-raw-capture")
     paths.append("scripts/check-trace-archive")
     paths.append("scripts/check-openrouter")
+    paths += ["scripts/tui-test", "scripts/check-tui-microsoft", "tooling/tui-test-profile.json"]
     lua_archive = ROOT.parent / "quarantine_proj/archives/lua-5.4.8.tar.gz"
     if hashlib.sha256(lua_archive.read_bytes()).hexdigest() != "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae":
         raise RuntimeError("Lua 5.4.8 source archive checksum mismatch")
@@ -47,9 +48,13 @@ def main():
         raise RuntimeError("unexpected remote workspace")
     try:
         subprocess.run([*SSH, "tar -xzf - -C " + shlex.quote(remote)], input=archive.getvalue(), check=True, timeout=30)
-        commands = '''import platform, subprocess, tarfile
+        commands = '''import platform, subprocess, tarfile, re
 from pathlib import Path
 root = Path.cwd()
+# Explicit development-tool provisioning precedes configuration/testing.
+if test_regex is None or re.search(test_regex, 'tui_microsoft'):
+    subprocess.run(['python3', str(root / 'scripts/tui-test'), '--install'], check=True)
+    subprocess.run(['python3', str(root / 'scripts/tui-test'), '--check'], check=True)
 print(platform.platform(), flush=True)
 for tool in ('/usr/bin/clang++-18', '/usr/bin/cmake', '/usr/bin/ninja'):
     subprocess.run([tool, '--version'], check=True)

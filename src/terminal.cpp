@@ -693,13 +693,22 @@ void Composer::palette_move(bool up) {
     palette_selected_ = std::min(palette_selected_ + 1, matches.size() - 1);
 }
 bool Composer::flush_escape() {
-  if ((palette_open_ || slash_open_) && escape_ == "\x1b") {
-    escape_.clear();
+  // Paste contents and its terminator can span reads without a timing bound.
+  if (escape_.empty() || pasted_)
+    return false;
+  if (escape_ == "\x1b") {
     palette_open_ = false;
     slash_open_ = false;
-    return true;
   }
-  return false;
+  escape_.clear();
+  return true;
+}
+TerminalInputDispatch
+terminal_input_dispatch(Composer &composer, std::chrono::steady_clock::time_point now,
+                        std::chrono::steady_clock::time_point escape_deadline,
+                        short events) {
+  const bool redraw = now >= escape_deadline && composer.flush_escape();
+  return {(events & (POLLIN | POLLHUP | POLLERR)) != 0, redraw};
 }
 std::vector<std::string> Composer::palette_lines(std::size_t rows) const {
   const auto catalog = choices_ && palette_open_ ? choices_ : command_catalog();
@@ -2611,12 +2620,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     if (inputs[1].revents & POLLIN)
       terminal_notification_drain(&terminal_context, notifications.read_fd());
     ui_capture.require();
-    if (!(inputs[0].revents & (POLLIN | POLLHUP | POLLERR))) {
-      if (std::chrono::steady_clock::now() >= escape_deadline &&
-          composer.flush_escape())
-        redraw = true;
+    // Service the same deadline policy before either ready-input or idle dispatch.
+    const auto dispatch = terminal_input_dispatch(
+        composer, std::chrono::steady_clock::now(), escape_deadline, inputs[0].revents);
+    redraw = redraw || dispatch.redraw;
+    if (!dispatch.read_input)
       continue;
-    }
     char bytes[128];
     RawRegion input{raw_regions::command_input_save};
     std::optional<RawCapacityClaim> keyboard_data;

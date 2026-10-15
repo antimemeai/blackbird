@@ -1,0 +1,10 @@
+styled-grid-v1
+size 12 5
+cursor 0 6
+state draft=a界éz\x0ax\x0a1234 cursor_bytes=7 pasted=false
+|{normal:> a界<continuation: >éz     }|
+|{normal:x           }|
+|{normal:1234        }|
+|{normal:            }|
+|{normal:            }|
+cell-widths 0:3=2 0:4=0

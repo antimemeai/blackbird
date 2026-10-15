@@ -183,3 +183,10 @@ use `git -c core.hooksPath=/dev/null commit ...` for that text-only commit. This
 per-command override leaves the installed source gate unchanged. Fast-forward
 integration does not require repeating settled source checks when subsequent
 changes are only documentation. Other exceptions require operator discussion.
+
+## TUI regression tools
+
+The operator-selected [Microsoft driver and owned Neovim-style screen expectations](TUI_TESTING.md)
+join native semantic/fault and actual PTY checks. Install the pinned development
+executable with `scripts/tui-test --install` before running the complete source
+gate on a new host. Tests fail when required tooling is absent; no silent skip.

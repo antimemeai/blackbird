@@ -4,6 +4,7 @@
 #include "blackbird/raw_ui.hpp"
 #include "blackbird/tasks.hpp"
 #include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <mutex>
@@ -93,6 +94,14 @@ private:
   void vertical(bool up);
   void kill(std::size_t begin, std::size_t end);
 };
+// One poll-turn decision: expiry is serviced for ready and idle input alike.
+struct TerminalInputDispatch {
+  bool read_input = false, redraw = false;
+};
+TerminalInputDispatch
+terminal_input_dispatch(Composer &composer, std::chrono::steady_clock::time_point now,
+                        std::chrono::steady_clock::time_point escape_deadline,
+                        short events);
 struct TerminalScrollUpdate {
   std::size_t scroll, previous, before_trim, after_trim, height;
 };

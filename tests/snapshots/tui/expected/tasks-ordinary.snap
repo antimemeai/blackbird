@@ -1,0 +1,23 @@
+styled-grid-v1
+size 36 18
+cursor none
+state component rows
+|{heading:TASKS  Parser work}{normal:                  }|
+|{muted:0 done · 1 active · 1 blocked · 1 qu}|
+|{muted:eued}{normal:                                }|
+|{muted:Bead demo-17}{normal:                        }|
+|{assistant:▶ t1 Build panel}{normal:                    }|
+|{muted:   active · running · 1/1 · operator}|
+|{success:  ✓ t2 Read 界}{normal:<continuation: >                      }|
+|{muted:     done}{normal:                           }|
+|{failure:! t3 Investigate failure}{normal:            }|
+|{muted:   blocked · Kimi}{normal:                   }|
+|{failure:   Need exact original}{normal:              }|
+|{muted:○ t4 Compare results}{normal:                }|
+|{muted:   queued}{normal:                           }|
+|{muted:/tasks up · down · fold ID}{normal:          }|
+|{normal:                                    }|
+|{normal:                                    }|
+|{normal:                                    }|
+|{normal:                                    }|
+cell-widths 6:12=2 6:13=0

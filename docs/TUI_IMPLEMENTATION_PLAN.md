@@ -2,9 +2,19 @@
 
 2026-10-15. Proposed implementation sequence for the
 [doctrine](TUI_DOCTRINE.md), [components](TUI_COMPONENTS.md) and
-[view designs](TUI_VIEWS.md). This unit delivers research and reviewed design/plan.
-It does not implement or activate the component foundation. No new runtime,
+[view designs](TUI_VIEWS.md). The original unit delivered research and reviewed design/plan; the source campaign
+is now underway as recorded below. No new runtime,
 library, controller or haptic device is selected.
+
+## Campaign underway
+
+Operator2026-10-15 authorizes implementation and explicitly adopts Microsoft
+`tui-test` plus Neovim-style readable screen expectations, alongside all usual
+rigor. Stable prior presentation is a deliberate regression baseline, including
+known imperfections. See [tooling](../tooling/TUI_TESTING.md). The first source
+unit adds these regression paths, the existing ESC prerequisite repair, and
+native scene/collection/local-state primitives. Broader host/Lua/application
+work remains in arconaut-rhi.3 until its actual contracts are delivered.
 
 ## Why this order
 

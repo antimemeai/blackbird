@@ -188,6 +188,19 @@ set_tests_properties(tasks_pty PROPERTIES TIMEOUT 45)
 target_link_libraries(chat_view_test PRIVATE blackbird_coding)
 add_test(NAME chat_view COMMAND chat_view_test)
 add_test(NAME chat_render_oracle COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/terminal-screen-oracle.py $<TARGET_FILE:chat_view_test>)
+target_sources(blackbird_coding PRIVATE src/tui_components.cpp)
+add_executable(tui_components_test tests/tui_components_test.cpp)
+target_link_libraries(tui_components_test PRIVATE blackbird_coding)
+add_test(NAME tui_components COMMAND tui_components_test)
+add_executable(tui_snapshot_test tests/tui_snapshot_test.cpp)
+target_link_libraries(tui_snapshot_test PRIVATE blackbird_coding)
+add_test(NAME tui_snapshots COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/tests/snapshots/tui/check.py $<TARGET_FILE:tui_snapshot_test>
+  --artifacts ${CMAKE_BINARY_DIR}/tui-snapshots)
+add_test(NAME tui_microsoft COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-tui-microsoft $<TARGET_FILE:blackbird>
+  --artifacts ${CMAKE_BINARY_DIR}/tui-microsoft)
+set_tests_properties(tui_microsoft PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
 add_executable(terminal_test tests/terminal_test.cpp)
 target_link_libraries(terminal_test PRIVATE blackbird_coding)
 add_test(NAME terminal COMMAND terminal_test)

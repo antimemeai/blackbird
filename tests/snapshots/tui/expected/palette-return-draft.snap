@@ -1,0 +1,10 @@
+styled-grid-v1
+size 32 5
+cursor 0 23
+state draft=unsent operator draft cursor_bytes=21 pasted=false
+|{normal:> unsent operator draft         }|
+|{normal:                                }|
+|{normal:                                }|
+|{normal:                                }|
+|{normal:                                }|
+cell-widths

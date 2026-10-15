@@ -215,3 +215,11 @@ C++/Lua composition; UI components never invent execution authority, shared-serv
 governance or metric transforms on producers. Designs include current surfaces,
 command center/team/mods, capabilities/skills/API recipes, hooks/action fabric and
 multiple metrics families. Research/design publication does not claim implementation.
+
+
+Operator2026-10-15 selects Microsoft tui-test plus Neovim-style readable screen
+expectations for the TUI campaign, alongside usual semantic/fault/sanitizer/source
+rigor. Deliberately retain stable presentation baselines, including understood
+imperfections. Read [TUI testing](tooling/TUI_TESTING.md); install the pinned
+development executable explicitly before a fresh host's full source gate.
+No production terminal framework or VHS adoption follows from this choice.

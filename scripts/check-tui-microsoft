@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""Actual credential-free Blackbird through the pinned Microsoft terminal driver."""
+import argparse
+import json
+from pathlib import Path
+import subprocess
+import signal
+import tempfile
+import uuid
+
+ROOT = Path(__file__).resolve().parent.parent
+TOOL = ROOT / "scripts/tui-test"
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("executable", type=Path)
+    parser.add_argument("--artifacts", type=Path, required=True)
+    parser.add_argument("--backend", choices=("ghostty", "alacritty"), default="ghostty")
+    args = parser.parse_args()
+    executable = args.executable.resolve()
+    artifacts = args.artifacts.resolve() / (args.backend + "-" + uuid.uuid4().hex[:10])
+    artifacts.mkdir(parents=True)
+    subprocess.run([str(TOOL), "--check"], check=True, timeout=10)
+    session = "blackbird-regression-" + uuid.uuid4().hex
+    history = []
+
+    def call(*command, check=True):
+        record = {"command": list(command)}
+        history.append(record)
+        try:
+            completed = subprocess.run([str(TOOL), "--session", session, "--json",
+                                        "--failure-artifacts", str(artifacts), *command],
+                                       capture_output=True, text=True, timeout=12)
+            record.update(returncode=completed.returncode, stdout=completed.stdout,
+                          stderr=completed.stderr)
+            if check and completed.returncode:
+                raise AssertionError(f"Microsoft {command}: {completed.stdout}\n{completed.stderr}")
+            return json.loads(completed.stdout) if completed.stdout.strip() else {}
+        except BaseException as error:
+            record["error"] = repr(error)
+            raise
+
+    def state():
+        return call("state")["data"]
+
+    def expect(needle, *options):
+        call("expect", "text", needle, "--timeout", "4000", *options)
+
+    with tempfile.TemporaryDirectory(prefix="blackbird-microsoft-") as temporary:
+        work = Path(temporary)
+        effects = work / "effects"
+        workflow = work / "turn.lua"
+        workflow.write_text("blackbird.call('exec', {argv={'/bin/sh', '-c', " +
+                            json.dumps('printf \'ran\\n\' >> "$1"') + ", 'fixture', " +
+                            json.dumps(str(effects)) + "}}); print('MICROSOFT_EFFECT')\n")
+        config = work / "tui-test.toml"
+        config.write_text("")
+        opened = False
+        failure = None
+        cleanup_error = None
+
+        def interrupted(number, _frame):
+            raise InterruptedError(f"terminal fixture interrupted by signal {number}")
+
+        prior = {number: signal.signal(number, interrupted)
+                 for number in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)}
+        # The body watchdog reserves 15s for a <=12s close before CTest's 60s guard.
+        # This is fixture cleanup capacity, not a product latency requirement.
+        signal.alarm(45)
+        (artifacts / "session.json").write_text(json.dumps({"session": session, "backend": args.backend}) + "\n")
+        try:
+            # The terminator is essential: without it tui-test consumes the
+            # target's --session as its own global option.
+            opened = True
+            result = call("run", "--backend", args.backend, "--config", str(config),
+                          "--env", "BLACKBIRD_GRAPHICS=off", "--cols", "80", "--rows", "24",
+                          "--", str(executable), "--session", str(work / "session"),
+                          "--workflow", str(workflow), "--model", "gpt-6.1-sol")
+            assert result["data"]["session"] == session, "target argument escaped into driver options"
+            expect("Workflow reloads")
+            call("write", "/")
+            expect("Enter run/fill")
+            expect("> /help", "--fg", "#72d7d3", "--bold")
+            first = state()
+            assert first["cols"] == 80 and first["rows"] == 24
+            assert first["modes"]["bracketed_paste"] is True
+            selected_y = next(i for i, row in enumerate(first["text"].splitlines()) if row.startswith("> /help "))
+            cells = call("cells", "0", str(selected_y), "7", "1")["data"]["cells"]
+            assert "".join(c["char"] for c in cells) == "> /help"
+            assert all(c["bold"] and c["fg"] == "#72d7d3" for c in cells)
+            call("key", "press", "Down")
+            expect("> /keys", "--fg", "#72d7d3", "--bold")
+            call("key", "press", "Tab")
+            expect("│ > /keys")
+            call("write", "\x15")
+            call("write", "\x1b[200~literal \x03 data\x1b[201~")
+            expect("literal \\x03 data")
+            assert not effects.exists(), "paste dispatched the workflow"
+            call("resize", "32", "8")
+            expect("literal")
+            small = state()
+            assert (small["cols"], small["rows"]) == (32, 8)
+            assert 0 <= small["cursor"]["x"] < 32 and 0 <= small["cursor"]["y"] < 8
+            call("resize", "80", "24")
+            expect("literal \\x03 data")
+            call("key", "press", "Enter")
+            expect("MICROSOFT_EFFECT")
+            final = state()
+            (artifacts / "final-state.json").write_text(json.dumps(final, indent=2) + "\n")
+            call("screenshot", "-o", str(artifacts / "final.svg"))
+            call("write", "/exit\r")
+            call("wait", "exit", "--timeout", "4000")
+        except BaseException as error:
+            failure = error
+        finally:
+            signal.alarm(0)
+            for number in prior:
+                signal.signal(number, signal.SIG_IGN)
+            try:
+                if opened:
+                    cleanup = call("close", check=False)
+                    if cleanup.get("ok") is not True:
+                        raise AssertionError(f"driver session cleanup failed: {cleanup}")
+            except BaseException as error:
+                cleanup_error = error
+            finally:
+                try:
+                    (artifacts / "commands.json").write_text(json.dumps(history, indent=2) + "\n")
+                except BaseException as error:
+                    if cleanup_error is None:
+                        cleanup_error = error
+                    else:
+                        cleanup_error.add_note(f"Artifact write also failed: {error!r}")
+                for number, handler in prior.items():
+                    signal.signal(number, handler)
+        if failure is not None:
+            if cleanup_error is not None:
+                failure.add_note(f"Cleanup/artifact failure: {cleanup_error!r}")
+            raise failure
+        if cleanup_error is not None:
+            raise cleanup_error
+        # Read only after observed exit and close: a late duplicate must count too.
+        assert effects.read_text() == "ran\n", "explicit submission did not execute exactly once"
+    print(f"Microsoft {args.backend}: styled palette, native input, literal paste, resize, exactly one workflow effect and exit pass")
+
+
+if __name__ == "__main__":
+    main()

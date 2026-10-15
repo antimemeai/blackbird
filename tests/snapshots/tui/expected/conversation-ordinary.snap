@@ -1,0 +1,25 @@
+styled-grid-v1
+size 52 20
+cursor none
+state component rows
+|{user:  YOU}{normal:                                               }|
+|{user:  │ }{normal:Inspect the parser.                             }|
+|{normal:                                                    }|
+|{assistant:  BLACKBIRD}{normal:                                         }|
+|{assistant:  │ }{heading:Findings}{normal:                                        }|
+|{assistant:  │ }{normal:Use }{code:read}{normal: before changing code.                  }|
+|{assistant:  │ }{code:─ cpp ─}{normal:                                         }|
+|{assistant:  │ }{keyword:auto}{code: result = }{string:"ready"}{code:;}{normal:                          }|
+|{normal:                                                    }|
+|{muted:  ACTIVITY}{normal:                                          }|
+|{muted:  │ }{normal:check-parser: exit 1                            }|
+|{normal:                                                    }|
+|{failure:  ERROR}{normal:                                             }|
+|{failure:  │ Result remains unresolved.}{normal:                      }|
+|{normal:                                                    }|
+|{normal:                                                    }|
+|{normal:                                                    }|
+|{normal:                                                    }|
+|{normal:                                                    }|
+|{normal:                                                    }|
+cell-widths

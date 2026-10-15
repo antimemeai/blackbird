@@ -920,3 +920,16 @@ under ignored `quarantine/tui-regression-2026-10-15/`. Restore each file with it
 recorded command and verify length/SHA-256; create its parent directory first.
 No source tree was extracted, dependency adopted or acquired program executed.
 Neovim Screen/terminal fixtures reuse the prior pinned performance corpus.
+
+
+## Adopted Microsoft TUI development driver — 2026-10-15
+
+The operator selects Microsoft tui-test and Neovim-style expectations alongside
+usual rigor. The [adoption manifest](papers/tui-implementation-2026-10-15/adoption/MANIFEST.tsv)
+retains intact release0.1.0 metadata and original Darwin-arm64 archive copies in
+ignored quarantine. [The tool profile](tooling/tui-test-profile.json) records
+version/source pin, upstream platform assets and archive byte/SHA-256 identities.
+The [owned installer/launcher](scripts/tui-test) installs explicitly under ignored
+build/tools, validates original bytes and detects installed corruption.
+Only the adopted development executable runs; source references remain study-only.
+No production terminal dependency is added. See [usage/limits](tooling/TUI_TESTING.md).

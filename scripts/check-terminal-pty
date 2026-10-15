@@ -488,14 +488,17 @@ with tempfile.TemporaryDirectory(prefix="arco-ui-state-") as work:
         prior_file = Path(session) / 'prior-ui-state.bbm'
         state_file.rename(prior_file)
         state_file.mkdir()  # Deterministic atomic-rename failure, even as root.
-        send(queued.encode())
+        # Correlate this retry's native-call return; retained prior [exit 0]
+        # rows and the shell effect alone do not establish current settlement.
+        retry = queued.rstrip('\r') + '; print("SAVE_RETRY_" .. "SETTLED")\r'
+        send(retry.encode())
         wait_for(b'UI state save failed')
         time.sleep(0.1)
         assert effect.read_text() == 'XX', 'work dispatched despite failed pending-state save'
         state_file.rmdir()
         prior_file.rename(state_file)
         send(b'\r')  # Unsubmitted command remained in composer, not autoexecuted.
-        wait_for(b'[exit 0]')
+        wait_for(b'SAVE_RETRY_SETTLED')
         wait_effect('XXX')
         send(b'\x11')
         assert exit_code() == 0

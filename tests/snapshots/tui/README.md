@@ -1,0 +1,65 @@
+# Current styled screen expectations
+
+These are deterministic component baselines of Blackbird's present behavior,
+including imperfections. They use the owned `ChatView`, `ChatGrid`, `Composer`
+and task-row renderer. Composer/palette grids are fixture compositions at these
+public seams; they do not claim to capture the private whole-window `TerminalUI`
+layout, actual GUI fonts/images, terminal negotiation or external effects.
+
+The readable styled rows follow
+[Neovim's Screen-expectation pattern](https://github.com/neovim/neovim/blob/3068a8f652c8e83aac0696b4a513f369b5bbbd99/test/functional/ui/screen.lua),
+implemented here with owned code and no Neovim dependency. Named aliases refer
+to exact native `Ink` roles; runs include spaces and padding. `cursor` is the
+zero-based row/column, or `none` for a non-focused fixture. Cursor visibility
+here describes the fixture, not a captured terminal mode.
+
+Each `{ink:text}` run records the glyph/complex-cluster bytes and role of every
+cell. Backslash, braces, row delimiters and control bytes are escaped. A
+`<continuation: >` marker represents the actual following wide-glyph cell with
+its own Ink; it is not printed UI text. `cell-widths` lists every non-default
+cell width by `row:column=width`, including width-zero continuations. This keeps
+wide-cell geometry observable rather than flattening it into a plain string.
+Arena offsets are storage details and are not baselined; actual cluster bytes
+are. `state` records the chosen draft/cursor/palette facts in addition to the
+visual grid.
+
+Run comparisons from the repository root after building the target:
+
+```sh
+python3 tests/snapshots/tui/check.py build/debug/tui_snapshot_test \
+  --artifacts build/debug/tui-snapshots
+```
+
+A normal run never creates or replaces expectations. Missing or removed cases
+fail. A mismatch emits `.actual.snap` and a unified `.diff` under the selected
+artifact directory; expected rows, styles, cursor and widths remain untouched.
+Use `--case composer-unicode` to compare one case. Independent native assertions
+also check the selected command, literal pasted text and hidden-draft survival.
+
+Update a baseline deliberately after deciding that the changed behavior belongs
+in the baseline:
+
+```sh
+python3 tests/snapshots/tui/check.py build/debug/tui_snapshot_test \
+  --artifacts build/debug/tui-snapshots --update composer-unicode
+```
+
+`--update-all` explicitly captures every emitted fixture. It is suitable for an
+intentional first capture or a reviewed broad change, never normal test execution.
+Review the source-controlled diff. No environment variable or missing-baseline
+fallback silently approves a new expectation. Delete retired expectations
+deliberately as a source change; the normal comparator flags their absence.
+
+Initial fixtures cover ordinary/narrow conversation (Markdown, code, tool and
+error), multiline/paste/Unicode composer, ordinary/narrow/tiny tasks, selected
+palette, no matches, and return to the unsent draft. Their fixed custom choice
+catalog avoids failures caused solely by unrelated built-in command additions.
+Palette style composition mirrors the present TerminalUI branch; extraction
+should eventually expose that production seam directly instead of keeping a
+test-local composition.
+
+The native tests are synchronous. Eventual matching would add no evidence here;
+future asynchronous component scenarios must wait for their actual promised
+state and retain transition/timeout evidence. Microsoft tui-test qualification,
+existing real-PTY/mode/effect checks and the independent VT oracle attack other
+fault classes. A passing snapshot does not establish the desired design is good.
