@@ -5,6 +5,7 @@
 #include "blackbird/openrouter.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/raw_auth.hpp"
 #include "blackbird/raw_command.hpp"
 #include "blackbird/raw_file.hpp"
 #include "blackbird/raw_input.hpp"
@@ -12,6 +13,7 @@
 #include "blackbird/raw_restart.hpp"
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/raw_storage.hpp"
+#include "blackbird/responses_provider.hpp"
 #include "blackbird/sprite.hpp"
 #include "blackbird/station.hpp"
 #include "blackbird/terminal.hpp"
@@ -78,7 +80,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     const char *home = std::getenv("HOME");
     if (home == nullptr)
       throw Error{ErrorCode::invalid_range};
-    std::filesystem::path session = default_session_directory(home);
+    std::filesystem::path session;
+    const auto session_root = std::filesystem::path{home} / ".local/state/blackbird";
     std::filesystem::path workflow = BLACKBIRD_WORKFLOW;
     std::string model = "gpt-6.1-sol", once, seed_path, backstop_path, station_path;
     Value backstop_mission;
@@ -86,10 +89,10 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
          expire_diagnostics = false, recover_unknown_effects = false;
     std::string effort = "medium";
     std::string provider_name = "openai";
-    bool provider_option = false;
+    bool provider_option = false, session_option = false;
     bool model_option = false, effort_option = false, workflow_option = false;
     bool resume_requested = false, discovery = false, switched_session = false;
-    auto discovery_root = session.parent_path();
+    auto discovery_root = session_root;
     for (int i = 1; i < argc; ++i) {
       const std::string_view arg = argv[i];
       if (arg == "--new-session-instance") {
@@ -97,14 +100,16 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         continue;
       }
       if (arg == "--help") {
-        std::cout << "blackbird [--session DIRECTORY] [--provider openai|openrouter] "
+        std::cout << "blackbird [--session DIRECTORY] [--provider ID] "
                      "[--model NAME] [--workflow FILE] "
                      "[--once "
-                     "PROMPT] [--audit-last] [--effort low|medium|high|xhigh] "
+                     "PROMPT] [--audit-last] [--effort low|medium|high|xhigh|max] "
                      "[--plain] [--list-sessions [ROOT]] [--seed-session JSON] "
                      "[--backstop MISSION_JSON (requires --once)] "
                      "[--resume-continue|--resume-once] [--rebuild-session] "
-                     "[--expire-diagnostics] [--recover-unknown-effects]\nInteractive: "
+                     "[--expire-diagnostics] [--recover-unknown-effects]\n"
+                     "Without --session, start a fresh conversation. Reopen an "
+                     "existing conversation with --session DIRECTORY.\nInteractive: "
                      "/context, "
                      "/originals, /restore "
                      "ENTRY, /lua CODE, /model NAME, /effort LEVEL, /workflow FILE, "
@@ -152,9 +157,10 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         backstop_path = argv[++i];
       else if (arg == "--seed-session")
         seed_path = argv[++i];
-      else if (arg == "--session")
+      else if (arg == "--session") {
         session = argv[++i];
-      else if (arg == "--effort") {
+        session_option = true;
+      } else if (arg == "--effort") {
         effort = argv[++i];
         effort_option = true;
       } else if (arg == "--workflow") {
@@ -189,6 +195,21 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       std::cout << unwrap(dump_json(list_sessions(discovery_root))) << '\n';
       return 0;
     }
+    if (!session_option) {
+      if (inspect || expire_diagnostics || rebuild_session || recover_unknown_effects ||
+          resume_requested) {
+        std::cerr << "Select an existing session with --session DIRECTORY for "
+                     "inspection, recovery, continuation or maintenance.\n";
+        return 1;
+      }
+      std::filesystem::create_directories(session_root);
+      auto directory_template = (session_root / "session-XXXXXX").string();
+      if (::mkdtemp(directory_template.data()) == nullptr)
+        throw Error{ErrorCode::io, errno};
+      session = directory_template;
+      std::cerr << "Starting Blackbird session: " << session.string() << '\n';
+    } else if (session.empty())
+      throw Error{ErrorCode::invalid_range};
     Value seed;
     if (!seed_path.empty()) {
       if (inspect || discovery || resume_requested ||
@@ -426,6 +447,25 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       settings.workflow =
           std::filesystem::absolute(workflow).lexically_normal().string();
     (void)read_file(settings.workflow, 16 * 1024 * 1024, &session_capture);
+    const auto validate_route = [&](const SessionSettings &candidate,
+                                    const RawAdapterContext &capture) {
+      if (candidate.provider == "openai" || candidate.provider == "openrouter")
+        return;
+      ProviderAuth auth;
+      const RawAuthParent parent{capture.parent.value_or(RawEventRef{})};
+      const auto descriptor = auth.descriptor(candidate.provider, &parent);
+      const auto &protocol = string_field(descriptor, "protocol");
+      if (protocol != "responses" && protocol != "responses-portable") {
+        warning("Main coding requires a Responses provider.\n");
+        throw Error{ErrorCode::unsupported};
+      }
+      if (protocol == "responses-portable" && candidate.effort != "low" &&
+          candidate.effort != "high" && candidate.effort != "max") {
+        warning("Portable Responses requires effort low, high or max.\n");
+        throw Error{ErrorCode::unsupported};
+      }
+    };
+    validate_route(settings, session_capture);
     session_store.save(settings, &session_capture);
     model = settings.model;
     provider_name = settings.provider;
@@ -444,6 +484,12 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       if (const auto *curl = std::getenv("BLACKBIRD_OPENROUTER_CURL"); curl && *curl)
         config.auth.curl_executable = curl;
       provider = std::make_unique<OpenRouterCodingProvider>(std::move(config));
+    } else if (provider_name != "openai") {
+      RegisteredResponsesConfig config;
+      config.provider = provider_name;
+      if (const auto *curl = std::getenv("BLACKBIRD_RESPONSES_CURL"); curl && *curl)
+        config.auth.curl_executable = curl;
+      provider = std::make_unique<RegisteredResponsesCodingProvider>(std::move(config));
     } else
       provider = std::make_unique<OpenAiCodingProvider>();
     CodingEngine engine{log, context, *provider, model};
@@ -997,6 +1043,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
               auto value = std::string{prompt.substr(8)};
               auto candidate = session_store.settings();
               candidate.effort = value;
+              validate_route(candidate, command_context);
               session_store.save(candidate, &command_context);
               engine.effort(value);
               effort = std::move(value);

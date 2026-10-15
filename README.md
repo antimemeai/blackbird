@@ -78,12 +78,13 @@ Start a named phux session with:
 Detach with `Ctrl-A`, then `d`; return with `phux attach arco`. See
 [phux support](docs/PHUX.md) for installation, multiple Blackbirds, and terminal control.
 
-The working directory is the tool working directory. New default sessions live at `~/.local/state/blackbird/default`; an existing `~/.local/state/arconaut/default` is reused until you select a new default. An explicit directory keeps a project's conversation where you choose. Only one process may hold a session. Model, reasoning effort, workflow path, and conversation identities persist across restart. Explicit launch options override and save the corresponding settings. See [session reopen behavior](docs/SESSION_REOPEN.md) for recovery size limits, uncertain operations and `--rebuild-session`.
+The working directory is the tool working directory. Without `--session`, every launch starts a fresh conversation under `~/.local/state/blackbird/session-XXXXXX` and prints its path. Use `--session DIRECTORY` to reopen a conversation, or `--list-sessions` to find its resume command. An explicit new directory keeps a project's conversation where you choose. Only one process may hold a session. Model, reasoning effort, workflow path, and conversation identities persist across restart. Explicit launch options override and save the corresponding settings. Recovery, inspection, continuation and diagnostic expiry require an explicit session path. See [session reopen behavior](docs/SESSION_REOPEN.md) for recovery size limits, uncertain operations and `--rebuild-session`.
 
 Blackbird owns provider account storage, selection and refresh. Explicit OpenAI
 sign-in uses browser OAuth; Kimi and Grok use device login; Anthropic has a
 PKCE/copy-code flow; MiMo and other providers accept keys. The main coding loop
-uses OpenAI by default, with explicit OpenRouter Responses support. See
+uses OpenAI by default, with explicit OpenRouter and registered Responses support,
+including Paper Instruments through the portable Responses dialect. See
 [provider routing, prompt caching and usage](docs/TOKENOMICS.md) for selection and
 limits. Direct context-only colleagues can use the wider provider registry.
 Installed Codex/Claude compatibility paths remain available until owned accounts

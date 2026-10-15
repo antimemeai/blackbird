@@ -7,13 +7,6 @@
 #include <algorithm>
 #include <sys/stat.h>
 namespace blackbird {
-std::filesystem::path default_session_directory(const std::filesystem::path &home) {
-  const auto current = home / ".local/state/blackbird/default";
-  const auto legacy = home / ".local/state/arconaut/default";
-  return !std::filesystem::exists(current) && std::filesystem::is_directory(legacy)
-             ? legacy
-             : current;
-}
 namespace {
 bool labelled(const Value &value, std::string_view label) {
   const auto *name = value.find("label");
@@ -36,16 +29,21 @@ template <class T> T identity(std::string_view text) {
   return unwrap(T::from_bytes(bytes));
 }
 void validate(const SessionSettings &value) {
+  const auto valid_provider =
+      !value.provider.empty() && value.provider.size() <= 64 &&
+      std::all_of(value.provider.begin(), value.provider.end(), [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+               (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+      });
   if (value.name.size() > 128 ||
       value.name.find_first_of("\r\n") != std::string::npos ||
       value.name.find('\0') != std::string::npos || value.model.size() > 1024 ||
       value.workflow.size() > 65536 || value.model.empty() ||
       value.model.find('\0') != std::string::npos || value.workflow.empty() ||
-      value.workflow.find('\0') != std::string::npos ||
-      (value.provider != "openai" && value.provider != "openrouter") ||
+      value.workflow.find('\0') != std::string::npos || !valid_provider ||
       (value.provider == "openrouter" && value.model.find('/') == std::string::npos) ||
       (value.effort != "low" && value.effort != "medium" && value.effort != "high" &&
-       value.effort != "xhigh"))
+       value.effort != "xhigh" && value.effort != "max"))
     throw Error{ErrorCode::invalid_range};
 }
 RawSessionCall session_call(AuditLog &log, std::uint8_t action,

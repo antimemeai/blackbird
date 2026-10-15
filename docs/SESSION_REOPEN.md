@@ -3,6 +3,10 @@
 Ordinary reopening restores context, pending context proposals, settings and
 conversation identity. It never resubmits a prior operation merely because the
 process ended. Drafts load separately and require Enter before submission.
+Reopening requires `--session DIRECTORY`. Without it, startup creates a fresh
+private conversation and prints its path; no shared default or old Arconaut
+directory is selected. `--list-sessions` finds saved conversations. Inspection,
+recovery, continuation and expiry flags require an explicit session path.
 
 | Session state | Reopen behavior |
 | --- | --- |

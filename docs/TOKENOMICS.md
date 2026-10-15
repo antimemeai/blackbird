@@ -1,8 +1,57 @@
 # Provider routing, prompt caching and usage
 
-Blackbird's main coding loop can use OpenAI or OpenRouter Responses. Choose the
+Blackbird's main coding loop can use OpenAI, OpenRouter or registered Responses routes. Choose the
 provider explicitly; changing a model string alone does not switch accounts or
 billing routes. Native context-only colleagues keep their existing provider registry.
+
+## Paper Instruments and registered Responses
+
+Register an HTTPS origin, wire dialect and environment-variable name, then store
+the key through the private auth prompt:
+
+```sh
+./scripts/blackbird auth add-provider paper https://api.paperinstruments.com/v1 responses-portable paper_api_key
+./scripts/blackbird auth key paper default
+./scripts/blackbird --session context/paper-session \
+  --provider paper --model ultramarine-1-flash --effort max
+```
+
+`auth key` prompts without echo; it also accepts stdin. An existing key in a
+`.env` file must be imported privately or exported to the named environment
+variable; the launcher does not source `.env`. The auth store retains imported
+keys, so later launches need no environment key. With no selected owned account,
+the registered environment variable is used. Broken/logged-out selections block
+fallback, as with other owned providers.
+
+Use `responses` for a provider accepting Blackbird's normal OpenAI Responses
+fields. `responses-portable` sends developer messages as system messages,
+requests plaintext reasoning and accepts only `low`, `high` or `max` effort.
+Choose effort explicitly: the ordinary initial `medium` is unsupported. The
+portable adapter refuses encrypted history instead of discarding it; begin a
+fresh session when moving from a provider whose history contains encrypted items.
+Plaintext reasoning and tool call/result IDs are replayed with the full history.
+Function tools without an explicit `strict` choice use `strict:false`, preserving
+optional arguments instead of letting the service normalize them to mandatory ones.
+Local function tools use string arguments/results at the wire boundary. Provider
+limits on models, modalities and other optional fields still apply. The dialect
+does not promise compatibility with every Responses implementation.
+Successor seeds currently require encrypted reasoning in the shared context
+validator; a seed containing Paper plaintext reasoning is refused. Ordinary
+conversation replay, context editing, reopen and fresh `/new` sessions work.
+
+Provider/model/effort persist across reopen, native restart and `/new`. Chat and
+Messages registrations remain available for colleagues. A main route with an
+unsupported protocol or effort is refused before saving the new settings. No
+request changes the provider or credentials automatically. Custom main routes
+use provider-default caching; explicit OpenAI/OpenRouter cache policies remain
+limited to those qualified routes. `BLACKBIRD_RESPONSES_CURL` selects a transport
+executable for deterministic/local checks; ordinary runs use system curl.
+
+Paper's [Responses contract](https://docs.paperinstruments.com/docs/ultramarine/responses)
+documents the model, effort values, plaintext reasoning and unsupported fields.
+Source grounding and direct qualification are recorded in
+[the provider plan](../papers/paper-provider-2026-10-15/PLAN.md) and
+[the qualification results](../papers/paper-provider-2026-10-15/QUALIFICATION.md).
 
 ## OpenRouter main coding
 

@@ -13,35 +13,52 @@ if [ "${1:-}" = auth ]; then
   exec "$blackbird_executable" "$@"
 fi
 blackbird_probe=false
-blackbird_session="$HOME/.local/state/blackbird/default"
-if [ ! -e "$blackbird_session" ] && [ -d "$HOME/.local/state/arconaut/default" ]; then
-  blackbird_session="$HOME/.local/state/arconaut/default"
-fi
+blackbird_session=''
+blackbird_session_option=false
+blackbird_existing_session=false
 blackbird_plain=false
 blackbird_once=false
 blackbird_value=''
 for blackbird_argument in "$@"; do
   if [ -n "$blackbird_value" ]; then
-    if [ "$blackbird_value" = session ]; then blackbird_session=$blackbird_argument; fi
+    if [ "$blackbird_value" = session ]; then
+      blackbird_session=$blackbird_argument
+      blackbird_session_option=true
+    fi
     blackbird_value=''
     continue
   fi
   case "$blackbird_argument" in
-    --help|--list-sessions|--audit-last|--expire-diagnostics) blackbird_probe=true ;;
+    --help|--list-sessions) blackbird_probe=true ;;
+    --audit-last|--expire-diagnostics|--rebuild-session|--recover-unknown-effects|--resume-continue)
+      blackbird_existing_session=true ;;
     --session) blackbird_value=session ;;
-    --model|--effort|--workflow|--provider) blackbird_value=skip ;;
+    --model|--effort|--workflow|--provider|--seed-session|--backstop|--station) blackbird_value=skip ;;
     --once) blackbird_once=true; blackbird_value=skip ;;
-    --resume-once) blackbird_once=true ;;
+    --resume-once) blackbird_once=true; blackbird_existing_session=true ;;
     --plain) blackbird_plain=true ;;
   esac
 done
+if ! "$blackbird_session_option" && "$blackbird_existing_session" && ! "$blackbird_probe"; then
+  printf 'Select an existing session with --session DIRECTORY for inspection, recovery, continuation or maintenance.\n' >&2
+  exit 1
+fi
+if ! "$blackbird_session_option" && ! "$blackbird_probe" && ! "$blackbird_existing_session"; then
+  blackbird_session=$(
+    umask 077
+    mkdir -p -- "$HOME/.local/state/blackbird"
+    mktemp -d "$HOME/.local/state/blackbird/session-XXXXXX"
+  )
+  set -- "$@" --session "$blackbird_session"
+  printf 'Starting Blackbird session: %s\n' "$blackbird_session" >&2
+fi
 # Keep interactive startup on its published generation while the dev campaign
 # builds/replaces Blackbird. Explicit executable selection always wins.
-if [ -z "${BLACKBIRD_EXECUTABLE:-}${ARCO_EXECUTABLE:-}" ] && ! "$blackbird_once" && ! "$blackbird_probe" &&
+if [ -z "${BLACKBIRD_EXECUTABLE:-}${ARCO_EXECUTABLE:-}" ] && ! "$blackbird_once" && ! "$blackbird_probe" && ! "$blackbird_existing_session" &&
    [ -x "$blackbird_root/build/release/blackbird-ui" ]; then
   blackbird_executable="$blackbird_root/build/release/blackbird-ui"
 fi
-if ! "$blackbird_once" && ! "$blackbird_probe" && [ -t 0 ] && [ -t 1 ]; then
+if "$blackbird_session_option" && ! "$blackbird_once" && ! "$blackbird_probe" && [ -t 0 ] && [ -t 1 ]; then
   printf 'Opening Blackbird session: %s\n' "$blackbird_session" >&2
 fi
 while :; do

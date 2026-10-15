@@ -927,7 +927,8 @@ int provider_auth_cli(int argc, char **argv) {
         << "Provider auth: " << error_name(e.code) << " (" << e.detail
         << ").\nUsage: blackbird auth providers|status|key PROVIDER [ACCOUNT]|login "
            "PROVIDER [ACCOUNT]|use PROVIDER ACCOUNT|logout PROVIDER "
-           "[ACCOUNT]|add-provider ID HTTPS_BASE responses|chat|messages ENV\n";
+           "[ACCOUNT]|add-provider ID HTTPS_BASE "
+           "responses|responses-portable|chat|messages ENV\n";
   } catch (const std::exception &) {
     std::cerr
         << "Provider auth: malformed local or provider data. No credentials printed.\n";

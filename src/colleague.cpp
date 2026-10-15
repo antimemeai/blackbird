@@ -262,7 +262,7 @@ Value prepare_colleague(const Value &request, const RawAdapterContext *raw_conte
       const auto binding = auth.binding(provider);
       const auto protocol = text(binding, "protocol");
       Value upstream;
-      if (protocol == "responses") {
+      if (protocol == "responses" || protocol == "responses-portable") {
         upstream = Value::object(
             {{"model", required_field(request, "model")},
              {"instructions", Value{instructions}},
@@ -470,7 +470,9 @@ Value native_colleague_transport(const Value &prepared, const ColleagueCapture &
       config.cancelled = cancelled;
       ProviderAuth auth{std::move(config)};
       const auto protocol = text(*binding, "protocol");
-      const auto route = protocol == "responses"  ? "responses"
+      const bool responses =
+          protocol == "responses" || protocol == "responses-portable";
+      const auto route = responses                ? "responses"
                          : protocol == "messages" ? "messages"
                                                   : "chat/completions";
       auto wire = auth.request(
@@ -481,7 +483,7 @@ Value native_colleague_transport(const Value &prepared, const ColleagueCapture &
               capture("raw", bytes);
           },
           binding, call.owner, &call);
-      if (protocol == "responses")
+      if (responses)
         return unwrap(completed_response(wire.body, {}, &call));
       RawProviderPhase decode{provider_link_credit};
       return decode.run([&] {

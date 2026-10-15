@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Fresh default launches and explicit reopen through the real binary and launcher."""
+import importlib.util
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+executable = str(Path(sys.argv[1]).resolve())
+launcher = str(Path(sys.argv[2]).resolve())
+spec = importlib.util.spec_from_file_location(
+    'native_packet', Path(__file__).with_name('native-packet.py'))
+native_packet = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(native_packet)
+
+with tempfile.TemporaryDirectory(prefix='blackbird-startup-') as temporary:
+    root = Path(temporary).resolve()
+    home = root / 'home with spaces'
+    sessions = home / '.local/state/blackbird'
+    old_files = {}
+    for directory in (sessions / 'default', home / '.local/state/arconaut/default'):
+        directory.mkdir(parents=True)
+        for name in ('audit', 'session-info.bbm'):
+            path = directory / name
+            path.write_bytes(b'old-session-must-not-be-opened')
+            old_files[path] = path.read_bytes()
+    env = dict(os.environ, HOME=str(home), BLACKBIRD_EXECUTABLE=executable,
+               BLACKBIRD_AUTH_HOME=str(root / 'auth'), BLACKBIRD_GRAPHICS='off',
+               BLACKBIRD_JEV_ENV_FILE=str(root / 'absent-env'))
+    workflow = root / 'local.lua'
+    workflow.write_text('print("LOCAL_WORKFLOW")\n')
+
+    def run(command, arguments, text=None, success=True):
+        result = subprocess.run([command, *arguments], input=text, env=env,
+                                capture_output=True, text=True, timeout=20)
+        if success:
+            assert result.returncode == 0, (arguments, result.stdout, result.stderr)
+        else:
+            assert result.returncode != 0, (arguments, result.stdout, result.stderr)
+        return result
+
+    def directories():
+        return set(sessions.glob('session-*'))
+
+    def metadata(directory):
+        return native_packet.read_packet(directory / 'session-info.bbm')
+
+    conversations = set()
+    for command in (executable, launcher):
+        for _ in range(2):
+            before = directories()
+            started = run(command, ['--plain', '--workflow', str(workflow)],
+                          "/lua blackbird.append({{role='user',content='RETAIN_ME'}})\n"
+                          '/session\n/quit\n')
+            added = directories() - before
+            assert len(added) == 1, (command, added, started.stderr)
+            directory = added.pop()
+            assert str(directory) in started.stderr, started.stderr
+            assert directory.stat().st_mode & 0o777 == 0o700
+            first = metadata(directory)
+            assert first['conversation'] not in conversations
+            conversations.add(first['conversation'])
+            reopened = run(command, ['--session', str(directory), '--once', '/context'])
+            assert 'RETAIN_ME' in reopened.stdout, reopened.stdout
+            assert metadata(directory)['conversation'] == first['conversation']
+            assert directories() == before | {directory}
+
+        before = directories()
+        run(command, ['--help'])
+        listed = run(command, ['--list-sessions'])
+        discovered = {Path(item['path']) for item in json.loads(listed.stdout)['sessions']}
+        assert before <= discovered, (before, discovered)
+        for flag in ('--audit-last', '--expire-diagnostics', '--rebuild-session',
+                     '--recover-unknown-effects', '--resume-continue', '--resume-once'):
+            refused = run(command, [flag], success=False)
+            assert '--session DIRECTORY' in refused.stderr, (flag, refused.stderr)
+        assert directories() == before
+
+    # The wrapper must retain its newly allocated path across exit-75 refit.
+    workflow.write_text('''local items=blackbird.context().entries
+local last=items[#items].item.content
+if last:find("Restart/resume note:",1,true) then
+  assert(#items==2 and items[1].item.content=="START_FRESH")
+  assert(last:find("SAME_FRESH_SESSION",1,true))
+  print("FRESH_RESTART_OK")
+else
+  blackbird.call("restart",{note="SAME_FRESH_SESSION"})
+end
+''')
+    before = directories()
+    restarted = run(launcher, ['--workflow', str(workflow), '--once', 'START_FRESH'])
+    assert 'FRESH_RESTART_OK' in restarted.stdout, (restarted.stdout, restarted.stderr)
+    assert len(directories() - before) == 1
+    assert all(path.read_bytes() == original for path, original in old_files.items())
+
+    # Probes with a completely empty home must leave it empty.
+    empty_home = root / 'empty-home'
+    env['HOME'] = str(empty_home)
+    for command in (executable, launcher):
+        run(command, ['--help'])
+        listed = run(command, ['--list-sessions'])
+        assert json.loads(listed.stdout)['sessions'] == []
+        run(command, ['--rebuild-session'], success=False)
+        assert not empty_home.exists()
+
+    # A retained UI generation must never receive maintenance or pathless recovery.
+    checkout = root / 'published checkout'
+    (checkout / 'scripts').mkdir(parents=True)
+    (checkout / 'build/release').mkdir(parents=True)
+    copied_launcher = checkout / 'scripts/blackbird'
+    shutil.copy2(launcher, copied_launcher)
+    for name, marker in (('blackbird', 'NATIVE_SELECTED'), ('blackbird-ui', 'OLD_UI_SELECTED')):
+        stub = checkout / 'build/release' / name
+        stub.write_text('#!/bin/sh\nprintf "%s\\n" ' + marker + '\n')
+        stub.chmod(0o700)
+    env.pop('BLACKBIRD_EXECUTABLE', None)
+    env.pop('ARCO_EXECUTABLE', None)
+    for flag in ('--audit-last', '--expire-diagnostics', '--rebuild-session',
+                 '--recover-unknown-effects', '--resume-continue', '--resume-once'):
+        refused = run(str(copied_launcher), [flag], success=False)
+        assert '--session DIRECTORY' in refused.stderr and not refused.stdout
+        selected = run(str(copied_launcher), ['--session', str(root / 'explicit'), flag])
+        assert selected.stdout.strip() == 'NATIVE_SELECTED', selected
+    assert not empty_home.exists()
+
+print('Fresh native/launcher conversations, explicit reopen, restart and old-session isolation pass')

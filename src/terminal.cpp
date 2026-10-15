@@ -59,7 +59,7 @@ const std::array builtin_commands{
     ChatCommand{"/exit", "", "Alias for /quit", "Chat"},
     ChatCommand{"/model", "NAME", "Change model at the next available boundary",
                 "Session"},
-    ChatCommand{"/effort", "LEVEL", "Set low, medium, high or xhigh", "Session"},
+    ChatCommand{"/effort", "LEVEL", "Set low, medium, high, xhigh or max", "Session"},
     ChatCommand{"/session", "", "Current session and settings", "Session"},
     ChatCommand{"/new", "", "Start a fresh saved session; keep current settings",
                 "Session"},

@@ -27,6 +27,8 @@ def main():
     paths.append("scripts/check-raw-capture")
     paths.append("scripts/check-trace-archive")
     paths.append("scripts/check-openrouter")
+    paths.append("scripts/check-registered-responses")
+    paths.append("scripts/check-session-startup")
     paths += ["scripts/tui-test", "scripts/check-tui-microsoft", "tooling/tui-test-profile.json"]
     lua_archive = ROOT.parent / "quarantine_proj/archives/lua-5.4.8.tar.gz"
     if hashlib.sha256(lua_archive.read_bytes()).hexdigest() != "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae":

@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""Exercise registered main Responses through native auth, tools and recovery."""
+import json
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import sys
+import tempfile
+import traceback
+
+
+def fake_curl():
+    config = sys.stdin.read()
+    assert 'https://api.paperinstruments.com/v1/responses' in config
+    assert 'Authorization: Bearer fixture-secret' in config
+    assert all('fixture-secret' not in arg for arg in sys.argv)
+    encoded = next(line.split(' = ', 1)[1] for line in config.splitlines()
+                   if line.startswith('data-binary = '))
+    request = json.loads(json.loads(encoded))
+    assert request['model'] == 'ultramarine-1-flash'
+    assert request['stream'] is True and request['store'] is False
+    assert request['include'] == [] and request['reasoning']['effort'] == 'max'
+    assert all(item.get('role') != 'developer' for item in request['input'])
+    assert 'provider' not in request
+    assert all(tool['strict'] is False for tool in request['tools'] if tool['type'] == 'function')
+    with Path(os.environ['BLACKBIRD_RR_LOG']).open('a') as out:
+        out.write(json.dumps(request) + '\n')
+    command = 'printf X >> ' + shlex.quote(os.environ['BLACKBIRD_RR_EFFECT'])
+    results = [item for item in request['input'] if item.get('type') == 'function_call_output']
+    if not results:
+        output = [
+            {'type': 'reasoning', 'id': 'r1', 'summary': [
+                {'type': 'summary_text', 'text': 'Read the fixture before answering.'}]},
+            {'type': 'function_call', 'id': 'f1', 'call_id': 'c1', 'name': 'exec',
+             'status': 'completed', 'arguments': json.dumps(
+                 {'command': command, 'yield_ms': 1000, 'output_max_bytes': 1024})}]
+    else:
+        assert len(results) == 1 and results[0]['call_id'] == 'c1'
+        assert isinstance(results[0]['output'], str)
+        assert json.loads(results[0]['output'])['state'] == 'completed'
+        reasoning = next(item for item in request['input'] if item.get('type') == 'reasoning')
+        assert reasoning['summary'][0]['text'] == 'Read the fixture before answering.'
+        assert not reasoning.get('encrypted_content')
+        call = next(item for item in request['input'] if item.get('type') == 'function_call')
+        assert json.loads(call['arguments'])['command'] == command
+        output = [{'type': 'message', 'role': 'assistant', 'id': 'm1',
+                   'status': 'completed', 'content': [
+                       {'type': 'output_text', 'text': 'portable fixture completed'}]}]
+    response = {'status': 'completed', 'id': 'resp1', 'model': 'ultramarine-1-flash',
+                'output': output, 'usage': {'input_tokens': 100, 'output_tokens': 10}}
+    event = {'type': 'response.completed', 'response': response}
+    mode = os.environ.get('BLACKBIRD_RR_MODE', 'success')
+    if mode in ('failed', 'incomplete'):
+        event['type'] = 'response.' + mode
+        response['status'] = mode
+    elif mode == 'contradictory_error':
+        response['error'] = {'code': 'server_error'}
+    elif mode in ('in_progress', 'partial_tool'):
+        output[-1]['status'] = 'in_progress' if mode == 'in_progress' else 'incomplete'
+    elif mode == 'duplicate_call':
+        output.append(dict(output[-1], id='f2'))
+    elif mode == 'invalid_arguments':
+        output.append(dict(output[-1], id='f2', call_id='c2', arguments='{broken'))
+    elif mode == 'partial_stream':
+        event = {'type': 'response.output_item.done', 'output_index': 0, 'item': output[-1]}
+    stream = 'data: ' + json.dumps(event) + '\n\n'
+    if mode == 'malformed_tail':
+        stream += 'data: {broken}\n\n'
+    sys.stdout.write(stream + '\n200')
+
+
+def main():
+    executable = Path(sys.argv[1]).resolve()
+    with tempfile.TemporaryDirectory(prefix='blackbird-registered-responses-') as temporary:
+        root = Path(temporary).resolve()
+        curl = root / 'curl'
+        curl.write_text('#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' ' +
+                        shlex.quote(str(Path(__file__).resolve())) + ' --fake-curl "$@"\n')
+        curl.chmod(0o700)
+        env = dict(os.environ, BLACKBIRD_AUTH_HOME=str(root / 'auth'),
+                   BLACKBIRD_RESPONSES_CURL=str(curl),
+                   BLACKBIRD_RR_LOG=str(root / 'requests'),
+                   BLACKBIRD_RR_DIAGNOSTIC=str(root / 'fake-error'),
+                   BLACKBIRD_RR_EFFECT=str(root / 'effect'))
+
+        def run(args, *, input=None, selected_env=env):
+            result = subprocess.run([str(executable), *args], env=selected_env,
+                                    input=input, capture_output=True, text=True, timeout=30)
+            diagnostic = root / 'fake-error'
+            assert not diagnostic.exists(), diagnostic.read_text() if diagnostic.exists() else ''
+            return result
+
+        def register(name, protocol):
+            result = run(['auth', 'add-provider', name,
+                          'https://api.paperinstruments.com/v1', protocol, 'PAPER_FIXTURE_KEY'])
+            assert result.returncode == 0, result.stderr
+
+        register('paper', 'responses-portable')
+        keyed = run(['auth', 'key', 'paper', 'fixture'], input='fixture-secret\n')
+        assert keyed.returncode == 0, keyed.stderr
+        session = root / 'session'
+        options = ['--plain', '--session', str(session), '--provider', 'paper',
+                   '--model', 'ultramarine-1-flash', '--effort', 'max']
+        first = run([*options, '--once', 'Write the fixture through a tool.'])
+        assert first.returncode == 0, (first.stdout, first.stderr)
+        assert (root / 'effect').read_text() == 'X'
+        assert len((root / 'requests').read_text().splitlines()) == 2
+        reopened = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
+        assert reopened.returncode == 0, reopened.stderr
+        assert '"provider":"paper"' in reopened.stdout and '"effort":"max"' in reopened.stdout
+        follow = run(['--plain', '--session', str(session), '--once', 'Confirm the fixture.'])
+        assert follow.returncode == 0, (follow.stdout, follow.stderr)
+        assert len((root / 'requests').read_text().splitlines()) == 3
+        refused_effort = run(['--plain', '--session', str(session)],
+                             input='/effort medium\n/effort xhigh\n/session\n/quit\n')
+        assert 'Portable Responses requires' in refused_effort.stderr
+        assert '"effort":"max"' in refused_effort.stdout
+        repaired = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
+        assert repaired.returncode == 0 and '"effort":"max"' in repaired.stdout
+        assert (root / 'effect').read_text() == 'X'
+        register('chat-only', 'chat')
+        register('messages-only', 'messages')
+        for provider in ('missing', 'chat-only', 'messages-only', '../bad'):
+            refused = run(['--plain', '--session', str(session), '--provider', provider,
+                           '--model', 'bad', '--once', 'must not dispatch'])
+            assert refused.returncode != 0, provider
+        for effort in ('medium', 'xhigh'):
+            refused = run([*options, '--effort', effort, '--once', 'must not dispatch'])
+            assert refused.returncode != 0
+            assert 'Portable Responses requires' in refused.stderr
+        still = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
+        assert '"provider":"paper"' in still.stdout and '"model":"ultramarine-1-flash"' in still.stdout
+        assert len((root / 'requests').read_text().splitlines()) == 3
+        for mode in ('failed', 'incomplete', 'contradictory_error', 'in_progress',
+                     'partial_tool', 'duplicate_call', 'invalid_arguments',
+                     'partial_stream', 'malformed_tail'):
+            (root / 'effect').unlink(missing_ok=True)
+            selected = dict(env, BLACKBIRD_RR_MODE=mode)
+            result = run([*options, '--session', str(root / mode), '--once', 'Refuse bad tools.'],
+                         selected_env=selected)
+            assert result.returncode != 0, (mode, result.stdout, result.stderr)
+            assert not (root / 'effect').exists(), mode
+        for result in (first, reopened, follow, still):
+            assert 'fixture-secret' not in result.stdout + result.stderr
+        for file in session.rglob('*'):
+            if file.is_file():
+                assert b'fixture-secret' not in file.read_bytes(), file
+        print('Registered Responses tool continuation, reopen, refusal and secret checks pass')
+
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == '--fake-curl':
+        try:
+            fake_curl()
+        except Exception:
+            Path(os.environ['BLACKBIRD_RR_DIAGNOSTIC']).write_text(traceback.format_exc())
+            raise
+    else:
+        main()

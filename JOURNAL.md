@@ -9659,3 +9659,111 @@ borrowed storage is protected by render gating; no existing use-after-free or
 measured speedup is claimed. Source plan: papers/tui-next-host-2026-10-15/SOURCE_PLAN.md.
 This checkpoint changes documentation only, with relevant diff/link checks; no
 new source gate, runtime activation or queued-defect investigation.
+
+## 2026-10-15 — Paper Instruments provider worktree
+
+Operator asks for a separate worktree and configuration sufficient to run Blackbird
+with Paper Instruments, using workspace .env variable paper_api_key (corrected
+from the initial typo). Created work/paper-provider-2026-10-15 in sibling
+blackbird-paper-provider at d987f6f; original TUI checkout stays untouched. Read
+current provider/session/encoding contracts and Paper's Responses documentation.
+The short design, direct checks and two-layer bound are in
+papers/paper-provider-2026-10-15/PLAN.md. No dependency adoption. Credential presence
+checked without displaying its content. Main routing and portable Responses
+configuration are the scoped implementation; no main integration or activation.
+
+Paper provider implementation and direct checks: registered responses-portable
+routes now reach the main loop through owned auth; standard Responses stays
+unchanged and OpenAI/OpenRouter retain their specialized paths. Native tests
+check call/result replay, plaintext reasoning, saved provider/max effort, account
+revision refusal and refusal of failed/incomplete/malformed/duplicate/bad-argument
+tools before effects. Focused Mac tests pass; the first Linux scoped Debug run
+passes4/4 before final review/live corrections. Initial fixture faults were test
+setup errors (unresolved macOS temp symlink and an unjustified expectation of an
+automatic state message in an empty task list), corrected without weakening the
+actual export oracle. Initial direct clang invocation lacked the host SDK and
+was discarded as an implementation oracle; the existing binary's rejection of
+responses-portable is the meaningful red case.
+
+Kimi returned subscription HTTP403 and performed no review. A Codex colleague
+reviewed the design and source; the report is in REVIEW.md. Fixed its interactive
+/effort save defect and documented the shared encrypted-successor-seed limitation.
+The first live request incorrectly authored max_attempts at the wire boundary;
+corrected the development workflow to retry_policy.max_attempts. Paper then
+accepted the stream and executed multiple tool exchanges, exposing its automatic
+strict schema normalization. Portable export now explicitly sets strict:false
+for function definitions without an authored strict choice; exact schema and
+explicit choices remain. Final live read and qualification follow.
+
+The new Git worktree initially lacked Beads' redirect. After one successful issue
+creation, its attempted local server could not find the shared database. Stopped
+only that worktree-owned empty server and added the ordinary ignored .beads/redirect
+to the primary checkout. Shared issue arconaut-7fp is present and in_progress;
+no database was reinitialized or replaced.
+
+Local host build follow-through: compiler child processes stalled repeatedly,
+including process inspection of the affected child. Controlled retries retained
+logs; the same installed Clang's documented -fintegrated-cc1 mode is now selected
+only in this worktree's ignored Debug/Release CMake caches. No tracked profile,
+compiler version, dependency or another checkout changed. Builds are progressing
+again. Final source checks will use these actual cache flags, whose build IDs
+include the flags; this is not a claim about an unrun default-process-mode build.
+
+Paper live success: optimized candidate completed a real read_file call and its
+follow-up Responses request, returning a fresh random file nonce absent from the
+prompt. The read completed and both provider calls completed. Final Linux Debug
+checks pass4/4, including the new native tool/reopen/refusal fixture. The stored
+paper/default key is in the existing owner-only auth store, never this branch.
+The candidate's source gate is enforced by its normal pre-commit hook; the gate's
+actual output is retained in ignored context/paper-commit.log.
+
+First complete Mac Debug source-gate run:145/148 pass in330.94seconds. The failed
+cases are command_jobs (fixture first-byte startup), coding (60-second watchdog)
+and tui_microsoft (the worktree lacked its pinned development executable). Installed
+the explicitly adopted tui-test with scripts/tui-test --install and --check. The
+three failing cases then pass in isolation unchanged:3.01s,4.80s and14.34s,
+respectively. No assertions/deadlines/source were relaxed to obtain those results.
+The normal source commit hook is retried after the missing prerequisite is fixed;
+this completes the required source gate, not a new hardening campaign.
+Unmodified default-workflow live read_file and ordinary reopen/follow-up also pass.
+
+Source gate recheck finishes147/148 in259.33seconds; command_jobs_pty fails at
+scripts/check-command-jobs-pty:566 with quit did not complete job cleanup. The
+other147 cases pass, including the Paper provider checks. The normal hook refuses
+the source commit. Preserve the staged implementation and live-tested executable
+in this worktree; no hook bypass, commit/push or merge. Keep command-job quit
+repair outside the provider unit's written scope and honor the two-layer bound;
+arconaut-7fp records the exact publication blocker. Run the remaining source lint
+independently because the failed test command prevented the hook reaching it.
+
+Independent scripts/rigor lint completes successfully: full owned C++ formatting,
+native/header analysis and Lua formatting/syntax/LuaLS pass. No suppression was
+added. The provider configuration and private key import are live-tested, including
+the unmodified default workflow and ordinary conversation reopen. Keep the source
+changes staged/uncommitted because the required source gate is still147/148, and
+retain arconaut-7fp in_progress with the exact quit-cleanup blocker. No third full
+suite, source commit/push, main merge or executable activation elsewhere.
+
+Final handoff checks: bd backup succeeds (148issues,676events); staged diff and
+local documentation links pass their checks. A final scan finds no Paper key in
+staged files or successful live-session captures. Saved the complete staged patch
+under ignored context/paper-provider.patch for recovery alongside the worktree.
+
+Operator rejects implicit global-session reopening after their no-session Paper
+launch selected the old 356 MiB Arconaut default. New scoped repair arconaut-401:
+remove default/legacy lookup in both shell and native startup, allocate private
+fresh conversations without --session, retain explicit reopen/refit, and require
+paths for maintenance/recovery. Short plan and direct oracle are in
+papers/paper-provider-2026-10-15/FRESH_START.md. Use isolated HOME and no provider
+requests for checks; keep old histories intact and command-job investigation paused.
+
+Fresh-start direct results: the old optimized executable fails the new poisoned-
+default test by opening the corrupt global history. Rebuilt Release and Debug
+both pass session startup, store, /new PTY and RRC (4/4 each). Focused code review
+found the wrapper could still select a published older UI for recovery flags;
+the shell now refuses pathless maintenance itself and uses the native executable
+for explicit maintenance. Added a selection fixture and the Debug recheck passes.
+The operator's exact provider/model/effort options from the projects directory,
+with --once /session to avoid a provider request, create a fresh private path and
+report paper/ultramarine-1-flash/max. Existing global histories are preserved.
+Proceed to one normal source publication gate for this newly requested repair.

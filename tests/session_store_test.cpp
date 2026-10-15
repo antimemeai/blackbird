@@ -25,12 +25,6 @@ int main() {
   const JournalCapacity capacity{16 * 1024 * 1024, 10000};
   std::string actor, conversation, workflow;
   try {
-    const auto home = std::filesystem::path{path} / "home";
-    check(default_session_directory(home) == home / ".local/state/blackbird/default");
-    std::filesystem::create_directories(home / ".local/state/arconaut/default");
-    check(default_session_directory(home) == home / ".local/state/arconaut/default");
-    std::filesystem::create_directories(home / ".local/state/blackbird/default");
-    check(default_session_directory(home) == home / ".local/state/blackbird/default");
     {
       auto root =
           unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(
@@ -105,6 +99,18 @@ int main() {
       check(string_field(
                 field(field(routed_sessions, "sessions").array()[0], "configuration"),
                 "provider") == "openrouter");
+      auto portable = routed;
+      portable.provider = "paper";
+      portable.model = "ultramarine-1-flash";
+      portable.effort = "max";
+      store.save(portable);
+      save_session_info(path, portable, identity);
+      check(SessionStore{log}.settings() == portable);
+      const auto portable_sessions = list_sessions(path);
+      check(string_field(
+                field(field(portable_sessions, "sessions").array()[0], "configuration"),
+                "provider") == "paper");
+      store.save(routed);
       store.restart("Retain this note");
       const auto &fact = root->committed_facts().back();
       const auto &record = std::get<ApplicationRecordEvent>(fact.event.body);

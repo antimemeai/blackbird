@@ -2191,7 +2191,7 @@ Value CodingEngine::program_config(const Value &arguments) {
       const auto &effort = string_field(*proposal, "effort");
       if (model.size() > 256 ||
           (!effort.empty() && effort != "low" && effort != "medium" &&
-           effort != "high" && effort != "xhigh"))
+           effort != "high" && effort != "xhigh" && effort != "max"))
         throw Error{ErrorCode::invalid_range};
       if (const auto *cache = proposal->find("prompt_cache"))
         (void)prompt_cache_mode(*cache);
@@ -5474,7 +5474,8 @@ CodingEngine::take_restart_note(const RawAdapterContext *context) {
   });
 }
 void CodingEngine::effort(std::string value) {
-  if (value != "low" && value != "medium" && value != "high" && value != "xhigh")
+  if (value != "low" && value != "medium" && value != "high" && value != "xhigh" &&
+      value != "max")
     throw Error{ErrorCode::invalid_range};
   effort_ = std::move(value);
 }

@@ -11,12 +11,15 @@ Owned accounts and explicit OpenRouter main coding are described in
 ./scripts/blackbird --session context/live-bootstrap
 ```
 
-Choose another `--session DIRECTORY` for a separate conversation. Default session:
-`~/.local/state/blackbird/default`, reusing an existing legacy
-`~/.local/state/arconaut/default` when the new default does not exist. The working directory is the tool working
+Without `--session`, each launch starts a fresh conversation in a private
+`~/.local/state/blackbird/session-XXXXXX` directory and prints its path.
+Use `--session DIRECTORY` to reopen a conversation or choose its location;
+`--list-sessions` lists saved conversations and explicit resume commands.
+Recovery, inspection, continuation and diagnostic expiry require `--session`.
+The working directory is the tool working
 directory. Only one process may hold a session. `--once 'prompt'` runs one turn.
-`--provider openai|openrouter` selects the main route; switching providers requires
-an explicit `--model NAME`. `--effort low|medium|high|xhigh` selects reasoning
+`--provider ID` selects OpenAI, OpenRouter or a registered Responses route; switching
+providers requires an explicit `--model NAME`. `--effort low|medium|high|xhigh|max` selects reasoning
 (initial default `medium`). Provider, model, effort and absolute workflow path persist with
 the session; explicit launch options override and save them. Actor/conversation/
 workflow identities also survive restart. Lua request options can override model
@@ -472,7 +475,7 @@ assert(pending.staged)
 ```
 
 Empty model/effort use current launch defaults; nonempty defaults affect later
-requests after publication. Effort accepts low/medium/high/xhigh. Request-local
+requests after publication. Effort accepts low/medium/high/xhigh/max. Request-local
 `blackbird.request` options still override these defaults. Model strings do **not**
 select a different provider/adapter, authorize dependencies, or establish provider
 capability; unsupported models fail through the existing adapter.
@@ -697,7 +700,10 @@ services, configure an explicit HTTPS origin and one of the three wire formats:
 ```
 
 Custom IDs cannot replace builtin origins. Supported protocols are `responses`,
-`chat` (chat/completions), and `messages` (Anthropic-style). Credentials are sent
+`responses-portable`, `chat` (chat/completions), and `messages` (Anthropic-style).
+The two Responses protocols also support the main coding loop. See
+[Paper Instruments setup](TOKENOMICS.md#paper-instruments-and-registered-responses).
+Credentials are sent
 through curl's private stdin configuration, not its argv; no redirects or HTTP
 downgrade. Installed `/usr/bin/openssl` supplies PKCE SHA256 and RSA signature
 verification; no provider SDK/auth library is linked.
@@ -706,8 +712,8 @@ verification; no provider SDK/auth library is linked.
 Admissions retain protocol/origin/account/revision, never token material; an
 account change before dispatch refuses that admission. Requested/observed models
 and provider usage remain separate. HTTP401/403,429 and transport timeout have
-distinct outcomes. The main coding loop supports OpenAI and explicit OpenRouter
-Responses. OpenAI can use its owned ChatGPT-plan login or key; existing Codex
+distinct outcomes. The main coding loop supports OpenAI, explicit OpenRouter
+Responses and registered Responses routes. OpenAI can use its owned ChatGPT-plan login or key; existing Codex
 authentication remains the compatibility path when neither is selected.
 Provider `claude` remains the explicit Claude CLI
 bridge, while `anthropic` uses owned direct authentication. The operator's current

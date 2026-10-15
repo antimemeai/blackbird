@@ -59,6 +59,8 @@ int main() {
       (void)::unsetenv("OPENAI_API_KEY");
     check(!ambient_switched, "ambient key changed existing subscription route");
     int calls = 0;
+    auth.add_provider("paper", "https://api.paperinstruments.com/v1",
+                      "responses-portable", "PAPER_FIXTURE_KEY");
     std::string raw;
     const auto capture = [&](std::string_view, std::string_view bytes) {
       check(bytes.find("private-key") == std::string_view::npos,
@@ -66,7 +68,7 @@ int main() {
       raw += bytes;
     };
     for (const std::string provider :
-         {"kimi", "mimo", "openai", "anthropic", "grok", "openrouter"}) {
+         {"kimi", "mimo", "openai", "anthropic", "grok", "openrouter", "paper"}) {
       auth.set_key(provider, "test", "private-key");
       config.http = [&](const ProviderHttpRequest &wire,
                         ProviderHttpResponseLease &response) {
@@ -82,7 +84,7 @@ int main() {
         check(wire.url.starts_with(d.find("base_url")->string()),
               "cross-provider routing");
         const auto protocol = d.find("protocol")->string();
-        if (protocol == "responses")
+        if (protocol == "responses" || protocol == "responses-portable")
           return reply(
               response, 200,
               "data: "
@@ -108,7 +110,7 @@ int main() {
       check(reply.find("text")->string() == "answer", "wrong native text");
       check(reply.find("actual_model")->string() == "observed", "model alias inferred");
     }
-    check(calls == 6, "extra dispatch");
+    check(calls == 7, "extra dispatch");
     for (const int status : {401, 403, 429}) {
       config.http = [&](const ProviderHttpRequest &,
                         ProviderHttpResponseLease &response) {

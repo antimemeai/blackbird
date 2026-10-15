@@ -995,7 +995,8 @@ void ProviderAuth::add_provider(const std::string &id, std::string base,
     identifier(id);
     identifier(env);
     https_url(base);
-    if (protocol != "responses" && protocol != "chat" && protocol != "messages")
+    if (protocol != "responses" && protocol != "responses-portable" &&
+        protocol != "chat" && protocol != "messages")
       throw Error{ErrorCode::invalid_range};
     trace.descriptor_strings(std::array<std::string_view, 4>{id, base, protocol, env});
     try {
