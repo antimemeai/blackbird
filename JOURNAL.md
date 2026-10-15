@@ -8504,3 +8504,37 @@ local-link/fence/diff checks and supported bead backup precede text-only checkpo
 and work-branch push. No product implementation, native tests/performance campaign,
 provider/eval requests, main merge, executable activation or unrelated cleanup.
 Untracked operator art and historical worktrees/stash remain untouched.
+
+## 2026-10-14 — trajectory preservation orientation
+
+Operator asks for orientation to Blackbird and the present trajectory-preservation
+state. Read workspace/repository instructions, doctrine, Jev setup, README,
+foundation/core/implementation/testing entry points, latest stock/handoff/workflow
+design, trajectory/instrumentation/reopen contracts, live related beads and actual
+capture/query/diagnostic/provider sources. No product implementation, native tests,
+provider calls, main integration or executable activation.
+
+Observed checkout starts at pushed 59d570d on work/workflow-design-2026-10-14,
+seven commits ahead of master 33e78d1. Master already contains the first trajectory
+reader and raw owner delivery; qualification repairs/reports and new workflow
+design remain on the work history. Operator art remains untracked and untouched.
+
+Preservation uses the semantic journal/originals and separate session/raw run
+recording. Context summaries/archive do not replace originals; bounded /trace,
+trajectory_read and Lua queries share pinned prefixes and source drill-down.
+Published raw records retain their approved process-failure boundary until recorder
+sync/reclaim, excluding host power loss. Provider/participant/post-effect/storage
+repairs do not close P0 arconaut-nls.10. Current semantic provider.stream still
+writes 30-day diagnostic files and StreamCapture still buffers a 64KiB block;
+these paths coexist with newer raw acquisition capture, so neither semantic expiry
+nor raw publication alone establishes whole-trajectory completeness. Actual nested
+File dispatch hooks remain absent under arconaut-4by; whole operation input/result
+audit remains. Logical clocks nls.9, richer views/export and integrated evaluations
+remain unfinished. Workflow durability is reviewed design, not implemented delivery.
+
+Session directories and context are local data outside Git publication. The
+512MiB/200000-record semantic capacity and explicit successor/recovery limits still
+matter; compaction does not reclaim the original audit. Report these boundaries
+without treating older TTL permission or projected timing prose as current policy.
+Relevant text/diff checks and supported bd backup only; record this orientation as
+a text-only checkpoint on the existing work branch and push per repository policy.
