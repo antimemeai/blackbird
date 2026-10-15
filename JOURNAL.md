@@ -8974,3 +8974,20 @@ byte-budget/model-authored compaction is less automatic than competitors' token
 or window controls. No paid call, new source, benchmark or certification round.
 Check local links and diff, run supported beads backup, and publish the text-only
 research checkpoint under the existing documentation exception.
+
+
+## 2026-10-15 — isolate concurrent workflow implementation
+
+Operator says send it, then requests a dedicated worktree because a colleague
+is actively changing the main checkout. Create sibling checkout
+/Users/patrickbeam/projects/blackbird-workflows on
+work/concurrent-durable-workflows-2026-10-15 from committed master fa347eb.
+That base already includes the workflow design and subsequent integrated work.
+Do not switch, stage, stash or modify the colleague's main-tree files/index.
+The new checkout has its own index and future context/build outputs; credentials
+and ignored working material are not copied. Canonical BLACKBIRD symlink resolves
+to the workspace doctrine, and the existing source hooks are installed.
+All subsequent workflow source edits/builds belong to this checkout. Existing
+untracked art and historical worktrees remain untouched. This setup changes only
+the worktree journal and Git worktree/branch metadata; no native tests or provider
+calls are needed. Check the isolated diff and publish the work branch.
