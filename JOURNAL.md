@@ -10725,3 +10725,63 @@ width. Check documents/links/catalog format, update the existing bug and support
 Beads backup, then commit/push this research checkpoint under the documentation
 exception. Prior source qualification, running sessions, AFL and artwork stay
 unchanged.
+
+2026-10-16 operator adopts full physical viewport ownership and authorizes a
+handful of approaches compared for performance/stability. New comparison branch
+from4af196d; written candidate/common-scene plan before source. Root owns native
+policies and fixture; independent physical-terminal oracle and external remote
+measurement own distinct lanes. Actual existing-main gutter RED already reproduces
+both Ghostty and Alacritty; no source edit needed. Startup preseed differs between
+profiles because repeated alternate-screen entry clears only one, so do not use
+that trick as a shared oracle. Four eligible fullphysical policies: absolute CUP,
+default blank-tail EL, bottom-right wrap suppression, full erase/repaint reference.
+Keep exact failures, no runtime adoption/main merge, no AFL/artwork interaction.
+
+Native refusing-policy seam RED: addressed already passes; erase, corner and full
+fail their direct output contracts before implementation. Add bounded policies
+inside ChatPainter, forwarded by ChatPresenter, while preserving default behavior
+and commit-after-flush. Native cases then pass4/4. One independent renderer review
+and root's fixture/oracle/observer source reviews close without a source finding.
+The first actual observer qualification completes16/16 normal processes; it is
+protocol qualification, not performance ranking.
+
+Physical comparison rejects corner: at Ghostty2x2 the bottom-right combining
+accent attaches to the preceding cell under DECAWM-off; Alacritty passes. Retain
+the exact prototype and failure without tuning it during the contest. Addressed,
+erase and full pass both profiles. The separately added width-two bottom-right
+case passes all four, exposing the distinction between two Unicode faults.
+Retain17 attempts/319 passing planes, the initial cleanup API error, and the
+intended cropped negative. The passing source gate explicitly selects the three
+eligible physical policies; native corner byte tests do not claim compatibility.
+No actual application caller selects corner. App width integration follows the
+comparison decision as a separate change. The remote snapshot predates only the
+CMake eligibility registration edit; declare that test-only difference rather
+than rebuilding unchanged measured code.
+
+ASan+UBSan passes native4/4 in0.84s and all four six-scenario200-frame batches,
+without sanitizer diagnostics. Actual core/test/fixture translation-unit analysis
+is clean. No new shared state or concurrency primitive exists in this renderer
+comparison; repeated TSan would not attack a new race class. Preserve the existing
+packet owner and exercise input progress during real output refusal instead.
+Create arconaut-rhi.3.7 for the comparison; arw remains open for app integration.
+Prepare source/index/Beads stability for the required full source gate. Remote
+build/qualification/results stay in ignored context while that gate runs.
+
+The first remote timing attempt stops after44 processes (43 observed OK, one
+collector failure). Addressed80x24 trial4 has all ten expected frames and input
+records; the collector's second child.poll could observe exit between its success
+predicate and early-break check, reporting failure precisely on termination.
+Its original final return code was not recorded and remains unknown. Preserve
+all44 originals, exact source and native binary; do not pool this aborted round
+with a replacement or claim the missing code was zero.
+
+Stop the identified owned rigor process during CTest to permit the concrete
+observer correction; the hook exits1 and no commit/source qualification occurred.
+Only source-hook log holders were inspected to identify that process. The fix
+removes the second poll/early break, keeps the same5s deadline and explicit exit0
+requirement, and records actual return codes in failure cleanup. Root reads the
+exact correction within the same observer review, without a new panel. Corrected
+actual Linux qualification passes12/12 normal processes with natural exit0 against
+the unchanged native binary. One fresh360-process matched round is authorized;
+its source overlay and corrected observer hash remain distinct from the failed
+attempt. All tracked files stop changing before the mandatory fresh source gate.

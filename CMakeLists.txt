@@ -186,6 +186,19 @@ set_tests_properties(registered_responses_native PROPERTIES TIMEOUT 120 RUN_SERI
 target_link_libraries(blackbird PRIVATE blackbird_coding)
 target_compile_definitions(blackbird PRIVATE BLACKBIRD_WORKFLOW="${CMAKE_SOURCE_DIR}/programs/turn.lua")
 target_compile_definitions(blackbird_coding PRIVATE BLACKBIRD_SPRITE_ASSET="${CMAKE_SOURCE_DIR}/assets/sr71.png")
+add_executable(terminal_edge_fixture tests/terminal_edge_fixture.cpp)
+target_link_libraries(terminal_edge_fixture PRIVATE blackbird_coding)
+add_test(NAME terminal_edge_physical COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-terminal-edge $<TARGET_FILE:terminal_edge_fixture>
+  --artifacts ${CMAKE_BINARY_DIR}/terminal-edge --backend ghostty
+  --strategy addressed --strategy erase --strategy full)
+set_tests_properties(terminal_edge_physical PROPERTIES TIMEOUT 260 RUN_SERIAL TRUE)
+add_executable(terminal_edge_test tests/terminal_edge_test.cpp)
+target_link_libraries(terminal_edge_test PRIVATE blackbird_coding)
+foreach(edge_case addressed erase corner full)
+  add_test(NAME terminal_edge_${edge_case} COMMAND terminal_edge_test ${edge_case})
+  set_tests_properties(terminal_edge_${edge_case} PROPERTIES TIMEOUT 20)
+endforeach()
 add_executable(chat_view_test tests/chat_view_test.cpp)
 add_executable(tasks_test tests/tasks_test.cpp)
 target_link_libraries(tasks_test PRIVATE blackbird_coding)

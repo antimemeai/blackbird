@@ -1,0 +1,18 @@
+backend	strategy	episode	passed_planes	failed_sequence	result	binary_sha256	artifact_directory
+ghostty	addressed	legacy-negative	0	0	physical-cell-failure	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/negative/ghostty-addressed-e45b2da42e
+alacritty	addressed	full37	37		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/alacritty-addressed-6ea5f55b1f
+alacritty	addressed	wide-corner	5		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/alacritty-addressed-wide-corner-e306bfe257
+alacritty	corner	full37	37		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/alacritty-corner-24d352ec6d
+alacritty	corner	wide-corner	5		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/alacritty-corner-wide-corner-7b21364d31
+alacritty	erase	full37	37		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/alacritty-erase-91e46e18fe
+alacritty	erase	wide-corner	5		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/alacritty-erase-wide-corner-2a2120088e
+alacritty	full	full37	37		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/alacritty-full-23343da744
+alacritty	full	wide-corner	5		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/alacritty-full-wide-corner-7c58219750
+ghostty	addressed	full37	37		cleanup-api-error	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/ghostty-addressed-504c6c4461
+ghostty	addressed	wide-corner	5		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/ghostty-addressed-wide-corner-41c069acd7
+ghostty	corner	full37	20	20	physical-cell-failure	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/ghostty-corner-ce77d49665
+ghostty	corner	wide-corner	5		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/ghostty-corner-wide-corner-fca6488b0b
+ghostty	erase	full37	37		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/ghostty-erase-d191141f04
+ghostty	erase	wide-corner	5		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/ghostty-erase-wide-corner-291a0e046a
+ghostty	full	full37	37		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/ghostty-full-be789364e4
+ghostty	full	wide-corner	5		pass	5f4de3471c19f521dbb39868153688467f1d59a93ef69e56af1c6f38f6e5daf2	context/tui-terminal-edge-comparison-2026-10-16/oracle/ghostty-full-wide-corner-b4dfafdb85
