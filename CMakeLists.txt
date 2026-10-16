@@ -103,6 +103,7 @@ foreach(raw_source IN LISTS raw_build_sources)
   file(SHA256 "${raw_source}" raw_source_hash)
   string(APPEND raw_build_input "|${raw_source_name}:${raw_source_hash}")
 endforeach()
+
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${raw_build_sources})
 string(SHA256 raw_build_hash "${raw_build_input}")
 set_source_files_properties(src/raw_runtime.cpp PROPERTIES COMPILE_DEFINITIONS BLACKBIRD_RAW_BUILD_ID="${raw_build_hash}")
@@ -637,7 +638,8 @@ add_test(NAME command_job_retention_engine COMMAND command_jobs_engine_test --re
 # existing command suites at their original deadlines and give this work its own.
 set_tests_properties(command_job_retention command_job_retention_engine PROPERTIES TIMEOUT 60)
 
-add_test(NAME command_jobs_pty COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check-command-jobs-pty $<TARGET_FILE:blackbird>)
+add_test(NAME command_jobs_pty COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check-command-jobs-pty $<TARGET_FILE:blackbird>
+  --log-dir ${CMAKE_BINARY_DIR}/command-jobs-pty)
 set_tests_properties(command_jobs_pty PROPERTIES TIMEOUT 60)
 
 add_test(NAME command_jobs_station COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check-command-jobs-station $<TARGET_FILE:blackbird>)
@@ -816,3 +818,112 @@ target_compile_definitions(station_main_raw_test PRIVATE BLACKBIRD_WORKFLOW="${C
 set_target_properties(station_main_raw_test PROPERTIES ENABLE_EXPORTS ON)
 add_test(NAME station_main_native COMMAND station_main_raw_test)
 set_tests_properties(station_main_native PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+
+# Cause-specific C++ intermission regressions.
+add_executable(participants_custody_test tests/participants_custody_test.cpp)
+target_link_libraries(participants_custody_test PRIVATE blackbird_colleague Threads::Threads)
+foreach(custody_case exact throwing unknown)
+  add_test(NAME participants_custody_${custody_case} COMMAND participants_custody_test ${custody_case})
+  set_tests_properties(participants_custody_${custody_case} PROPERTIES TIMEOUT 15)
+endforeach()
+add_executable(child_custody_test tests/child_custody_test.cpp)
+target_link_libraries(child_custody_test PRIVATE blackbird_foundation Threads::Threads ${CMAKE_DL_LIBS})
+foreach(custody_case default ignored no-cldwait lost-collect lost-destructor cleanup-error raw-cleanup)
+  add_test(NAME child_custody_${custody_case} COMMAND child_custody_test ${custody_case})
+  set_tests_properties(child_custody_${custody_case} PROPERTIES TIMEOUT 10)
+endforeach()
+target_sources(blackbird_coding PRIVATE src/display_text.cpp)
+add_executable(display_text_test tests/display_text_test.cpp)
+target_link_libraries(display_text_test PRIVATE blackbird_coding)
+add_test(NAME display_text COMMAND display_text_test)
+
+target_sources(blackbird_foundation PRIVATE src/admission.cpp)
+set_source_files_properties(src/admission.cpp PROPERTIES COMPILE_OPTIONS -Wswitch-enum)
+add_executable(domain_admission_test tests/domain_admission_test.cpp)
+target_link_libraries(domain_admission_test PRIVATE blackbird_coding)
+foreach(admission_case participant inbox config encoding tasks capture)
+  add_test(NAME domain_admission_${admission_case} COMMAND domain_admission_test ${admission_case})
+  set_tests_properties(domain_admission_${admission_case} PROPERTIES TIMEOUT 30 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+endforeach()
+
+add_executable(command_mailbox_test tests/command_mailbox_test.cpp)
+target_link_libraries(command_mailbox_test PRIVATE blackbird_foundation Threads::Threads)
+foreach(mailbox_case identity history reserved_ids reserved_bytes transient)
+  add_test(NAME command_mailbox_${mailbox_case} COMMAND command_mailbox_test ${mailbox_case})
+  set_tests_properties(command_mailbox_${mailbox_case} PROPERTIES TIMEOUT 30)
+endforeach()
+foreach(display_backend ghostty alacritty)
+  add_test(NAME display_text_${display_backend} COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_SOURCE_DIR}/scripts/check-display-text $<TARGET_FILE:display_text_test>
+    --backend ${display_backend} --artifacts ${CMAKE_BINARY_DIR}/display-text)
+  set_tests_properties(display_text_${display_backend} PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+endforeach()
+
+add_executable(file_effect_test tests/file_effect_test.cpp)
+target_link_libraries(file_effect_test PRIVATE blackbird_coding Threads::Threads ${CMAKE_DL_LIBS})
+foreach(file_case write-plain edit-plain write-raw edit-raw persistent-plain persistent-raw native-plain native-raw)
+  add_test(NAME file_effect_${file_case} COMMAND file_effect_test ${file_case})
+  set_tests_properties(file_effect_${file_case} PROPERTIES TIMEOUT 15)
+endforeach()
+
+add_executable(command_wait_custody_test tests/command_wait_custody_test.cpp)
+target_link_libraries(command_wait_custody_test PRIVATE blackbird_foundation Threads::Threads ${CMAKE_DL_LIBS})
+foreach(wait_case filtered filtered-raw lost)
+  add_test(NAME command_wait_custody_${wait_case} COMMAND command_wait_custody_test ${wait_case})
+  set_tests_properties(command_wait_custody_${wait_case} PROPERTIES TIMEOUT 15)
+endforeach()
+
+# Native reusable inspector; the grid/text implementation currently lives in coding.
+target_sources(blackbird_coding PRIVATE src/tui_inspector.cpp src/command_inspector.cpp)
+add_executable(tui_inspector_test tests/tui_inspector_test.cpp)
+target_link_libraries(tui_inspector_test PRIVATE blackbird_coding)
+add_test(NAME tui_inspector COMMAND tui_inspector_test)
+set_tests_properties(tui_inspector PROPERTIES TIMEOUT 20)
+
+add_executable(command_observation_test tests/command_observation_test.cpp)
+target_link_libraries(command_observation_test PRIVATE blackbird_foundation Threads::Threads)
+foreach(observation_case allocation ranges ranges-raw busy lifecycle)
+  add_test(NAME command_observation_${observation_case} COMMAND command_observation_test ${observation_case})
+  set_tests_properties(command_observation_${observation_case} PROPERTIES TIMEOUT 20)
+endforeach()
+add_test(NAME tui_command_inspector COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-tui-inspector $<TARGET_FILE:blackbird>
+  --artifacts ${CMAKE_BINARY_DIR}/tui-command-inspector)
+set_tests_properties(tui_command_inspector PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+
+add_executable(command_inspector_test tests/command_inspector_test.cpp)
+target_link_libraries(command_inspector_test PRIVATE blackbird_coding Threads::Threads)
+foreach(inspector_case semantic raw pressure runtime-pressure)
+  add_test(NAME command_inspector_${inspector_case} COMMAND command_inspector_test ${inspector_case})
+  set_tests_properties(command_inspector_${inspector_case} PROPERTIES TIMEOUT 20)
+endforeach()
+
+add_executable(task_observation_test tests/task_observation_test.cpp)
+target_link_libraries(task_observation_test PRIVATE blackbird_foundation Threads::Threads)
+foreach(task_observation_case allocation semantic ranges numeric bounded raw)
+  add_test(NAME task_observation_${task_observation_case} COMMAND task_observation_test ${task_observation_case})
+  set_tests_properties(task_observation_${task_observation_case} PROPERTIES TIMEOUT 20)
+endforeach()
+add_executable(participant_observation_test tests/participant_observation_test.cpp)
+target_link_libraries(participant_observation_test PRIVATE blackbird_colleague Threads::Threads)
+foreach(participant_observation_case semantic ranges busy lifecycle raw)
+  add_test(NAME participant_observation_${participant_observation_case} COMMAND participant_observation_test ${participant_observation_case})
+  set_tests_properties(participant_observation_${participant_observation_case} PROPERTIES TIMEOUT 20)
+endforeach()
+
+target_sources(blackbird_coding PRIVATE src/command_center.cpp)
+add_executable(command_center_test tests/command_center_test.cpp)
+target_link_libraries(command_center_test PRIVATE blackbird_coding Threads::Threads)
+foreach(center_case semantic raw pressure)
+  add_test(NAME command_center_${center_case} COMMAND command_center_test ${center_case})
+  set_tests_properties(command_center_${center_case} PROPERTIES TIMEOUT 20)
+endforeach()
+add_test(NAME tui_command_center COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-tui-center $<TARGET_FILE:blackbird>
+  --artifacts ${CMAKE_BINARY_DIR}/tui-command-center)
+set_tests_properties(tui_command_center PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+
+add_executable(task_publication_test tests/task_publication_test.cpp)
+target_link_libraries(task_publication_test PRIVATE blackbird_coding Threads::Threads)
+add_test(NAME task_publication_busy COMMAND task_publication_test)
+set_tests_properties(task_publication_busy PROPERTIES TIMEOUT 20)

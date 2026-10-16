@@ -40,6 +40,8 @@ args = parser.parse_args()
 executable = str(Path(args.executable).resolve())
 if args.log_dir:
     args.log_dir.mkdir(parents=True, exist_ok=True)
+    args.log_dir = Path(tempfile.mkdtemp(prefix="run-", dir=args.log_dir))
+    print("Command jobs PTY artifacts: " + str(args.log_dir), flush=True)
 
 
 def alive(pid):
@@ -327,25 +329,28 @@ while True:
 
     def job_id(pid):
         command("/clear")
-        command("/jobs")
+        prefix = "OWNED_JOB_%s:" % pid
+        command("/lua local q=blackbird.call('process',{op='read'}); local n=0; "
+                "for _,j in ipairs(q.jobs) do if j.pid==%s then n=n+1; "
+                "print('OWNED_' .. 'JOB_%s:' .. j.job_id .. ':' .. "
+                "tostring(j.pid) .. ':END') end end; assert(n==1)" % (pid, pid))
         found = []
 
         def extract():
             # Discard the side pane and display gutters before joining wrapped
-            # JSON; only a fresh /jobs response may satisfy discovery.
+            # output. The requested native registry read must match the actual
+            # fixture PID; the echoed Lua contains no literal matching job ID.
             text = main_text()
             text = re.sub(r"\s+", "", text)
-            if '"jobs":[' not in text:
-                return False
             found[:] = [
                 identifier for identifier, observed_pid in re.findall(
-                    r'\{[^{}]*"job_id":"([a-f0-9]{32})"[^{}]*"pid":(\d+)[^{}]*\}', text
+                    re.escape(prefix) + r'([a-f0-9]{32}):(\d+):END', text
                 ) if int(observed_pid) == pid
             ]
-            return bool(found)
+            return len(found) == 1
 
         wait(extract, "job discovery exposes stable launch identity")
-        return found[-1]
+        return found[0]
 
     def launch(kind, **options):
         (root / (kind + ".pid")).unlink(missing_ok=True)
@@ -412,9 +417,10 @@ while True:
         assert pty_job != pipe_job, "different launches share job identity"
         foreground(pty_job, interactive=True)
         # A marker from the actual reader, not echoed composer text, proves input.
-        send("step-first\r")
-        wait(lambda: "1:step-first" in effects(), "foreground input reached actual PTY")
+        send("step-first\x18\r")
+        wait(lambda: "1:step-first\x18" in effects(), "foreground input reached actual PTY")
         visible("CHILD_STEP_1")
+        assert "COMMAND CENTER" not in screen.text(), "private PTY control opened center"
         send(b"\x02")
         command("/lua print('PTY_DETACHED_' .. 'LOCAL_WORK')")
         visible("PTY_DETACHED_LOCAL_WORK")
@@ -482,11 +488,11 @@ while True:
         pids.remove(pty_pid)
         assert (root / "pty.launches").read_text().splitlines() == [str(pty_pid)]
         assert [x for x in effects() if re.match(r"\d+:", x)] == [
-            "1:step-first", "2:step-delivery", "3:step-second", "4:step-paste\x02literal",
+            "1:step-first\x18", "2:step-delivery", "3:step-second", "4:step-paste\x02literal",
             "5:step-unicode-☃", "6:step-escape-\x1bliteral",
         ], "foreground transitions repeated or reordered child input"
         assert (root / "pty.input").read_bytes() == (
-            b"step-first\nstep-delivery\nsize\ncontrols\nstep-second\n"
+            b"step-first\x18\nstep-delivery\nsize\ncontrols\nstep-second\n"
             b"step-paste\x02literal\nstep-unicode-" + "☃".encode() +
             b"\nstep-escape-\x1bliteral\nfinish\n"
         ), "actual private tty reader lost, duplicated or redirected original bytes"
@@ -518,8 +524,20 @@ while True:
         try:
             deadline = pressure_started + 30
             while remaining:
-                assert time.monotonic() < deadline, \
-                    "input saturation not established with %s bytes remaining" % remaining
+                # Output acquired on the preceding iteration can establish the
+                # literal refusal even when this iteration's write would succeed.
+                saturated = blocked_writes > 0 and "PTY input refused:" in main_text()
+                if saturated:
+                    break
+                if time.monotonic() >= deadline:
+                    # Read one bounded ready prefix before deciding that the
+                    # deadline expired without the required observation.
+                    if select.select([master], [], [], 0)[0]:
+                        assert read_outer(), "outer terminal closed during pressure"
+                    saturated = blocked_writes > 0 and "PTY input refused:" in main_text()
+                    assert saturated, \
+                        "input saturation not established with %s bytes remaining" % remaining
+                    break
                 try:
                     at = len(pressure_source) - remaining
                     written = os.write(master, pressure_source[at:at + min(8192, remaining)])
@@ -539,6 +557,9 @@ while True:
                 # writes. The fixture must keep both PTY directions moving.
                 if select.select([master], [], [], 0)[0]:
                     assert read_outer(), "outer terminal closed during pressure"
+                saturated = blocked_writes > 0 and "PTY input refused:" in main_text()
+                if saturated:
+                    break
             assert saturated, "pressure source exhausted without observed saturation"
         finally:
             (root / "pressure.trace").write_text(json.dumps(dict(

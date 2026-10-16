@@ -62,9 +62,24 @@ retain exact earlier performance runs and actual build/test faults.
 
 The [next-slice source map](../papers/tui-next-components-2026-10-15/SOURCE_MAP.md)
 identifies the missing visual properties/renderer, owner publications and
-independent VM. Shared collection/command-result inspection across conversation
-and a real current-session center remains a proposal to ground the rest of
-Units1–2, not an implemented reusable view or Lua bridge.
+independent VM. The [command-inspector tranche](../papers/tui-command-inspector-2026-10-16/PLAN.md)
+implements shared keyed collection/detail rendering and the conversation adapter:
+Ctrl-O preserves the draft, `/jobs` opens results, and retained bytes name their
+actual command and source extents. Owner/recording pressure retains the last good
+page visibly stale. The current-session center reuse tranche is now under
+[its owning plan](../papers/tui-command-center-2026-10-16/PLAN.md): pure bounded task
+and participant observation, the same controls, actual session scope and separate
+source coverage. Source `d0e3b2e` delivers it after222/222 Debug plus complete
+C++/Lua checks, affected sanitizers and75 Linux Release cases. Its
+[results](../papers/tui-command-center-2026-10-16/RESULTS.md) retain behavioral REDs,
+review fixes, real source/pressure/screen checks and mixed matched performance.
+The independent Lua bridge remains open; this does not complete Units1–2.
+
+Source `52f9103` delivers that inspector after206/206 Debug tests, full C++/Lua
+analysis, affected sanitizers and58 scoped Linux Release checks. The same tranche
+fixes a diagnosed recorder-test synchronization bug while retaining its original
+assertions/watchdog. [Results and matched performance](../papers/tui-command-inspector-2026-10-16/RESULTS.md)
+preserve both failed gates and the final qualification; no live activation follows.
 
 Separate terminal decoding from native editor/palette behavior while retaining
 present draft/history/paste/editor controls, including literal insertion followed

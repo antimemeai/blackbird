@@ -1,13 +1,12 @@
 #include "blackbird/chat_view.hpp"
+#include "blackbird/display_text.hpp"
 #include "blackbird/terminal.hpp"
 #include "blackbird/workflows.hpp"
-#include "unicode_pictographic.hpp"
 #include <algorithm>
 #include <array>
 #include <cerrno>
 #include <climits>
 #include <clocale>
-#include <cwchar>
 #include <fcntl.h>
 #include <limits>
 #include <stdexcept>
@@ -48,57 +47,6 @@ void utf8(std::string &out, char32_t cp) {
     out += static_cast<char>(0x80 | ((cp >> 6) & 63));
     out += static_cast<char>(0x80 | (cp & 63));
   }
-}
-struct Rune {
-  char32_t scalar;
-  std::size_t bytes;
-  unsigned width;
-};
-Rune rune(std::string_view s) {
-  const auto byte = static_cast<unsigned char>(s[0]);
-  if (byte < 128)
-    return {byte, 1, 1};
-  wchar_t wide{};
-  std::mbstate_t state{};
-  const auto n = std::mbrtowc(&wide, s.data(), s.size(), &state);
-  if (n == 0 || n > s.size())
-    return {U'?', 1, 1};
-  const int width = ::wcwidth(wide);
-  return {static_cast<char32_t>(wide), n, static_cast<unsigned>(std::max(0, width))};
-}
-// Shared display-cluster scanner for both wrapping and rasterization.
-Rune cluster(std::string_view s) {
-  auto result = rune(s);
-  auto rest = s.substr(result.bytes);
-  // An unattached joiner has no spacing cell and cannot absorb a later base.
-  if (result.scalar == 0x200d)
-    return result;
-  bool pictograph = detail::extended_pictographic(result.scalar);
-  bool join = false;
-  bool regional = result.scalar >= 0x1f1e6 && result.scalar <= 0x1f1ff;
-  while (!rest.empty()) {
-    const auto r = rune(rest);
-    const bool region = r.scalar >= 0x1f1e6 && r.scalar <= 0x1f1ff;
-    const bool modifier = r.scalar >= 0x1f3fb && r.scalar <= 0x1f3ff;
-    const bool joined = join && detail::extended_pictographic(r.scalar);
-    if (r.width && !modifier && !joined && !(region && regional))
-      break;
-    if (joined || (region && regional) || r.scalar == 0xfe0f || r.scalar == 0x20e3)
-      result.width = 2;
-    result.bytes += r.bytes;
-    // GB11 permits EP Extend* ZWJ EP, not arbitrary text joined by ZWJ.
-    join = r.scalar == 0x200d && pictograph;
-    if (r.scalar == 0x200d)
-      pictograph = false;
-    else if (joined)
-      pictograph = true;
-    else if (!detail::grapheme_extend(r.scalar))
-      pictograph = false;
-    regional = region && !regional;
-    rest.remove_prefix(r.bytes);
-  }
-  result.width = std::max(1U, result.width);
-  return result;
 }
 ChatRow inline_text(std::string_view text, Ink base) {
   ChatRow out;
@@ -162,7 +110,7 @@ ChatRow syntax(std::string_view text) {
       if (std::find(words.begin(), words.end(), word) != words.end())
         ink = Ink::keyword;
     } else
-      pos += rune(text.substr(pos)).bytes;
+      pos += display_scalar(text.substr(pos)).bytes;
     if (!out.empty() && out.back().ink == ink)
       out.back().text.append(text.substr(begin, pos - begin));
     else
@@ -182,24 +130,24 @@ void wrap(std::vector<ChatRow> &rows, const ChatRow &content, std::size_t width,
       pending.clear();
     }
   };
-  for (const auto &span : content) {
-    if (span.ink != previous) {
+  DisplayCursor cursor{content};
+  DisplayCluster cluster;
+  while (cursor.next(cluster)) {
+    if (!cluster.cells.value)
+      continue;
+    display_fit(cluster, {width});
+    if (cluster.ink != previous) {
       flush();
-      previous = span.ink;
+      previous = cluster.ink;
     }
-    auto s = std::string_view{span.text};
-    while (!s.empty()) {
-      const auto r = cluster(s);
-      if (cells && cells + r.width > width) {
-        flush();
-        rows.push_back(std::move(row));
-        row = {{"  │ ", rail}};
-        cells = 0;
-      }
-      pending.append(s.substr(0, r.bytes));
-      cells += r.width;
-      s.remove_prefix(r.bytes);
+    if (cells && cells + cluster.cells.value > width) {
+      flush();
+      rows.push_back(std::move(row));
+      row = {{"  │ ", rail}};
+      cells = 0;
     }
+    cursor.append(pending, cluster);
+    cells += cluster.cells.value;
   }
   flush();
   rows.push_back(std::move(row));
@@ -489,46 +437,36 @@ void ChatGrid::reset(std::size_t columns, std::size_t rows) {
 void ChatGrid::line(std::size_t row, const ChatRow &content, std::size_t column) {
   if (row >= height || column >= width)
     return;
-  for (const auto &span : content) {
-    auto text = std::string_view{span.text};
-    while (!text.empty()) {
-      const auto r = cluster(text);
-      if (!r.width) {
-        text.remove_prefix(r.bytes);
-        continue;
-      }
-      if (column + r.width > width)
-        return;
-      const auto erase_footprint = [&](std::size_t x) {
-        auto &old = cells[row * width + x];
-        if (old.width == 0 && x > 0)
-          cells[row * width + x - 1] = ChatCell{};
-        if (old.width == 2 && x + 1 < width)
-          cells[row * width + x + 1] = ChatCell{};
-        old = ChatCell{};
-      };
-      erase_footprint(column);
-      if (r.width == 2)
-        erase_footprint(column + 1);
-      auto &cell = cells[row * width + column];
-      cell.scalar = r.scalar;
-      cell.ink = span.ink;
-      cell.width = static_cast<std::uint8_t>(r.width);
-      const auto first = rune(text).bytes;
-      // Oversized clusters are visibly replaced, never an exception from output.
-      if (r.bytes > 4096) {
-        cell.scalar = U'�';
-      } else if (r.bytes > first) {
-        cell.tail = static_cast<std::uint32_t>(tails.size());
-        cell.length = static_cast<std::uint16_t>(r.bytes - first);
-        tails.append(text.substr(first, r.bytes - first));
-      }
-      column += r.width;
-      if (r.width == 2) {
-        cells[row * width + column - 1] = ChatCell{};
-        cells[row * width + column - 1].width = 0;
-      }
-      text.remove_prefix(r.bytes);
+  DisplayCursor cursor{content};
+  DisplayCluster cluster;
+  while (cursor.next(cluster)) {
+    const auto cells_used = cluster.cells.value;
+    if (!cells_used)
+      continue;
+    if (column + cells_used > width)
+      return;
+    const auto erase_footprint = [&](std::size_t x) {
+      auto &old = cells[row * width + x];
+      if (old.width == 0 && x > 0)
+        cells[row * width + x - 1] = ChatCell{};
+      if (old.width == 2 && x + 1 < width)
+        cells[row * width + x + 1] = ChatCell{};
+      old = ChatCell{};
+    };
+    erase_footprint(column);
+    if (cells_used == 2)
+      erase_footprint(column + 1);
+    auto &cell = cells[row * width + column];
+    cell.scalar = cluster.scalar;
+    cell.ink = cluster.ink;
+    cell.width = static_cast<std::uint8_t>(cells_used);
+    cell.tail = static_cast<std::uint32_t>(tails.size());
+    cursor.append(tails, cluster, true);
+    cell.length = static_cast<std::uint16_t>(tails.size() - cell.tail);
+    column += cells_used;
+    if (cells_used == 2) {
+      cells[row * width + column - 1] = ChatCell{};
+      cells[row * width + column - 1].width = 0;
     }
   }
 }

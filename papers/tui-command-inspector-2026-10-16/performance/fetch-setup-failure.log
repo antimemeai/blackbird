@@ -1,0 +1,1 @@
+Remote120-run observer and analyzer completed successfully. Initial local artifact extraction failed afterwards at run-performance.py:55 with TypeError: extractall() got an unexpected keyword argument filter. Local default Python lacks this API. Existing remote artifacts fetched separately with path/type validation; no measurement repeated.

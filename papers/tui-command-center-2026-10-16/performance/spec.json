@@ -1,0 +1,14 @@
+{
+  "before": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz/after-release/blackbird",
+    "source": "f2ab70b483f2e2f87efb90229c17d0e947fb9de4+qualified-native-tree-a23d707da144aa47a797837a2500b802cb213d789880ccb53645e35f4a6ee48f",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  },
+  "after": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-command-center-20261016-_ycd6jjo/after-release/blackbird",
+    "source": "d0e3b2efa68d1dc3b4310ee06f483a11d6d44786+native-tree-a019f4e4d6e1206b06c068903c3313c9d526bbe24c2eb9e36ee17b639ed3a0cb",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  }
+}

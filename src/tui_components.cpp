@@ -1,5 +1,7 @@
 #include "blackbird/tui_components.hpp"
+#include "blackbird/display_text.hpp"
 #include <algorithm>
+#include <array>
 #include <set>
 #include <stdexcept>
 
@@ -32,10 +34,96 @@ bool valid_kind(NodeKind kind) {
   }
   return false;
 }
+bool valid_ink(Ink ink) {
+  switch (ink) {
+  case Ink::normal:
+  case Ink::muted:
+  case Ink::user:
+  case Ink::assistant:
+  case Ink::heading:
+  case Ink::code:
+  case Ink::keyword:
+  case Ink::string:
+  case Ink::success:
+  case Ink::failure:
+  case Ink::selected:
+  case Ink::border:
+    return true;
+  }
+  return false;
+}
+bool valid_notice(NoticeKind kind) {
+  switch (kind) {
+  case NoticeKind::none:
+  case NoticeKind::loading:
+  case NoticeKind::stale:
+  case NoticeKind::unavailable:
+  case NoticeKind::failed:
+    return true;
+  }
+  return false;
+}
+bool safe_text(std::string_view text) {
+  while (!text.empty()) {
+    const auto scalar = display_scalar(text);
+    if (scalar.cells < 0 || scalar.scalar < 32 || scalar.scalar == 127)
+      return false;
+    text.remove_prefix(scalar.bytes);
+  }
+  return true;
+}
+// Decode across formatting fragments; a style boundary is not a UTF8 boundary.
+bool safe_row(const ChatRow &row) {
+  std::size_t run = 0, offset = 0;
+  auto fragment = [&](std::size_t &at, std::size_t &within) {
+    while (at < row.size() && within == row[at].text.size()) {
+      ++at;
+      within = 0;
+    }
+    return at == row.size() ? std::string_view{}
+                            : std::string_view{row[at].text}.substr(within);
+  };
+  while (true) {
+    auto current = fragment(run, offset);
+    if (current.empty())
+      return true;
+    DisplayScalar scalar{};
+    if (current.size() >= 4 || static_cast<unsigned char>(current[0]) < 128)
+      scalar = display_scalar(current);
+    else {
+      std::array<char, 4> bytes{};
+      auto next_run = run, next_offset = offset;
+      std::size_t size = 0;
+      while (size < bytes.size() && !current.empty()) {
+        const auto count = std::min(bytes.size() - size, current.size());
+        std::copy_n(current.data(), count, bytes.data() + size);
+        next_offset += count;
+        size += count;
+        current = fragment(next_run, next_offset);
+      }
+      scalar = display_scalar({bytes.data(), size});
+    }
+    if (scalar.cells < 0 || scalar.scalar < 32 || scalar.scalar == 127)
+      return false;
+    auto remaining = scalar.bytes;
+    while (remaining) {
+      current = fragment(run, offset);
+      const auto count = std::min(remaining, current.size());
+      offset += count;
+      remaining -= count;
+    }
+  }
+}
 Result<void> validate(const SceneCandidate &candidate, Limits limits) {
   if (candidate.nodes.size() > limits.nodes)
     return Result<void>::failure({ErrorCode::capacity});
   std::size_t bytes = 0, items = 0;
+  auto charge_items = [&](std::size_t count) {
+    if (count > limits.items - items)
+      return false;
+    items += count;
+    return true;
+  };
   auto charge = [&](std::string_view value) {
     if (value.size() > limits.bytes - bytes)
       return false;
@@ -81,6 +169,22 @@ Result<void> validate(const SceneCandidate &candidate, Limits limits) {
     }
   }
   std::set<std::string_view, std::less<>> collections;
+  auto target = [&](const TargetRef &reference) {
+    if (reference.owner.empty() || reference.kind.empty() || reference.key.empty() ||
+        !reference.incarnation)
+      return Result<void>::failure({ErrorCode::invalid_identity});
+    if (!charge(reference.owner) || !charge(reference.kind) || !charge(reference.key))
+      return Result<void>::failure({ErrorCode::capacity});
+    return Result<void>::success();
+  };
+  auto notice = [&](const Notice &value) {
+    if (!valid_notice(value.kind))
+      return Result<void>::failure({ErrorCode::unsupported});
+    if (!charge(value.text))
+      return Result<void>::failure({ErrorCode::capacity});
+    return safe_text(value.text) ? Result<void>::success()
+                                 : Result<void>::failure({ErrorCode::invalid_range});
+  };
   for (const auto &collection : candidate.collections) {
     const auto node = nodes.find(collection.node);
     if (node == nodes.end() ||
@@ -88,28 +192,61 @@ Result<void> validate(const SceneCandidate &candidate, Limits limits) {
       return Result<void>::failure({ErrorCode::invalid_range});
     if (!collections.insert(collection.node).second)
       return Result<void>::failure({ErrorCode::invalid_identity});
-    if (!charge(collection.node) || collection.items.size() > limits.items - items)
+    if (!charge(collection.node) || !charge(collection.title) ||
+        !charge_items(collection.items.size()))
       return Result<void>::failure({ErrorCode::capacity});
-    items += collection.items.size();
+    if (!safe_text(collection.title))
+      return Result<void>::failure({ErrorCode::invalid_range});
+    if (const auto checked = notice(collection.notice); !checked.has_value())
+      return checked;
     std::set<std::string_view, std::less<>> keys;
     for (const auto &item : collection.items) {
       if (item.key.empty() || !keys.insert(item.key).second)
         return Result<void>::failure({ErrorCode::invalid_identity});
       if (!charge(item.key) || !charge(item.label))
         return Result<void>::failure({ErrorCode::capacity});
+      if (!safe_text(item.label))
+        return Result<void>::failure({ErrorCode::invalid_range});
       if (item.target) {
-        const auto &target = *item.target;
-        if (target.owner.empty() || target.kind.empty() || target.key.empty() ||
-            !target.incarnation)
-          return Result<void>::failure({ErrorCode::invalid_identity});
-        if (!charge(target.owner) || !charge(target.kind) || !charge(target.key))
-          return Result<void>::failure({ErrorCode::capacity});
+        if (const auto checked = target(*item.target); !checked.has_value())
+          return checked;
       }
     }
   }
   for (const auto &node : candidate.nodes)
     if (node.kind == NodeKind::collection && !collections.contains(node.key))
       return Result<void>::failure({ErrorCode::invalid_range});
+  std::set<std::string_view, std::less<>> inspectors;
+  for (const auto &inspector : candidate.inspectors) {
+    const auto node = nodes.find(inspector.node);
+    if (node == nodes.end() ||
+        candidate.nodes[node->second].kind != NodeKind::inspector)
+      return Result<void>::failure({ErrorCode::invalid_range});
+    if (!inspectors.insert(inspector.node).second)
+      return Result<void>::failure({ErrorCode::invalid_identity});
+    if (!charge(inspector.node) || !charge(inspector.title) ||
+        !charge_items(inspector.lines.size()))
+      return Result<void>::failure({ErrorCode::capacity});
+    if (!safe_text(inspector.title))
+      return Result<void>::failure({ErrorCode::invalid_range});
+    if (const auto checked = notice(inspector.notice); !checked.has_value())
+      return checked;
+    if (inspector.target)
+      if (const auto checked = target(*inspector.target); !checked.has_value())
+        return checked;
+    for (const auto &row : inspector.lines) {
+      if (!charge_items(row.size()))
+        return Result<void>::failure({ErrorCode::capacity});
+      for (const auto &span : row) {
+        if (!charge(span.text))
+          return Result<void>::failure({ErrorCode::capacity});
+        if (!valid_ink(span.ink))
+          return Result<void>::failure({ErrorCode::unsupported});
+      }
+      if (!safe_row(row))
+        return Result<void>::failure({ErrorCode::invalid_range});
+    }
+  }
   return Result<void>::success();
 }
 // Keep the same key, then the nearest surviving old successor/predecessor.
@@ -181,8 +318,9 @@ Result<void> SceneHost::publish(const SceneCandidate &candidate) {
       return valid;
     // Copy, rather than move, across publication: external mutable borrows into a
     // public candidate must not become aliases of an immutable snapshot.
-    std::shared_ptr<const Scene> next = std::make_shared<Scene>(
-        Scene{view_, scene_->revision + 1, candidate.nodes, candidate.collections});
+    std::shared_ptr<const Scene> next =
+        std::make_shared<Scene>(Scene{view_, scene_->revision + 1, candidate.nodes,
+                                      candidate.collections, candidate.inspectors});
     decltype(generations_) generations;
     auto serial = next_generation_;
     for (std::size_t i = 0; i < next->nodes.size(); ++i) {
@@ -358,6 +496,27 @@ Result<void> SceneHost::anchor(const NodeHandle &node, std::string_view item,
     next.anchor = item;
     next.anchor_offset = offset;
     std::swap(state, next);
+    return Result<void>::success();
+  } catch (const std::bad_alloc &) {
+    return Result<void>::failure({ErrorCode::allocation});
+  }
+}
+Result<void> SceneHost::position(const NodeHandle &node, std::string_view selected,
+                                 std::string_view anchor_item) {
+  if (const auto checked = check(node); !checked.has_value())
+    return checked;
+  const auto *rows = collection(node.key);
+  if (!rows)
+    return Result<void>::failure({ErrorCode::invalid_range});
+  if (!find_item(*rows, selected) || !find_item(*rows, anchor_item))
+    return Result<void>::failure({ErrorCode::invalid_identity});
+  try {
+    auto &state = collections_.at(node.key);
+    CollectionState next{std::string{selected}, std::string{anchor_item}, 0};
+    const bool changed = next.selected != state.selected;
+    std::swap(state, next);
+    if (changed)
+      armed_.reset();
     return Result<void>::success();
   } catch (const std::bad_alloc &) {
     return Result<void>::failure({ErrorCode::allocation});

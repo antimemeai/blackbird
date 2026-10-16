@@ -102,3 +102,14 @@ checks and an inherited-signal direct regression bear on that actual claim.
 
 Compiler results and costs are in [TOOLING.md](TOOLING.md). No production code,
 annotation wrapper, linter configuration or runtime process policy changed here.
+
+## Implementation followup: selector meaning limits the negative control
+
+The intermission's ordinary Linux command_jobs check establishes a sibling not
+found in the initial negative survey. Status-only WSTOPPED|WCONTINUED can return
+ECHILD for an actual unreaped exited child; only an exit-inclusive query supports
+this total-loss classification. The original table's no stale-group-signal finding
+is unchanged, but it must not be read as a general qualification of custody.
+See [WAIT_SELECTOR](../cpp-intermission-2026-10-15/WAIT_SELECTOR.md) and P1
+arconaut-vyi for the actual continued-child diagnostic and permanent red-first
+repair. No observed selector/native errno is normalized to manufacture success.

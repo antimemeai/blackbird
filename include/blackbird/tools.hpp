@@ -1,5 +1,6 @@
 #pragma once
 #include "blackbird/context.hpp"
+#include "blackbird/file_effect.hpp"
 #include "blackbird/provider_original.hpp"
 #include <filesystem>
 #include <functional>
@@ -19,7 +20,8 @@ public:
   std::function<bool()> cancelled;
   Value run(std::string_view name, const Value &arguments,
             const RawAdapterContext *raw_context = nullptr,
-            RawControlToken *native_return = nullptr);
+            RawControlToken *native_return = nullptr,
+            FileEffectObservation *file_effect = nullptr);
   const std::vector<CapturedOutput> &captured() const noexcept { return captured_; }
 
 private:
@@ -34,10 +36,13 @@ std::string read_file_prefix(const std::filesystem::path &, std::size_t,
 std::string read_file(const std::filesystem::path &path,
                       std::size_t limit = 16 * 1024 * 1024);
 void write_file(const std::filesystem::path &path, std::string_view bytes);
+void write_file_observed(const std::filesystem::path &, std::string_view,
+                         FileEffectObservation *);
 std::string read_file(const std::filesystem::path &, std::size_t,
                       const RawAdapterContext *, RawEventRef *actual_owner = nullptr);
 void write_file(const std::filesystem::path &, std::string_view,
-                const RawAdapterContext *, const RawFileInput * = nullptr);
+                const RawAdapterContext *, const RawFileInput * = nullptr,
+                FileEffectObservation * = nullptr);
 Value process_output_presentation(const std::string &raw, const Value &args);
 Value file_content_presentation(const std::string &raw, const Value &args,
                                 RawFileToolTrace *trace = nullptr);

@@ -4,6 +4,14 @@ Operator2026-10-15: save ordinary findings for collective action; interrupt for
 egregious faults. Performance measurement and input generation do not authorize
 chasing every newly observed defect. Preserve originals and continue the tranche.
 
+Source `52f9103` repairs the reproduced `arconaut-3wt` recorder-test hang: its send
+interposer mistook a producer STREAM notice for a DGRAM lifecycle reply, parking
+before retirement could complete. A permanent real-notification oracle rejects
+the old selector; the corrected fixture passes inside the full206-case Debug
+gate and final Linux scope, with its original wake/literal assertions and60s
+watchdog. [Diagnosis and samples](../papers/tui-command-inspector-2026-10-16/RECORDER_FIX.md)
+bound this to the fixture; they do not assert a runtime data-loss repair.
+
 Beads is the issue queue. Use label `tui-campaign-bug` for TUI product/tooling
 findings and the retained AFL inbox. A bug entry includes exact source/run/tool
 identity, actual result versus expectation, original reproducer/output location,
@@ -79,3 +87,28 @@ bytes may survive. The child signal was intercepted, not sent to another process
 Ordinary findings remain queued; these research results implement no product
 repair. No AFL output was inspected. Root's aggregate grid priorityP2 preserves
 the staff report's higher presentation-priority assessment in its notes.
+
+The operator then requests the repair intermission. Sourceabaee8a repairs those
+seven causes and the actual Linux filtered-wait custody sibling arconaut-vyi.
+[Results](../papers/cpp-intermission-2026-10-15/RESULTS.md) retain permanent
+old-source REDs, one independent challenge per unit,195/195 Debug plus full lint,
+Linux43/43 and affected sanitizers. Close those eight issues; broader process
+group cleanup arconaut-ruj and aggregate TSan timing headroom arconaut-ldt remain
+queued. The120/120 paired performance round has mixed deltas and worse startup
+p95/max in both sizes; append to arconaut-f8f without a source-causation claim.
+
+Command-center source d0e3b2e has one ordinary static presentation follow-up,
+`arconaut-5z4`: selected participant provider/model/request labels currently show
+finite256-byte prefixes without a visible clipping marker. Native total/truncated
+flags, full originals and typed run targets remain correct. Later collective work
+will reproduce a long accepted request ID and add an explicit marker; it does not
+block this qualified read-only tranche. The same tranche's120-process paired round
+retains narrow startup/paste and wide palette tail observations under `arconaut-f8f`
+with mixed shared-host deltas and no source-causation claim.
+
+`arconaut-8j8` retains the combined-source command-PTY saturation timeout. The
+[fixture observation correction](../papers/tui-mainline-integration-2026-10-16/PTY_PRESSURE.md)
+preserves30s/512KiB and actual EAGAIN plus refusal; the original failure lacked
+terminal artifacts, so throughput causality remains unknown. CTest now retains
+unique terminal/keyboard/pressure artifacts. Passing direct checks do not resolve
+the historical timeout.

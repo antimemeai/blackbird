@@ -7,7 +7,9 @@
 #include <cerrno>
 #include <charconv>
 #include <condition_variable>
+#include <cstring>
 #include <fcntl.h>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <sys/socket.h>
@@ -77,8 +79,9 @@ Value action(RawParticipantAction kind, std::uint64_t bytes,
     throw;
   }
 }
-Value projection(const Value &result) {
-  if (unwrap(encode_packet_string(result)).size() <= 65536)
+Value projection(const Value &result, bool &truncated) {
+  truncated = unwrap(encode_packet_string(result)).size() > 65536;
+  if (!truncated)
     return result;
   return Value::object(
       {{"status", field(result, "status")},
@@ -112,6 +115,24 @@ int control_native(RawParticipantBank &bank, RawEventRef parent, int fd, int com
   return result;
 }
 } // namespace
+namespace {
+std::uint64_t participant_incarnation() {
+  static std::atomic<std::uint64_t> next{1};
+  auto current = next.load();
+  for (;;) {
+    if (current == std::numeric_limits<std::uint64_t>::max())
+      throw Error{ErrorCode::overflow};
+    if (next.compare_exchange_weak(current, current + 1))
+      return current;
+  }
+}
+} // namespace
+struct ParticipantObservationReader::State {
+  std::mutex mutex;
+  Participants::Impl *owner = nullptr;
+  const std::uint64_t incarnation = participant_incarnation();
+  bool retired = false;
+};
 struct Participants::Impl {
   struct PreparedDirection {
     Value prepared, delivery;
@@ -129,7 +150,15 @@ struct Participants::Impl {
     // Handles precede all claims: claims die before their producer mappings.
     RawThreadHandle setup_handle, worker_handle;
     RawParticipantBank cleanup, lifetime;
-    RawEventRef reference, entry, end;
+    RawEventRef reference, entry, end, dispatch;
+    Value initial_delivery, current_delivery, retained_result_delivery;
+    std::optional<ProviderOriginalReference> initial_original, current_original,
+        result_original;
+    std::optional<SourceReference> initial_retained, current_retained, result_retained,
+        latest_retained_result;
+    std::size_t pending_captures = 0;
+    bool worker_started = false, worker_ended = false, worker_joined = false,
+         restored = false, projection_known = false, projection_truncated = false;
     Value row;
     std::array<Value, max_inbox + 1> dropped;
     Value failure_state{"unknown"}, cancelled_state{"cancelled"},
@@ -158,10 +187,13 @@ struct Participants::Impl {
     RawEventRef prepared, handoff;
     std::optional<ProviderOwnedOriginal> original;
     std::unique_ptr<Capture> next;
+    std::optional<Value> result_delivery;
   };
-  mutable std::mutex mutex;
+  // Reader State owns the mutex, but never owns Impl or any live Run.
+  std::shared_ptr<ParticipantObservationReader::State> observation;
+  std::mutex &mutex;
   std::condition_variable changed;
-  std::map<std::string, std::unique_ptr<Run>> runs;
+  std::map<std::string, std::unique_ptr<Run>, std::less<>> runs;
   std::unique_ptr<Capture> captures;
   Capture *tail = nullptr;
   std::size_t capture_bytes = 0, capture_count = 0;
@@ -172,8 +204,11 @@ struct Participants::Impl {
   Publish publish;
   PublishNative publish_native;
   Impl(Retain r, Save s, Publish p, PublishNative native)
-      : retain(std::move(r)), save(std::move(s)), publish(std::move(p)),
-        publish_native(std::move(native)) {}
+      : observation(std::make_shared<ParticipantObservationReader::State>()),
+        mutex(observation->mutex), retain(std::move(r)), save(std::move(s)),
+        publish(std::move(p)), publish_native(std::move(native)) {
+    observation->owner = this;
+  }
   struct OwnerCallback {
     bool &active;
     explicit OwnerCallback(bool &value) : active(value) { active = true; }
@@ -219,6 +254,14 @@ struct Participants::Impl {
         return true;
     }
     return false;
+  }
+  bool archivable_locked(const Run &run) const noexcept {
+    if (!run.finished || run.worker.joinable() || !run.cleanup_closed || run.emergency)
+      return false;
+    for (auto *capture = captures.get(); capture; capture = capture->next.get())
+      if (capture->run == &run)
+        return false;
+    return true;
   }
   void state(Run &run, RawParticipantBank &bank, std::uint8_t branch) noexcept {
     const bool stopped = run.stop.load();
@@ -368,6 +411,8 @@ struct Participants::Impl {
       if (joinable) {
         run.worker.join();
         run.endpoint_borrowed.store(false, std::memory_order_release);
+        const std::lock_guard lock{mutex};
+        run.worker_joined = true;
       }
     } catch (...) {
       const auto failure = exception_error();
@@ -397,6 +442,7 @@ struct Participants::Impl {
     if (!failure) {
       close_native(bank, run.reference, std::exchange(run.observer, -1), 2);
       close_native(bank, run.reference, std::exchange(run.activation, -1), 1);
+      const std::lock_guard lock{mutex};
       run.cleanup_closed = true;
     }
     bool pending;
@@ -435,6 +481,7 @@ struct Participants::Impl {
     const PreparedDirection &direction;
     RawEventRef transport;
     bool pending = false;
+    std::optional<ProviderOriginalReference> result_original;
     Receiver(Impl &p, Run &r, const PreparedDirection &d, RawEventRef t)
         : pool(p), run(r), direction(d), transport(t) {}
     struct Ticket final : ProviderOriginalTicket {
@@ -486,6 +533,9 @@ struct Participants::Impl {
         {
           std::lock_guard lock{destination.mutex};
           const auto bytes = node->original->bytes().size();
+          ++participant.pending_captures;
+          if (node->result_delivery.has_value())
+            receiver.result_original = source;
           overflow =
               !node->original->owns_bytes() ||
               node->original->kind() == ProviderOriginalExtentKind::unknown_used ||
@@ -562,7 +612,11 @@ struct Participants::Impl {
                     prepared,
                     {},
                     {},
-                    {}});
+                    {},
+                    request.role == ProviderOriginalRole::wrapper_packet &&
+                            request.label == "result"
+                        ? std::optional<Value>{direction.delivery}
+                        : std::nullopt});
         auto storage = std::make_shared<ProviderOriginalStorage>();
         if (request.mode == ProviderOriginalMode::native_extent)
           storage->bytes.resize(request.maximum_bytes);
@@ -589,6 +643,7 @@ struct Participants::Impl {
     const bool initial_stop = run.stop.load();
     {
       std::lock_guard lock{mutex};
+      run.worker_started = true;
       run.entry = event(bank, 2103, run.reference,
                         {f(direction->offer.lane), f(direction->offer.ordinal),
                          f(run.queued), f(initial_stop)});
@@ -616,6 +671,13 @@ struct Participants::Impl {
         }
         const auto dispatched =
             execution.linked(2104, run.entry, std::span{request_fields}.first(count));
+        {
+          const std::lock_guard lock{mutex};
+          run.current_delivery = direction->delivery;
+          run.current_original = direction->source;
+          run.current_retained = direction->retained;
+          run.dispatch = dispatched;
+        }
         Receiver receiver{*this, run, *direction, dispatched};
         RawProviderOwner owner{};
         if (identities)
@@ -654,12 +716,19 @@ struct Participants::Impl {
         const bool stopped = run.stop.load();
         (void)event(execution, 2105, dispatched,
                     {f(transport_branch), f(stage), f(stopped)});
-        auto display = projection(*result);
+        bool truncated = false;
+        auto display = projection(*result, truncated);
         Value publication;
         {
           std::lock_guard lock{mutex};
           set(run.row, "result", std::move(display));
           set(run.row, "last_delivery", direction->delivery);
+          run.result_original = receiver.result_original;
+          run.result_retained = run.retained_result_delivery == direction->delivery
+                                    ? run.latest_retained_result
+                                    : std::nullopt;
+          run.projection_known = true;
+          run.projection_truncated = truncated;
           const auto status = string_field(*result, "status"),
                      remote = string_field(*result, "remote_disposition");
           run.finished = run.stop.load() || status != "completed";
@@ -712,6 +781,10 @@ struct Participants::Impl {
       set(run.row, "state", std::move(run.failure_state));
       set(run.row, "result", std::move(run.failure_result));
       set(run.row, "last_delivery", std::move(direction->delivery));
+      run.result_original.reset();
+      run.result_retained.reset();
+      run.projection_known = true;
+      run.projection_truncated = false;
       run.finished = true;
       erase(run.row, "request");
       withdraw(run, bank, 2);
@@ -726,6 +799,7 @@ struct Participants::Impl {
     notify(run.row, bank, run.reference, true);
     {
       std::lock_guard lock{mutex};
+      run.worker_ended = true;
       const bool stopped = run.stop.load(),
                  emergency = static_cast<bool>(run.emergency);
       const std::uint8_t branch = failure ? 2 : 1;
@@ -820,6 +894,212 @@ struct Participants::Impl {
     }
   }
 };
+namespace {
+struct ParticipantProjection {
+  ParticipantObservation &out;
+  bool valid = true;
+  const Value *lookup(const Value &value, std::string_view key) {
+    const auto *object = std::get_if<Value::Object>(&value.value());
+    if (!object || object->size() > 32) {
+      valid = false;
+      return nullptr;
+    }
+    for (const auto &[name, item] : *object) {
+      ++out.examined_fields;
+      if (name == key)
+        return &item;
+    }
+    return nullptr;
+  }
+  std::string_view string(const Value *value) {
+    if (!value || std::holds_alternative<std::nullptr_t>(value->value()))
+      return {};
+    const auto *text_value = std::get_if<std::string>(&value->value());
+    if (!text_value) {
+      valid = false;
+      return {};
+    }
+    return *text_value;
+  }
+  ParticipantObservationText text(const Value *value) {
+    ParticipantObservationText result;
+    if (!value || std::holds_alternative<std::nullptr_t>(value->value()))
+      return result;
+    const auto bytes = string(value);
+    result.present = true;
+    result.total = bytes.size();
+    result.size = std::min(bytes.size(), result.bytes.size());
+    result.truncated = result.size < result.total;
+    std::copy_n(bytes.begin(), result.size, result.bytes.begin());
+    out.copied_bytes += result.size;
+    return result;
+  }
+  bool boolean(const Value *value) {
+    if (!value)
+      return false;
+    const auto *result = std::get_if<bool>(&value->value());
+    if (!result) {
+      valid = false;
+      return false;
+    }
+    return *result;
+  }
+  std::size_t count(const Value *value) {
+    if (!value)
+      return 0;
+    const auto *number = std::get_if<Number>(&value->value());
+    if (!number) {
+      valid = false;
+      return 0;
+    }
+    if (const auto *n = std::get_if<std::uint64_t>(&number->storage());
+        n && *n <= std::numeric_limits<std::size_t>::max())
+      return static_cast<std::size_t>(*n);
+    if (const auto *n = std::get_if<std::int64_t>(&number->storage());
+        n && *n >= 0 &&
+        static_cast<std::uint64_t>(*n) <= std::numeric_limits<std::size_t>::max())
+      return static_cast<std::size_t>(*n);
+    valid = false;
+    return 0;
+  }
+};
+} // namespace
+ParticipantObservationReader Participants::observer() const {
+  return ParticipantObservationReader{impl_->observation};
+}
+ParticipantObservation ParticipantObservationReader::try_observe(
+    const ParticipantObservationQuery &query) const noexcept {
+  ParticipantObservation out;
+  const auto valid = [](const std::optional<ParticipantObservationId> &identity) {
+    return !identity ||
+           (identity->size != 0 && identity->size <= identity->bytes.size() &&
+            identity->view().find('\0') == std::string_view::npos);
+  };
+  if (!valid(query.after) || !valid(query.selected)) {
+    out.status = ParticipantObservationStatus::invalid_identity;
+    return out;
+  }
+  if (query.row_limit > out.rows.size() || query.byte_limit > out.window.bytes.size()) {
+    out.status = ParticipantObservationStatus::invalid_range;
+    return out;
+  }
+  if (!state_)
+    return out;
+  out.incarnation = state_->incarnation;
+  try {
+    const std::unique_lock lock{state_->mutex, std::try_to_lock};
+    if (!lock.owns_lock()) {
+      out.status = ParticipantObservationStatus::busy;
+      return out;
+    }
+    if (state_->retired || !state_->owner) {
+      out.status = ParticipantObservationStatus::retired;
+      return out;
+    }
+    if (query.incarnation && query.incarnation != out.incarnation) {
+      out.status = ParticipantObservationStatus::scope_mismatch;
+      return out;
+    }
+    const auto &owner = *state_->owner;
+    ParticipantProjection projection{out};
+    const auto project = [&](std::string_view key, const Participants::Impl::Run &run) {
+      ParticipantObservationRow row;
+      row.id.size = key.size();
+      std::copy(key.begin(), key.end(), row.id.bytes.begin());
+      out.copied_bytes += key.size();
+      const auto phase = projection.string(projection.lookup(run.row, "state"));
+      row.phase = phase == "running"     ? ParticipantObservationPhase::running
+                  : phase == "waiting"   ? ParticipantObservationPhase::waiting
+                  : phase == "completed" ? ParticipantObservationPhase::completed
+                  : phase == "cancelled" ? ParticipantObservationPhase::cancelled
+                  : phase == "failed"    ? ParticipantObservationPhase::failed
+                                         : ParticipantObservationPhase::unknown;
+      row.task_id = projection.text(projection.lookup(run.row, "task_id"));
+      row.provider = projection.text(projection.lookup(run.row, "provider"));
+      row.model = projection.text(projection.lookup(run.row, "model"));
+      row.from = projection.text(projection.lookup(run.row, "from"));
+      row.to = projection.text(projection.lookup(run.row, "to"));
+      row.reopened = projection.boolean(projection.lookup(run.row, "reopened"));
+      row.dropped = projection.count(projection.lookup(run.row, "dropped_directions"));
+      row.queued = run.queued;
+      row.accepted = run.receipts.size();
+      row.pending_captures = run.pending_captures;
+      row.stop_requested = run.stop.load();
+      row.sealed = run.sealed;
+      row.business_finished = run.finished;
+      row.worker_started = run.worker_started;
+      row.worker_ended = run.worker_ended;
+      row.worker_joined = run.worker_joined;
+      row.cleanup_closed = run.cleanup_closed;
+      row.restored = run.restored;
+      row.admission = run.reference;
+      row.dispatch = run.dispatch;
+      row.end = run.end;
+      ++out.examined_rows;
+      return row;
+    };
+    auto entry = owner.runs.begin();
+    if (query.after) {
+      ++out.seek_steps;
+      entry = owner.runs.upper_bound(query.after->view());
+    }
+    while (entry != owner.runs.end() && out.row_count < query.row_limit) {
+      out.rows[out.row_count++] = project(entry->first, *entry->second);
+      ++entry;
+    }
+    out.more_rows = entry != owner.runs.end();
+    if (out.more_rows && out.row_count)
+      out.next = out.rows[out.row_count - 1].id;
+    if (query.selected) {
+      ++out.seek_steps;
+      const auto found = owner.runs.find(query.selected->view());
+      if (found == owner.runs.end())
+        out.selection = ParticipantObservationSelection::not_resident;
+      else {
+        out.selection = ParticipantObservationSelection::resident;
+        const auto &run = *found->second;
+        out.detail = project(found->first, run);
+        out.result.initial_request = projection.text(&run.initial_delivery);
+        out.result.current_request = projection.text(&run.current_delivery);
+        out.result.last_answered_request =
+            projection.text(projection.lookup(run.row, "last_delivery"));
+        out.result.initial_original = run.initial_original;
+        out.result.current_original = run.current_original;
+        out.result.result_original = run.result_original;
+        out.result.initial_retained = run.initial_retained;
+        out.result.current_retained = run.current_retained;
+        out.result.result_retained = run.result_retained;
+        out.result.projection_known = run.projection_known;
+        out.result.projection_truncated = run.projection_truncated;
+        const auto *result = projection.lookup(run.row, "result");
+        if (result && !std::holds_alternative<std::nullptr_t>(result->value())) {
+          out.result.result_available = true;
+          out.result.result_status =
+              projection.text(projection.lookup(*result, "status"));
+          out.result.remote_disposition =
+              projection.text(projection.lookup(*result, "remote_disposition"));
+          const auto bytes = projection.string(projection.lookup(*result, "text"));
+          out.window.requested = query.offset;
+          out.window.total = bytes.size();
+          out.window.begin = std::min(query.offset, bytes.size());
+          out.window.size = std::min(query.byte_limit, bytes.size() - out.window.begin);
+          out.window.next = out.window.begin + out.window.size;
+          out.window.more = out.window.next < bytes.size();
+          if (out.window.size)
+            std::memcpy(out.window.bytes.data(), bytes.data() + out.window.begin,
+                        out.window.size);
+          out.copied_bytes += out.window.size;
+        }
+      }
+    }
+    out.status = projection.valid ? ParticipantObservationStatus::ready
+                                  : ParticipantObservationStatus::unavailable;
+  } catch (...) {
+    // The caller keeps its last good sample. No callback/admission/fence is used.
+    out.status = ParticipantObservationStatus::unavailable;
+  }
+  return out;
+}
 Participants::Participants(const Value &saved, Retain retain, Save save,
                            Publish publish, PublishNative publish_native)
     : impl_(std::make_unique<Impl>(std::move(retain), std::move(save),
@@ -835,6 +1115,7 @@ Participants::Participants(const Value &saved, Retain retain, Save save,
     for (const auto &row : field(saved, "runs").array()) {
       auto run = std::make_unique<Impl::Run>();
       run->row = row;
+      run->restored = true;
       run->finished = true;
       run->sealed = true;
       run->cleanup_closed = true;
@@ -867,6 +1148,11 @@ Participants::Participants(const Value &saved, Retain retain, Save save,
   drain();
 }
 Participants::~Participants() {
+  {
+    const std::lock_guard lock{impl_->mutex};
+    impl_->observation->owner = nullptr;
+    impl_->observation->retired = true;
+  }
   try {
     shutdown();
   } catch (...) {
@@ -933,20 +1219,31 @@ void Participants::drain() {
         impl_->stop_all(bank, trace.reference(), 3);
         throw failure;
       }
+      std::optional<SourceReference> retained_source;
       try {
-        (void)impl_->retain_original(bank, capture->handoff, original, capture->label,
-                                     capture->metadata);
+        retained_source = impl_->retain_original(bank, capture->handoff, original,
+                                                 capture->label, capture->metadata);
       } catch (...) {
         impl_->stop_all(bank, capture->handoff, 3);
         throw;
       }
+      std::unique_ptr<Impl::Capture> retired;
       {
         std::lock_guard lock{impl_->mutex};
+        auto &run = *capture->run;
+        if (capture->result_delivery.has_value()) {
+          run.retained_result_delivery = std::move(*capture->result_delivery);
+          run.latest_retained_result = retained_source;
+          if (run.retained_result_delivery == field(run.row, "last_delivery"))
+            run.result_retained = retained_source;
+        }
+        --run.pending_captures;
         if (emergency)
-          emergency->emergency.reset();
+          retired = std::move(emergency->emergency);
         else {
           const auto bytes = original.bytes().size();
-          impl_->captures = std::move(capture->next);
+          retired = std::move(impl_->captures);
+          impl_->captures = std::move(retired->next);
           impl_->capture_bytes -= bytes;
           --impl_->capture_count;
           if (!impl_->captures)
@@ -986,7 +1283,7 @@ Value Participants::configure(const Value &args) {
 }
 Value Participants::start(std::string id, const Value &args,
                           const ParticipantTransport &transport,
-                          RawParticipantOrigin origin) {
+                          RawParticipantOrigin origin, DomainAdmission *admission) {
   impl_->entry(RawParticipantAction::start, origin);
   drain();
   return action(
@@ -1005,8 +1302,18 @@ Value Participants::start(std::string id, const Value &args,
             (void)key;
             live += run->finished ? 0U : 1U;
           }
-          if (impl_->runs.size() >= max_runs || live >= impl_->concurrency)
+          if (impl_->runs.size() >= max_runs) {
+            if (admission)
+              admission->reject(AdmissionResource::participant_runs, impl_->runs.size(),
+                                max_runs);
             throw Error{ErrorCode::capacity};
+          }
+          if (live >= impl_->concurrency) {
+            if (admission)
+              admission->reject(AdmissionResource::participant_concurrency, live,
+                                impl_->concurrency);
+            throw Error{ErrorCode::capacity};
+          }
           if (impl_->runs.contains(id))
             throw Error{ErrorCode::conflict};
         }
@@ -1018,6 +1325,7 @@ Value Participants::start(std::string id, const Value &args,
                                     origin,
                                     trace.reference()});
         auto run = std::make_unique<Impl::Run>();
+        run->initial_delivery = direction->delivery;
         run->row = Value::object({{"run_id", Value{id}},
                                   {"state", Value{"running"}},
                                   {"cancel_requested", Value{false}},
@@ -1043,7 +1351,7 @@ Value Participants::start(std::string id, const Value &args,
         const auto result =
             Value::object({{"run_id", Value{id}}, {"state", Value{"running"}}});
         // Stage the actual map node before the acknowledged admission append.
-        std::map<std::string, std::unique_ptr<Impl::Run>> staged;
+        std::map<std::string, std::unique_ptr<Impl::Run>, std::less<>> staged;
         auto *pointer = run.get();
         staged.emplace(id, std::move(run));
         auto node = staged.extract(id);
@@ -1069,6 +1377,8 @@ Value Participants::start(std::string id, const Value &args,
           trace.stage(2);
           direction->retained = impl_->retain_original(
               bank, trace.reference(), original, "participant.admission", metadata);
+          pointer->initial_original = direction->source;
+          pointer->initial_retained = direction->retained;
           {
             std::lock_guard lock{impl_->mutex};
             auto inserted = impl_->runs.insert(std::move(node));
@@ -1147,7 +1457,8 @@ Value Participants::read(const Value &args) {
                           {"runs", Value{std::move(rows)}}});
   });
 }
-Value Participants::send(const Value &args, RawParticipantOrigin origin) {
+Value Participants::send(const Value &args, RawParticipantOrigin origin,
+                         DomainAdmission *admission) {
   impl_->entry(RawParticipantAction::send, origin);
   drain();
   return action(
@@ -1212,8 +1523,18 @@ Value Participants::send(const Value &args, RawParticipantOrigin origin) {
             }
             if (run->finished || run->sealed || run->stop.load())
               throw Error{ErrorCode::busy};
-            if (run->queued >= max_inbox || run->receipts.size() >= max_messages)
+            if (run->queued >= max_inbox) {
+              if (admission)
+                admission->reject(AdmissionResource::participant_pending_directions,
+                                  run->queued, max_inbox);
               throw Error{ErrorCode::capacity};
+            }
+            if (run->receipts.size() >= max_messages) {
+              if (admission)
+                admission->reject(AdmissionResource::participant_direction_receipts,
+                                  run->receipts.size(), max_messages);
+              throw Error{ErrorCode::capacity};
+            }
             request = field(run->row, "request");
             set(request, "request_id",
                 Value{string_field(request, "request_id") + ":" + message});
@@ -1403,13 +1724,22 @@ Value Participants::archive(const Value &args) {
                   auto result = Value::object({{"archived", field(args, "run_id")}});
                   impl_->join_native(*run, trace.bank(), trace.reference());
                   impl_->cleanup_run(*run);
+                  // Join closes the worker's last publication opportunity. A
+                  // business-terminal row alone says nothing about its final
+                  // emergency original; retain it before releasing its owner.
+                  drain();
+                  std::unique_ptr<Impl::Run> retired;
                   {
                     std::lock_guard lock{impl_->mutex};
+                    if (!impl_->archivable_locked(*run))
+                      throw Error{ErrorCode::incomplete};
                     const std::uint8_t branch = 1;
                     (void)event(trace.bank(), 2134, trace.reference(),
                                 {f(run->reference.lane), f(run->reference.ordinal),
                                  f(branch), f(impl_->runs.size())});
-                    impl_->runs.erase(string_field(args, "run_id"));
+                    const auto found = impl_->runs.find(string_field(args, "run_id"));
+                    retired = std::move(found->second);
+                    impl_->runs.erase(found);
                     impl_->dirty = true;
                   }
                   impl_->save_snapshot(trace.bank(), trace.reference());

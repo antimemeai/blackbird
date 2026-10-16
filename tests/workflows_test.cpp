@@ -311,6 +311,28 @@ int main() {
   auto escaped = terminal_powerword_lines(std::string{"\x1b"} + "ultracode", 40);
   check(escaped.front().back().ink == Ink::keyword);
   check(escaped.front().back().text == "ultracode");
+  check(chat_plain(escaped.front()) == "\\x1bultracode");
+  const auto wrapped_color =
+      terminal_powerword_lines(std::string{"\x1b"} + "ultracode", 5);
+  check(wrapped_color.size() == 3 && chat_plain(wrapped_color[0]) == "\\x1bu" &&
+        chat_plain(wrapped_color[1]) == "ltrac" &&
+        chat_plain(wrapped_color[2]) == "ode");
+  std::string keyword_bytes;
+  for (const auto &row : wrapped_color)
+    for (const auto &span : row)
+      if (span.ink == Ink::keyword)
+        keyword_bytes += span.text;
+  check(keyword_bytes == "ultracode");
+  const auto split_token = terminal_powerword_lines("ultra\x1b"
+                                                    "code",
+                                                    40);
+  check(chat_plain(split_token.front()) == "ultra\\x1bcode");
+  for (const auto &span : split_token.front())
+    check(span.ink != Ink::keyword);
+  const auto nul_boundary =
+      terminal_powerword_lines(std::string(1, '\0') + "ultracode", 40);
+  check(chat_plain(nul_boundary.front()) == "\\x00ultracode" &&
+        nul_boundary.front().back().ink == Ink::keyword);
   // A registered workflow that stages config and then fails cannot activate it,
   // even when the outer caller ignores the returned error.
   const auto before_failure = engine.workflows();

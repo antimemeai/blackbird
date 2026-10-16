@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/command_observation.hpp"
 #include "blackbird/raw_command.hpp"
 #include "blackbird/value.hpp"
 #include <functional>
@@ -46,7 +47,12 @@ public:
   Value wait(const std::string &id, JobWaitOptions options,
              const std::function<void()> &tick, const std::function<bool()> &cancelled);
   Value read(const Value &arguments) const;
+  // Pure bounded current projection: no allocation, capture, blocking or effects.
+  CommandObservation try_observe(const CommandObservationQuery &) const noexcept;
   Value control(const Value &arguments);
+  // Enqueue reserves unique delivery identity/history capacity through dispatch.
+  // Permanent exhaustion refuses synchronously; only pending PTY input can wait.
+  // Exact duplicates share their reservation or retained delivery receipt.
   void request(Value arguments);
   std::vector<Value> requests();
   std::vector<JobEvent> drain();

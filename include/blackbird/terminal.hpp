@@ -1,6 +1,8 @@
 #pragma once
 #include "blackbird/chat_view.hpp"
+#include "blackbird/command_center.hpp"
 #include "blackbird/command_jobs.hpp"
+#include "blackbird/display_text.hpp"
 #include "blackbird/raw_ui.hpp"
 #include "blackbird/tasks.hpp"
 #include <atomic>
@@ -22,7 +24,21 @@ enum class InputAction {
   page_up,
   page_down,
   edit,
-  choose_command
+  choose_command,
+  inspect_toggle,
+  inspect_previous,
+  inspect_next,
+  inspect_first,
+  inspect_last,
+  inspect_page_up,
+  inspect_page_down,
+  inspect_focus_collection,
+  inspect_focus_detail,
+  inspect_toggle_focus,
+  inspect_focus_editor,
+  inspect_previous_output,
+  inspect_next_output,
+  center_toggle
 };
 struct InputResult {
   InputAction action = InputAction::none;
@@ -57,7 +73,7 @@ struct ComposerChoice {
 };
 class Composer {
 public:
-  InputResult feed(char byte, RawUiInput *raw = nullptr);
+  InputResult feed(char byte, RawUiInput *raw = nullptr, bool inspecting = false);
   std::uint64_t capture_bound(std::size_t acquired_bytes) const;
   void restore(const TerminalState &state);
   TerminalState state() const;
@@ -73,7 +89,7 @@ public:
   std::size_t cursor() const noexcept { return cursor_; }
 
 private:
-  InputResult feed_impl(char byte, RawUiInput *raw);
+  InputResult feed_impl(char byte, RawUiInput *raw, bool inspecting = false);
   std::size_t history_capture_bound_ = 0, choice_capture_bound_ = 0;
   std::shared_ptr<const std::vector<ComposerChoice>> choices_;
   mutable std::shared_ptr<const std::vector<ComposerChoice>> capture_catalog_;
@@ -109,6 +125,10 @@ std::size_t terminal_scroll_after_output(const TerminalScrollUpdate &update);
 void trim_terminal_transcript(std::string &text);
 std::vector<ChatRow> terminal_powerword_lines(std::string_view text,
                                               std::size_t columns);
+// Invert a display column within one raw logical line; edits retain source bytes.
+ByteOffset terminal_byte_at_column(std::string_view text, CellCount column);
+DisplayPosition terminal_caret(std::string_view text, ByteOffset source,
+                               CellCount columns);
 std::vector<std::string> terminal_lines(std::string_view text, std::size_t columns);
 class TerminalUI {
 public:
@@ -132,6 +152,8 @@ public:
   void title(std::string_view text);
   void sessions(const Value &listing, RawUiValueOrigin origin = {});
   void tasks(const Value &publication, RawUiValueOrigin origin = {});
+  TaskPublishedObservation
+  try_observe_tasks(const TaskObservationQuery &query) noexcept;
   void task_activity(const Value &event, RawUiValueOrigin origin = {});
   void run(const std::function<void(std::string_view)> &perform,
            std::atomic_bool &cancelled,
@@ -140,7 +162,8 @@ public:
            const std::function<void()> &idle_work = {},
            std::shared_ptr<CommandJobs> commands = {}, int interrupt_fd = -1,
            const std::function<Result<void>()> &reset_interrupt = {},
-           RetainedState *raw_root = nullptr);
+           RetainedState *raw_root = nullptr,
+           std::optional<CommandCenterContext> center_context = {});
 
 private:
   enum class Kind {
@@ -176,6 +199,9 @@ private:
   std::vector<Message> messages_;
   std::string title_;
   TaskState task_state_;
+  bool task_publication_initialized_ = false, task_publication_failed_ = false;
+  RawUiValueOrigin task_publication_origin_{};
+  RawEventRef task_publication_ingress_{};
   bool tasks_dirty_ = true;
   std::map<std::string, Value> task_activity_;
   std::map<std::string, std::map<std::string, Value>> task_runs_;

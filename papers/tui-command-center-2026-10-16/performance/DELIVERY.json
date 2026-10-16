@@ -1,0 +1,12 @@
+{
+  "source_commit": "d0e3b2efa68d1dc3b4310ee06f483a11d6d44786",
+  "native_tree_sha256": "a019f4e4d6e1206b06c068903c3313c9d526bbe24c2eb9e36ee17b639ed3a0cb",
+  "native_sha256": "4af92b452b5bd6a19345d2a402f6d7227d84f546126ab6914873748629db0b8e",
+  "committed_native_files": 432,
+  "check_adjuncts": 1,
+  "git_content_and_executable_bits_match": true,
+  "remote_campaign": "/home/patrick/.local/share/blackbird-campaigns/tui-command-center-20261016-_ycd6jjo",
+  "baseline_commit": "f2ab70b483f2e2f87efb90229c17d0e947fb9de4",
+  "baseline_native_sha256": "0e8e1b513bfc95ab1da7ee3b45e3735011bcc1f204bd75d11b7c3209034a8ac6",
+  "limitations": "One shared-host paired round, not exclusive host or physical display. Common scenarios do not open the center. No repeat to improve tails."
+}

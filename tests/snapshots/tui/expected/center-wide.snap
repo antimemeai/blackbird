@@ -1,0 +1,21 @@
+styled-grid-v1
+size 100 16
+cursor none
+state route=center;selected-kind=task;selected-id=t1;declared=blocked;participants=unavailable;commands=unavailable
+|{normal:                                                                                                    }|
+|{heading:COMMAND CENTER}{normal:                                                                                      }|
+|{selected:> T1/1 P? J?}{normal:                     }{border:│}{heading:  Task t1}{normal:                                                         }|
+|{muted:T ready P unknown J unknown}{normal:      }{border:│}{heading:Declared blocked}{normal:                                                  }|
+|{selected:> T t1 blocked Investigate retain}{border:│}{normal:Investigate retained result                                       }|
+|{normal:                                 }{border:│}{muted:Owner label: declared label}{normal:                                       }|
+|{normal:                                 }{border:│}{muted:Version 1 \| task revision 1}{normal:                                       }|
+|{normal:                                 }{border:│}{muted:Subtasks 0/0}{normal:                                                      }|
+|{normal:                                 }{border:│}{failure:Blocker: Await independent review}{normal:                                 }|
+|{normal:                                 }{border:│}{normal:First source line                                                 }|
+|{normal:                                 }{border:│}{normal:Second source line                                                }|
+|{normal:                                 }{border:│}{normal:Third source line                                                 }|
+|{normal:                                 }{border:│}{normal:Fourth source line                                                }|
+|{normal:                                 }{border:│}{normal:                                                                  }|
+|{normal:                                 }{border:│}{normal:                                                                  }|
+|{normal:                                 }{border:│}{normal:                                                                  }|
+cell-widths

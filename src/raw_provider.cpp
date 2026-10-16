@@ -48,10 +48,13 @@ constexpr std::uint64_t spawn_bytes =
     raw_envelope_size + ref_bytes + 1 + 2 * sizeof(int) + 2 * sizeof(pid_t);
 constexpr std::uint64_t refusal_bytes =
     raw_envelope_size + ref_bytes + 2 + sizeof(ErrorCode) + sizeof(std::int64_t);
+constexpr std::uint64_t wait_bytes =
+    raw_envelope_size + ref_bytes + 1 + 4 * sizeof(int) + sizeof(pid_t) + sizeof(uid_t);
 constexpr std::uint64_t cleanup_bytes =
     12 * close_bytes + raw_envelope_size + ref_bytes + sizeof(pid_t) + 3 * sizeof(int) +
     raw_envelope_size + ref_bytes + 2 * sizeof(pid_t) + sizeof(int) + sizeof(bool) +
-    sizeof(int) + raw_envelope_size + ref_bytes + 1 + spawn_bytes + refusal_bytes;
+    sizeof(int) + raw_envelope_size + ref_bytes + 1 + spawn_bytes + refusal_bytes +
+    wait_bytes;
 constexpr std::uint64_t read_bytes = raw_envelope_size + ref_bytes + 1 +
                                      sizeof(std::size_t) + sizeof(ssize_t) +
                                      sizeof(int);
@@ -282,6 +285,20 @@ void RawChildTrace::wait(RawNativePermit &credit, const siginfo_t &observed, int
                           raw_native_field(observed.si_code),
                           raw_native_field(observed.si_status)};
   immediate(1405, fields, &*credit.control);
+}
+void RawChildTrace::cleanup_wait(const siginfo_t &observed, int result,
+                                 int error) noexcept {
+  const std::uint8_t method = 1;
+  const std::array fields{ByteView{child_.lane},
+                          raw_native_field(child_.ordinal),
+                          raw_native_field(method),
+                          raw_native_field(result),
+                          raw_native_field(error),
+                          raw_native_field(observed.si_pid),
+                          raw_native_field(observed.si_uid),
+                          raw_native_field(observed.si_code),
+                          raw_native_field(observed.si_status)};
+  terminal(1405, fields);
 }
 void RawChildTrace::close(std::uint8_t channel, int fd, int result,
                           int error) noexcept {

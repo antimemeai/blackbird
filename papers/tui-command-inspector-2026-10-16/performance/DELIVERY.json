@@ -1,0 +1,17 @@
+{
+  "delivered_source_commit": "52f910372cd47bf4e95ed9de16dccfa3d87bc888",
+  "qualified_native_tree_sha256": "a23d707da144aa47a797837a2500b802cb213d789880ccb53645e35f4a6ee48f",
+  "qualified_native_sha256": "0e8e1b513bfc95ab1da7ee3b45e3735011bcc1f204bd75d11b7c3209034a8ac6",
+  "native_files": 421,
+  "check_input_files": 1,
+  "comparison": "All contents and Git executable bits match; full tar/filesystem permission bits are not Git source identity",
+  "baseline_commit": "45b14541749119399ce2f6e4f07aee9c082c8e41",
+  "baseline_qualified_native_tree_sha256": "48027f980f11cfd5ce6913db9d56fe9f4f94b0d7bea23e64d14605e2e0f097d0",
+  "baseline_native_sha256": "991d5d19363f3796e44648e41beba644f090c66bc3620e6eb36b5e49fdc28d54",
+  "timing_started_utc": "2026-10-16T06:53:35Z",
+  "timing_finished_utc": "2026-10-16T06:53:48Z",
+  "recorded_processes": 120,
+  "recorded_endpoints": 960,
+  "terminal_output_directory": "/Users/patrickbeam/projects/blackbird/context/tui-command-inspector-2026-10-16/performance/perf-round/terminal-output",
+  "remote_campaign": "/home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz"
+}

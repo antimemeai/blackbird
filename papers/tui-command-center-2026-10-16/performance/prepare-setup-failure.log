@@ -1,0 +1,1 @@
+Initial preparation created the owned campaign and copied qualified Lua, then local comparison failed KeyError lua_archive_sha256: new previous build provenance nests those fields under profile. No source build/test or measured process had started. Reused the same exact owned directory after checking baseline hashes; compare profile fields.

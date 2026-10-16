@@ -1,4 +1,6 @@
 #include "blackbird/terminal.hpp"
+#include "blackbird/command_inspector.hpp"
+#include "blackbird/display_text.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/local_timing.hpp"
 #include "blackbird/packet.hpp"
@@ -20,7 +22,6 @@
 #include <clocale>
 #include <csignal>
 #include <cstdlib>
-#include <cwchar>
 #include <exception>
 #include <fcntl.h>
 #include <iostream>
@@ -90,7 +91,10 @@ const std::array builtin_commands{
                 "Tools"},
     ChatCommand{"/exec", "JSON", "Launch a command; yield_ms releases its wait",
                 "Tools"},
-    ChatCommand{"/jobs", "", "Inspect owned commands immediately", "Tools"},
+    ChatCommand{"/center", "",
+                "Open current-session work; Ctrl-X preserves draft (TUI)", "TUI"},
+    ChatCommand{"/jobs", "", "Open command results; Ctrl-O preserves draft (TUI)",
+                "Tools"},
     ChatCommand{"/fg", "JOB", "Wait for the same command; PTY text input", "Tools"},
     ChatCommand{"/bg", "[JOB]",
                 "Release foreground wait immediately; keep command running", "Tools"},
@@ -265,23 +269,8 @@ std::size_t line_end(std::string_view text, std::size_t cursor) {
   const auto newline = text.find('\n', cursor);
   return newline == std::string_view::npos ? text.size() : newline;
 }
-std::size_t display_width(std::string_view text) {
-  std::size_t cells = 0;
-  while (!text.empty()) {
-    if (text.front() == '\t') {
-      cells += 2;
-      text.remove_prefix(1);
-      continue;
-    }
-    wchar_t wide{};
-    std::mbstate_t state{};
-    const auto n = std::mbrtowc(&wide, text.data(), text.size(), &state);
-    const auto width = n != 0 && n <= text.size() ? ::wcwidth(wide) : -1;
-    cells += width < 0 ? 4 : static_cast<std::size_t>(width);
-    text.remove_prefix(width < 0 ? 1 : n);
-  }
-  return cells;
-}
+std::size_t display_width(std::string_view text) { return display_cells(text).value; }
+
 bool word_space(std::string_view text, std::size_t position) {
   // Whitespace-delimited words, rather than imposing a language's punctuation rules.
   const auto c = static_cast<unsigned char>(text[position]);
@@ -320,6 +309,11 @@ std::string terminal_key_help() {
          "  Ctrl-U       Clear draft; Ctrl-Y restores it\n"
          "  Ctrl-C       Request stop and clear pending queue; keep unsent draft\n"
          "  Ctrl-B       Background foreground command; preserve composer\n"
+         "  Ctrl-O       Inspect command results; preserve draft/cursor\n"
+         "  Ctrl-X       Current-session command center; preserve draft/cursor\n"
+         "  Inspector    Arrows/Home/End/Page navigate; Tab focus; Esc draft\n"
+         "  Center       T tasks, P participants, J jobs; + means more rows\n"
+         "               Ctrl-Left/Right source pages; typing returns to draft\n"
          "  PTY input    Keys and Ctrl-C reach selected command; Ctrl-B returns\n"
          "  Ctrl-Q       Stop and exit; preserve unsent draft\n"
          "  PgUp / PgDn  Scroll transcript\n"
@@ -773,20 +767,16 @@ void Composer::vertical(bool up) {
   }
   if (!goal_column_)
     goal_column_ =
-        display_width(std::string_view{text_}.substr(begin, cursor_ - begin));
+        terminal_caret(std::string_view{text_}.substr(begin, end - begin),
+                       {cursor_ - begin}, {std::numeric_limits<std::size_t>::max()})
+            .column.value;
   const auto target_begin = up ? line_start(text_, begin - 1) : end + 1;
   const auto target_end = line_end(text_, target_begin);
-  std::size_t position = target_begin, cells = 0;
-  while (position < target_end) {
-    const auto after = next(text_, position);
-    const auto width =
-        display_width(std::string_view{text_}.substr(position, after - position));
-    if (cells + width > *goal_column_)
-      break;
-    cells += width;
-    position = after;
-  }
-  cursor_ = position;
+  cursor_ = target_begin +
+            terminal_byte_at_column(
+                std::string_view{text_}.substr(target_begin, target_end - target_begin),
+                {*goal_column_})
+                .value;
 }
 void Composer::kill(std::size_t begin, std::size_t end) {
   slash_open_ = false;
@@ -807,9 +797,9 @@ std::uint64_t Composer::capture_bound(std::size_t acquired_bytes) const {
                                     raw_envelope_size + raw_ui_ref_bytes +
                                         4 * sizeof(std::size_t) + sizeof(InputAction)));
 }
-InputResult Composer::feed(char byte, RawUiInput *raw) {
+InputResult Composer::feed(char byte, RawUiInput *raw, bool inspecting) {
   if (!raw || !raw->enabled || !raw_enabled())
-    return feed_impl(byte, nullptr);
+    return feed_impl(byte, nullptr, inspecting);
   if (!raw->data || !raw->control)
     throw Error{ErrorCode::invalid_range};
   RawUiBurst burst{raw->control};
@@ -829,7 +819,7 @@ InputResult Composer::feed(char byte, RawUiInput *raw) {
   return trace.run([&] {
     if (raw->keyboard && !raw_ui_source_valid(*raw->keyboard))
       throw Error{ErrorCode::invalid_identity};
-    auto result = feed_impl(byte, raw);
+    auto result = feed_impl(byte, raw, inspecting);
     if (!result.source.record.ordinal) {
       const auto action = result.action;
       const auto length = result.text.size();
@@ -867,7 +857,7 @@ InputResult Composer::feed(char byte, RawUiInput *raw) {
     return result;
   });
 }
-InputResult Composer::feed_impl(char byte, RawUiInput *raw) {
+InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
   const auto catalog = choices_ && palette_open_ ? choices_
                        : raw && capture_catalog_ ? capture_catalog_
                                                  : command_catalog();
@@ -879,7 +869,7 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw) {
       slash_open_ = false;
       pasted_ = true;
       escape_.clear();
-      return {};
+      return {inspecting ? InputAction::inspect_focus_editor : InputAction::none, {}};
     }
     if (escape_ == "\x1b[201~") {
       pasted_ = false;
@@ -904,6 +894,30 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw) {
       return {};
     if (escape_.size() >= 3 && c >= 0x30U && c <= 0x3fU)
       return {};
+    if (inspecting) {
+      const auto action =
+          escape_ == "\x1b[A" || escape_ == "\x1bOA"   ? InputAction::inspect_previous
+          : escape_ == "\x1b[B" || escape_ == "\x1bOB" ? InputAction::inspect_next
+          : escape_ == "\x1b[D" || escape_ == "\x1bOD"
+              ? InputAction::inspect_focus_collection
+          : escape_ == "\x1b[C" || escape_ == "\x1bOC"
+              ? InputAction::inspect_focus_detail
+          : escape_ == "\x1b[H" || escape_ == "\x1bOH" || escape_ == "\x1b[1~" ||
+                  escape_ == "\x1b[7~"
+              ? InputAction::inspect_first
+          : escape_ == "\x1b[F" || escape_ == "\x1bOF" || escape_ == "\x1b[4~" ||
+                  escape_ == "\x1b[8~"
+              ? InputAction::inspect_last
+          : escape_ == "\x1b[5~"   ? InputAction::inspect_page_up
+          : escape_ == "\x1b[6~"   ? InputAction::inspect_page_down
+          : escape_ == "\x1b[1;5D" ? InputAction::inspect_previous_output
+          : escape_ == "\x1b[1;5C" ? InputAction::inspect_next_output
+                                   : InputAction::none;
+      if (action != InputAction::none) {
+        escape_.clear();
+        return {action, {}};
+      }
+    }
     if (palette_open_) {
       if (escape_ == "\x1b[A" || escape_ == "\x1bOA")
         palette_move(true);
@@ -959,7 +973,10 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw) {
                         : escape_ == "\x1b[6~" ? InputAction::page_down
                                                : InputAction::none;
     escape_.clear();
-    return {action, {}};
+    return {inspecting && action == InputAction::none
+                ? InputAction::inspect_focus_editor
+                : action,
+            {}};
   }
   if (c == 27) {
     escape_ = byte;
@@ -968,6 +985,26 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw) {
   if (pasted_) {
     insert(byte == '\r' ? '\n' : byte);
     return {};
+  }
+  if (c == 15) {
+    palette_open_ = slash_open_ = false;
+    return {InputAction::inspect_toggle, {}};
+  }
+  if (c == 24) {
+    palette_open_ = slash_open_ = false;
+    return {InputAction::center_toggle, {}};
+  }
+  if (inspecting) {
+    if (c == 9)
+      return {InputAction::inspect_toggle_focus, {}};
+    if (c == 13 || c == 10)
+      return {InputAction::inspect_focus_detail, {}};
+    if (c == 16 || c == 14)
+      return {c == 16 ? InputAction::inspect_previous : InputAction::inspect_next, {}};
+    auto result = feed_impl(byte, raw, false);
+    if (result.action == InputAction::none)
+      result.action = InputAction::inspect_focus_editor;
+    return result;
   }
   if (c == 0 || c == 20) {
     slash_open_ = false;
@@ -1135,48 +1172,146 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw) {
     insert(byte);
   return {};
 }
+namespace {
+std::size_t safe_scalar_bytes(unsigned char byte, const DisplayScalar &scalar) {
+  if (byte == '\t')
+    return 2;
+  if (byte != '\n' && (byte < 32 || byte == 127 || scalar.cells < 0))
+    return 4;
+  return scalar.bytes;
+}
+struct SafeScalar {
+  std::size_t source_bytes, emitted_bytes;
+  bool changed;
+};
+SafeScalar safe_scalar(std::string_view source) {
+  const auto byte = static_cast<unsigned char>(source.front());
+  const auto scalar = display_scalar(source);
+  const auto emitted = safe_scalar_bytes(byte, scalar);
+  const bool changed = emitted != scalar.bytes || (scalar.cells < 0 && byte != '\n');
+  return {changed ? 1 : scalar.bytes, emitted, changed};
+}
+void append_safe_scalar(std::string &out, std::string_view source,
+                        const SafeScalar &scalar) {
+  if (!scalar.changed) {
+    out.append(source.substr(0, scalar.source_bytes));
+    return;
+  }
+  const auto byte = static_cast<unsigned char>(source.front());
+  if (byte == '\t')
+    out += "  ";
+  else {
+    constexpr char hex[] = "0123456789abcdef";
+    out += '\\';
+    out += 'x';
+    out += hex[byte >> 4U];
+    out += hex[byte & 15U];
+  }
+}
+std::string_view safe_terminal_text(std::string_view text, std::string &sanitized,
+                                    ByteOffset *mapped = nullptr) {
+  const auto source_cursor = mapped ? mapped->value : 0;
+  bool copied = false;
+  for (std::size_t offset = 0; offset < text.size();) {
+    const auto source = text.substr(offset);
+    const auto scalar = safe_scalar(source);
+    if (scalar.changed && !copied) {
+      sanitized.assign(text.substr(0, offset));
+      copied = true;
+    }
+    if (copied)
+      append_safe_scalar(sanitized, source, scalar);
+    if (mapped && scalar.changed && offset < source_cursor)
+      mapped->value += scalar.emitted_bytes - scalar.source_bytes;
+    offset += scalar.source_bytes;
+  }
+  return copied ? std::string_view{sanitized} : text;
+}
+ChatRow safe_terminal_row(std::string_view source, const ChatRow &colors) {
+  ChatRow safe;
+  std::size_t index = 0, within = 0;
+  while (!source.empty()) {
+    while (index < colors.size() && within == colors[index].text.size()) {
+      ++index;
+      within = 0;
+    }
+    const auto ink = index < colors.size() ? colors[index].ink : Ink::normal;
+    const auto scalar = safe_scalar(source);
+    if (safe.empty() || safe.back().ink != ink)
+      safe.push_back({{}, ink});
+    append_safe_scalar(safe.back().text, source, scalar);
+    // Decode the contiguous original, even if style metadata splits its UTF-8.
+    // The first source byte supplies scalar ink; grapheme ink is resolved later.
+    auto bytes = scalar.source_bytes;
+    while (bytes && index < colors.size()) {
+      const auto count = std::min(bytes, colors[index].text.size() - within);
+      within += count;
+      bytes -= count;
+      if (within == colors[index].text.size()) {
+        ++index;
+        within = 0;
+      }
+    }
+    source.remove_prefix(scalar.source_bytes);
+  }
+  return safe;
+}
+} // namespace
+ByteOffset terminal_byte_at_column(std::string_view text, CellCount column) {
+  std::string sanitized;
+  const auto safe = safe_terminal_text(text, sanitized);
+  DisplayCursor cursor{safe};
+  DisplayCluster cluster;
+  std::size_t cells = 0, boundary = 0;
+  while (cursor.next(cluster)) {
+    if (cells + cluster.cells.value > column.value)
+      break;
+    cells += cluster.cells.value;
+    boundary = cluster.end.value;
+  }
+  if (sanitized.empty())
+    return {boundary};
+  // Invert the same sanitizer expansion at the selected display boundary.
+  std::size_t source = 0, emitted = 0;
+  while (source < text.size()) {
+    const auto scalar = safe_scalar(text.substr(source));
+    if (emitted + scalar.emitted_bytes > boundary)
+      break;
+    emitted += scalar.emitted_bytes;
+    source += scalar.source_bytes;
+  }
+  return {source};
+}
+DisplayPosition terminal_caret(std::string_view text, ByteOffset source,
+                               CellCount columns) {
+  std::string sanitized;
+  const auto safe = safe_terminal_text(text, sanitized, &source);
+  return display_position(safe, source, columns);
+}
 std::vector<std::string> terminal_lines(std::string_view text, std::size_t columns) {
   columns = std::max<std::size_t>(columns, 1);
+  std::string sanitized;
+  text = safe_terminal_text(text, sanitized);
   std::vector<std::string> lines(1);
-  std::size_t width = 0;
-  auto add = [&](std::string_view value, std::size_t cells) {
-    if (width != 0 && width + cells > columns) {
-      lines.emplace_back();
-      width = 0;
+  do {
+    const auto newline = text.find('\n');
+    DisplayCursor cursor{text.substr(0, newline)};
+    DisplayCluster cluster;
+    std::size_t cells = 0;
+    while (cursor.next(cluster)) {
+      display_fit(cluster, {columns});
+      if (cells && cells + cluster.cells.value > columns) {
+        lines.emplace_back();
+        cells = 0;
+      }
+      cursor.append(lines.back(), cluster);
+      cells += cluster.cells.value;
     }
-    lines.back().append(value);
-    width += cells;
-  };
-  while (!text.empty()) {
-    const auto c = static_cast<unsigned char>(text.front());
-    if (c == '\n') {
-      lines.emplace_back();
-      width = 0;
-      text.remove_prefix(1);
-      continue;
-    }
-    if (c == '\t') {
-      add("  ", 2);
-      text.remove_prefix(1);
-      continue;
-    }
-    wchar_t wide{};
-    std::mbstate_t state{};
-    auto count = std::mbrtowc(&wide, text.data(), text.size(), &state);
-    const auto cells = count != static_cast<std::size_t>(-1) &&
-                               count != static_cast<std::size_t>(-2) && count != 0
-                           ? ::wcwidth(wide)
-                           : -1;
-    if (c < 32 || c == 127 || cells < 0) {
-      constexpr char hex[] = "0123456789abcdef";
-      const char escaped[] = {'\\', 'x', hex[c >> 4U], hex[c & 15U]};
-      for (const auto value : escaped)
-        add(std::string_view{&value, 1}, 1);
-      count = 1;
-    } else
-      add(text.substr(0, count), static_cast<std::size_t>(cells));
-    text.remove_prefix(count);
-  }
+    if (newline == std::string_view::npos)
+      break;
+    lines.emplace_back();
+    text.remove_prefix(newline + 1);
+  } while (true);
   return lines;
 }
 std::vector<ChatRow> terminal_powerword_lines(std::string_view text,
@@ -1186,31 +1321,28 @@ std::vector<ChatRow> terminal_powerword_lines(std::string_view text,
   do {
     const auto end = text.find('\n');
     const auto raw = text.substr(0, end);
-    auto spans =
+    const auto colors =
         registry ? registry->color(raw) : ChatRow{{std::string{raw}, Ink::normal}};
-    std::string safe;
-    for (auto &span : spans) {
-      span.text =
-          terminal_lines(span.text, std::numeric_limits<std::size_t>::max()).front();
-      safe += span.text;
-    }
-    std::size_t index = 0, offset = 0;
-    for (const auto &line : terminal_lines(safe, columns)) {
-      ChatRow row;
-      std::size_t remaining = line.size();
-      while (remaining && index < spans.size()) {
-        const auto count = std::min(remaining, spans[index].text.size() - offset);
-        if (count)
-          row.push_back({spans[index].text.substr(offset, count), spans[index].ink});
-        remaining -= count;
-        offset += count;
-        if (offset == spans[index].text.size()) {
-          ++index;
-          offset = 0;
-        }
+    const auto spans = safe_terminal_row(raw, colors);
+    ChatRow row;
+    std::size_t cells = 0;
+    DisplayCursor cursor{spans};
+    DisplayCluster cluster;
+    while (cursor.next(cluster)) {
+      if (!cluster.cells.value)
+        continue;
+      display_fit(cluster, {columns});
+      if (cells && cells + cluster.cells.value > std::max<std::size_t>(columns, 1)) {
+        result.push_back(std::move(row));
+        row.clear();
+        cells = 0;
       }
-      result.push_back(std::move(row));
+      if (row.empty() || row.back().ink != cluster.ink)
+        row.push_back({{}, cluster.ink});
+      cursor.append(row.back().text, cluster);
+      cells += cluster.cells.value;
     }
+    result.push_back(std::move(row));
     if (end == std::string_view::npos)
       break;
     text.remove_prefix(end + 1);
@@ -1369,38 +1501,73 @@ void TerminalUI::operation_completed(std::string_view value, Ink outcome) {
 void TerminalUI::failed() { post(Kind::failure, {}); }
 void TerminalUI::title(std::string_view value) { post(Kind::title, value); }
 void TerminalUI::tasks(const Value &publication, RawUiValueOrigin origin) {
-  auto trace = raw_ui_value_trace(raw_capture_, origin);
-  trace.run([&] {
-    if (trace.enabled() && (!origin.source || !raw_ui_source_valid(*origin.source)))
-      throw Error{ErrorCode::invalid_identity};
-    const bool snapshot = string_field(publication, "label") == "task-state-v1";
-    auto task_credit = raw_ui_control(true, snapshot ? 221 : 552, RawWaitControl{});
-    auto task_data =
-        snapshot ? std::optional<RawCapacityClaim>{}
-                 : raw_ui_data(true, ValueLimits{}.bytes + 48, RawWaitControl{});
-    RawTaskOrigin task_origin{trace.enabled() ? std::optional{trace.reference()}
-                                              : std::nullopt,
-                              false, nullptr, task_data ? &*task_data : nullptr,
-                              task_credit ? &*task_credit : nullptr};
+  try {
+    auto trace = raw_ui_value_trace(raw_capture_, origin);
+    trace.run([&] {
+      if (trace.enabled() && (!origin.source || !raw_ui_source_valid(*origin.source)))
+        throw Error{ErrorCode::invalid_identity};
+      const bool snapshot = string_field(publication, "label") == "task-state-v1";
+      auto task_credit = raw_ui_control(true, snapshot ? 221 : 552, RawWaitControl{});
+      auto task_data =
+          snapshot ? std::optional<RawCapacityClaim>{}
+                   : raw_ui_data(true, ValueLimits{}.bytes + 48, RawWaitControl{});
+      RawTaskOrigin task_origin{trace.enabled() ? std::optional{trace.reference()}
+                                                : std::nullopt,
+                                false, nullptr, task_data ? &*task_data : nullptr,
+                                task_credit ? &*task_credit : nullptr};
+      const std::lock_guard lock{mutex_};
+      if (snapshot)
+        task_state_.restore(publication, task_origin);
+      else
+        task_state_.replay(publication, task_origin);
+      if (publication.find("order"))
+        if (const auto position = task_state_.position(task_anchor_))
+          task_offset_ = *position;
+      if (const auto *removed = publication.find("removed"))
+        for (const auto &id : removed->array()) {
+          task_activity_.erase(id.string());
+          task_runs_.erase(id.string());
+          task_folded_.erase(id.string());
+        }
+      task_publication_initialized_ = true;
+      if (snapshot)
+        task_publication_failed_ = false;
+      task_publication_origin_ = origin;
+      task_publication_ingress_ = trace.reference();
+      // One mutable derived view, not a queued snapshot per update.
+      tasks_dirty_ = true;
+      raw_ui_notify(trace, notification_);
+      trace.finish();
+    });
+  } catch (...) {
     const std::lock_guard lock{mutex_};
-    if (snapshot)
-      task_state_.restore(publication, task_origin);
-    else
-      task_state_.replay(publication, task_origin);
-    if (publication.find("order"))
-      if (const auto position = task_state_.position(task_anchor_))
-        task_offset_ = *position;
-    if (const auto *removed = publication.find("removed"))
-      for (const auto &id : removed->array()) {
-        task_activity_.erase(id.string());
-        task_runs_.erase(id.string());
-        task_folded_.erase(id.string());
-      }
-    // One mutable derived view, not a queued snapshot per update.
-    tasks_dirty_ = true;
-    raw_ui_notify(trace, notification_);
-    trace.finish();
-  });
+    task_publication_failed_ = true;
+    throw;
+  }
+}
+TaskPublishedObservation
+TerminalUI::try_observe_tasks(const TaskObservationQuery &query) noexcept {
+  TaskPublishedObservation out;
+  try {
+    const std::unique_lock lock{mutex_, std::try_to_lock};
+    if (!lock.owns_lock()) {
+      out.publication = TaskPublicationStatus::busy;
+      return out;
+    }
+    if (!task_publication_initialized_) {
+      if (task_publication_failed_)
+        out.publication = TaskPublicationStatus::stale;
+      return out;
+    }
+    out.publication = task_publication_failed_ ? TaskPublicationStatus::stale
+                                               : TaskPublicationStatus::ready;
+    out.value = task_state_.observe(query);
+    out.origin = task_publication_origin_;
+    out.ingress = task_publication_ingress_;
+  } catch (...) {
+    out.publication = TaskPublicationStatus::stale;
+  }
+  return out;
 }
 void TerminalUI::task_activity(const Value &event, RawUiValueOrigin origin) {
   auto trace = raw_ui_value_trace(raw_capture_, origin);
@@ -1435,7 +1602,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                      const std::function<void()> &idle_work,
                      std::shared_ptr<CommandJobs> commands, int interrupt_fd,
                      const std::function<Result<void>()> &reset_interrupt,
-                     RetainedState *raw_root) {
+                     RetainedState *raw_root,
+                     std::optional<CommandCenterContext> center_context) {
   RawCaptureFailureScope ui_capture{raw_capture_ && raw_enabled()};
   const RawAdapterContext terminal_context{
       nullptr,
@@ -1572,6 +1740,71 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     }
   };
 
+  std::unique_ptr<CommandInspector> inspector;
+  bool inspector_refused = false;
+  auto ensure_inspector = [&] {
+    try {
+      if (!inspector)
+        inspector = std::make_unique<CommandInspector>();
+      inspector_refused = false;
+      return true;
+    } catch (const Error &) {
+      inspector_refused = true;
+    } catch (const std::bad_alloc &) {
+      inspector_refused = true;
+    } catch (const std::length_error &) {
+      inspector_refused = true;
+    }
+    return false;
+  };
+  std::unique_ptr<CommandCenter> center;
+  bool center_refused = false;
+  auto ensure_center = [&] {
+    if (!center_context) {
+      center_refused = true;
+      return false;
+    }
+    try {
+      if (!center)
+        center = std::make_unique<CommandCenter>(center_context->scope);
+      center_refused = false;
+      return true;
+    } catch (const Error &) {
+      center_refused = true;
+    } catch (const std::bad_alloc &) {
+      center_refused = true;
+    } catch (const std::length_error &) {
+      center_refused = true;
+    }
+    return false;
+  };
+  CommandCenterSources center_sources{
+      [this](const TaskObservationQuery &query) { return try_observe_tasks(query); },
+      center_context ? center_context->participants : ParticipantObservationReader{},
+      commands.get()};
+  auto close_center = [&] {
+    if (center && center->open())
+      center->toggle();
+  };
+  auto close_inspector = [&] {
+    if (inspector && inspector->open())
+      inspector->toggle();
+  };
+  auto inspection_open = [&] {
+    return (center && center->open()) || (inspector && inspector->open());
+  };
+  auto inspection_focused = [&] {
+    return (center && center->open() && center->focused()) ||
+           (inspector && inspector->open() && inspector->focused());
+  };
+  auto visit_inspection = [&](auto &&action) {
+    if (center && center->open())
+      action(*center);
+    else if (inspector && inspector->open())
+      action(*inspector);
+  };
+  auto center_refresh = std::chrono::steady_clock::time_point::min();
+  auto inspector_refresh = std::chrono::steady_clock::time_point::min();
   ChatView transcript{raw_capture_};
   bool welcoming = initial.empty();
   std::vector<std::string> welcome_lines;
@@ -2132,6 +2365,21 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     });
     if (!busy && idle_work && (!raw_root || !raw_root->raw_owner_blocked()))
       idle_work();
+    // Bounded derived owner observations run outside keyboard handling/painting.
+    if (center && center->open() &&
+        (center->needs_refresh() ||
+         std::chrono::steady_clock::now() >= center_refresh)) {
+      redraw = center->refresh(center_sources, raw_capture_) || redraw;
+      center_refresh = std::chrono::steady_clock::now() + std::chrono::milliseconds(80);
+    }
+    if (inspector && inspector->open() &&
+        (inspector->needs_refresh() ||
+         std::chrono::steady_clock::now() >= inspector_refresh)) {
+      redraw = inspector->refresh(commands.get(), raw_capture_) || redraw;
+      inspector_refresh =
+          std::chrono::steady_clock::now() + std::chrono::milliseconds{80};
+      ui_capture.require();
+    }
     if (commands) {
       pollfd child_input_ready{STDIN_FILENO, POLLIN, 0};
       if (foreground_pty && !child_escape.empty() &&
@@ -2304,8 +2552,9 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           layout.finish();
           continue;
         }
+        const bool inspecting = inspection_open();
         const bool show_task_pane =
-            !welcoming && !tasks_hidden && width >= 90 && rows >= 18;
+            !inspecting && !welcoming && !tasks_hidden && width >= 90 && rows >= 18;
         const auto pane_width =
             show_task_pane ? std::clamp(width / 3, std::size_t{28}, std::size_t{36})
                            : 0;
@@ -2313,15 +2562,15 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         const auto inner_width = main_width - 4;
         const auto composed =
             terminal_powerword_lines("> " + composer.text(), inner_width);
-        const auto prefix = terminal_lines(
-            "> " + composer.text().substr(0, composer.cursor()), inner_width);
+        const auto caret = terminal_caret("> " + composer.text(),
+                                          {composer.cursor() + 2}, {inner_width});
         const auto draft_height = std::min<std::size_t>(
             {6, composed.size(), static_cast<std::size_t>(rows - 7)});
         const auto palette =
             composer.palette_lines(std::min<std::size_t>(8, rows - 5 - draft_height));
         const auto height =
             static_cast<std::size_t>(rows - 5) - draft_height - palette.size();
-        const bool show_sprite = !welcoming && mascot_enabled &&
+        const bool show_sprite = !inspecting && !welcoming && mascot_enabled &&
                                  (!tasks_expanded || show_task_pane) &&
                                  width >= (graphics_enabled ? 70U : 90U) &&
                                  height + 2 >= blackbird_sprite_height;
@@ -2330,24 +2579,27 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                                                  : width;
         // The square occupies a right gutter, including beside the first chat rows.
         // Wrap into the remaining columns so a sprite can never overwrite content.
-        const auto &lines = transcript.rows(header_width);
+        const std::vector<ChatRow> empty_lines;
+        const auto &lines = inspecting ? empty_lines : transcript.rows(header_width);
         if (welcoming && (geometry_changed || welcome_lines.empty()))
           welcome_lines =
               blackbird_startup(width - 4, height > 2 ? height - 2 : 0, mascot_enabled);
-        if (display_generation != transcript.generation()) {
+        if (!inspecting && display_generation != transcript.generation()) {
           scroll =
               0; // Evicted display history: return to live tail, never a false anchor.
           display_generation = transcript.generation();
         }
-        if (scroll > 0 && same_width)
+        if (!inspecting && scroll > 0 && same_width)
           scroll = terminal_scroll_after_output({.scroll = scroll,
                                                  .previous = previous_lines,
                                                  .before_trim = lines.size(),
                                                  .after_trim = lines.size(),
                                                  .height = height});
-        previous_lines = lines.size();
-        scroll = std::min(scroll, lines.size() > height ? lines.size() - height : 0);
-        const auto end = lines.size() - scroll;
+        if (!inspecting) {
+          previous_lines = lines.size();
+          scroll = std::min(scroll, lines.size() > height ? lines.size() - height : 0);
+        }
+        const auto end = inspecting ? 0 : lines.size() - scroll;
         const auto begin = end > height ? end - height : 0;
         layout.stage(2);
         grid.reset(width, rows);
@@ -2433,7 +2685,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             grid.line(welcome_lines.size() + 3,
                       {{"  Enter continues · / commands · Workflow reloads each turn.",
                         Ink::muted}});
-        } else if (!tasks_expanded || show_task_pane)
+        } else if (!inspecting && (!tasks_expanded || show_task_pane))
           for (std::size_t row = 0; row < height; ++row)
             if (begin + row < end)
               grid.line(row + 2, lines[begin + row]);
@@ -2441,7 +2693,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           placement = {0, width - blackbird_sprite_width, blackbird_sprite_width,
                        blackbird_sprite_height};
         const auto task_width = show_task_pane ? pane_width : main_width;
-        if (task_rows_dirty || task_render_width != task_width) {
+        if (!inspecting && (task_rows_dirty || task_render_width != task_width)) {
           task_rows = task_pane_rows(task_page, task_width, task_activity);
           task_render_width = task_width;
           task_rows_dirty = false;
@@ -2455,15 +2707,41 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             grid.line(row + task_start, task_rows[row], main_width + 2);
           grid.line(rows - 1, {{"/tasks up/down · fold ID", Ink::muted}},
                     main_width + 2);
-        } else if (tasks_expanded && !welcoming) {
+        } else if (!inspecting && tasks_expanded && !welcoming) {
           for (std::size_t row = 0; row < height && row < task_rows.size(); ++row)
             grid.line(row + 2, task_rows[row]);
-        } else if (!welcoming && !busy && !tasks_hidden &&
+        } else if (!inspecting && !welcoming && !busy && !tasks_hidden &&
                    !field(task_page, "items").array().empty()) {
           grid.line(1, {{terminal_lines("Tasks: " + task_summary(task_page) +
                                             " · /tasks expand",
                                         header_width)[0],
                          Ink::muted}});
+        }
+        std::optional<tui::InspectorLayout> inspection_layout;
+        if (inspecting) {
+          const bool centered = center && center->open();
+          auto caption = std::string{centered ? "COMMAND CENTER" : "COMMAND RESULTS"};
+          visit_inspection([&](auto &view) {
+            inspection_layout = unwrap(view.render(grid, {0, 2, main_width, height}));
+            if (!view.notice().empty())
+              caption += " · " + std::string{view.notice()};
+          });
+          caption += centered ? " · Ctrl-X close · Tab focus · Esc draft"
+                              : " · Ctrl-O close · Tab focus · Esc draft";
+          grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
+          grid.line(1, {{terminal_lines(caption, main_width).front(), Ink::heading}});
+        } else if (center_refused) {
+          grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
+          grid.line(1, {{terminal_lines("Command center unavailable; draft retained",
+                                        main_width)
+                             .front(),
+                         Ink::failure}});
+        } else if (inspector_refused) {
+          grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
+          grid.line(1, {{terminal_lines("Command inspector unavailable; draft retained",
+                                        main_width)
+                             .front(),
+                         Ink::failure}});
         }
         std::size_t menu_row = height + 2;
         for (const auto &line : palette) {
@@ -2499,7 +2777,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           return out + std::string{corners.second};
         };
         grid.line(menu_row++, {{border({"╭", "╮"}, hint), Ink::border}});
-        const auto cursor_row = prefix.size() - 1;
+        const auto cursor_row = caret.row;
         const auto draft_begin =
             cursor_row >= draft_height ? cursor_row - draft_height + 1 : 0;
         for (std::size_t row = 0; row < draft_height; ++row) {
@@ -2520,23 +2798,18 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         }
         grid.line(menu_row, {{border({"╰", "╯"}, ""), Ink::border}});
         const auto cursor_line = height + palette.size() + 4 + cursor_row - draft_begin;
-        // Derive cursor cells with the same terminal width rules, including UTF-8.
-        std::size_t cells = 0;
-        std::mbstate_t state{};
-        auto remain = std::string_view{prefix.back()};
-        while (!remain.empty()) {
-          wchar_t wide{};
-          const auto n = std::mbrtowc(&wide, remain.data(), remain.size(), &state);
-          if (n == 0 || n > remain.size())
-            break;
-          cells += static_cast<std::size_t>(std::max(0, ::wcwidth(wide)));
-          remain.remove_prefix(n);
-        }
+        const auto cells = caret.column.value;
         const auto display_cursor_line =
-            composer.palette_open() ? height + 3 : cursor_line;
+            inspecting && inspection_focused() && inspection_layout
+                ? inspection_layout->bounds.y + 1
+            : composer.palette_open() ? height + 3
+                                      : cursor_line;
         const auto display_cursor_cells =
-            composer.palette_open()
-                ? display_width(palette.front().substr(0, palette.front().size() - 1)) +
+            inspecting && inspection_focused() ? 1
+            : composer.palette_open()
+                ? terminal_caret(palette.front(), {palette.front().size() - 1},
+                                 {std::numeric_limits<std::size_t>::max()})
+                          .column.value +
                       1
                 : cells + 3;
         layout.stage(3);
@@ -2624,6 +2897,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     const auto dispatch = terminal_input_dispatch(
         composer, std::chrono::steady_clock::now(), escape_deadline, inputs[0].revents);
     redraw = redraw || dispatch.redraw;
+    if (dispatch.redraw)
+      visit_inspection([](auto &view) { view.focus_editor(); });
     if (!dispatch.read_input)
       continue;
     char bytes[128];
@@ -2734,7 +3009,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                           session_data ? &*session_data : nullptr,
                           session_control ? &*session_control : nullptr,
                           {}};
-        auto outcome = composer.feed(bytes[i], &origin);
+        auto outcome = composer.feed(bytes[i], &origin, inspection_focused());
         keyboard_process.progress(static_cast<std::size_t>(i) + 1);
         return outcome;
       });
@@ -2763,6 +3038,77 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           escape_deadline =
               std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
         redraw = true;
+        if (result.action == InputAction::center_toggle) {
+          if (ensure_center()) {
+            close_inspector();
+            center->toggle(result.source.record);
+          }
+        }
+        if (result.action == InputAction::inspect_toggle) {
+          if (ensure_inspector()) {
+            close_center();
+            inspector->toggle(result.source.record);
+          }
+        }
+        if (inspection_open()) {
+          std::optional<tui::InspectorAction> navigation;
+          switch (result.action) {
+          case InputAction::inspect_previous:
+            navigation = tui::InspectorAction::previous;
+            break;
+          case InputAction::inspect_next:
+            navigation = tui::InspectorAction::next;
+            break;
+          case InputAction::inspect_first:
+            navigation = tui::InspectorAction::first;
+            break;
+          case InputAction::inspect_last:
+            navigation = tui::InspectorAction::last;
+            break;
+          case InputAction::inspect_page_up:
+            navigation = tui::InspectorAction::page_previous;
+            break;
+          case InputAction::inspect_page_down:
+            navigation = tui::InspectorAction::page_next;
+            break;
+          case InputAction::inspect_focus_collection:
+            navigation = tui::InspectorAction::focus_collection;
+            break;
+          case InputAction::inspect_focus_detail:
+            navigation = tui::InspectorAction::focus_detail;
+            break;
+          case InputAction::inspect_toggle_focus:
+            navigation = tui::InspectorAction::toggle_focus;
+            break;
+          case InputAction::inspect_focus_editor:
+            visit_inspection([](auto &view) { view.focus_editor(); });
+            break;
+          case InputAction::inspect_previous_output:
+            if (center && center->open())
+              center->page(false, result.source.record);
+            else if (inspector && inspector->open())
+              inspector->page(false);
+            break;
+          case InputAction::inspect_next_output:
+            if (center && center->open())
+              center->page(true, result.source.record);
+            else if (inspector && inspector->open())
+              inspector->page(true);
+            break;
+          default:
+            break;
+          }
+          if (navigation) {
+            auto moved = Result<void>::success();
+            if (center && center->open())
+              moved = center->act(*navigation, result.source.record);
+            else if (inspector && inspector->open())
+              moved = inspector->act(*navigation);
+            if (!moved.has_value())
+              transcript += std::string{"\nInspection navigation refused: "} +
+                            error_name(moved.error().code) + "\n";
+          }
+        }
         if (result.action == InputAction::choose_command) {
           bool load = true;
           if (!composer.text().empty()) {
@@ -2830,16 +3176,16 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           cancel_turn();
         }
         if (result.action == InputAction::submit && !result.text.empty() && !quitting) {
-          if (commands && result.text == "/jobs") {
-            try {
-              transcript.append(ChatKind::assistant,
-                                unwrap(dump_json(commands->read(Value::object({})))) +
-                                    "\n");
-            } catch (const Error &error) {
-              transcript += std::string{"\nCommand discovery refused: "} +
-                            error_name(error.code) + "\n";
+          if (result.text == "/center") {
+            if (ensure_center()) {
+              close_inspector();
+              center->first_page(result.source.record);
             }
-            scroll = 0;
+          } else if (result.text == "/jobs") {
+            if (ensure_inspector()) {
+              close_center();
+              inspector->first_page(result.source.record);
+            }
           } else if (commands &&
                      (result.text == "/bg" || result.text.starts_with("/bg "))) {
             release_command(result.text == "/bg"

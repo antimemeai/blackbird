@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Literal cell expectations for production display packets on pinned engines."""
+import argparse
+import json
+from pathlib import Path
+import subprocess
+import signal
+import tempfile
+import uuid
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("executable", type=Path)
+    parser.add_argument("--backend", choices=("ghostty", "alacritty"), required=True)
+    parser.add_argument("--artifacts", type=Path, required=True)
+    parser.add_argument("--allow-native-red", action="store_true")
+    args = parser.parse_args()
+    artifacts = args.artifacts.resolve() / (args.backend + "-" + uuid.uuid4().hex[:10])
+    artifacts.mkdir(parents=True)
+    packet = artifacts / "display.vt"
+    native = subprocess.run([str(args.executable.resolve()), str(packet)],
+                            capture_output=True, text=True, timeout=10)
+    (artifacts / "native.txt").write_text(native.stdout + native.stderr)
+    if not args.allow_native_red:
+        assert native.returncode == 0, native.stderr
+    session = "blackbird-display-" + uuid.uuid4().hex
+    history = []
+
+    def call(*command):
+        result = subprocess.run([str(ROOT / "scripts/tui-test"), "--session", session,
+                                 "--json", "--failure-artifacts", str(artifacts), *command],
+                                capture_output=True, text=True, timeout=12)
+        history.append(dict(command=command, returncode=result.returncode,
+                            stdout=result.stdout, stderr=result.stderr))
+        assert result.returncode == 0, result.stdout + result.stderr
+        return json.loads(result.stdout).get("data", {})
+
+    # The child only copies the production painter packet, then remains alive.
+    writer = ("import os,sys; p=open(sys.argv[1],'rb').read();\n"
+              "while p:\n n=os.write(1,p);p=p[n:]\n"
+              "os.read(0,1)")
+    with tempfile.TemporaryDirectory(prefix="blackbird-display-") as temporary:
+        config = Path(temporary) / "driver.toml"
+        config.write_text("")
+        opened = False
+        def interrupted(number, _frame):
+            raise InterruptedError(f"display fixture interrupted by signal {number}")
+        prior = {number: signal.signal(number, interrupted)
+                 for number in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)}
+        signal.alarm(35)
+        failure = None
+        try:
+            opened = True
+            call("run", "--backend", args.backend, "--config", str(config),
+                 "--cols", "25", "--rows", "24", "--", "/usr/bin/python3", "-u",
+                 "-c", writer, str(packet))
+            call("expect", "text", "DONE", "--timeout", "4000")
+            cells = call("cells", "0", "0", "24", "24")["cells"]
+            (artifacts / "cells.json").write_text(json.dumps(cells, indent=2) + "\n")
+            state = call("state")
+            (artifacts / "state.json").write_text(json.dumps(state, indent=2) + "\n")
+            # Literal independently observed coordinates; no owned width scanner.
+            expected = {0: 1, 1: 3, 2: 1, 3: 0, 4: 0, 5: 1, 6: 1,
+                        10: 1, 13: 23, 14: 1, 15: 4, 21: 4, 22: 3}
+            if args.backend == "ghostty":
+                expected.update({7: 2, 8: 2, 9: 2, 11: 2, 12: 2, 16: 2, 17: 2, 18: 2, 20: 2})  # Explicit Unicode/2027 profile.
+            for row, column in expected.items():
+                assert cells[row * 24 + column]["char"].startswith("X"), (row, column)
+            for row in range(12):
+                if args.backend == "ghostty" or row not in (7, 8, 9, 11):
+                    assert cells[row * 24 + 20]["char"] == "│", (row, "border")
+            assert cells[6 * 24]["char"].startswith("�")
+            assert (state["cursor"]["x"], state["cursor"]["y"]) == (4, 23)
+        except BaseException as error:
+            failure = error
+        finally:
+            signal.alarm(0)
+            try:
+                if opened:
+                    call("close")
+            except BaseException as error:
+                if failure is None:
+                    failure = error
+                else:
+                    failure.add_note(f"Driver cleanup failed: {error!r}")
+            finally:
+                (artifacts / "commands.json").write_text(json.dumps(history, indent=2) + "\n")
+                for number, handler in prior.items():
+                    signal.signal(number, handler)
+        if failure is not None:
+            raise failure
+    print(f"{args.backend}: literal malformed/zero/style/fallback cells pass")
+
+
+if __name__ == "__main__":
+    main()

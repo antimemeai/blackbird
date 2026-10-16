@@ -10270,3 +10270,309 @@ is pushed, remove only the away worktree and its now-merged local
 `work/oxcart-interface-2026-10-16` branch. Remote feature history stays.
 The primary's active source/index remain untouched; only the already-owned
 generated Beads backup files were refreshed with supported `bd backup`.
+2026-10-15 — Operator requests repair intermission for all seven audited causes,
+starting with strong REDs, then return to TUI. Wrote cpp-intermission PLAN and
+owner subplans before source. Permanent old-source tests reproduce late original
+loss, unsafe numeric group signaling after child custody loss, permanent mailbox
+budget acceptance, ordinary domain refusals aborting turns, malformed display
+footprints/caret drift, and real rename followed by lost applied knowledge.
+Implement owned call-local statuses, final worker/retention checks, explicit child
+custody, immutable mailbox reservations, shared byte/cell cursor, preallocated
+file results and native applied observation. No new library.
+
+One independent implementation challenge per conceptual owner: fix private raw
+fixture signature/public refusal expectations; actual physical terminal literals
+fix VS16/modifier and bare-keycap authority; actual two-fault file test exposes
+new-turn escape from ordinary capacity stop. Persistent unretained-applied guard
+now fences later turns without replay. Reject speculative raw mailbox linkage
+throw (actual noexcept) and ZWSP width suspicion (actual named engine result).
+Queue broader descendant/group-cleanup certainty separately as arconaut-ruj.
+Initial domain6, child7 and final file8 checks pass; shared source gate, changed
+profile checks and matched measurements remain pending. All failed setups and
+counterexamples retained; do not claim candidate published/activated yet.
+
+First installed source gate stops at189/192 in250.77s, before lint/commit.
+Existing workflows312 catches raw token coloring changed by escaping first;
+restore raw token matching with one contiguous sanitizer/style map. Existing
+provider_raw overflow catches Darwin exiting leader: waitid succeeds pid0,
+killEPERM, WNOHANGwait0 falsely releases unreaped owner. Restore original blocking
+exact finalwait after proven custody, retain ECHILD/error authority revocation;
+queue broader denial/hang certainty in arconaut-ruj. Revised cleanup
+observation-EINTR test gets its own old-header RED, seven current GREEN; provider
+assertion unchanged. Root source review dispositions those concrete fixes.
+Independent operation BBM2 literal now includes intentional applied field;
+post-encoder failure returns retained allocation/applied fallback, with exactly
+one original primary and actual adapter receipt unchanged. Preserve unrelated Lua
+capacity and receipt-EIO oracles. Owning workflow/display6, child/provider8 and
+operation/file9 checks pass. Initial after Release unmeasured inputs/provenance
+retained separately; recapture final sources and rebuild for final comparisons.
+
+Final changed integration ASan/UBSan22/22 in87.46s. Final-source isolated TSan
+participants_raw passes57.63s at unchanged60s, preserving earlier60.42 aggregate
+timeout; queue narrow instrumentation headroom rather than declare it disproved.
+Earlier custody3/mailbox5 TSan checks pass with no changed ownership since.
+Linux final frozen-source Release38/38 includes blocked output and all three
+existing regressions. Correct stale incremental objects caused by epoch archive
+mtime, preserve failed setup and force only changed inputs current before actual
+rebuild; no stale binary timed. Fold learned source escaping/capacity/applied
+contracts into TUI_DOCTRINE. Restage final code/fixtures/reports for installed
+source gate; no further tracked/index/backup changes during it.
+
+Full192 Debug tests pass247.26s; complete native analysis then finds four lint
+issues in command mailbox move flow and three fixture patterns. No sourcecommit.
+Simplify mailbox to one argument move with immutable borrowed fields, retain
+promise/receipt sharing; two test parameters borrow conststrings. Extract the
+file fixture's actual fault+malloc body into a shared helper, keeping globalnew
+engine faults and a directly matched native malloc/free consume. All affected
+translation units analyze clean, scoped Debug/ASan/TSan owning checks pass.
+
+Ordinary Linux command_jobs newly added check stillfails finalreap (other19pass).
+Direct selector/errno/PID diagnostics prove a continued CommandJobs child, not
+legacy Child, remains WNOWAIT-waitable after filteredstatus ECHILD. Worker marks
+unavailable/reaped and skips nativefinalwait; test's finalwait reaps it. P1
+arconaut-vyi enters repair as critical eighth sibling with written WAIT_SELECTOR
+plan, deterministic actualchild RED first and true-loss/raw counterparts. Do not
+attribute intentional uncontained_exec launch policy to this bug or weaken the
+existing finalreap assertion. No new broad campaign, dependency or reviewpanel.
+
+2026-10-16 — Selector-aware child custody repair completes permanent old-source
+RED on actual Linux and Mac's explicitly modeled Linux return, plus raw and
+genuine externally-reaped counterparts. Only exit-inclusive ECHILD revokes exit
+custody; no new native poll or normalized result. Debugaffected5/5, ASan/UBSan5/5
+and TSannew3/3 pass; both owning translation units analyze clean. Root's one
+independent concrete code/oracle challenge finds no defect. Final native Linux
+overlay, installed source gate and matched performance remain delivery work.
+
+Full installed source gate passes195/195 Debug233.52s and complete C++/Lua
+analysis, no new suppression. Sourceabaee8a commits and pushes work branch.
+Final exact Linux native tree passes43/43 in18.91s, including the unchanged
+command_jobs final-reap assertion and new filtered/raw/lost cases. No further
+root build/check runs during timing. Matched120/120 normal runs yield960 raw
+endpoints; binaries unchanged. Startupp95 worsens28.089→112.375ms wide and
+27.400→230.796ms narrow, input medians nearly unchanged, paste/other endpoints
+mixed. Shared-host load unisolated; preserve all samples, no causal source or
+nonregression claim, append f8f. Publish exact metadata/deltas/source/build
+identities and terminal hashes, close eight repaired Beads issues, preserve ruj
+and ldt follow-ups, supported backup, checked text/data-only commit and push.
+No main merge/activation. Return to bounded shared collection/inspector, first
+real command-result detail then current-session center; Lua composition follows.
+
+Publication checks:19 document link sets resolve;9 JSON files and1198 JSONL
+records parse; tranche ledger keeps its existing10-field tab format. Corrected
+the new row's literal escape to actual tabs. Native/tooling source remains
+identical to deliveredabaee8a. Beads closes all eight and backup writes164 issues,
+751 events and120 dependencies. Text/data publication uses the operator's
+explicit documentation-only hook exception; unchanged observer/report copies
+are study artifacts from the measured run, not active tooling additions.
+
+2026-10-16 — Operator resumes TUI campaign after repair intermission. Study real
+scene host/terminal/CommandJobs seams and existing acquired Ito/HCI design. Write
+tui-command-inspector PLAN, staff component/owner plans and bounded read study.
+Claim arconaut-rhi.3.4. Permanent actual-main Microsoft test on45b1454 binary
+fails exact Ctrl-O COMMAND RESULTS visibility with nonempty draft, preserving
+its real terminal artifacts. Opening must be a local read-only instrument, not
+JSON transcript projection or a model turn. Staff own generic keyed controls
+and pure bounded owner query; root owns actual input/raw/view adapter.
+
+Command-inspector implementation: pure CommandJobs try-observation bounds catalog8
+plus selected1, retained4096bytes/16chunks with logarithmic seek and native refs.
+Shared SceneHost accepts safe immutable collection/detail properties; native
+controls preserve keyed selection and source reading anchors across reflow.
+Root reviews owner/component once with no findings. Actual Ctrl-O and /jobs
+adapter uses the sole Composer, refreshes outside input/paint and prepays exact
+4087 CONTROL via nonblocking try before adoption. Pressure preserves last scene
+and successful reference; source bytes resolve to original2008 records.
+
+Direct integration GREEN: adapter4/4 including separate-producer runtime pressure;
+actual-main Microsoft Ghostty and Alacritty draft/navigation/real-source/no-rerun;
+blocked stdout3 episodes;16 readable baselines including2 explicit new ones and
+14 unchanged. Existing command_jobs PTY/station and terminal5/5 pass31.03s.
+PTY discovery intentionally moves from old /jobs JSON scraping to explicit Lua
+process read with exact fixture PID and one canonical ID. First adapter compile
+missed context.hpp declarations, recorded as setup failure then corrected, never
+RED. Initial actual old-source behavioral REDs remain in each unit report.
+Lazy view-construction refusal now leaves conversation/draft usable with native
+feedback; no domain cancellation. Independent integration review, affected
+sanitizers/Linux, full source gate and matched performance remain underway.
+
+Single independent integrated input/raw/adapter review finds no concrete defect;
+REVIEW.md records scope. Final source ready for installed206-case Debug/full
+C++/Lua hook, affected sanitizer and matched-profile Linux checks. Their results
+and actual performance will follow without implying completion in advance.
+
+ASan+UBSan12/12 and TSan6/6 pass scoped native checks without diagnostics.
+First installed gate205/206 in286.42s fails existing raw_recorder_cuts60.08s
+explicit-recovery episode, before lint/commit. Preserve exact full Debug log and
+append existing arconaut-3wt, no duplicate or cause claim. Single unchanged stop
+mode passes; bounded stage-instrumented diagnostic reproduces trial24 before
+recover(): parent handle retirement waits while fixture recorder poll waits for
+a later stop. Owning fixture synchronization fix underway with the same checks
+and watchdog; product raw semantics are not diagnosed by this timeout. Linux
+build continues; timing waits.
+
+Recorder fixture cause: selected one-byte producer STREAM space notices were
+misclassified as DGRAM lifecycle replies. Strengthened permanent fixture arms a
+real lane notification, requires STREAM notice with zero stop arms, then exactly
+one DGRAM arm and all original stop/wake/literal assertions. Old-selector scratch
+raises the actual wrong-arm error (behavioral RED); corrected full Mac fixture
+passes0.58s, owning tidy clean, root single review no finding. Final Linux source
+passes57/57 in34.99s plus fixture-only overlay1/1 in0.17s; final native tree991b8f,
+product binary unchanged451271fc. Full failed gate preserved, arconaut-3wt remains
+open pending source delivery. Retry installed normal hook; no widened watchdog,
+source bypass or new runtime repair. Timing waits until all owned checks stop.
+
+Hook retry passes206/206 Debug in226.78s, including repaired recorder0.79s in
+parallel suite, then full native analysis rejects15 diagnostics across four new
+translations. Preserve complete attempt02 output. Fix plans recorded before
+edits: required direct CollectionInspector member removes empty adapter state;
+typed cell widths/Rect remove swappable renderer scalars; bound local selection
+proves optional access. Test helpers gain scoped part and named path arguments,
+explicit local detail checks and same invalid Ink byte255 through fixed-byte
+representation. No oracle/suppression/watchdog changes. Run actual owning tidy
+and affected semantic/screen/sanitizer/Linux rechecks before normal full hook.
+
+Concrete lint remediations now pass all four actual owning translation checks.
+Component2/2, adapter4/4, relinked actual-main Ghostty/blocked/snapshots3/3 in9.91s
+and affected ASan6/6 plusTSan4/4 remain green with unchanged oracles. Final Linux
+overlay native treea23d707 is being qualified under same profile; no timing yet.
+Stage intended source/docs/Beads only, then retry full installed source hook.
+
+Final installed hook passes206/206 Debug in249.87s plus complete235-translation
+C++ analysis and owned Lua checks. Source52f910372cd47bf4e95ed9de16dccfa3d87bc888
+committed/pushed on work/tui-reference-2026-10-15; no bypass. Final Linux58/58
+in35.04s uses exact native treea23d707 and Release binary0e8e1b513bfc95ab1da7ee3b45e3735011bcc1f204bd75d11b7c3209034a8ac6.
+All421 native files and one driver adjunct match delivered Git contents/executable
+bits. All owned builds/checks stop before the single matched120-process round.
+Observer completes120/120, no failure/rerun; deltas mixed. Actual reports and
+raw endpoints follow. Fetch-only local tarfile compatibility error occurs after
+remote completion; retain original error and retrieve the existing round only.
+No main merge or running-process activation.
+
+Matched timing window06:53:35–06:53:48UTC completes120/120 processes and960
+endpoints,30 trials/source/geometry. Preserve all120 terminal originals and every
+tail. Wide startup p95 103.086→26.076ms; narrow paste44.887→56.199ms,
+medians39.254→40.222ms. Mixed deltas (p95down9/up7), shared host load unisolated;
+no source-causal or inspector-latency claim. Publish exact inputs/profiles/raw
+timestamps/deltas and10-field tab ledger. Append f8f and keep open. Close3wt
+and bounded inspector issue rhi.3.4; parent rhi.3 remains in_progress for center
+reuse and separate Lua bridge. Supported Beads backup follows. Final publication
+is docs/data plus unchanged measured observer/report study artifacts, with native
+source identical to52f9103. Use operator's checked text-only hook exception, no
+repeat of the settled source gate.
+
+Final text/data publication checks:19 document link sets resolve,12 JSON files
+and1210 JSONL records parse, tranche ledger retains10 actual TAB fields with one
+new row, and native tracked source remains identical to52f9103. Supported backup
+contains165 issues/761 events/121 dependencies. Publish via the explicit docs/data
+exception; unchanged observer/report are measured study artifacts under papers,
+not active tool/source additions.
+
+## 2026-10-16 — current-session center begins
+
+Operator send-it continues rhi.3 with second application of the shared native
+collection/inspector. Three staff studies establish pure bounded task observation
+on the existing UI reducer, a smaller guarded participant lifetime endpoint, and
+the actual-main inspection episode. Integrated PLAN.md records theory, owners,
+finite costs, actual scope and source cuts, Ctrl-X routing,4088/4089 literal/adopt
+recording and direct RED/GREEN/review/qualification. No new library, scheduler,
+command-task relation index, Lua VM or AFL interaction. Task and participant lanes
+now implement their own contracts; root owns adapter/main/input/raw integration.
+
+Actual-old-main Ctrl-X/mid-cursor behavioral RED captured with pinned Ghostty;
+actual old task read allocation RED and participant unavailable-seam runtime RED
+also fail their stated behaviors. Native task observation then passes6/6 and
+owning tidy. Root's one task source/oracle challenge finds no defect. UI wiring
+now retains successful task publication scope/ingress under existing mutex and
+try-observes outside input/paint. Failed task publication remains stale until
+an actual complete snapshot, including after a later contiguous delta; direct
+terminal semantic checks exercise that distinction. Participant owner9 focused
+new/existing cases pass pending review. Root extends real blocked-output and
+foreground-PTY input oracles to Ctrl-X without changing cancellation authority.
+
+Participant observer final focused9/9 passes Debug1.96s, ASan+UBSan4.82s and
+TSan9.95s; owner/test analysis clean and root one challenge no defect. Initial
+integrated Debug build succeeds. Actual-main Ghostty and Alacritty complete
+local-owner episodes pass; root oracle review tightens task-title waiting against
+old bound-participant detail, then both counterparts pass again. Exactly2 new
+readable expectations adopted after inspection; all18 compare, original16 intact.
+Terminal semantic, real UI publication-guard Busy, and Ctrl-X private-PTY priority
+pass. New blocked episode initially expected welcome although seeded tasks replace
+that line; corrected exact Tasks readiness marker, then all4 original-pressure/
+input/cancel/resize/draft episodes pass unchanged assertions. Root source analysis
+emits no diagnostics and explicit second task-publication/terminal analysis exits0.
+Native center review identifies finite credit, retirement identity, compact
+coverage/presentation and overflow defects; integrated review identifies stale
+navigation input origin. Owning fixes and direct native checks underway within
+these single review layers; full source qualification/performance not yet claimed.
+
+Final integrated relink includes exact two-reference control credit, explicit
+retired binding identity, compact per-source coverage, saturating view incarnation,
+current navigation input origin and selected stop/capture/source-availability facts.
+Native center3/3 and final integration9/9 pass35.64s; all18 grids unchanged outside
+the2 new specifications. ASan+UBSan integration12/12 passes7.11s and TSan5/5
+passes6.79s. Both sanitizer leases returned. Linux final native snapshota019f4e4
+now builds/checks its declared30-target/75-case Release profile; no timing.
+All owning source/test analysis clean. Prepare stable source/docs/Beads index for
+normal installed full Debug/C++/Lua hook; no source bypass or live activation.
+
+Final-source Alacritty actual-main counterpart passes after relink.17 document
+link sets resolve; all432 native inputs plus driver adjunct match Linux snapshot
+a019f4e4. All source owners are stable and explicitly instructed not to write
+tracked files/index/Beads during installed hook. Source issue remains in progress
+for whole-source gate, Linux qualification and matched performance.
+
+Normal installed source hook succeeds:222/222 Debug259.53s, complete240 actual
+C++ translations and owned Lua analysis. Source d0e3b2efa68d1dc3b4310ee06f483a11d6d44786
+committed/pushed on work/tui-reference-2026-10-15 without bypass. Linux exact final
+native treea019f4e4 passes75/75 in51.48s, binary4af92b452b5bd6a19345d2a402f6d7227d84f546126ab6914873748629db0b8e.
+All owned commands stop before one matched round08:34:16–08:34:29UTC:120/120
+processes and960 endpoints normal, no exclusion/repeat. Wide startup p95 falls
+111.492→29.310ms; narrow rises26.978→82.450ms; paste p95 falls both geometries.
+Publish all samples/profile/deltas/terminal originals and actual10-field TAB row.
+Shared-host conditions remain uncontrolled; common scenarios do not open center.
+Append f8f tails and keep open. Ordinary static long-metadata clipping-marker
+finding queued as5z4, no authority/data-loss issue and no reopened source layer.
+Close bounded center rhi.3.5; parent stays in progress for Lua bridge/instrument.
+Supported Beads backup and checked docs/data publication follow, with native
+source identical to d0e3b2e. No main merge, live activation or AFL interaction.
+
+Final publication checks20 document link sets,10 JSON files and120 JSONL sample
+records; ledger keeps10 actual TAB fields and one center row. Measured observer/
+report hashes match their actual run; tracked native source remains identical to
+d0e3b2e. Supported backup preserves167 issues/769 events/123 dependencies; rhi.3.5
+is closed, parent in progress. Use the explicit docs/data-only hook exception for
+this publication, with no repeat of settled source qualification.
+
+## 2026-10-16 — TUI center mainline integration
+
+Operator explicitly requests merge then proceed. Mainline is master46f3204;
+work/tui-reference-2026-10-15 is c0989cd. Integrate on
+work/tui-mainline-integration-2026-10-16, preserving registered Responses/fresh
+startup and Oxcart application alongside the repaired owners and TUI instruments.
+Product source merges automatically; retain both journal streams and all Linux
+check scripts. The supported current database contains every mainline event,
+dependency and label; four differing issue rows are later TUI updates. Preserve
+both original backups in ignored context, refresh through bd backup, and retain
+167 issues/769 events/123 dependencies without a restore or database rewrite.
+
+Combined source receives one independent concrete integration review, direct
+application/provider/startup/center/input checks and the normal installed full
+Debug/C++/Lua source hook. No new assurance layer or unrelated audit. Push the
+qualified integration checkpoint, fast-forward/push master to that exact source,
+then resume the separate Lua composition/action bridge with targeted staff studies,
+written contract and behavioral REDs. No running-session activation, new dependency,
+artwork changes or AFL interaction. Logs under context/tui-mainline-integration-2026-10-16.
+
+One independent combined-source source challenge finds no concrete defect.
+Direct combined Debug13/13 passes36.86s. Both original issue backups retained;
+all resolved sources staged for the normal installed full source hook. No tracked
+files/index/Beads writes during qualification. Linux counterpart runs separately.
+
+First installed combined gate226/227 in296.84s stops before lint: command-PTY
+pressure30s timeout,246402bytes unoffered. One unchanged diagnostic passes14.119s
+with316798written and1765EAGAIN. Concrete sampling-order defect fixed under written
+PTY_PRESSURE plan, without deadline/byte/assertion weakening; CTest now retains
+unique artifacts. Corrected actual fixture passes12.906s,316798written/2EAGAIN,
+all lifecycle and closed-original assertions. One independent diff challenge
+finds no defect. Historical timeout cause remains unknown; queued arconaut-8j8.
+Prepare stable index/backup for second required source gate, not an assurance panel.

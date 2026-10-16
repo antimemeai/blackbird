@@ -1,0 +1,13 @@
+styled-grid-v1
+size 24 8
+cursor none
+state selected=alpha;focus=detail;target=alpha
+|{selected:> alpha · retained resul}|
+|{failure:Exit 7 \| native reaped}{normal:  }|
+|{muted:Retained 30 \| received 3}|
+|{muted:0}{normal:                       }|
+|{normal:same source · é}{code: 界}{normal:<continuation: >      }|
+|{normal:line 2: actual bounded c}|
+|{normal:ontent                  }|
+|{normal:line 3: more readable ou}|
+cell-widths 4:16=2 4:17=0

@@ -1,0 +1,11 @@
+# Adapter oracle lint remediation
+
+The full source hook passed all 206 Debug cases, then reported seven concrete diagnostics in command_inspector_test.cpp. Replace the numeric output-part argument with a scoped enum, and pass the worker's directory/executable in a named aggregate so call sites state both path roles. For independently decoded source/detail checks, branch explicitly on optional presence before binding a local detail reference; retain the exact native identity, extent, frontier, applied-reference and reconstructed-byte assertions. No suppression, product edit, deadline change or weaker pressure oracle is needed.
+
+Run the owning translation-unit clang-tidy with the existing Debug compilation database, rebuild only command_inspector_test after the Debug lease is released, then run its four registered cases. The affected component2+adapter4 cases under ASan+UBSan and component2+adapter semantic/runtime-pressure cases under TSan check the changed fixture and renderer while retaining the original sanitizer scenario scope.
+
+## Results
+
+Implemented only tests/command_inspector_test.cpp. OutputPart makes the payload step nonconvertible with its character tag. WorkerPaths uses designated directory/executable fields at each real worker launch. Each decoded adopted observation copies its optional detail once into an immutable local; explicit has_value branches precede bound detail access. Identity, native original coverage, frontier, exact applied-reference, safe rendering and physical CONTROL-pressure assertions remain unchanged.
+
+The first two focused lint runs retained two optional diagnostics on member access despite explicit member checks (oracle-lint-remediation.log and oracle-lint-remediation-final.log); these are preserved. The final immutable-local form passes the owning translation-unit clang-tidy with exit 0 and empty oracle-lint-remediation-local.log. Final Debug adapter cases pass 4/4 in 1.01 seconds. The affected ASan+UBSan component2+adapter4 cases pass 6/6 in 3.34 seconds; affected TSan component2+adapter semantic/runtime-pressure cases pass 4/4 in 5.97 seconds. No sanitizer diagnostics, suppressions or deadline changes. Exact logs use oracle-lint-debug-final-, oracle-lint-asan-, and oracle-lint-tsan- build/checks prefixes. Scoped git diff --check also passes. All Ninja leases and checks are idle.

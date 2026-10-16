@@ -1,0 +1,9 @@
+styled-grid-v1
+size 24 4
+cursor none
+state component rows
+|{normal:A️X A🏽<continuation: >X A⃣X              }|
+|{heading:é}{normal:X                      }|
+|{normal:X ​X                     }|
+|{normal:                        }|
+cell-widths 0:4=2 0:5=0

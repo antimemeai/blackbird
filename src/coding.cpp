@@ -2133,8 +2133,9 @@ RawProgramContext program_origin(const RawOperationTrace *operation,
                     : std::nullopt,
           generation.bytes()};
 }
+template <class Refused>
 std::string program_encoded(RawProgramCall &trace, std::uint8_t kind,
-                            const Value &value) {
+                            const Value &value, Refused &&refused) {
   const ValueLimits limits{65536, 500000, 128};
   auto data = trace.data(49 + limits.bytes);
   const auto origin = trace.context();
@@ -2152,6 +2153,8 @@ std::string program_encoded(RawProgramCall &trace, std::uint8_t kind,
                     std::array{raw_native(success)});
     return result;
   });
+  if (!encoded.has_value() && encoded.error().code == ErrorCode::capacity)
+    std::forward<Refused>(refused)();
   return unwrap(std::move(encoded));
 }
 template <class F>
@@ -2170,7 +2173,7 @@ bool program_syntax(RawProgramCall &trace, std::uint8_t kind, std::string_view s
   });
 }
 } // namespace
-Value CodingEngine::program_config(const Value &arguments) {
+Value CodingEngine::program_config(const Value &arguments, DomainAdmission *admission) {
   const auto origin = program_origin(operation_trace_, turn_trace_, generation_);
   RawProgramCall trace{arguments.find("proposal") ? std::uint8_t{2} : std::uint8_t{1},
                        &origin};
@@ -2197,8 +2200,15 @@ Value CodingEngine::program_config(const Value &arguments) {
         (void)prompt_cache_mode(*cache);
       const auto &modules = field(*proposal, "modules").array();
       trace.stage(2);
-      if (modules.size() > 32 || program_encoded(trace, 0, *proposal).size() > 65536)
+      if (modules.size() > 32) {
+        if (admission)
+          admission->reject(AdmissionResource::program_modules, modules.size(), 32);
         throw Error{ErrorCode::capacity};
+      }
+      (void)program_encoded(trace, 0, *proposal, [&] {
+        if (admission)
+          admission->reject(AdmissionResource::program_encoding);
+      });
       std::set<std::string> names;
       for (const auto &module : modules) {
         trace.stage(3);
@@ -2381,7 +2391,8 @@ Value CodingEngine::define_tool(const Value &arguments) {
     else
       *found = definition;
     trace.stage(2);
-    if (next.array().size() > 32 || program_encoded(trace, 2, next).size() > 65536)
+    if (next.array().size() > 32 ||
+        program_encoded(trace, 2, next, [] {}).size() > 65536)
       throw Error{ErrorCode::capacity};
     if (trace.enabled() && !program_issuer_)
       program_issuer_ = RawProgramIssuer::prepare();
@@ -2773,6 +2784,9 @@ void CodingEngine::poll_commands() {
     throw *command_failure_;
 }
 void CodingEngine::poll_participants() { participants_->drain(); }
+ParticipantObservationReader CodingEngine::participant_observer() const {
+  return participants_->observer();
+}
 void CodingEngine::shutdown_participants() {
   participants_->shutdown();
   if ((!cancelled || !cancelled()) && log_.root().state() == JournalWriterState::live)
@@ -3136,9 +3150,20 @@ Value CodingEngine::operation(
     const std::function<Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
                               CommandTaskActivity *, RawRetainedExec *)> &body,
     RawProviderOperationContext *provider_operation,
-    const CommandStartStatus *command_start) {
+    const CommandStartStatus *command_start, const DomainAdmission *domain_admission,
+    const FileEffectObservation *file_effect) {
   auto &root = log_.root();
+  struct FileObservationFence {
+    const FileEffectObservation *effect;
+    bool &blocked;
+    bool retained = false;
+    ~FileObservationFence() {
+      if (effect && effect->applied() && !retained)
+        blocked = true;
+    }
+  } file_observation{file_effect, file_effect_unretained_};
   RawOperationTrace trace{root};
+  RawCaptureFailureScope operation_capture{trace.enabled()};
   std::optional<RawEventRef> parent;
   if (operation_trace_ && operation_trace_->reference().ordinal)
     parent = operation_trace_->reference();
@@ -3171,6 +3196,8 @@ Value CodingEngine::operation(
       throw Error{ErrorCode::interrupted};
     trace.callback(1, static_cast<bool>(effect_policy),
                    [&] { effect_policy(name, input); });
+    if (file_effect_unretained_)
+      throw Error{ErrorCode::incomplete};
     if (capacity_stopped_ || operation_depth_ >= 16) {
       capacity_stopped_ = true;
       throw Error{ErrorCode::capacity};
@@ -3399,10 +3426,16 @@ Value CodingEngine::operation(
     Value result;
     std::string output;
     bool adapter_capacity = false, timed_out = false, persistent_command = false,
-         command_refused = false;
-    auto prepare = [&](Value adapter_result, const std::optional<Error> &effect_error) {
+         command_refused = false, domain_refused = false;
+    auto prepare = [&](Value adapter_result, const std::optional<Error> &effect_error,
+                       bool presentation_fallback = false) {
       result = effect_error ? error_value(*effect_error) : std::move(adapter_result);
-      if (name == "program_config" && effect_error) {
+      if (effect_error && file_effect && file_effect->applied())
+        result.object().emplace_back("effect_outcome", Value{"applied"});
+      domain_refused = domain_admission && domain_admission->refusal() &&
+                       effect_error && effect_error->code == ErrorCode::capacity &&
+                       !operation_capture.error() && !root.raw_owner_blocked();
+      if (name == "program_config" && effect_error && !domain_refused) {
         result.object().emplace_back(
             "message",
             Value{
@@ -3441,7 +3474,8 @@ Value CodingEngine::operation(
                                                     {"start", Value{Number{"1"}}},
                                                     {"end", Value{Number{"20"}}}})}}));
       }
-      if ((name == "tasks_read" || name == "tasks_edit") && effect_error)
+      if ((name == "tasks_read" || name == "tasks_edit") && effect_error &&
+          !domain_refused)
         result.object().emplace_back(
             "message",
             Value{
@@ -3456,8 +3490,8 @@ Value CodingEngine::operation(
                 "titles512 bytes, notes2048 bytes. No changes accepted for an invalid "
                 "batch."});
 
-      adapter_capacity = name == "process" && effect_error &&
-                         effect_error->code == ErrorCode::capacity;
+      adapter_capacity = domain_refused || (name == "process" && effect_error &&
+                                            effect_error->code == ErrorCode::capacity);
       command_refused = command_start && effect_error &&
                         effect_error->code == ErrorCode::capacity &&
                         !command_start->worker_started &&
@@ -3486,6 +3520,21 @@ Value CodingEngine::operation(
                          "output/controls or explicitly archive an eligible completed "
                          "job before choosing further work."});
       }
+      if (domain_refused) {
+        const auto &refusal = *domain_admission->refusal();
+        result.object().emplace_back("resource",
+                                     Value{admission_resource_name(refusal.resource)});
+        result.object().emplace_back("effect_outcome", Value{"not_started"});
+        result.object().emplace_back("attempt", Value{hex_identity(attempt.bytes())});
+        if (refusal.count)
+          result.object().emplace_back("count", Value{Number{*refusal.count}});
+        if (refusal.limit)
+          result.object().emplace_back("limit", Value{Number{*refusal.limit}});
+        result.object().emplace_back(
+            "message", Value{"Resource owner refused this request before publication; "
+                             "prior accepted work is unchanged. Inspect the named "
+                             "resource and choose further work. No automatic retry."});
+      }
       timed_out = (effect_error && effect_error->code == ErrorCode::io &&
                    effect_error->detail == ETIMEDOUT) ||
                   (name == "exec" && result.find("timed_out") &&
@@ -3500,11 +3549,13 @@ Value CodingEngine::operation(
         }
       }
       auto encode = [&] {
-        auto encoded = encode_original(result, RawOperationOriginal::primary,
-                                       result_data ? &*result_data : nullptr,
-                                       provider_result
-                                           ? std::optional{provider_result->reference()}
-                                           : std::nullopt);
+        auto encoded = encode_original(
+            result,
+            presentation_fallback ? RawOperationOriginal::fallback
+                                  : RawOperationOriginal::primary,
+            !presentation_fallback && result_data ? &*result_data : nullptr,
+            provider_result ? std::optional{provider_result->reference()}
+                            : std::nullopt);
         result_data.reset();
         output.assign(reinterpret_cast<const char *>(encoded.data()), encoded.size());
       };
@@ -3533,17 +3584,22 @@ Value CodingEngine::operation(
       CommandTaskActivity *activity;
       RawRetainedExec *raw_exec;
       Value result;
-      std::optional<Error> error;
+      std::optional<Error> error, presentation_error;
+      const FileEffectObservation *file_effect;
+      const RawCaptureFailureScope &capture;
+      RetainedState &root;
       std::exception_ptr deferred;
       std::optional<RawRegionPrepaidScope> receipt_scope;
       bool dispatched = false;
       Boundary(decltype(fn) body_fn, decltype(prepare) &preparation,
                RawOperationTrace &owner, InvocationId actual_invocation,
                DefinitionGenerationId actual_generation, CommandTaskActivity *task,
-               RawRetainedExec *actual_exec)
+               RawRetainedExec *actual_exec, const FileEffectObservation *effect,
+               const RawCaptureFailureScope &capture_scope, RetainedState &retained)
           : fn(body_fn), prepare_result(preparation), trace(owner),
             invocation(actual_invocation), generation(actual_generation),
-            activity(task), raw_exec(actual_exec) {}
+            activity(task), raw_exec(actual_exec), file_effect(effect),
+            capture(capture_scope), root(retained) {}
       Result<void> dispatch(const EffectIntent &intent) override {
         receipt_scope.reset();
         if (raw_exec)
@@ -3595,8 +3651,29 @@ Value CodingEngine::operation(
           raw_exec->resume();
         trace.stage(5);
         if (!deferred) {
+          auto recover_allocation = [&] {
+            if (!file_effect || !file_effect->applied() || capture.error() ||
+                root.raw_owner_blocked())
+              return;
+            // One bounded presentation attempt; the adapter is never called again.
+            // Keep its actual receipt separate from this preparation failure.
+            presentation_error = Error{ErrorCode::allocation};
+            try {
+              prepare_result(Value{}, error ? error : presentation_error, true);
+              deferred = nullptr;
+            } catch (...) {
+              // Preserve the first preparation failure; admission will fence below.
+            }
+          };
           try {
             prepare_result(std::move(result), error);
+          } catch (const std::bad_alloc &) {
+            deferred = std::current_exception();
+            recover_allocation();
+          } catch (const Error &failure) {
+            deferred = std::current_exception();
+            if (failure.code == ErrorCode::allocation)
+              recover_allocation();
           } catch (...) {
             deferred = std::current_exception();
           }
@@ -3612,7 +3689,10 @@ Value CodingEngine::operation(
                invocation,
                admitted_generation,
                task_run.activity,
-               exec_admission ? &*exec_admission : nullptr};
+               exec_admission ? &*exec_admission : nullptr,
+               file_effect,
+               operation_capture,
+               root};
     auto settle = [&](const RetainedEvent &event, bool settlement, bool fallback) {
       const auto &observation = std::get<AttemptObservationEvent>(event.body);
       const auto observation_bytes = observation.observation.size();
@@ -3734,8 +3814,13 @@ Value CodingEngine::operation(
     }();
     trace.stage(6);
     unwrap(report.recording);
-    if (boundary.deferred)
+    if (boundary.deferred) {
+      if (file_effect && file_effect->applied())
+        capacity_stopped_ = true;
       std::rethrow_exception(boundary.deferred);
+    }
+    if (!boundary.error && boundary.presentation_error)
+      boundary.error = boundary.presentation_error;
     if (!report.dispatched)
       throw Error{ErrorCode::conflict};
     if (name == "exec" && boundary.error &&
@@ -3804,6 +3889,7 @@ Value CodingEngine::operation(
                                     {"operation", Value{std::string{name}}}})});
       result_id = hex_identity(identity.bytes());
       result_record = root.fact_count() - 1;
+      file_observation.retained = true;
     } catch (const Error &e) {
       if (e.code != ErrorCode::capacity)
         throw;
@@ -3812,6 +3898,7 @@ Value CodingEngine::operation(
       boundary.error = e;
       adapter_capacity = false;
       command_refused = false;
+      domain_refused = false;
       if (command_jobs_->active()) {
         command_failure_ = e;
         const auto registry = command_jobs_->read(Value::object({}));
@@ -3821,6 +3908,8 @@ Value CodingEngine::operation(
         command_jobs_->shutdown();
       }
       result = error_value(e);
+      if (file_effect && file_effect->applied())
+        result.object().emplace_back("effect_outcome", Value{"applied"});
       auto fallback = encode_original(result, RawOperationOriginal::fallback, nullptr);
       output.assign(reinterpret_cast<const char *>(fallback.data()), fallback.size());
     }
@@ -3828,9 +3917,13 @@ Value CodingEngine::operation(
         !adapter_capacity) {
       capacity_stopped_ = true;
       RetainedState::MaintenanceScope maintenance{root};
-      constexpr std::string_view message =
-          "effect outcome unknown; no replay; earlier originals retained, rejected "
-          "bytes not retained";
+      const std::string_view message =
+          file_effect && file_effect->applied()
+              ? "file replacement applied; result capture failed; no replay; earlier "
+                "originals retained"
+              : "effect outcome unknown; no replay; earlier originals retained, "
+                "rejected "
+                "bytes not retained";
       const auto original = trace.original(RawOperationOriginal::capacity_message,
                                            raw_text(message), nullptr);
       trace.source(RawOperationOriginal::capacity_message, original);
@@ -3917,10 +4010,15 @@ Value CodingEngine::operation(
         capacity_stopped_ = true;
         adapter_capacity = false;
         command_refused = false;
+        domain_refused = false;
         boundary.error = recorded.error();
         result = error_value(*boundary.error);
+        if (file_effect && file_effect->applied())
+          result.object().emplace_back("effect_outcome", Value{"applied"});
         const std::string bounded =
-            "capacity stop after dispatch; outcome unknown; no replay";
+            file_effect && file_effect->applied()
+                ? "capacity stop after dispatch; file replacement applied; no replay"
+                : "capacity stop after dispatch; outcome unknown; no replay";
         const auto bounded_raw =
             std::as_bytes(std::span{bounded.data(), bounded.size()});
         disposition = AttemptDisposition::unknown;
@@ -3949,7 +4047,9 @@ Value CodingEngine::operation(
                                std::chrono::steady_clock::now() - began)
                                .count();
       const auto outcome =
-          command_refused ? "refused; not started"
+          (command_refused || domain_refused) ? "refused; not started"
+          : boundary.error && file_effect && file_effect->applied()
+              ? "file replacement applied; result failed"
           : persistent_command && !boundary.error && !result.find("exit_code")
               ? "backgrounded"
           : timed_out && name == "exec"                ? "timed out; outcome unknown"
@@ -3971,8 +4071,11 @@ Value CodingEngine::operation(
         [&] {
           process_output("\n[" + std::string{name} + ": " +
                          error_name(boundary.error->code) + "]" +
-                         (command_refused ? " " + string_field(result, "message")
-                                          : std::string{}) +
+                         ((command_refused || domain_refused)
+                              ? " " + string_field(result, "message")
+                          : file_effect && file_effect->applied()
+                              ? " file replacement applied; no replay"
+                              : std::string{}) +
                          "\n");
         });
     if (command_failure_ && boundary.error &&
@@ -4679,6 +4782,8 @@ Value CodingEngine::call(std::string name, Value arguments) {
   if (name == "provider")
     throw Error{ErrorCode::invalid_range};
   CommandStartStatus command_start;
+  DomainAdmission domain_admission;
+  FileEffectObservation file_effect;
   return operation(
       name, arguments,
       [&](OperationAttemptId attempt, InvocationId invocation,
@@ -4838,7 +4943,7 @@ Value CodingEngine::call(std::string name, Value arguments) {
           });
         }
         if (name == "program_config")
-          return program_config(arguments);
+          return program_config(arguments, &domain_admission);
         if (name == "module_source")
           return module_source(arguments);
         if (name == "tool_define")
@@ -5286,9 +5391,11 @@ Value CodingEngine::call(std::string name, Value arguments) {
           return participants_->read(arguments);
         if (name == "participant_send")
           return participants_->send(
-              arguments, {{},
-                          RawParticipantIdentities{attempt.bytes(), invocation.bytes(),
-                                                   admitted_generation.bytes()}});
+              arguments,
+              {{},
+               RawParticipantIdentities{attempt.bytes(), invocation.bytes(),
+                                        admitted_generation.bytes()}},
+              &domain_admission);
         if (name == "participant_cancel")
           return participants_->cancel(arguments);
         if (name == "participant_await")
@@ -5318,7 +5425,8 @@ Value CodingEngine::call(std::string name, Value arguments) {
               hex_identity(attempt.bytes()), arguments, transport,
               {{},
                RawParticipantIdentities{attempt.bytes(), invocation.bytes(),
-                                        admitted_generation.bytes()}});
+                                        admitted_generation.bytes()}},
+              &domain_admission);
         }
         if (name == "provider_auth_status")
           return ProviderAuth{}.status();
@@ -5351,7 +5459,7 @@ Value CodingEngine::call(std::string name, Value arguments) {
           return tasks_.read(arguments.find("query") ? field(arguments, "query")
                                                      : Value::object({}));
         if (name == "tasks_edit")
-          return tasks_.edit(arguments);
+          return tasks_.edit(arguments, {}, &domain_admission);
         if (name == "context_inspect")
           return context_.inspect(field(arguments, "query"));
         if (name == "context_stats")
@@ -5411,7 +5519,7 @@ Value CodingEngine::call(std::string name, Value arguments) {
           poll_commands();
           return cancelled && cancelled();
         };
-        auto result = tools.run(name, arguments);
+        auto result = tools.run(name, arguments, nullptr, nullptr, &file_effect);
         if (name == "read_file" && file_snapshot)
           result.object().emplace_back(
               "snapshot",
@@ -5423,7 +5531,8 @@ Value CodingEngine::call(std::string name, Value arguments) {
                          "]\n");
         return result;
       },
-      nullptr, name == "exec" ? &command_start : nullptr);
+      nullptr, name == "exec" ? &command_start : nullptr, &domain_admission,
+      &file_effect);
 }
 Value CodingEngine::stats() const {
   auto result = context_.stats();
@@ -5630,6 +5739,11 @@ void CodingEngine::turn(TurnInput input) {
   if (backstop_claimed_ || turn_running_) {
     branch = 1;
     terminal_error = Error{ErrorCode::conflict};
+    throw *terminal_error;
+  }
+  if (file_effect_unretained_) {
+    branch = 1;
+    terminal_error = Error{ErrorCode::incomplete};
     throw *terminal_error;
   }
   const auto is_null = [](const Value &value) noexcept {

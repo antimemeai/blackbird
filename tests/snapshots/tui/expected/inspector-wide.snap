@@ -1,0 +1,15 @@
+styled-grid-v1
+size 84 10
+cursor none
+state selected=alpha;target=alpha;draft=external
+|{selected:> COMMANDS}{normal:                  }{border:│}{heading:  alpha · retained result}{normal:                              }|
+|{selected:> alpha  settled}{normal:            }{border:│}{failure:Exit 7 \| native reaped}{normal:                                 }|
+|{normal:  beta   running            }{border:│}{muted:Retained 30 \| received 30}{normal:                              }|
+|{normal:                            }{border:│}{normal:same source · é}{code: 界}{normal:<continuation: >                                     }|
+|{normal:                            }{border:│}{normal:line 2: actual bounded content                         }|
+|{normal:                            }{border:│}{normal:line 3: more readable output                           }|
+|{normal:                            }{border:│}{normal:line 4: last line                                      }|
+|{normal:                            }{border:│}{normal:                                                       }|
+|{normal:                            }{border:│}{normal:                                                       }|
+|{normal:                            }{border:│}{normal:                                                       }|
+cell-widths 3:45=2 3:46=0

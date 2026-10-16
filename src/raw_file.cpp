@@ -885,7 +885,8 @@ std::string raw_file_read(const std::filesystem::path &path, std::size_t limit,
   });
 }
 void raw_file_write(const std::filesystem::path &requested, std::string_view content,
-                    const RawAdapterContext *context, const RawFileInput *provided) {
+                    const RawAdapterContext *context, const RawFileInput *provided,
+                    FileEffectObservation *effect) {
   Helper helper{context, RawFileMethod::write, content.size()};
   helper.run([&] {
     RawFileInput input = provided ? *provided : RawFileInput{};
@@ -1027,8 +1028,11 @@ void raw_file_write(const std::filesystem::path &requested, std::string_view con
     rename_args.bytes(new_path);
     renaming.begin(rename_args);
     const int renamed = ::rename(name.data(), path.c_str()), rename_error = errno;
-    if (renamed == 0)
+    if (renamed == 0) {
+      if (effect)
+        effect->replaced();
       resource.renamed();
+    }
     renaming.returned(renamed, rename_error);
     renaming.check();
     if (renamed != 0)

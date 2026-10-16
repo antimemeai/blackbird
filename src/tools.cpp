@@ -27,7 +27,8 @@ std::string read_file(const std::filesystem::path &path, std::size_t limit) {
     throw Error{ErrorCode::io};
   return out;
 }
-void write_file(const std::filesystem::path &requested, std::string_view bytes) {
+void write_file_observed(const std::filesystem::path &requested, std::string_view bytes,
+                         FileEffectObservation *effect) {
   std::error_code error;
   const bool exists = std::filesystem::exists(requested, error);
   if (error)
@@ -67,12 +68,17 @@ void write_file(const std::filesystem::path &requested, std::string_view bytes) 
       throw Error{ErrorCode::io, errno};
     if (::rename(name.data(), path.c_str()) != 0)
       throw Error{ErrorCode::io, errno};
+    if (effect)
+      effect->replaced();
   } catch (...) {
     if (!closed)
       (void)::close(fd);
     (void)::unlink(name.data());
     throw;
   }
+}
+void write_file(const std::filesystem::path &path, std::string_view bytes) {
+  write_file_observed(path, bytes, nullptr);
 }
 std::string read_file(const std::filesystem::path &path, std::size_t limit,
                       const RawAdapterContext *context, RawEventRef *actual_owner) {
@@ -81,12 +87,13 @@ std::string read_file(const std::filesystem::path &path, std::size_t limit,
   return raw_file_read(path, limit, context, actual_owner);
 }
 void write_file(const std::filesystem::path &path, std::string_view bytes,
-                const RawAdapterContext *context, const RawFileInput *input) {
+                const RawAdapterContext *context, const RawFileInput *input,
+                FileEffectObservation *effect) {
   if (!context || !context->parent || !raw_enabled()) {
-    write_file(path, bytes);
+    write_file_observed(path, bytes, effect);
     return;
   }
-  raw_file_write(path, bytes, context, input);
+  raw_file_write(path, bytes, context, input, effect);
 }
 void LocalTools::capture(std::string label, std::string raw, RawFileToolTrace *trace) {
   if (trace)
@@ -228,7 +235,8 @@ Value process_output_presentation(const std::string &raw, const Value &args) {
 }
 Value LocalTools::run(std::string_view name, const Value &args,
                       const RawAdapterContext *raw_context,
-                      RawControlToken *native_return) {
+                      RawControlToken *native_return,
+                      FileEffectObservation *file_effect) {
   if (name == "read_file" || name == "write_file" || name == "edit_file") {
     const auto method = name == "read_file"    ? RawFileMethod::read
                         : name == "write_file" ? RawFileMethod::write
@@ -302,9 +310,11 @@ Value LocalTools::run(std::string_view name, const Value &args,
         if (error)
           throw Error{ErrorCode::io, error.value()};
       }
+      auto result = Value::object({{"written", Value{true}},
+                                   {"path", Value{path}},
+                                   {"effect_outcome", Value{"applied"}}});
       capture("file.proposed", next, &trace);
-      write_file(path, next, trace.context(), &input);
-      auto result = Value::object({{"written", Value{true}}, {"path", Value{path}}});
+      write_file(path, next, trace.context(), &input, file_effect);
       trace.result(next.size());
       return result;
     });

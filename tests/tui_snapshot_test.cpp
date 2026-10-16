@@ -1,11 +1,13 @@
 #include "blackbird/chat_view.hpp"
+#include "blackbird/command_center.hpp"
 #include "blackbird/context.hpp"
+#include "blackbird/display_text.hpp"
 #include "blackbird/task_view.hpp"
 #include "blackbird/terminal.hpp"
+#include "blackbird/tui_inspector.hpp"
 #include <algorithm>
 #include <array>
 #include <clocale>
-#include <cwchar>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -127,20 +129,10 @@ InputResult feed(Composer &composer, std::string_view bytes) {
 }
 Snapshot composer_frame(std::string name, const Composer &composer, std::size_t width) {
   const auto content = terminal_powerword_lines("> " + composer.text(), width);
-  const auto prefix =
-      terminal_lines("> " + composer.text().substr(0, composer.cursor()), width);
+  const auto caret =
+      terminal_caret("> " + composer.text(), {composer.cursor() + 2}, {width});
   auto result = rows(std::move(name), content, width, 5);
-  std::size_t columns = 0;
-  std::mbstate_t state{};
-  auto remain = std::string_view{prefix.back()};
-  while (!remain.empty()) {
-    wchar_t scalar{};
-    const auto count = std::mbrtowc(&scalar, remain.data(), remain.size(), &state);
-    require(count != 0 && count <= remain.size(), "invalid displayed composer UTF-8");
-    columns += static_cast<std::size_t>(std::max(0, ::wcwidth(scalar)));
-    remain.remove_prefix(count);
-  }
-  result.cursor = {prefix.size() - 1, std::min(columns, width - 1)};
+  result.cursor = {caret.row, std::min(caret.column.value, width - 1)};
   result.state = "draft=" + composer.text() +
                  " cursor_bytes=" + std::to_string(composer.cursor()) +
                  " pasted=" + (composer.pasted() ? "true" : "false");
@@ -201,6 +193,14 @@ std::vector<Snapshot> scenarios() {
   feed(pasted, "\x1b[200~/hel\t\n界é\x1b[201~");
   require(pasted.text() == "/hel\t\n界é", "paste became a command or completion");
   output.push_back(composer_frame("composer-literal-paste", pasted, 20));
+  Composer emoji;
+  emoji.draft("ab👩‍💻X");
+  output.push_back(composer_frame("composer-joined-emoji", emoji, 6));
+  output.push_back(rows("display-suffix-boundaries",
+                        {{{"A️X A🏽X A⃣X", Ink::normal}},
+                         {{"e", Ink::heading}, {"́X", Ink::normal}},
+                         {{"́X ​X", Ink::normal}}},
+                        24, 4));
   Composer unicode;
   unicode.draft("a界éz\nx\n1234");
   feed(unicode, "\x1b[A\x1b[A");
@@ -246,6 +246,99 @@ std::vector<Snapshot> scenarios() {
       "Sessions");
   feed(palette, "zzzz");
   output.push_back(palette_frame("palette-no-match", palette));
+  auto scene = unwrap(tui::SceneHost::create({71, 1}, {8, 128, 8192}));
+  tui::SceneCandidate instrument;
+  instrument.view = {71, 1};
+  instrument.nodes = {{"list", {}, tui::NodeKind::collection, true},
+                      {"detail", {}, tui::NodeKind::inspector, true}};
+  const tui::TargetRef alpha{"fixture", "command", "alpha", 1};
+  const tui::TargetRef beta{"fixture", "command", "beta", 1};
+  instrument.collections = {
+      {"list",
+       {{"alpha", "alpha  settled", alpha}, {"beta", "beta   running", beta}},
+       "COMMANDS",
+       {}}};
+  instrument.inspectors = {{"detail",
+                            "alpha · retained result",
+                            alpha,
+                            {{{"Exit 7 | native reaped", Ink::failure}},
+                             {{"Retained 30 | received 30", Ink::muted}},
+                             {{"same source · e", Ink::normal}, {"́ 界", Ink::code}},
+                             {{"line 2: actual bounded content", Ink::normal}},
+                             {{"line 3: more readable output", Ink::normal}},
+                             {{"line 4: last line", Ink::normal}}},
+                            {},
+                            0}};
+  unwrap(scene.publish(instrument));
+  auto instrument_control =
+      unwrap(tui::CollectionInspector::create(scene, "list", "detail"));
+  Snapshot wide_inspector{
+      "inspector-wide", {}, {}, "selected=alpha;target=alpha;draft=external"};
+  wide_inspector.grid.reset(84, 10);
+  unwrap(instrument_control.render(wide_inspector.grid, {0, 0, 84, 10}));
+  output.push_back(std::move(wide_inspector));
+  unwrap(instrument_control.act(tui::InspectorAction::focus_detail));
+  Snapshot narrow_inspector{
+      "inspector-narrow", {}, {}, "selected=alpha;focus=detail;target=alpha"};
+  narrow_inspector.grid.reset(24, 8);
+  unwrap(instrument_control.render(narrow_inspector.grid, {0, 0, 24, 8}));
+  output.push_back(std::move(narrow_inspector));
+
+  TaskState center_tasks;
+  center_tasks.commit(center_tasks.prepare(Value::object(
+      {{"op_id", Value{"center-snapshot"}},
+       {"base", Value{Number{"0"}}},
+       {"ops", Value{Value::Array{Value::object(
+                   {{"op", Value{"add"}},
+                    {"title", Value{"Investigate retained result"}},
+                    {"status", Value{"blocked"}},
+                    {"owner", Value{"declared label"}},
+                    {"blocker", Value{"Await independent review"}},
+                    {"note", Value{"First source line\nSecond source line\n"
+                                   "Third source line\nFourth source line"}}})}}}})));
+  IdentityBytes center_environment{}, center_conversation{};
+  center_environment.fill(std::byte{0x31});
+  center_conversation.fill(std::byte{0x52});
+  CommandCenter center{{unwrap(EnvironmentId::from_bytes(center_environment)),
+                        unwrap(ConversationId::from_bytes(center_conversation))}};
+  bool center_busy = false;
+  CommandCenterSources center_sources;
+  center_sources.tasks = [&](const TaskObservationQuery &query) {
+    TaskPublishedObservation observed;
+    observed.publication =
+        center_busy ? TaskPublicationStatus::busy : TaskPublicationStatus::ready;
+    if (!center_busy) {
+      observed.value = center_tasks.observe(query);
+      observed.origin.revision = center_tasks.revision();
+    }
+    return observed;
+  };
+  center.toggle();
+  (void)center.refresh(center_sources, false);
+  (void)center.refresh(center_sources, false);
+  Snapshot wide_center{
+      "center-wide",
+      {},
+      {},
+      "route=center;selected-kind=task;selected-id=t1;declared=blocked;"
+      "participants=unavailable;commands=unavailable"};
+  wide_center.grid.reset(100, 16);
+  wide_center.grid.line(1, {{"COMMAND CENTER", Ink::heading}});
+  unwrap(center.render(wide_center.grid, {0, 2, 100, 14}));
+  output.push_back(std::move(wide_center));
+  unwrap(center.act(tui::InspectorAction::focus_detail));
+  center_busy = true;
+  (void)center.refresh(center_sources, false);
+  Snapshot narrow_center{"center-narrow-stale",
+                         {},
+                         {},
+                         "route=center;selected-kind=task;selected-id=t1;focus=detail;"
+                         "tasks=stale-last-good;declared=blocked"};
+  narrow_center.grid.reset(32, 12);
+  narrow_center.grid.line(
+      1, {{"COMMAND CENTER | " + std::string{center.notice()}, Ink::heading}});
+  unwrap(center.render(narrow_center.grid, {0, 2, 32, 10}));
+  output.push_back(std::move(narrow_center));
   return output;
 }
 } // namespace

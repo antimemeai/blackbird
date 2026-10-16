@@ -68,7 +68,7 @@ public:
   std::filesystem::path cwd;
   std::vector<std::string> child_environment;
   bool separate_error = false;
-  bool spawned() const noexcept { return group > 0; }
+  bool spawned() const noexcept { return custody != Custody::never_started; }
   Error deadline_error{ErrorCode::io, ETIMEDOUT};
   Child() = default;
   void raw_capture(RawEventRef request, bool stdout_bytes = true,
@@ -86,14 +86,24 @@ public:
       close_owned(output, 1);
     if (error_output >= 0)
       close_owned(error_output, 2);
-    // collect() observes with WNOWAIT; pin the leader through the final group action.
-    if (group > 0) {
-      const int result = ::kill(-group, SIGKILL);
+    if (custody == Custody::unreaped) {
+      // Recheck even if collect() was skipped or another owner reaped the child.
+      // A numeric PGID authorizes nothing after ECHILD.
+      siginfo_t observed{};
+      const int result = ::waitid(P_PID, static_cast<id_t>(pid), &observed,
+                                  WEXITED | WNOHANG | WNOWAIT);
       const int error = errno;
       if (trace)
-        trace->signal(group, SIGKILL, result, error);
+        trace->cleanup_wait(observed, result, error);
+      if (result < 0 || (observed.si_pid != 0 && observed.si_pid != pid))
+        lose_custody();
     }
-    if (pid > 0) {
+    if (custody == Custody::unreaped) {
+      // The unreaped leader pins the group through this final group action.
+      const int signalled = ::kill(-pid, SIGKILL);
+      const int signal_error = errno;
+      if (trace)
+        trace->signal(pid, SIGKILL, signalled, signal_error);
       int status = 0;
       pid_t result;
       do {
@@ -102,10 +112,15 @@ public:
       const int error = errno;
       if (trace)
         trace->reap(pid, result, error, result == pid, status);
+      if (result == pid)
+        custody = Custody::reaped;
+      else
+        lose_custody();
     }
-    if (group > 0)
+    if (spawned())
       --owned_children;
   }
+
   void start(std::vector<std::string> args,
              const std::filesystem::path &codex_home = {}, bool merge_error = false) {
     try {
@@ -116,6 +131,13 @@ public:
       if (cancelled && cancelled())
         fail(ErrorCode::interrupted);
       const std::lock_guard spawn_lock{process_spawn_mutex};
+      native_stage = 14;
+      struct sigaction child_policy{};
+      if (::sigaction(SIGCHLD, nullptr, &child_policy) != 0)
+        fail(ErrorCode::io, errno);
+      if (child_policy.sa_handler == SIG_IGN ||
+          (child_policy.sa_flags & SA_NOCLDWAIT) != 0)
+        fail(ErrorCode::unsupported, SIGCHLD);
       std::vector<char *> argv;
       for (auto &arg : args)
         argv.push_back(arg.data());
@@ -258,7 +280,7 @@ public:
         pid = -1;
         fail(ErrorCode::io, rc);
       }
-      group = pid;
+      custody = Custody::unreaped;
       ++owned_children;
       input = in[1];
       output = out[0];
@@ -365,8 +387,11 @@ public:
           (void)::waitid(P_PID, static_cast<id_t>(pid), &state,
                          WSTOPPED | WCONTINUED | WNOHANG);
         }
-        if (rc < 0 && errno != EINTR)
-          fail(ErrorCode::io, errno);
+        if (rc < 0 && error != EINTR) {
+          if (error == ECHILD)
+            lose_custody();
+          fail(ErrorCode::io, error);
+        }
         if (Clock::now() >= deadline)
           throw deadline_error;
         (void)::poll(nullptr, 0, 10);
@@ -396,7 +421,14 @@ private:
   };
   std::optional<RawCaptureOptions> raw_options;
   std::optional<RawChildTrace> trace;
-  pid_t pid = -1, group = -1;
+  // Historical launch knowledge and current signal authority are distinct.
+  enum class Custody : std::uint8_t { never_started, unreaped, reaped, lost };
+  Custody custody = Custody::never_started;
+  pid_t pid = -1;
+  void lose_custody() noexcept {
+    custody = Custody::lost;
+    uncontained_exec = true;
+  }
   std::uint8_t native_stage = 0;
   void close_owned(int &fd, std::uint8_t channel) noexcept {
     const int result = ::close(fd);

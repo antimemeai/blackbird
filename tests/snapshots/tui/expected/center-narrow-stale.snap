@@ -1,0 +1,17 @@
+styled-grid-v1
+size 32 12
+cursor none
+state route=center;selected-kind=task;selected-id=t1;focus=detail;tasks=stale-last-good;declared=blocked
+|{normal:                                }|
+|{heading:COMMAND CENTER \| partial: indepe}|
+|{selected:> Task t1}{normal:                       }|
+|{muted:Stale: Task source stale; showin}|
+|{heading:Declared blocked}{normal:                }|
+|{normal:Investigate retained result     }|
+|{muted:Owner label: declared label}{normal:     }|
+|{muted:Version 1 \| task revision 1}{normal:     }|
+|{muted:Subtasks 0/0}{normal:                    }|
+|{failure:Blocker: Await independent revie}|
+|{failure:w}{normal:                               }|
+|{normal:First source line               }|
+cell-widths

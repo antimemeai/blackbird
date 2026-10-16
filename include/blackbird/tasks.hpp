@@ -1,6 +1,8 @@
 #pragma once
+#include "blackbird/admission.hpp"
 #include "blackbird/context.hpp"
 #include "blackbird/raw_tasks.hpp"
+#include "blackbird/task_observation.hpp"
 #include <array>
 #include <deque>
 #include <set>
@@ -30,12 +32,15 @@ public:
     Value packet, result;
     std::optional<RawEventRef> raw_prepare;
   };
-  Prepared prepare(const Value &request, RawTaskOrigin origin = {}) const;
+  Prepared prepare(const Value &request, RawTaskOrigin origin = {},
+                   DomainAdmission *admission = nullptr) const;
   void commit(Prepared &&prepared, RawTaskOrigin origin = {});
   void replay(const Value &packet, RawTaskOrigin origin = {});
   void restore(const Value &snapshot, RawTaskOrigin origin = {});
   Value snapshot(RawTaskOrigin origin = {}, RawEventRef *completion = nullptr) const;
   Value read(const Value &query = Value::object({}), RawTaskOrigin origin = {}) const;
+  // Pure finite current projection; the caller owns sequential state access.
+  TaskObservation observe(const TaskObservationQuery &query) const noexcept;
   const Value *item(std::string_view id) const;
   std::uint64_t revision() const noexcept { return revision_; }
   bool empty() const noexcept { return items_.empty(); }
@@ -43,7 +48,7 @@ public:
   std::optional<std::size_t> position(std::string_view id) const;
 
 private:
-  std::map<std::string, Value> items_;
+  std::map<std::string, Value, std::less<>> items_;
   std::vector<std::string> order_;
   std::deque<Value> receipts_;
   std::array<std::size_t, 5> counts_{};
@@ -58,7 +63,8 @@ public:
   Value read(const Value &query = Value::object({}), RawTaskOrigin origin = {}) const {
     return state_.read(query, origin);
   }
-  Value edit(const Value &request, RawTaskOrigin origin = {});
+  Value edit(const Value &request, RawTaskOrigin origin = {},
+             DomainAdmission *admission = nullptr);
   Value operator_command(std::string_view command);
   Value snapshot(RawEventRef *completion = nullptr) const {
     return state_.snapshot({}, completion);

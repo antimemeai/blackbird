@@ -1,0 +1,92 @@
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/cpp-intermission-20261015-rDlHIhMM/after-release
+Test project /home/patrick/.local/share/blackbird-campaigns/cpp-intermission-20261015-rDlHIhMM/after-release
+      Start   9: command_jobs
+ 1/43 Test   #9: command_jobs ........................   Passed    2.08 sec
+      Start  16: chat_view
+ 2/43 Test  #16: chat_view ...........................   Passed    0.05 sec
+      Start  18: terminal_blocked
+ 3/43 Test  #18: terminal_blocked ....................   Passed    1.09 sec
+      Start  22: terminal
+ 4/43 Test  #22: terminal ............................   Passed    0.05 sec
+      Start  95: workflows
+ 5/43 Test  #95: workflows ...........................   Passed    0.53 sec
+      Start 103: participants_raw
+ 6/43 Test #103: participants_raw ....................   Passed    1.29 sec
+      Start 124: command_raw
+ 7/43 Test #124: command_raw .........................   Passed    1.33 sec
+      Start 133: provider_raw
+ 8/43 Test #133: provider_raw ........................   Passed    0.32 sec
+      Start 134: operation_raw
+ 9/43 Test #134: operation_raw .......................   Passed    4.33 sec
+      Start 144: program_workflow_raw
+10/43 Test #144: program_workflow_raw ................   Passed    1.60 sec
+      Start 161: participants_custody_exact
+11/43 Test #161: participants_custody_exact ..........   Passed    0.02 sec
+      Start 162: participants_custody_throwing
+12/43 Test #162: participants_custody_throwing .......   Passed    0.02 sec
+      Start 163: participants_custody_unknown
+13/43 Test #163: participants_custody_unknown ........   Passed    0.02 sec
+      Start 164: child_custody_default
+14/43 Test #164: child_custody_default ...............   Passed    0.02 sec
+      Start 165: child_custody_ignored
+15/43 Test #165: child_custody_ignored ...............   Passed    0.00 sec
+      Start 166: child_custody_no-cldwait
+16/43 Test #166: child_custody_no-cldwait ............   Passed    0.00 sec
+      Start 167: child_custody_lost-collect
+17/43 Test #167: child_custody_lost-collect ..........   Passed    0.00 sec
+      Start 168: child_custody_lost-destructor
+18/43 Test #168: child_custody_lost-destructor .......   Passed    0.01 sec
+      Start 169: child_custody_cleanup-error
+19/43 Test #169: child_custody_cleanup-error .........   Passed    0.00 sec
+      Start 170: child_custody_raw-cleanup
+20/43 Test #170: child_custody_raw-cleanup ...........   Passed    0.01 sec
+      Start 171: display_text
+21/43 Test #171: display_text ........................   Passed    0.00 sec
+      Start 172: domain_admission_participant
+22/43 Test #172: domain_admission_participant ........   Passed    0.04 sec
+      Start 173: domain_admission_inbox
+23/43 Test #173: domain_admission_inbox ..............   Passed    0.08 sec
+      Start 174: domain_admission_config
+24/43 Test #174: domain_admission_config .............   Passed    0.03 sec
+      Start 175: domain_admission_encoding
+25/43 Test #175: domain_admission_encoding ...........   Passed    0.03 sec
+      Start 176: domain_admission_tasks
+26/43 Test #176: domain_admission_tasks ..............   Passed    0.14 sec
+      Start 177: domain_admission_capture
+27/43 Test #177: domain_admission_capture ............   Passed    0.03 sec
+      Start 178: command_mailbox_identity
+28/43 Test #178: command_mailbox_identity ............   Passed    0.03 sec
+      Start 179: command_mailbox_history
+29/43 Test #179: command_mailbox_history .............   Passed    2.72 sec
+      Start 180: command_mailbox_reserved_ids
+30/43 Test #180: command_mailbox_reserved_ids ........   Passed    0.06 sec
+      Start 181: command_mailbox_reserved_bytes
+31/43 Test #181: command_mailbox_reserved_bytes ......   Passed    2.71 sec
+      Start 182: command_mailbox_transient
+32/43 Test #182: command_mailbox_transient ...........   Passed    0.06 sec
+      Start 185: file_effect_write-plain
+33/43 Test #185: file_effect_write-plain .............   Passed    0.01 sec
+      Start 186: file_effect_edit-plain
+34/43 Test #186: file_effect_edit-plain ..............   Passed    0.01 sec
+      Start 187: file_effect_write-raw
+35/43 Test #187: file_effect_write-raw ...............   Passed    0.02 sec
+      Start 188: file_effect_edit-raw
+36/43 Test #188: file_effect_edit-raw ................   Passed    0.02 sec
+      Start 189: file_effect_persistent-plain
+37/43 Test #189: file_effect_persistent-plain ........   Passed    0.01 sec
+      Start 190: file_effect_persistent-raw
+38/43 Test #190: file_effect_persistent-raw ..........   Passed    0.02 sec
+      Start 191: file_effect_native-plain
+39/43 Test #191: file_effect_native-plain ............   Passed    0.00 sec
+      Start 192: file_effect_native-raw
+40/43 Test #192: file_effect_native-raw ..............   Passed    0.02 sec
+      Start 193: command_wait_custody_filtered
+41/43 Test #193: command_wait_custody_filtered .......   Passed    0.00 sec
+      Start 194: command_wait_custody_filtered-raw
+42/43 Test #194: command_wait_custody_filtered-raw ...   Passed    0.03 sec
+      Start 195: command_wait_custody_lost
+43/43 Test #195: command_wait_custody_lost ...........   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 43
+
+Total Test time (real) =  18.91 sec

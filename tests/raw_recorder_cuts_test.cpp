@@ -28,6 +28,7 @@ struct NativeCut {
   std::atomic<unsigned> writes{0}, syncs{0}, reached{0};
   std::atomic<pid_t> stop_recorder{0};
   std::atomic<unsigned> stop_reached{0}, stop_wake{0};
+  std::atomic<unsigned> space_notices{0}, stop_arms{0};
   dev_t device{};
   ino_t inode{};
   std::array<char, 512> published{};
@@ -137,13 +138,30 @@ extern "C" int rename(const char *source, const char *destination) {
   return result;
 }
 extern "C" ssize_t send(int descriptor, const void *body, std::size_t size, int flags) {
-  // Select before forwarding: the parent can receive a registration reply and
-  // arm the later retirement cut before this send returns in the recorder.
-  const bool retirement = cut && cut->stop_recorder.load() == ::getpid() && size == 1 &&
-                          *static_cast<const std::byte *>(body) == std::byte{1};
+  // Classify before forwarding: the parent can receive a lifecycle reply and
+  // arm the later cut before this send returns in the recorder. Producer space
+  // notices carry the same byte, but use the distinct STREAM transport.
+  const bool selected_reply = cut && cut->stop_recorder.load() == ::getpid() &&
+                              size == 1 &&
+                              *static_cast<const std::byte *>(body) == std::byte{1};
+  int type = 0;
+  if (selected_reply) {
+    socklen_t length = sizeof(type);
+    const int saved = errno;
+    if (::getsockopt(descriptor, SOL_SOCKET, SO_TYPE, &type, &length) != 0 ||
+        length != sizeof(type))
+      std::abort();
+    errno = saved;
+  }
   const auto result = native_send(descriptor, body, size, flags);
-  if (retirement && result == 1)
-    stop_poll = true;
+  if (selected_reply && result == 1) {
+    if (type == SOCK_DGRAM) {
+      stop_poll = true;
+      ++cut->stop_arms;
+    }
+    if (type == SOCK_STREAM)
+      ++cut->space_notices;
+  }
   return result;
 }
 extern "C" int poll(pollfd *descriptors, nfds_t descriptor_count, int wait_ms) {
@@ -624,22 +642,34 @@ void competing_lane_fairness() {
 void stop_before_poll(bool recover) {
   Directory directory;
   ProcessGuard process_guard;
-  auto runtime = take(RawRuntime::open(directory.name.data(), environment()));
+  const RawRuntimeOptions options{};
+  auto runtime = take(RawRuntime::open(directory.name.data(), environment(), options));
   auto handle = take(runtime->prepare_thread());
   IdentityBytes first_epoch{};
   const std::array<ByteView, 1> parts{literal};
   {
     RawThreadBinding binding{handle};
     first_epoch = raw_lane_epoch();
-    CHECK(take(raw_emit(9205, parts)) == 1);
   }
   const auto status = take(runtime->status());
   const auto path = run_path(directory);
   cut->stop_reached.store(0);
   cut->stop_wake.store(0);
+  cut->space_notices.store(0);
+  cut->stop_arms.store(0);
   cut->stop_recorder.store(status.recorder);
+  auto first_lane = lane(path, first_epoch, options.producer_capacities);
+  take(first_lane.arm_space());
+  {
+    RawThreadBinding binding{handle};
+    CHECK(take(raw_emit(9205, parts)) == 1);
+  }
+  until([&] { return cut->space_notices.load() == 1; });
+  // A real producer space notification cannot arm the retirement-only stop cut.
+  CHECK(cut->stop_arms.load() == 0);
   handle.reset();
   until([&] { return cut->stop_reached.load() == 1; });
+  CHECK(cut->stop_arms.load() == 1);
   IdentityBytes second_epoch{};
   if (recover) {
     take(runtime->recover());

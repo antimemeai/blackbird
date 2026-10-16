@@ -1,0 +1,125 @@
+{
+  "schema": "blackbird-tui-observer-1",
+  "driver_sha256": "f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377",
+  "variants": {
+    "before": {
+      "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz/after-release/blackbird",
+      "source": "f2ab70b483f2e2f87efb90229c17d0e947fb9de4+qualified-native-tree-a23d707da144aa47a797837a2500b802cb213d789880ccb53645e35f4a6ee48f",
+      "profile": "release",
+      "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF",
+      "native_identity": {
+        "device": 64512,
+        "inode": 10618969,
+        "size": 5894136,
+        "mtime_ns": 1792132549867564664
+      },
+      "native_sha256": "0e8e1b513bfc95ab1da7ee3b45e3735011bcc1f204bd75d11b7c3209034a8ac6",
+      "final_native_sha256": "0e8e1b513bfc95ab1da7ee3b45e3735011bcc1f204bd75d11b7c3209034a8ac6"
+    },
+    "after": {
+      "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-command-center-20261016-_ycd6jjo/after-release/blackbird",
+      "source": "d0e3b2efa68d1dc3b4310ee06f483a11d6d44786+native-tree-a019f4e4d6e1206b06c068903c3313c9d526bbe24c2eb9e36ee17b639ed3a0cb",
+      "profile": "release",
+      "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF",
+      "native_identity": {
+        "device": 64512,
+        "inode": 10626092,
+        "size": 6009064,
+        "mtime_ns": 1792138664007631592
+      },
+      "native_sha256": "4af92b452b5bd6a19345d2a402f6d7227d84f546126ab6914873748629db0b8e",
+      "final_native_sha256": "4af92b452b5bd6a19345d2a402f6d7227d84f546126ab6914873748629db0b8e"
+    }
+  },
+  "host": {
+    "hostname": "neuroses",
+    "system": "Linux",
+    "release": "6.8.0-146-generic",
+    "machine": "x86_64",
+    "platform": "Linux-6.8.0-146-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "cpu": "Intel(R) Xeon(R) CPU E5-2697 v2 @ 2.70GHz"
+  },
+  "scenarios": [
+    {
+      "cols": 110,
+      "rows": 35,
+      "session": "fresh",
+      "environment": {
+        "TERM": "xterm-256color",
+        "TERM_PROGRAM": "ghostty",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "BLACKBIRD_GRAPHICS": "off"
+      },
+      "frame_end": "CSI ?2026 l",
+      "startup": "spawn begin to newer committed frame containing Enter send, ECHO disabled",
+      "input": "BB_TUI_INPUT_0123456789, no Enter; committed row contains exact marker",
+      "paste": "Ctrl-U; bracketed paste 4080 x bytes plus newline and BB_PASTE_TAIL, no Enter; exact tail in committed row",
+      "palette_open": "Ctrl-U then /; committed selected > /help row",
+      "palette_next": "CSI B; committed selected > /keys row",
+      "resize": {
+        "to": [
+          96,
+          30
+        ],
+        "draft": "BB_RESIZE_DRAFT",
+        "endpoint": "new committed frame contains exact draft in third-last row and closing border in second-last row"
+      },
+      "resize_restore": "restore original size; exact draft in third-last row and closing border in second-last row",
+      "quit": "Ctrl-U then Ctrl-D, normal exit zero, no force",
+      "endpoint_clock": "parent monotonic_ns after parsing read block and observing newer committed frame",
+      "cache": "ordinary OS caches; all trials retained; no warmup exclusion"
+    },
+    {
+      "cols": 80,
+      "rows": 24,
+      "session": "fresh",
+      "environment": {
+        "TERM": "xterm-256color",
+        "TERM_PROGRAM": "ghostty",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "BLACKBIRD_GRAPHICS": "off"
+      },
+      "frame_end": "CSI ?2026 l",
+      "startup": "spawn begin to newer committed frame containing Enter send, ECHO disabled",
+      "input": "BB_TUI_INPUT_0123456789, no Enter; committed row contains exact marker",
+      "paste": "Ctrl-U; bracketed paste 4080 x bytes plus newline and BB_PASTE_TAIL, no Enter; exact tail in committed row",
+      "palette_open": "Ctrl-U then /; committed selected > /help row",
+      "palette_next": "CSI B; committed selected > /keys row",
+      "resize": {
+        "to": [
+          66,
+          19
+        ],
+        "draft": "BB_RESIZE_DRAFT",
+        "endpoint": "new committed frame contains exact draft in third-last row and closing border in second-last row"
+      },
+      "resize_restore": "restore original size; exact draft in third-last row and closing border in second-last row",
+      "quit": "Ctrl-U then Ctrl-D, normal exit zero, no force",
+      "endpoint_clock": "parent monotonic_ns after parsing read block and observing newer committed frame",
+      "cache": "ordinary OS caches; all trials retained; no warmup exclusion"
+    }
+  ],
+  "count_per_variant_and_size": 30,
+  "order": "trial, size, variant; serial round robin",
+  "clock": "time.monotonic_ns, parent process, integer nanoseconds",
+  "load_before": [
+    4.6826171875,
+    5.42041015625,
+    5.89306640625
+  ],
+  "started_utc": "2026-10-16T08:34:16Z",
+  "inference_prompts_submitted": 0,
+  "launcher": null,
+  "load_after": [
+    5.0458984375,
+    5.47314453125,
+    5.90576171875
+  ],
+  "failed": 0,
+  "interrupted": null,
+  "executable_changed": [],
+  "finished_utc": "2026-10-16T08:34:29Z"
+}
