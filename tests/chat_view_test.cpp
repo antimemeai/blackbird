@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <iostream>
 #include <stdexcept>
+#include <type_traits>
 #include <unistd.h>
 using namespace blackbird;
 void require(bool yes, const char *why) {
@@ -29,29 +30,126 @@ std::string hex(std::string_view bytes) {
   }
   return result;
 }
+void presenter_pipe() {
+  static_assert(!std::is_move_constructible_v<ChatPresenter>);
+  int descriptors[2];
+  require(::pipe(descriptors) == 0, "presenter pipe setup");
+  (void)::fcntl(descriptors[0], F_SETFL, O_NONBLOCK);
+  {
+    ChatPresenter presenter;
+    presenter.attach(descriptors[1]);
+    auto &grid = presenter.grid();
+    grid.reset(20, 4);
+    grid.line(0, {{"A", Ink::normal}});
+    const auto initial = presenter.prepare(2, 3);
+    presenter.start();
+    require(presenter.flush() && !presenter.flush(), "completion consumed once");
+    require(presenter.geometry().rows == 4 && presenter.geometry().cursor_column == 3,
+            "completed normal geometry");
+    std::string received;
+    char data[16384];
+    auto count = ::read(descriptors[0], data, sizeof(data));
+    require(count > 0, "initial presenter bytes");
+    received.append(data, static_cast<std::size_t>(count));
+    require(received == initial, "initial exact packet");
+    presenter.grid().reset(20, 4);
+    presenter.grid().line(0, {{"B", Ink::normal}});
+    auto &packet = presenter.prepare(1, 8);
+    packet.append(256 * 1024, 'q'); // Final graphics-like augmentation is owned.
+    const auto expected = packet;
+    presenter.start();
+    require(!presenter.flush() && presenter.pending(), "owned backpressure");
+    require(presenter.geometry().cursor_column == 3,
+            "partial output does not publish cursor");
+    bool refused = false;
+    try {
+      (void)presenter.prepare_tiny(2, 8, 0, 1);
+    } catch (const std::logic_error &) {
+      refused = true;
+    }
+    require(refused, "inflight frame cannot be replaced");
+    received.clear();
+    unsigned completions = 0;
+    for (unsigned round = 0;
+         round < 1000 && (presenter.pending() || received.size() < expected.size());
+         ++round) {
+      count = ::read(descriptors[0], data, sizeof(data));
+      if (count > 0)
+        received.append(data, static_cast<std::size_t>(count));
+      completions += presenter.flush() ? 1U : 0U;
+    }
+    require(received == expected && completions == 1 &&
+                presenter.geometry().cursor_column == 8,
+            "owned exact suffix and matching completion");
+    auto &tiny = presenter.prepare_tiny(2, 8, 0, 1);
+    tiny = "x"; // Short string storage must remain inside the immovable owner.
+    presenter.start();
+    require(presenter.flush() && presenter.geometry().tiny,
+            "tiny completion is explicit");
+    require(::read(descriptors[0], data, sizeof(data)) == 1 && data[0] == 'x',
+            "short owned packet");
+    presenter.grid().reset(20, 4);
+    require(!presenter.prepare(1, 8).empty(), "tiny invalidates normal baseline");
+    presenter.abandon();
+  }
+  require((::fcntl(descriptors[1], F_GETFL) & O_NONBLOCK) == 0,
+          "presenter restores descriptor flags");
+  ::close(descriptors[0]);
+  ::close(descriptors[1]);
+}
 int main(int argc, char **) {
   try {
     (void)std::setlocale(LC_CTYPE, "en_US.UTF-8");
     if (argc > 1) {
-      ChatPainter delta;
-      ChatGrid frame;
-      for (int i = 0; i < 6; ++i) {
+      int descriptors[2];
+      require(::pipe(descriptors) == 0, "oracle presenter pipe");
+      ChatPresenter presenter;
+      presenter.attach(descriptors[1]);
+      for (int i = 0; i < 9; ++i) {
+        if (i == 6) {
+          auto &tiny = presenter.prepare_tiny(2, 8, 0, 1);
+          tiny = "\x1b[?2026h\x1b[H\x1b[2Jx\x1b[1;2H\x1b[?2026l";
+          const auto expected = tiny;
+          presenter.start();
+          require(presenter.flush(), "tiny oracle completion");
+          char data[4096];
+          const auto count = ::read(descriptors[0], data, sizeof(data));
+          require(count > 0, "tiny oracle bytes");
+          std::cout << "8 2\n"
+                    << hex(std::string_view{data, static_cast<std::size_t>(count)})
+                    << "\n"
+                    << hex(expected) << "\n";
+          continue;
+        }
+        auto &frame = presenter.grid();
         frame.reset(i == 4 ? 12 : 20, 4);
         frame.line(0, {{i == 0   ? "hello long"
                         : i == 1 ? "界éx"
                         : i == 2 ? "h"
+                        : i == 8 ? "A\u200dB\u200dCx"
                                  : "👩‍💻🇺🇸",
                         Ink::assistant}});
         frame.line(1, {{"keyword", Ink::keyword}, {" string", Ink::string}});
         ChatPainter full;
-        const auto packet = delta.prepare(frame, 3, 2);
-        std::cout << frame.width << " " << frame.height << "\n"
+        (void)presenter.prepare(3, 2);
+        const auto cold = full.prepare(frame, 3, 2);
+        const auto width = frame.width, height = frame.height;
+        presenter.start();
+        require(presenter.flush(), "oracle presenter completion");
+        char data[4096];
+        const auto count = ::read(descriptors[0], data, sizeof(data));
+        require(count > 0, "oracle presenter bytes");
+        const std::string_view packet{data, static_cast<std::size_t>(count)};
+        std::cout << width << " " << height << "\n"
                   << hex(packet) << "\n"
-                  << hex(full.prepare(frame, 3, 2)) << "\n";
-        delta.commit(frame);
+                  << hex(cold) << "\n";
       }
+      presenter.detach();
+      ::close(descriptors[0]);
+      ::close(descriptors[1]);
       return 0;
     }
+    presenter_pipe();
     const auto &idle_sprite = blackbird_sprite(false, 0);
     require(&idle_sprite == &blackbird_sprite(false, 999), "idle mascot animates");
     require(blackbird_sprite(true, 0) != blackbird_sprite(true, 1),
@@ -146,6 +244,51 @@ int main(int argc, char **) {
     grid.reset(20, 4);
     grid.line(0, {{"👩‍💻x", Ink::normal}});
     require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x', "ZWJ cluster");
+    grid.reset(20, 4);
+    grid.line(0, {{" \u200d \u200d X", Ink::normal}});
+    require(grid.cells[0].width == 1 && grid.cells[1].width == 1 &&
+                grid.cells[2].width == 1 && grid.cells[3].scalar == U'X',
+            "plain-text joiners collapse spacing cells");
+    grid.reset(20, 4);
+    grid.line(0, {{"A\u200dB\u200dCx", Ink::normal}});
+    require(grid.cells[0].width == 1 && grid.cells[1].scalar == U'B' &&
+                grid.cells[2].scalar == U'C' && grid.cells[3].scalar == U'x',
+            "plain-text joiners collapse letter cells");
+    grid.reset(20, 4);
+    grid.line(0, {{"\u200dA", Ink::normal}});
+    require(grid.cells[0].scalar == U'A' && grid.cells[1].scalar == U' ',
+            "leading joiner consumes a spacing cell or next letter");
+    grid.reset(20, 4);
+    grid.line(0, {{"\u200d\u200dA", Ink::normal}});
+    require(grid.cells[0].scalar == U'A' && grid.cells[1].scalar == U' ',
+            "repeated leading joiners fail to advance input");
+    grid.reset(20, 4);
+    grid.line(0, {{"👩́\u200d💻x", Ink::normal}});
+    require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x',
+            "pictograph Extend ZWJ sequence split");
+    grid.reset(20, 4);
+    grid.line(0, {{"👩🏽\u200d💻x", Ink::normal}});
+    require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x',
+            "modified pictograph ZWJ sequence split");
+    for (const auto barrier_text :
+         {"👩\u200b\u200d💻x", "👩\u200e\u200d💻x", "👩\u200d́💻x"}) {
+      grid.reset(20, 4);
+      grid.line(0, {{barrier_text, Ink::normal}});
+      require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'💻' &&
+                  grid.cells[4].scalar == U'x',
+              "non-Extend barrier or post-ZWJ Extend joins pictographs");
+    }
+    grid.reset(20, 4);
+    grid.line(0, {{"👨\u200d👩\u200d👧\u200d👦x", Ink::normal}});
+    require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x',
+            "family pictograph ZWJ sequence split");
+    ChatView plain_joiners;
+    plain_joiners.append(ChatKind::assistant, " \u200d \u200d XZ");
+    const auto &joined_rows = plain_joiners.rows(8);
+    require(joined_rows.size() == 3 &&
+                chat_plain(joined_rows[1]) == "  │  \u200d \u200d X" &&
+                chat_plain(joined_rows[2]) == "  │ Z",
+            "plain joiners change wrap boundary");
     grid.reset(20, 4);
     grid.line(0, {{"🇺🇸x", Ink::normal}});
     require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x', "flag cluster");

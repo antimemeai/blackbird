@@ -3135,7 +3135,8 @@ Value CodingEngine::operation(
     std::string_view name, const Value &input,
     const std::function<Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
                               CommandTaskActivity *, RawRetainedExec *)> &body,
-    RawProviderOperationContext *provider_operation) {
+    RawProviderOperationContext *provider_operation,
+    const CommandStartStatus *command_start) {
   auto &root = log_.root();
   RawOperationTrace trace{root};
   std::optional<RawEventRef> parent;
@@ -3397,7 +3398,8 @@ Value CodingEngine::operation(
     }
     Value result;
     std::string output;
-    bool adapter_capacity = false, timed_out = false, persistent_command = false;
+    bool adapter_capacity = false, timed_out = false, persistent_command = false,
+         command_refused = false;
     auto prepare = [&](Value adapter_result, const std::optional<Error> &effect_error) {
       result = effect_error ? error_value(*effect_error) : std::move(adapter_result);
       if (name == "program_config" && effect_error) {
@@ -3456,12 +3458,40 @@ Value CodingEngine::operation(
 
       adapter_capacity = name == "process" && effect_error &&
                          effect_error->code == ErrorCode::capacity;
+      command_refused = command_start && effect_error &&
+                        effect_error->code == ErrorCode::capacity &&
+                        !command_start->worker_started &&
+                        command_start->refusal != CommandStartStatus::Refusal::none;
+      if (command_refused) {
+        const bool live =
+            command_start->refusal == CommandStartStatus::Refusal::live_limit;
+        adapter_capacity = true;
+        result.object().emplace_back("resource",
+                                     Value{live ? "live_commands" : "command_records"});
+        result.object().emplace_back("effect_outcome", Value{"not_started"});
+        result.object().emplace_back("attempt", Value{exec_id});
+        result.object().emplace_back(
+            "count",
+            Value{Number{live ? command_start->live : command_start->resident}});
+        result.object().emplace_back(
+            "limit",
+            Value{Number{live ? command_start->max_live : command_start->max_records}});
+        result.object().emplace_back(
+            "message",
+            Value{live ? "Live command limit reached; this command was not started. "
+                         "Inspect process read or /jobs; wait for existing commands "
+                         "or explicitly stop one before choosing further work."
+                       : "Resident command record limit reached; this command was "
+                         "not started. Inspect process read or /jobs; settle pending "
+                         "output/controls or explicitly archive an eligible completed "
+                         "job before choosing further work."});
+      }
       timed_out = (effect_error && effect_error->code == ErrorCode::io &&
                    effect_error->detail == ETIMEDOUT) ||
                   (name == "exec" && result.find("timed_out") &&
                    field(result, "timed_out") == Value{true});
       persistent_command = name == "exec" && command_jobs_->contains(exec_id);
-      if (name == "exec" && !result.find("output_ref")) {
+      if (name == "exec" && !command_refused && !result.find("output_ref")) {
         result.object().emplace_back("output_ref",
                                      Value{hex_identity(attempt.bytes())});
         if (timed_out) {
@@ -3781,6 +3811,7 @@ Value CodingEngine::operation(
       unretained_bytes_ += output.size();
       boundary.error = e;
       adapter_capacity = false;
+      command_refused = false;
       if (command_jobs_->active()) {
         command_failure_ = e;
         const auto registry = command_jobs_->read(Value::object({}));
@@ -3884,6 +3915,8 @@ Value CodingEngine::operation(
       auto recorded = settle(terminal, boundary.error.has_value(), false);
       if (!recorded.has_value() && recorded.error().code == ErrorCode::capacity) {
         capacity_stopped_ = true;
+        adapter_capacity = false;
+        command_refused = false;
         boundary.error = recorded.error();
         result = error_value(*boundary.error);
         const std::string bounded =
@@ -3916,7 +3949,8 @@ Value CodingEngine::operation(
                                std::chrono::steady_clock::now() - began)
                                .count();
       const auto outcome =
-          persistent_command && !boundary.error && !result.find("exit_code")
+          command_refused ? "refused; not started"
+          : persistent_command && !boundary.error && !result.find("exit_code")
               ? "backgrounded"
           : timed_out && name == "exec"                ? "timed out; outcome unknown"
           : disposition == AttemptDisposition::success ? "completed"
@@ -3936,7 +3970,10 @@ Value CodingEngine::operation(
         6, boundary.error && name != "provider" && static_cast<bool>(process_output),
         [&] {
           process_output("\n[" + std::string{name} + ": " +
-                         error_name(boundary.error->code) + "]\n");
+                         error_name(boundary.error->code) + "]" +
+                         (command_refused ? " " + string_field(result, "message")
+                                          : std::string{}) +
+                         "\n");
         });
     if (command_failure_ && boundary.error &&
         boundary.error->code == ErrorCode::capacity) {
@@ -4641,6 +4678,7 @@ Value CodingEngine::request(Value options) {
 Value CodingEngine::call(std::string name, Value arguments) {
   if (name == "provider")
     throw Error{ErrorCode::invalid_range};
+  CommandStartStatus command_start;
   return operation(
       name, arguments,
       [&](OperationAttemptId attempt, InvocationId invocation,
@@ -4667,7 +4705,7 @@ Value CodingEngine::call(std::string name, Value arguments) {
             options.max_output = static_cast<std::size_t>(
                 command_number(arguments, "output_max_bytes", 16 * 1024 * 1024));
           options.stop_on_cancel = true;
-          command_jobs_->start(id, arguments, raw_exec);
+          command_jobs_->start(id, arguments, raw_exec, &command_start);
           if (activity) {
             if (!activity->pending_node || !activity->transferred)
               throw Error{ErrorCode::conflict};
@@ -5384,7 +5422,8 @@ Value CodingEngine::call(std::string name, Value arguments) {
           process_output("\n[exit " + field(result, "exit_code").number().text() +
                          "]\n");
         return result;
-      });
+      },
+      nullptr, name == "exec" ? &command_start : nullptr);
 }
 Value CodingEngine::stats() const {
   auto result = context_.stats();

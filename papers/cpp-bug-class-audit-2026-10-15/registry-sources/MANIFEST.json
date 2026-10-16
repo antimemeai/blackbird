@@ -1,0 +1,145 @@
+[
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/rocksdb-lru_cache.cc",
+    "url": "https://raw.githubusercontent.com/facebook/rocksdb/v9.10.0/cache/lru_cache.cc",
+    "author": "Facebook/RocksDB authors; LevelDB authors",
+    "revision": "v9.10.0",
+    "license": "GPL-2.0 OR Apache-2.0; inherited BSD-3-Clause notice",
+    "acquired_utc": "2026-10-16T02:02:18.876540+00:00",
+    "bytes": 23312,
+    "sha256": "cc28e2959c152c774e5d0d22b07b415fee47f1fad4e437d4cb2266a7d6c16afe",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/facebook/rocksdb/v9.10.0/cache/lru_cache.cc' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/rocksdb-lru_cache.cc'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/rocksdb-LICENSE.Apache",
+    "url": "https://raw.githubusercontent.com/facebook/rocksdb/v9.10.0/LICENSE.Apache",
+    "author": "Facebook/RocksDB authors",
+    "revision": "v9.10.0",
+    "license": "Apache-2.0",
+    "acquired_utc": "2026-10-16T02:02:18.895766+00:00",
+    "bytes": 11358,
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/facebook/rocksdb/v9.10.0/LICENSE.Apache' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/rocksdb-LICENSE.Apache'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/rocksdb-COPYING",
+    "url": "https://raw.githubusercontent.com/facebook/rocksdb/v9.10.0/COPYING",
+    "author": "Facebook/RocksDB authors",
+    "revision": "v9.10.0",
+    "license": "GPL-2.0",
+    "acquired_utc": "2026-10-16T02:02:18.903637+00:00",
+    "bytes": 18092,
+    "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/facebook/rocksdb/v9.10.0/COPYING' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/rocksdb-COPYING'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/leveldb-cache.cc",
+    "url": "https://raw.githubusercontent.com/google/leveldb/1.23/util/cache.cc",
+    "author": "LevelDB authors",
+    "revision": "1.23",
+    "license": "BSD-3-Clause",
+    "acquired_utc": "2026-10-16T02:02:18.859676+00:00",
+    "bytes": 12093,
+    "sha256": "02bbdc5843dc46e4e9850d948089a26876287c76ed4f71993e89a3b375a99b79",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/google/leveldb/1.23/util/cache.cc' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/leveldb-cache.cc'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/leveldb-LICENSE",
+    "url": "https://raw.githubusercontent.com/google/leveldb/1.23/LICENSE",
+    "author": "LevelDB authors",
+    "revision": "1.23",
+    "license": "BSD-3-Clause",
+    "acquired_utc": "2026-10-16T02:02:19.202750+00:00",
+    "bytes": 1484,
+    "sha256": "ccc19f1da0798ed666609b65a5b44dd8b3abe6fc08b9c0592eb76e82e174db19",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/google/leveldb/1.23/LICENSE' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/leveldb-LICENSE'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/linux-kref.rst",
+    "url": "https://raw.githubusercontent.com/torvalds/linux/v6.12/Documentation/core-api/kref.rst",
+    "author": "Corey Minyard; Thomas Hellstrom; Greg Kroah-Hartman",
+    "revision": "v6.12",
+    "license": "GPL-2.0 per repository COPYING; kref.rst has no SPDX",
+    "acquired_utc": "2026-10-16T02:02:19.252572+00:00",
+    "bytes": 9275,
+    "sha256": "5724ae3846fa826b8678e909d41ba7ec43c37713f42335cc14f3b080181893e6",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/torvalds/linux/v6.12/Documentation/core-api/kref.rst' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/linux-kref.rst'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/linux-workqueue.rst",
+    "url": "https://raw.githubusercontent.com/torvalds/linux/v6.12/Documentation/core-api/workqueue.rst",
+    "author": "Tejun Heo; Florian Mickler; Linux contributors",
+    "revision": "v6.12",
+    "license": "GPL-2.0 per repository COPYING; workqueue.rst has no SPDX",
+    "acquired_utc": "2026-10-16T02:02:19.374198+00:00",
+    "bytes": 29749,
+    "sha256": "c406ea880503a459a44d5152f13f058f31ccd55f70cbd59cc772d7d812cb8145",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/torvalds/linux/v6.12/Documentation/core-api/workqueue.rst' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/linux-workqueue.rst'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/linux-lockdep.h",
+    "url": "https://raw.githubusercontent.com/torvalds/linux/v6.12/include/linux/lockdep.h",
+    "author": "Ingo Molnar; Red Hat; Linux contributors",
+    "revision": "v6.12",
+    "license": "GPL-2.0",
+    "acquired_utc": "2026-10-16T02:02:19.355451+00:00",
+    "bytes": 21387,
+    "sha256": "25bed4d54526ae31a5d74d4f08fd12bd64ad53ebb5c45f6e7fd8f10cf989fc97",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/torvalds/linux/v6.12/include/linux/lockdep.h' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/linux-lockdep.h'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/linux-COPYING",
+    "url": "https://raw.githubusercontent.com/torvalds/linux/v6.12/COPYING",
+    "author": "Linux contributors",
+    "revision": "v6.12",
+    "license": "GPL-2.0 WITH Linux-syscall-note",
+    "acquired_utc": "2026-10-16T02:02:19.563130+00:00",
+    "bytes": 496,
+    "sha256": "fb5a425bd3b3cd6071a3a9aff9909a859e7c1158d54d32e07658398cd67eb6a0",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/torvalds/linux/v6.12/COPYING' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/linux-COPYING'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/llvm18-infinite-loop.rst",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang-tools-extra/docs/clang-tidy/checks/bugprone/infinite-loop.rst",
+    "author": "LLVM contributors",
+    "revision": "llvmorg-18.1.8",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "acquired_utc": "2026-10-16T02:02:19.630074+00:00",
+    "bytes": 1093,
+    "sha256": "7a09dd5a111776287eff368054c228b7050c89f8280fede6280dd5ae68378626",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang-tools-extra/docs/clang-tidy/checks/bugprone/infinite-loop.rst' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/llvm18-infinite-loop.rst'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/llvm18-use-after-move.rst",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang-tools-extra/docs/clang-tidy/checks/bugprone/use-after-move.rst",
+    "author": "LLVM contributors",
+    "revision": "llvmorg-18.1.8",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "acquired_utc": "2026-10-16T02:02:19.825227+00:00",
+    "bytes": 8194,
+    "sha256": "c12fdbf31f8a3f9c3b3b39dd2b774aa1e4cf2eb691d1c310ab9912ce968f8d67",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang-tools-extra/docs/clang-tidy/checks/bugprone/use-after-move.rst' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/llvm18-use-after-move.rst'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/llvm18-ThreadSafetyAnalysis.rst",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang/docs/ThreadSafetyAnalysis.rst",
+    "author": "LLVM contributors",
+    "revision": "llvmorg-18.1.8",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "acquired_utc": "2026-10-16T02:02:19.825702+00:00",
+    "bytes": 34941,
+    "sha256": "ca2f6a2d23e774dc3888574f437df80a3dd30054e1888b7469995dac211a6934",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang/docs/ThreadSafetyAnalysis.rst' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/llvm18-ThreadSafetyAnalysis.rst'"
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/registries/llvm-LICENSE.TXT",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/LICENSE.TXT",
+    "author": "LLVM contributors",
+    "revision": "llvmorg-18.1.8",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "acquired_utc": "2026-10-16T02:02:20.125468+00:00",
+    "bytes": 15141,
+    "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee",
+    "restore": "curl --fail --location 'https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/LICENSE.TXT' --output 'quarantine/cpp-bug-class-audit-2026-10-15/registries/llvm-LICENSE.TXT'"
+  }
+]

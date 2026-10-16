@@ -1,6 +1,7 @@
 #include "blackbird/chat_view.hpp"
 #include "blackbird/terminal.hpp"
 #include "blackbird/workflows.hpp"
+#include "unicode_pictographic.hpp"
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -69,18 +70,30 @@ Rune rune(std::string_view s) {
 Rune cluster(std::string_view s) {
   auto result = rune(s);
   auto rest = s.substr(result.bytes);
-  bool join = result.scalar == 0x200d;
+  // An unattached joiner has no spacing cell and cannot absorb a later base.
+  if (result.scalar == 0x200d)
+    return result;
+  bool pictograph = detail::extended_pictographic(result.scalar);
+  bool join = false;
   bool regional = result.scalar >= 0x1f1e6 && result.scalar <= 0x1f1ff;
   while (!rest.empty()) {
     const auto r = rune(rest);
     const bool region = r.scalar >= 0x1f1e6 && r.scalar <= 0x1f1ff;
     const bool modifier = r.scalar >= 0x1f3fb && r.scalar <= 0x1f3ff;
-    if (r.width && !modifier && !join && !(region && regional))
+    const bool joined = join && detail::extended_pictographic(r.scalar);
+    if (r.width && !modifier && !joined && !(region && regional))
       break;
-    if (join || (region && regional) || r.scalar == 0xfe0f || r.scalar == 0x20e3)
+    if (joined || (region && regional) || r.scalar == 0xfe0f || r.scalar == 0x20e3)
       result.width = 2;
     result.bytes += r.bytes;
-    join = r.scalar == 0x200d;
+    // GB11 permits EP Extend* ZWJ EP, not arbitrary text joined by ZWJ.
+    join = r.scalar == 0x200d && pictograph;
+    if (r.scalar == 0x200d)
+      pictograph = false;
+    else if (joined)
+      pictograph = true;
+    else if (!detail::grapheme_extend(r.scalar))
+      pictograph = false;
     regional = region && !regional;
     rest.remove_prefix(r.bytes);
   }
@@ -480,6 +493,10 @@ void ChatGrid::line(std::size_t row, const ChatRow &content, std::size_t column)
     auto text = std::string_view{span.text};
     while (!text.empty()) {
       const auto r = cluster(text);
+      if (!r.width) {
+        text.remove_prefix(r.bytes);
+        continue;
+      }
       if (column + r.width > width)
         return;
       const auto erase_footprint = [&](std::size_t x) {
@@ -528,6 +545,8 @@ std::uint64_t raw_ui_owned_grid_bound(const ChatGrid &grid) {
 }
 const std::string &ChatPainter::prepare(const ChatGrid &next, std::size_t cursor_row,
                                         std::size_t cursor_column, bool full) {
+  if (!next.width || !next.height)
+    throw std::logic_error("cannot paint an empty grid");
   packet_.clear();
   touched_ = 0;
   cursor_row = std::min(cursor_row, next.height - 1);
@@ -576,12 +595,21 @@ const std::string &ChatPainter::prepare(const ChatGrid &next, std::size_t cursor
     packet_ += "\x1b[0m\x1b[" + std::to_string(cursor_row + 1) + ";" +
                std::to_string(cursor_column + 1) + "H\x1b[?25h\x1b[?2026l";
   }
-  cursor_row_ = cursor_row;
-  cursor_column_ = cursor_column;
+  prepared_row_ = cursor_row;
+  prepared_column_ = cursor_column;
   return packet_;
 }
 void ChatPainter::commit(const ChatGrid &next) {
   previous_ = next;
+  cursor_row_ = prepared_row_;
+  cursor_column_ = prepared_column_;
+  valid_ = true;
+}
+void ChatPainter::commit_swap(ChatGrid &next) noexcept {
+  using std::swap;
+  swap(previous_, next);
+  cursor_row_ = prepared_row_;
+  cursor_column_ = prepared_column_;
   valid_ = true;
 }
 ChatOutput::~ChatOutput() {
@@ -733,5 +761,72 @@ bool ChatOutput::flush() {
     raw_.terminal.reset();
   }
   return complete;
+}
+void ChatPresenter::require_idle() const {
+  if (state_ != State::idle)
+    throw std::logic_error("cannot replace a prepared or writing terminal frame");
+}
+ChatGrid &ChatPresenter::grid() {
+  require_idle();
+  return grid_;
+}
+std::string &ChatPresenter::prepare(std::size_t cursor_row, std::size_t cursor_column,
+                                    bool full) {
+  require_idle();
+  // Return the previous packet's capacity before constructing the next delta.
+  packet_.swap(painter_.packet_);
+  (void)painter_.prepare(grid_, cursor_row, cursor_column, full);
+  packet_.swap(painter_.packet_);
+  staged_ = {grid_.height, grid_.width, std::min(cursor_row, grid_.height - 1),
+             std::min(cursor_column, grid_.width - 1), false};
+  state_ = State::prepared;
+  return packet_;
+}
+std::string &ChatPresenter::prepare_tiny(std::size_t rows, std::size_t columns,
+                                         std::size_t cursor_row,
+                                         std::size_t cursor_column) {
+  require_idle();
+  if (!rows || !columns || cursor_row >= rows || cursor_column >= columns)
+    throw std::logic_error("invalid tiny terminal geometry");
+  packet_.clear();
+  staged_ = {rows, columns, cursor_row, cursor_column, true};
+  state_ = State::prepared;
+  return packet_;
+}
+void ChatPresenter::start(RawUiPacket raw) {
+  if (state_ != State::prepared || packet_.empty())
+    throw std::logic_error("terminal frame is not prepared for output");
+  output_.start(packet_, std::move(raw));
+  state_ = State::writing;
+}
+bool ChatPresenter::flush() {
+  if (state_ != State::writing)
+    return false;
+  try {
+    if (!output_.flush())
+      return false;
+  } catch (...) {
+    detach();
+    throw;
+  }
+  if (staged_.tiny)
+    painter_.invalidate();
+  else
+    painter_.commit_swap(grid_);
+  committed_ = staged_;
+  state_ = State::idle;
+  return true;
+}
+void ChatPresenter::detach() {
+  output_.detach();
+  painter_.invalidate();
+  committed_ = {};
+  state_ = State::idle;
+}
+void ChatPresenter::abandon() {
+  if (state_ == State::writing)
+    detach();
+  else
+    state_ = State::idle;
 }
 } // namespace blackbird

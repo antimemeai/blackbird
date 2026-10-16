@@ -1,0 +1,11 @@
+{
+  "command": [
+    "ssh",
+    "-o",
+    "BatchMode=yes",
+    "neuroses",
+    "cd /home/patrick/.local/share/blackbird-campaigns/cpp-class-probes-20261015-bsQPmeBv && /usr/bin/clang++-18 -std=c++20 -fsyntax-only -Werror=unknown-warning-option -Wlifetime-safety-permissive borrow-bad.cpp"
+  ],
+  "exit_code": 1,
+  "diagnostics": "error: unknown warning option '-Wlifetime-safety-permissive' [-Werror,-Wunknown-warning-option]\n"
+}

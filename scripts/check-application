@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Direct process oracle for pure BBM2 stdout and retained session reopening."""
+import importlib.util
+from pathlib import Path
+import struct
+import subprocess
+import sys
+import tempfile
+
+spec = importlib.util.spec_from_file_location(
+    "native_packet", Path(__file__).with_name("native-packet.py"))
+packet = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(packet)
+
+
+def send(process, temporary, value):
+    path = temporary / "frame.bbm"
+    packet.write_packet(path, value)
+    data = path.read_bytes()
+    process.stdin.write(struct.pack(">I", len(data)) + data)
+    process.stdin.flush()
+
+
+def exact(process, count):
+    out = bytearray()
+    while len(out) < count:
+        part = process.stdout.read(count - len(out))
+        if not part:
+            raise AssertionError("application stdout ended inside packet")
+        out.extend(part)
+    return bytes(out)
+
+
+def receive(process):
+    size = struct.unpack(">I", exact(process, 4))[0]
+    assert 5 <= size <= 4 * 1024 * 1024, size
+    return packet.decode_packet(exact(process, size))
+
+
+with tempfile.TemporaryDirectory(prefix="blackbird-application-cli-") as name:
+    temporary = Path(name)
+    session = temporary / "session"
+    for ordinal in range(2):
+        process = subprocess.Popen([sys.argv[1], "--application"],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+        try:
+            send(process, temporary, {"type": "open", "id": "open",
+                                     "session": str(session)})
+            ready = receive(process)
+            assert ready["type"] == "ready" and ready["id"] == "open", ready
+            assert ready["protocol"] == 1 and ready["session"] == str(session)
+            send(process, temporary, {"type": "not-a-command", "id": "invalid"})
+            error = receive(process)
+            assert error["type"] == "error" and error["id"] == "invalid", error
+            send(process, temporary, {"type": "close", "id": "close"})
+            closed = receive(process)
+            assert closed == {"type": "closed", "id": "close"}, closed
+            process.stdin.close()
+            assert process.wait(timeout=20) == 0, process.stderr.read().decode()
+            assert process.stdout.read() == b"", "unframed stdout"
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+    assert (session / "audit").is_file(), "semantic session was not retained"
+print("Application CLI framing, startup and session reopen passed")

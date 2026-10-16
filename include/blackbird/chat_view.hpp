@@ -93,9 +93,12 @@ public:
   std::size_t touched() const noexcept { return touched_; }
 
 private:
+  friend class ChatPresenter;
+  void commit_swap(ChatGrid &next) noexcept;
   ChatGrid previous_;
   std::string packet_;
   std::size_t cursor_row_ = 0, cursor_column_ = 0, touched_ = 0;
+  std::size_t prepared_row_ = 0, prepared_column_ = 0;
   bool valid_ = false;
 };
 // Single-writer nonblocking terminal packet. Caller retains packet storage until
@@ -122,5 +125,46 @@ private:
   int descriptor_ = -1, flags_ = 0;
   std::string_view packet_;
   std::size_t offset_ = 0;
+};
+
+struct ChatFrameGeometry {
+  std::size_t rows = 0, columns = 0, cursor_row = 0, cursor_column = 0;
+  bool tiny = false;
+};
+// One owner, one frame. Mutable build values are available only before start;
+// references returned during preparation must not be used after start/abandon.
+// The writer borrows only this immovable object's final packet storage.
+class ChatPresenter {
+public:
+  ChatPresenter() = default;
+  ~ChatPresenter() = default;
+  ChatPresenter(const ChatPresenter &) = delete;
+  ChatPresenter &operator=(const ChatPresenter &) = delete;
+  void raw_capture(bool enabled) noexcept { output_.raw_capture(enabled); }
+  void attach(int descriptor) { output_.attach(descriptor); }
+  void detach();
+  ChatGrid &grid();
+  std::string &prepare(std::size_t cursor_row, std::size_t cursor_column,
+                       bool full = false);
+  std::string &prepare_tiny(std::size_t rows, std::size_t columns,
+                            std::size_t cursor_row, std::size_t cursor_column);
+  void start(RawUiPacket raw = {});
+  // True once per completed packet, including completion during editor drain.
+  bool flush();
+  bool pending() const noexcept { return state_ == State::writing; }
+  // Prepared frames have emitted nothing; writing frames explicitly detach.
+  void abandon();
+  const ChatFrameGeometry &geometry() const noexcept { return committed_; }
+
+private:
+  enum class State { idle, prepared, writing };
+  void require_idle() const;
+  ChatPainter painter_;
+  ChatGrid grid_;
+  std::string packet_;
+  ChatFrameGeometry staged_{}, committed_{};
+  State state_ = State::idle;
+  // Destroy/detach the borrowing writer before its containing packet storage.
+  ChatOutput output_;
 };
 } // namespace blackbird

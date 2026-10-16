@@ -1,0 +1,55 @@
+Installed microsoft/tui-test 0.1.0 from SHA256 c7096f55a1cdb58c46bc4bdb27f8b5e246f07a5324a904c5ccd1b0351df0466b
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/ultramarine-20261015-nQtYVG34/before-release
+Test project /home/patrick/.local/share/blackbird-campaigns/ultramarine-20261015-nQtYVG34/before-release
+      Start   9: command_jobs
+ 1/24 Test   #9: command_jobs .....................   Passed    2.10 sec
+      Start  15: tasks_pty
+ 2/24 Test  #15: tasks_pty ........................   Passed    1.69 sec
+      Start  16: chat_view
+ 3/24 Test  #16: chat_view ........................   Passed    0.05 sec
+      Start  17: chat_render_oracle
+ 4/24 Test  #17: chat_render_oracle ...............   Passed    0.07 sec
+      Start  18: terminal_blocked
+ 5/24 Test  #18: terminal_blocked .................   Passed    0.74 sec
+      Start  20: tui_snapshots
+ 6/24 Test  #20: tui_snapshots ....................   Passed    0.07 sec
+      Start  21: tui_microsoft
+ 7/24 Test  #21: tui_microsoft ....................   Passed    6.06 sec
+      Start  23: terminal_pty
+ 8/24 Test  #23: terminal_pty .....................   Passed    0.92 sec
+      Start  24: terminal_pty_palette
+ 9/24 Test  #24: terminal_pty_palette .............   Passed    0.61 sec
+      Start  25: terminal_pty_palette_capacity
+10/24 Test  #25: terminal_pty_palette_capacity ....   Passed    0.15 sec
+      Start  26: terminal_pty_editor
+11/24 Test  #26: terminal_pty_editor ..............   Passed    0.36 sec
+      Start  27: terminal_pty_composer
+12/24 Test  #27: terminal_pty_composer ............   Passed    0.19 sec
+      Start  28: terminal_pty_state
+13/24 Test  #28: terminal_pty_state ...............   Passed    2.15 sec
+      Start  29: terminal_pty_comfort
+14/24 Test  #29: terminal_pty_comfort .............   Passed    3.41 sec
+      Start  30: terminal_pty_avatar
+15/24 Test  #30: terminal_pty_avatar ..............   Passed    1.29 sec
+      Start  31: terminal_pty_graphics
+16/24 Test  #31: terminal_pty_graphics ............   Passed    0.39 sec
+      Start  40: coding_capacity
+17/24 Test  #40: coding_capacity ..................   Passed    1.01 sec
+      Start  65: trajectory
+18/24 Test  #65: trajectory .......................   Passed    0.04 sec
+      Start  66: audit_query_raw
+19/24 Test  #66: audit_query_raw ..................   Passed    0.96 sec
+      Start 124: command_raw
+20/24 Test #124: command_raw ......................   Passed    1.60 sec
+      Start 126: command_admission
+21/24 Test #126: command_admission ................   Passed    0.13 sec
+      Start 127: command_jobs_engine
+22/24 Test #127: command_jobs_engine ..............   Passed    1.28 sec
+      Start 128: command_job_retention
+23/24 Test #128: command_job_retention ............   Passed    0.27 sec
+      Start 129: command_job_retention_engine
+24/24 Test #129: command_job_retention_engine .....   Passed    0.71 sec
+
+100% tests passed, 0 tests failed out of 24
+
+Total Test time (real) =  26.28 sec

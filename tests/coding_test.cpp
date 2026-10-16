@@ -1351,21 +1351,66 @@ void file_selector_test(const std::string &path) {
     throw Error{ErrorCode::corrupt};
 }
 int main(int argc, char **argv) {
+  const std::string_view selected_mode = argc == 1 ? "ordinary" : argv[1];
+  if (argc > 2 || (selected_mode != "ordinary" && selected_mode != "capacity" &&
+                   selected_mode != "routing" && selected_mode != "stream-capture")) {
+    std::cerr << "expected ordinary, capacity, routing or stream-capture mode\n";
+    return 2;
+  }
   char name[] = "/tmp/arco-coding-XXXXXX";
   auto path = mkdtemp(name);
   if (!path)
     return 2;
   std::string stage = "initial";
+  const auto began = std::chrono::steady_clock::now();
+  auto enter_stage = [&](std::string_view next) {
+    stage = next;
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - began)
+                             .count();
+    std::cerr << "coding stage " << elapsed << "ms: " << stage << '\n';
+  };
   try {
-    if (argc == 2 && std::string_view{argv[1]} == "stream-capture") {
-      stage = "workflow_capacity_test";
+    if (selected_mode == "capacity") {
+      enter_stage("workflow_interruption_budget_test");
+      workflow_interruption_budget_test(std::string{path} + "/interruption-floor");
+      enter_stage("workflow settlement payload");
+      workflow_settlement_limits_test(std::string{path} + "/settlement-payload", false);
+      enter_stage("workflow settlement batch");
+      workflow_settlement_limits_test(std::string{path} + "/settlement-batch", true);
+      enter_stage("workflow mutation capacity");
+      workflow_mutation_capacity_test(std::string{path} + "/workflow-mutation", false);
+      enter_stage("workflow nesting capacity");
+      workflow_mutation_capacity_test(std::string{path} + "/workflow-nesting", true);
+      enter_stage("workflow_process_capacity_test");
+      workflow_process_capacity_test(std::string{path} + "/workflow-process");
+      enter_stage("workflow capacity bytes");
       workflow_capacity_test(std::string{path} + "/workflow-bytes", false);
-      stage = "workflow_capacity_test";
+      enter_stage("workflow capacity records");
       workflow_capacity_test(std::string{path} + "/workflow-records", true);
-      stage = "retry_tests";
+      enter_stage("atomic_admission_test");
+      for (int mode = 0; mode != 3; ++mode)
+        atomic_admission_test(std::string{path} + "/admission-" + std::to_string(mode),
+                              mode);
+      enter_stage("capacity_warning_test");
+      capacity_warning_test(std::string{path} + "/capacity");
+      enter_stage("fixture removal");
+      std::filesystem::remove_all(path);
+      enter_stage("complete");
+      return 0;
+    }
+    if (selected_mode == "routing") {
+      enter_stage("retry_tests");
       retry_tests(std::string{path} + "/retries");
-      stage = "owned_route_tests";
+      enter_stage("owned_route_tests");
       owned_route_tests(std::string{path} + "/owned-routes");
+      enter_stage("fixture removal");
+      std::filesystem::remove_all(path);
+      enter_stage("complete");
+      return 0;
+    }
+    if (selected_mode == "stream-capture") {
+      enter_stage("stream setup and interruption");
       JournalHeader h{id<EnvironmentId>(1),
                       id<AuditStreamId>(2),
                       3,
@@ -1399,6 +1444,7 @@ int main(int argc, char **argv) {
       if (!stopped || !displayed.ends_with("PARTIAL"))
         throw Error{ErrorCode::corrupt};
       engine.validate_restart();
+      enter_stage("stream 100000 fragments");
       class Fragmented final : public CodingProvider {
         Value respond(const Value &,
                       const std::function<void(std::string_view)> &capture) override {
@@ -1427,40 +1473,16 @@ int main(int argc, char **argv) {
       if (blocks != 2 || captured_bytes != 100000)
         throw Error{ErrorCode::corrupt};
       std::cout << "engine: 100000 callbacks -> " << blocks << " diagnostic blocks\n";
+      enter_stage("fixture removal");
       std::filesystem::remove_all(path);
+      enter_stage("complete");
       return 0;
     }
-    stage = "file_selector_test";
+    enter_stage("file_selector_test");
     file_selector_test(std::string{path} + "/file-selector");
-    stage = "workflow_interruption_budget_test";
-    workflow_interruption_budget_test(std::string{path} + "/interruption-floor");
-    stage = "workflow_settlement_limits_test";
-    workflow_settlement_limits_test(std::string{path} + "/settlement-payload", false);
-    stage = "workflow_settlement_limits_test";
-    workflow_settlement_limits_test(std::string{path} + "/settlement-batch", true);
-    stage = "workflow_mutation_capacity_test";
-    workflow_mutation_capacity_test(std::string{path} + "/workflow-mutation", false);
-    stage = "workflow_mutation_capacity_test";
-    workflow_mutation_capacity_test(std::string{path} + "/workflow-nesting", true);
-    stage = "workflow_process_capacity_test";
-    workflow_process_capacity_test(std::string{path} + "/workflow-process");
-    stage = "workflow_capacity_test";
-    workflow_capacity_test(std::string{path} + "/workflow-bytes", false);
-    stage = "workflow_capacity_test";
-    workflow_capacity_test(std::string{path} + "/workflow-records", true);
-    stage = "atomic_admission_test";
-    for (int mode = 0; mode != 3; ++mode)
-      atomic_admission_test(std::string{path} + "/admission-" + std::to_string(mode),
-                            mode);
-    stage = "capacity_warning_test";
-    capacity_warning_test(std::string{path} + "/capacity");
-    stage = "retry_tests";
-    retry_tests(std::string{path} + "/retries");
-    stage = "owned_route_tests";
-    owned_route_tests(std::string{path} + "/owned-routes");
-    stage = "retained_output_test";
+    enter_stage("retained_output_test");
     retained_output_test(std::string{path} + "/output");
-    stage = "ordinary coding";
+    enter_stage("ordinary coding");
     JournalHeader h{id<EnvironmentId>(1),
                     id<AuditStreamId>(2),
                     3,
@@ -1492,6 +1514,7 @@ int main(int argc, char **argv) {
         ++terminal;
     if (terminal != 3)
       throw Error{ErrorCode::corrupt};
+    enter_stage("ordinary context edit and sandbox");
     const auto before = context.items();
     engine.turn(
         {"",
@@ -1521,6 +1544,7 @@ int main(int argc, char **argv) {
     }
     if (!print_retained)
       throw Error{ErrorCode::corrupt};
+    enter_stage("ordinary provider interruption");
     provider.interrupt = true;
     bool stopped = false;
     try {
@@ -1537,6 +1561,7 @@ int main(int argc, char **argv) {
         unknown = true;
     if (!unknown || read_file(provider.path) != "int answer = 42;\n")
       throw Error{ErrorCode::corrupt};
+    enter_stage("ordinary command cancellation");
     StoppedTool stopped_provider;
     CodingEngine stopped_engine{log, context, stopped_provider, "test"};
     bool stop_requested = false;
@@ -1563,12 +1588,14 @@ int main(int argc, char **argv) {
         last_disposition = observation->disposition;
     if (last_disposition != AttemptDisposition::unknown)
       throw Error{ErrorCode::corrupt};
+    enter_stage("ordinary continuation after command cancellation");
     stopped_engine.cancelled = {};
     stopped_engine.display = [&](std::string_view s) { displayed += s; };
     stopped_engine.turn({"continue", read_file("programs/turn.lua")});
     if (stopped_provider.calls != 2 || !displayed.ends_with("CONTINUED"))
       throw Error{ErrorCode::corrupt};
 
+    enter_stage("ordinary usage");
     UsageProvider usage_provider;
     CodingEngine usage_engine{log, context, usage_provider, "test"};
     std::string summary;
@@ -1591,6 +1618,7 @@ int main(int argc, char **argv) {
     if (!std::holds_alternative<std::nullptr_t>(field(stats, "usage").value()))
       throw Error{ErrorCode::corrupt};
 
+    enter_stage("ordinary managed publication");
     // Managed publication waits for workflow success, including a proposing tool
     // result.
     context.append({Value::object({{"role", Value{"assistant"}},
@@ -1643,6 +1671,7 @@ int main(int argc, char **argv) {
       if (string_field(entry, "id") == cancel_entry)
         throw Error{ErrorCode::corrupt};
 
+    enter_stage("ordinary managed provider settlement");
     // Drive actual provider response append -> tool call -> result append ->
     // settlement.
     context.append({Value::object({{"role", Value{"assistant"}},
@@ -1688,6 +1717,7 @@ int main(int argc, char **argv) {
                 .find("provider-selected-away") != std::string::npos)
       throw Error{ErrorCode::corrupt};
 
+    enter_stage("ordinary restart cancellation");
     bool cancel_restart = false;
 
     stopped_engine.cancelled = [&] { return cancel_restart; };
@@ -1712,5 +1742,7 @@ int main(int argc, char **argv) {
     std::filesystem::remove_all(path);
     return 1;
   }
+  enter_stage("fixture removal");
   std::filesystem::remove_all(path);
+  enter_stage("complete");
 }

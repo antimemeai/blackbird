@@ -1445,7 +1445,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   terminal_native_locale(&terminal_context);
   ui_capture.require();
   TerminalMode mode{&terminal_context};
-  ChatOutput output;
+  ChatPresenter output;
   output.raw_capture(raw_capture_);
   output.attach(STDOUT_FILENO);
   TerminalNotifications notifications{&terminal_context};
@@ -1575,9 +1575,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   ChatView transcript{raw_capture_};
   bool welcoming = initial.empty();
   std::vector<std::string> welcome_lines;
-  ChatGrid grid;
-  ChatPainter painter;
-  std::string activity = "Ready", observed_usage, small_frame;
+  auto &grid = output.grid();
+  std::string activity = "Ready", observed_usage;
   Value task_page;
   std::map<std::string, Value> task_activity;
   std::vector<ChatRow> task_rows;
@@ -1589,7 +1588,6 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
        turn_failed = false;
   std::size_t scroll = 0, previous_lines = 0;
   std::uint64_t display_generation = 0;
-  bool pending_grid = false;
   auto escape_deadline = std::chrono::steady_clock::time_point::max();
   unsigned short old_rows = 0, old_columns = 0;
   std::string foreground_job, foreground_epoch, detached_epoch, child_escape,
@@ -1707,7 +1705,23 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   const bool graphics_enabled = mascot_enabled && blackbird_graphics_available();
   bool image_loaded = false;
   std::array<std::size_t, 4> image_placement{};
-  std::string image_frame;
+  bool pending_image_loaded = false;
+  std::array<std::size_t, 4> pending_image_placement{};
+  auto service_output = [&] {
+    try {
+      if (!output.flush())
+        return false;
+    } catch (...) {
+      image_loaded = false;
+      image_placement = {};
+      throw;
+    }
+    image_loaded = pending_image_loaded;
+    image_placement = pending_image_placement;
+    first_frame.outcome(RawRegionOutcome::flushed);
+    first_frame.finish();
+    return true;
+  };
   auto started = std::chrono::steady_clock::now();
   auto second = started, tool_started = started;
   bool wake_refused = false;
@@ -1919,7 +1933,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     }
     const auto handoff_deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds(150);
-    while (output.pending() && !output.flush()) {
+    while (output.pending() && !service_output()) {
       if (std::chrono::steady_clock::now() >= handoff_deadline) {
         transcript += "\nTerminal busy; editor handoff deferred. Draft retained.\n";
         return false;
@@ -1937,7 +1951,6 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     image_loaded = false;
     image_placement = {};
     output.attach(STDOUT_FILENO);
-    painter.invalidate();
     terminal_native_flush(&terminal_context); // Editor typeahead cannot send a draft.
     if (edited.accepted && edited.text != composer.text())
       composer.draft(edited.text);
@@ -1966,14 +1979,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       (void)custody.join();
       std::rethrow_exception(publication_failure);
     }
-    if (output.pending() && output.flush()) {
-      first_frame.outcome(RawRegionOutcome::flushed);
-      first_frame.finish();
-      if (pending_grid)
-        painter.commit(grid);
-      else
-        painter.invalidate();
-    }
+    (void)service_output();
     std::vector<Message> incoming;
     RawUiTrace drain{raw_capture_, {4005, 4009}, {}, 171};
     auto task_read_credit = raw_ui_control(true, 222);
@@ -2277,24 +2283,22 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           RawUiFrame captured{raw_capture_, bound};
           captured.run([&] {
             const auto draft = terminal_lines("> " + composer.text(), width);
+            const auto cursor_column = std::min(static_cast<std::size_t>(columns),
+                                                display_width(draft.back()) + 1) -
+                                       1;
+            auto &small_frame = output.prepare_tiny(rows, columns, 0, cursor_column);
             small_frame = "\x1b[?2026h\x1b[H\x1b[2J" + draft.back();
-            small_frame += "\x1b[1;" +
-                           std::to_string(std::min(static_cast<std::size_t>(columns),
-                                                   display_width(draft.back()) + 1)) +
-                           "H";
+            small_frame += "\x1b[1;" + std::to_string(cursor_column + 1) + "H";
+            pending_image_loaded = image_loaded;
+            pending_image_placement = image_placement;
             if (graphics_enabled && image_placement[2]) {
               small_frame += blackbird_graphics_erase();
-              image_placement = {};
+              pending_image_placement = {};
             }
             small_frame += "\x1b[?2026l";
-            pending_grid = false;
             captured.capture(small_frame);
-            output.start(small_frame, captured.handoff());
-            if (output.flush()) {
-              first_frame.outcome(RawRegionOutcome::flushed);
-              first_frame.finish();
-            }
-            painter.invalidate();
+            output.start(captured.handoff());
+            (void)service_output();
             render.outcome(RawRegionOutcome::small_frame);
           });
           layout.finish();
@@ -2542,15 +2546,15 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                             {grid.width, grid.height, display_cursor_line - 1,
                              std::min(display_cursor_cells, main_width) - 1},
                             bound};
-        const auto &packet = captured.run([&]() -> const std::string & {
-          const auto &result =
-              painter.prepare(grid, display_cursor_line - 1,
-                              std::min(display_cursor_cells, main_width) - 1);
+        auto &packet = captured.run([&]() -> std::string & {
+          auto &result = output.prepare(display_cursor_line - 1,
+                                        std::min(display_cursor_cells, main_width) - 1);
           captured.capture(result);
           return result;
         });
         if (!packet.empty()) {
-          pending_grid = true;
+          pending_image_loaded = image_loaded;
+          pending_image_placement = image_placement;
           if (graphics_enabled && placement != image_placement) {
             layout.stage(4);
             constexpr auto digits = std::numeric_limits<std::size_t>::digits10 + 1;
@@ -2560,35 +2564,31 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                     : 0;
             RawUiFrame image{raw_capture_, image_bound};
             image.run([&] {
-              image_frame.assign(packet);
               // Insert image commands before the existing synchronized-update close.
-              image_frame.resize(image_frame.size() -
-                                 std::string_view{"\x1b[?2026l"}.size());
-              image_frame += blackbird_graphics_erase();
+              packet.resize(packet.size() - std::string_view{"\x1b[?2026l"}.size());
+              packet += blackbird_graphics_erase();
               if (placement[2] && placement[3]) {
                 if (!image_loaded) {
-                  image_frame += blackbird_graphics_load();
-                  image_loaded = true;
+                  packet += blackbird_graphics_load();
+                  pending_image_loaded = true;
                 }
-                image_frame += blackbird_graphics_place(placement[0], placement[1],
-                                                        placement[2], placement[3]);
+                packet += blackbird_graphics_place(placement[0], placement[1],
+                                                   placement[2], placement[3]);
               }
-              image_frame += "\x1b[?2026l";
-              image_placement = placement;
-              image.capture(image_frame);
-              output.start(image_frame, image.handoff());
+              packet += "\x1b[?2026l";
+              pending_image_placement = placement;
+              image.capture(packet);
+              output.start(image.handoff());
             });
             captured.discard();
           } else
-            output.start(packet, captured.handoff());
-          if (output.flush()) {
-            first_frame.outcome(RawRegionOutcome::flushed);
-            first_frame.finish();
-            painter.commit(grid);
-          }
+            output.start(captured.handoff());
+          (void)service_output();
         }
-        if (packet.empty())
+        if (packet.empty()) {
           captured.discard();
+          output.abandon();
+        }
         render.outcome(output.pending() ? RawRegionOutcome::queued
                                         : RawRegionOutcome::flushed);
         layout.finish();

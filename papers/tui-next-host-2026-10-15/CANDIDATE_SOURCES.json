@@ -1,0 +1,108 @@
+{
+  "status": "inactive-unqualified",
+  "base_commit": "d987f6fb207e47106ce4f5fa6339065e88a89f03",
+  "source_files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "79a84ac848f7fd45b8f2cd22f48c79b78868036713e4c4d6f975882f323467a1",
+      "size": 51385,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/CMakeLists.txt"
+    },
+    {
+      "path": "include/blackbird/chat_view.hpp",
+      "sha256": "7676295576216067fea061707b05462d09cbc7989d7d7edca2dca0a9d01adacb",
+      "size": 5665,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/include/blackbird/chat_view.hpp"
+    },
+    {
+      "path": "scripts/check-linux",
+      "sha256": "50610c4b0ddab32a4be06c337e3ffbf2d9de72f241a97ffc430a7540396d5674",
+      "size": 6893,
+      "mode": "0o755",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/scripts/check-linux"
+    },
+    {
+      "path": "scripts/check-terminal-blocked",
+      "sha256": "c7afc7298009dbb226388e552f5d496dbcd20df81025746a47dbd49eaf72a74e",
+      "size": 4837,
+      "mode": "0o755",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/scripts/check-terminal-blocked"
+    },
+    {
+      "path": "scripts/terminal-screen-oracle.py",
+      "sha256": "33300b88646620b88e2be278cef5915d8aa2b0a2c0782225e3c098948d313cac",
+      "size": 8150,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/scripts/terminal-screen-oracle.py"
+    },
+    {
+      "path": "src/chat_view.cpp",
+      "sha256": "417c7343f4d2a812d54570b691750c4559c7c70b77c7c465184eac3432cac93e",
+      "size": 29939,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/src/chat_view.cpp"
+    },
+    {
+      "path": "src/command_jobs.cpp",
+      "sha256": "f22e42c5011b28c412817556713815036a35bff5bf67ac73563b43da81dad9ed",
+      "size": 88125,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/src/command_jobs.cpp"
+    },
+    {
+      "path": "src/terminal.cpp",
+      "sha256": "0f35a03e7f2cfda051a57715fe0f30d3af7b508911cc845558aee14a6fa0bd9d",
+      "size": 129734,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/src/terminal.cpp"
+    },
+    {
+      "path": "tests/chat_view_test.cpp",
+      "sha256": "f9a6aba9ecafe0106c4fbab5a923203c2ab2e2992d91d127ffda01573fc45251",
+      "size": 14358,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/tests/chat_view_test.cpp"
+    },
+    {
+      "path": "tests/command_raw_test.cpp",
+      "sha256": "83a5ee7de9377f096e1ad9b726609f0bfcbdbcec8a0ff35b769ed5d6cf9d2059",
+      "size": 68835,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/tests/command_raw_test.cpp"
+    },
+    {
+      "path": "tests/terminal_blocked_fixture.cpp",
+      "sha256": "f1052d05aebad3c4b9c9d6e7f9fb4a732938682403ffb51df16a3e6a4e25a011",
+      "size": 3681,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/tests/terminal_blocked_fixture.cpp"
+    },
+    {
+      "path": "tests/ui_raw_test.cpp",
+      "sha256": "d7c181628d807482246c3c6551a421bf625375617fb596c47f90bd162e3d9192",
+      "size": 57680,
+      "mode": "0o644",
+      "retained_path": "context/tui-next-host-2026-10-15/candidate/tests/ui_raw_test.cpp"
+    }
+  ],
+  "archive": {
+    "path": "context/tui-next-host-2026-10-15/candidate/source-overlay.tar.gz",
+    "sha256": "98cad4f95317d39ac1d4f15871178b4a806a772ed0bf796006ee7455ed6bc3b9",
+    "size": 100444
+  },
+  "patch_sha256": "786cc35c77ec311c61459a64f7bcc125a4615f78e6216f915c6a7984a8030b67",
+  "final_gate": {
+    "passed": 145,
+    "total": 147,
+    "seconds": 372.14,
+    "failures": [
+      "coding timeout60.11s",
+      "terminal_pty line460 exit-code polling assertion11.18s"
+    ],
+    "full_cpp_lua_analysis": "not reached"
+  },
+  "performance_source_tree_sha256": "7df6ab79a40d4df6ade50f3197360ce0abb36b55f4517f2d9ddb32524ff77200",
+  "performance_difference": "Only tests/terminal_blocked_fixture.cpp changes after measurements: lint-only helper signature."
+}

@@ -91,6 +91,11 @@ Installed Codex/Claude compatibility paths remain available until owned accounts
 are selected. Live account sign-in and remote logout revocation remain follow-through.
 See [provider authentication](docs/USING_BLACKBIRD.md) for commands and limits.
 
+Native applications can run `blackbird --application` and exchange framed BBM2
+commands and streaming events over stdio. This uses the same session, provider,
+workflow and tools as the terminal; page observations remain separate from the
+operator objective. See the [application interface](docs/APPLICATION_INTERFACE.md).
+
 ### Building this checkout
 
 The build is deliberately tied to qualified development profiles. The local macOS profile uses Clang 23.1.2 and Lua 5.4.8; the Linux profile uses Clang 18.1.3 and libstdc++ 13. CMake presets contain host-specific tool paths. A fresh machine needs its profile configured deliberately, rather than assuming these paths will exist.

@@ -676,7 +676,7 @@ std::string_view raw_command_description() noexcept {
 2042:keyboard-read Ref,job Text,foreground_epoch Text,routed Text,branch:u8(1=accepted,2=refused),pending:size_t.
 2043:job Text,pending input Text (bounded4096; same original job through refusal).
 2044:request Ref,accepted:bool,Error.
-2045:delivery request Ref (zero for initial object shutdown),job Text (empty for shutdown),operation:u8(1=configure,2=archive,3=initial orderly shutdown),branch:u8(1=success,2=Error,3=exception),Error,max_live:size_t,max_records:size_t.
+2045:delivery/admission request Ref (zero for initial object shutdown),job Text (empty for shutdown),operation:u8(1=configure,2=archive,3=initial orderly shutdown,4=automatic settled retirement),branch:u8(1=success,2=Error,3=exception),Error,max_live:size_t,max_records:size_t.
 2046:launch Ref,output_fd:int,output_events:short,bootstrap_fd:int,bootstrap_events:short,timeout:int.
 2047:request Ref,result:int,errno:int,output_revents:short,bootstrap_revents:short.
 2050:parent Ref,domain:int,type:int,protocol:int. Socket incarnation begins here.

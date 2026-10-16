@@ -1,0 +1,14 @@
+[
+  {
+    "path": "/Users/patrickbeam/projects/blackbird/build/debug/.ninja_deps",
+    "bytes": 469008,
+    "sha256": "be9942d4ec4d356eed881b859a03f2eeddb87ca20841786d701621146a41fc42",
+    "endian": "little",
+    "version": 4,
+    "valid_path_records": 1447,
+    "valid_dep_records": 89,
+    "first_failure": null,
+    "parsed_to": 469008,
+    "unchanged_while_reading": true
+  }
+]

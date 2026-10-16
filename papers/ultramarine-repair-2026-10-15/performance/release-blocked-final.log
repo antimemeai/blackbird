@@ -1,0 +1,8 @@
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/ultramarine-20261015-nQtYVG34/before-release
+Test project /home/patrick/.local/share/blackbird-campaigns/ultramarine-20261015-nQtYVG34/before-release
+    Start 18: terminal_blocked
+1/1 Test #18: terminal_blocked .................   Passed    0.81 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.82 sec

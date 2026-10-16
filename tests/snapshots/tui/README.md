@@ -63,3 +63,10 @@ future asynchronous component scenarios must wait for their actual promised
 state and retain transition/timeout evidence. Microsoft tui-test qualification,
 existing real-PTY/mode/effect checks and the independent VT oracle attack other
 fault classes. A passing snapshot does not establish the desired design is good.
+
+`conversation-plain-joiners` specifies ordinary U+200D text as separate spacing
+cells, retaining joiner bytes in tails. It was added after both the renderer and
+the original VT-subset oracle incorrectly collapsed plain joined spaces/letters.
+The production105×52 whole-window case in the Microsoft driver independently
+checks divider/gutter cells in both Ghostty and Alacritty qualification; this
+component snapshot alone cannot establish real terminal width behavior.

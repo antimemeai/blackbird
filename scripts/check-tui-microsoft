@@ -109,6 +109,28 @@ def main():
             final = state()
             (artifacts / "final-state.json").write_text(json.dumps(final, indent=2) + "\n")
             call("screenshot", "-o", str(artifacts / "final.svg"))
+            # The screenshot geometry must survive ordinary (non-emoji) ZWJs.
+            # These literal cell assertions use the independent terminal engine,
+            # rather than the renderer's own cluster-width assumptions.
+            call("resize", "105", "52")
+            expect("TASKS")
+            joiner_text = " \u200d \u200d "
+            code = ("for i=1,24 do print(string.format('ROW_%02d ',i).." +
+                    "string.rep('" + joiner_text + "',20)..'END') end; " +
+                    "print('PANE'..'_DONE')")
+            call("write", "/lua " + code + "\r")
+            expect("PANE_DONE")
+            expect("Turn complete")
+            wide = state()
+            assert (wide["cols"], wide["rows"]) == (105, 52)
+            divider = call("cells", "68", "0", "3", "52")["data"]["cells"]
+            assert all(divider[row * 3]["char"] == "│" for row in range(52)), "wide pane divider overwritten"
+            assert all(divider[row * 3 + 1]["char"] == " " for row in range(52)), "wide pane gutter overwritten"
+            assert divider[7 * 3 + 2]["char"] == "T", "wide task origin moved"
+            assert (wide["cursor"]["x"], wide["cursor"]["y"]) == (4, 49), "wide composer cursor moved"
+            (artifacts / "wide-state.json").write_text(json.dumps(wide, indent=2) + "\n")
+            (artifacts / "wide-screen.txt").write_text(wide["text"] + "\n")
+            call("screenshot", "-o", str(artifacts / "wide.svg"))
             call("write", "/exit\r")
             call("wait", "exit", "--timeout", "4000")
         except BaseException as error:
@@ -142,7 +164,7 @@ def main():
             raise cleanup_error
         # Read only after observed exit and close: a late duplicate must count too.
         assert effects.read_text() == "ran\n", "explicit submission did not execute exactly once"
-    print(f"Microsoft {args.backend}: styled palette, native input, literal paste, resize, exactly one workflow effect and exit pass")
+    print(f"Microsoft {args.backend}: styled palette, native input, literal paste, resize, wide plain-joiner pane cells, exactly one workflow effect and exit pass")
 
 
 if __name__ == "__main__":

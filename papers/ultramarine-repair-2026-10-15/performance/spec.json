@@ -1,0 +1,14 @@
+{
+  "before": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/ultramarine-20261015-nQtYVG34/retained-before/blackbird",
+    "source": "9cea416bfb5116b1e3ba6f6a1af462515091a543",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  },
+  "after": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/ultramarine-20261015-nQtYVG34/before-release/blackbird",
+    "source": "9cea416bfb5116b1e3ba6f6a1af462515091a543+native-tree-5e55da4d9725ee96fa2142e4d51d93a99f2e093977b89b448dff8359c88b2f15",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  }
+}

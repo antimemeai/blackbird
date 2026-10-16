@@ -1,0 +1,13 @@
+{
+  "command": [
+    "/usr/bin/ctest",
+    "--test-dir",
+    "/home/patrick/.local/share/blackbird-campaigns/ultramarine-20261015-nQtYVG34/before-release",
+    "--output-on-failure",
+    "--no-tests=error",
+    "-R",
+    "^(command_jobs|command_jobs_engine|command_admission|command_job_retention|command_job_retention_engine|command_raw|chat_view|chat_render_oracle|terminal_blocked|tui_snapshots|tui_microsoft|tasks_pty|trajectory|audit_query_raw|coding_capacity|terminal_pty.*)$"
+  ],
+  "returncode": 0,
+  "native_sha256": "79ab52694c1f94f1fcb8fea90095d4f6ee5a84c0abe541913efabca7290db7b3"
+}

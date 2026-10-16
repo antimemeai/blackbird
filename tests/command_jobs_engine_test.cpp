@@ -1,5 +1,6 @@
 #include "blackbird/coding.hpp"
 #include "blackbird/packet.hpp"
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <fcntl.h>
@@ -10,6 +11,7 @@
 #include <termios.h>
 #include <thread>
 #include <unistd.h>
+#include <vector>
 
 using namespace blackbird;
 namespace {
@@ -283,6 +285,50 @@ void same_command(Harness &h, const std::filesystem::path &directory,
   h.engine.validate_session_switch();
   check(h.provider.calls == 0, "native commands unexpectedly called provider");
 }
+void sustainable_foreground(Harness &h, const std::filesystem::path &directory,
+                            const std::string &executable) {
+  std::vector<std::string> ids;
+  Value original_presentation;
+  for (unsigned i = 0; i < 40; ++i) {
+    const auto child = directory / std::to_string(i);
+    std::filesystem::create_directory(child);
+    write_file(child / "release", "go");
+    auto arguments = launch_arguments(executable, child);
+    std::erase_if(arguments.object(),
+                  [](const auto &entry) { return entry.first == "yield_ms"; });
+    const auto done = h.engine.operator_call("exec", arguments);
+    check(field(done, "exit_code") == Value{Number{7}},
+          "ordinary foreground execution stopped at a lifetime record quota");
+    const auto id = string_field(done, "output_ref");
+    if (i == 0)
+      original_presentation = field(done, "output");
+    ids.push_back(id);
+    check(terminal_count(h, id) == 1 && retained_bytes(h, id) == prefix + suffix &&
+              read_file(child / "launches") == "launch\n" &&
+              read_file(child / "effects") == "end\n",
+          "sustained foreground execution lost originals or duplicated effects");
+  }
+  const auto listing =
+      h.engine.operator_call("process", Value::object({{"op", Value{"read"}}}));
+  check(field(listing, "jobs").array().size() == 32,
+        "completed-job retirement changed the declared resident bound");
+  check(std::none_of(field(listing, "jobs").array().begin(),
+                     field(listing, "jobs").array().end(),
+                     [&](const Value &row) {
+                       return string_field(row, "job_id") == ids.front();
+                     }),
+        "oldest foreground projection stayed resident after admission pressure");
+  const auto old = h.engine.operator_call(
+      "read_process_output", Value::object({{"output_ref", Value{ids.front()}}}));
+  check(field(old, "output") == original_presentation &&
+            field(old, "output_bytes") == Value{Number{6}} &&
+            field(old, "returned_bytes") == Value{Number{6}} &&
+            retained_bytes(h, ids.front()) == prefix + suffix &&
+            terminal_count(h, ids.front()) == 1,
+        "retired job output_ref stopped reading its original output");
+  check(h.provider.calls == 0 && !h.root->protected_settlement().has_value(),
+        "foreground retirement called provider or retained stale terminal debt");
+}
 void deadline(Harness &h, const std::filesystem::path &directory,
               const std::string &executable) {
   const auto began = Clock::now();
@@ -527,6 +573,12 @@ int main(int argc, char **argv) {
       }
     } cleanup{directory};
     const auto executable = std::filesystem::absolute(argv[0]).string();
+    if (argc == 2 && std::string_view{argv[1]} == "--retention") {
+      scenario_name = "retention";
+      Harness h{directory};
+      sustainable_foreground(h, directory, executable);
+      return 0;
+    }
     for (const auto *scenario : {"identity", "deadline", "pty", "capacity",
                                  "quiet-provider", "control-capacity"}) {
       scenario_name = scenario;

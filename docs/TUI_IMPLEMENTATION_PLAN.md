@@ -52,11 +52,19 @@ ownership and async publication. Keep the Blackbird domain adapters outside it.
 The existing writer's borrowed packet must gain an explicit containing lifetime;
 retain complete pending suffixes and commit the painter only on complete output.
 
-The next source slice is the [native frame presenter](../papers/tui-next-host-2026-10-15/SOURCE_PLAN.md):
-one containing owner for final output bytes, matching staged grid and completion,
-integrated into the actual terminal loop. Keep input/cancellation service and the
-existing one-frame/coalescing policy. This prepares reusable presentation without
-coupling it to Lua composition or migrating domain views in the same slice.
+The [native frame presenter](../papers/tui-next-host-2026-10-15/SOURCE_PLAN.md)
+slice is delivered in `676120c`: one containing owner for final bytes, matching
+staged grid and completion in the actual terminal loop, including tiny/graphics
+and editor drain. Native input/cancellation and one-frame/coalescing remain.
+A specific wait-admission/tick cancellation cleanup boundary is repaired alongside
+it. The installed full gate passes157/157 plus full C++/Lua analysis; [results](../papers/mac-link-repair-2026-10-15/RESULTS.md)
+retain exact earlier performance runs and actual build/test faults.
+
+The [next-slice source map](../papers/tui-next-components-2026-10-15/SOURCE_MAP.md)
+identifies the missing visual properties/renderer, owner publications and
+independent VM. Shared collection/command-result inspection across conversation
+and a real current-session center remains a proposal to ground the rest of
+Units1–2, not an implemented reusable view or Lua bridge.
 
 Separate terminal decoding from native editor/palette behavior while retaining
 present draft/history/paste/editor controls, including literal insertion followed

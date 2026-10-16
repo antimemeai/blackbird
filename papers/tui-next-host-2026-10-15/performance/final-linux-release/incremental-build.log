@@ -1,0 +1,14 @@
+-- Configuring done (0.3s)
+-- Generating done (0.1s)
+-- Build files have been written to: /home/patrick/.local/share/blackbird-campaigns/tui-presenter-20261015-E0ODIPF4/after-release
+[0/2] Re-checking globbed directories...
+[1/10] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_runtime.cpp.o
+[2/10] Building CXX object CMakeFiles/blackbird_foundation.dir/src/command_jobs.cpp.o
+[3/10] Building CXX object CMakeFiles/command_job_fixture.dir/tests/command_job_fixture.cpp.o
+[4/10] Linking CXX executable command_job_fixture
+[5/10] Building CXX object CMakeFiles/blackbird_foundation.dir/src/workflow_runtime.cpp.o
+[6/10] Linking CXX static library libblackbird_foundation.a
+[7/10] Linking CXX executable blackbird-archive
+[8/10] Linking CXX executable blackbird
+[9/10] Building CXX object CMakeFiles/command_raw_test.dir/tests/command_raw_test.cpp.o
+[10/10] Linking CXX executable command_raw_test

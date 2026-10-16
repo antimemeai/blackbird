@@ -938,7 +938,11 @@ Value tool_definitions() {
                 "inspect it and choose a distinct retry or another approach. Operator "
                 "cancellation stops the turn. Optional output_max_bytes bounds raw "
                 "prefix bytes shown to model; full original chunks remain audited. "
-                "output_ref can retrieve omitted output using read_process_output."}},
+                "output_ref can retrieve omitted output using read_process_output. "
+                "A command-registry limit returns capacity with resource, count, "
+                "limit, attempt and effect_outcome=not_started; no command launched "
+                "and there is no output_ref. Inspect jobs before choosing further "
+                "work."}},
            {"parameters",
             Value::object(
                 {{"type", Value{"object"}},
@@ -977,7 +981,10 @@ Value tool_definitions() {
                   "stop/continue/interrupt/terminate/kill; acceptance differs from "
                   "observed effect. stop requests cleanup; archive requires completed "
                   "job. configure max_live/max_records only with no live jobs. Active "
-                  "jobs block restart/session switch; custody is process-lifetime "
+                  "jobs block restart/session switch. Admission pressure retires the "
+                  "oldest safely settled record; its audited output_ref stays readable "
+                  "with read_process_output, while process controls require a resident "
+                  "job. No live/unsettled job is evicted; custody is process-lifetime "
                   "only."}},
            {"parameters",
             Value::object(
@@ -1062,7 +1069,13 @@ Value tool_definitions() {
             Value{"Read bounded trajectory metadata in recorded order. query: cursor, "
                   "end pinned prefix, count1..64(default32), scan1..256(default128), "
                   "optional attempt32 lowercase hex, variables boolean, variable name "
-                  "filter. Default latest128 facts; attempt filter starts at0. next "
+                  "filter. Omit end to snapshot current facts; end0 is empty. Without "
+                  "cursor, start at max(0,end-128), or0 with an attempt or variable "
+                  "filter or variables=true, and "
+                  "return the FIRST count matches in ascending order, not the newest "
+                  "count. For an unfiltered newest page, obtain end then request "
+                  "cursor=max(0,end-count), end=end. Pin returned end and page with "
+                  "cursor=next until caught_up. next "
                   "advances by examined facts even without matches; caught_up refers "
                   "only to pinned end. Follow existing causal IDs; missing settlement "
                   "is not success. No originals copied; drill down with audit_inspect "
@@ -1109,7 +1122,11 @@ Value tool_definitions() {
            {"description",
             Value{
                 "Bounded local audit explorer. query: cursor (fact index), count 1..64 "
-                "default32, end (pin returned append-only prefix). For exact bytes: "
+                "default32, end (pin returned append-only prefix). Omit end for "
+                "the current snapshot; end0 is explicitly empty. Default cursor0 "
+                "reads the oldest facts. Page with cursor=next and the SAME end. "
+                "For a newest unfiltered page, obtain end then request "
+                "cursor=max(0,end-count), end=end. For exact bytes: "
                 "record index, optional source dependency index, offset, limit "
                 "1..65536. Optional record+packet=true returns decoded metadata "
                 "(log/program, operation continuation or terminal attempt); limit "

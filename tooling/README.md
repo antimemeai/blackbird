@@ -194,3 +194,25 @@ The operator-selected [Microsoft driver and owned Neovim-style screen expectatio
 join native semantic/fault and actual PTY checks. Install the pinned development
 executable with `scripts/tui-test --install` before running the complete source
 gate on a new host. Tests fail when required tooling is absent; no silent skip.
+
+## Repeated dependency-log recovery
+
+The pinned Ninja has a known recovery-offset defect for complete semantically
+invalid records. If the same premature-EOF warning repeats and unchanged targets
+recompile, preserve and inspect the exact `.ninja_deps` bytes before invoking more
+Ninja commands; even a dry run can truncate a malformed log. The
+[observed repair](../papers/mac-link-repair-2026-10-15/BUILD_OWNERSHIP.md) identifies
+the duplicate ID/checksum and preserves the original. After establishing no
+builder is active, remove only that derived dependency log and rebuild with the
+pinned tools. One unchanged build should report no work. Do not automatically
+delete caches, infer another actor, replace the linker or erase application data
+from the warning alone. Original linker stalls remain a distinct host finding.
+
+The operator-requested [C++ sibling-bug audit](../papers/cpp-bug-class-audit-2026-10-15/README.md)
+records new custody/refusal/display findings and a proposed prevention sequence.
+Its [diagnostic study](../papers/cpp-bug-class-audit-2026-10-15/TOOLING.md)
+demonstrates six bad/good mechanisms on the actual Clang23/18 profiles, including
+capability join exclusion, exhaustive enum handling and distinct byte/cell types.
+These are research probes, not enabled source rules or replacement qualification.
+`Result` is already nodiscard; semantic retention, effect and physical-cell
+invariants still need their actual owner contracts and direct behavioral checks.

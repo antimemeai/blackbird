@@ -1,0 +1,51 @@
+[
+  {
+    "key": "participant-emergency",
+    "id": "arconaut-th5",
+    "priority": 1,
+    "report": "REGISTRIES.md",
+    "title": "Participant archive can erase unretained emergency original after final worker publication"
+  },
+  {
+    "key": "child-custody",
+    "id": "arconaut-4y5",
+    "priority": 1,
+    "report": "PROCESS.md",
+    "title": "Native Child sends group signal after ECHILD when inherited SIGCHLD is ignored"
+  },
+  {
+    "key": "domain-refusal",
+    "id": "arconaut-pd3",
+    "priority": 1,
+    "report": "EFFECTS.md",
+    "title": "Participant configuration and task domain capacity still becomes sticky unknown-effect turn stop"
+  },
+  {
+    "key": "mailbox-permanent",
+    "id": "arconaut-r38",
+    "priority": 2,
+    "report": "REGISTRIES.md",
+    "title": "Accepted process mailbox controls wait forever at permanent delivery-history limits"
+  },
+  {
+    "key": "grid-width",
+    "id": "arconaut-2hh",
+    "priority": 2,
+    "report": "TERMINAL.md",
+    "title": "Grid footprint diverges for arbitrary emoji suffixes zero-width starts style spans and fallback"
+  },
+  {
+    "key": "composer-width",
+    "id": "arconaut-haz",
+    "priority": 2,
+    "report": "TERMINAL.md",
+    "title": "Composer wrap caret and padding use scalar widths inconsistent with cluster rasterization"
+  },
+  {
+    "key": "file-result",
+    "id": "arconaut-08t",
+    "priority": 2,
+    "report": "EFFECTS.md",
+    "title": "Successful file replacement loses effect knowledge on post-rename result allocation failure"
+  }
+]

@@ -1,0 +1,118 @@
+{
+  "status": "restored-working-tree-source-uncommitted-host-gate-blocked",
+  "base_commit": "d9c46be42c4a103523b216bba52f40b58ca3216e",
+  "source_files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "2780437f234be080b5ceb0ce9dfd50e59bb24f4958126c8ebad4352a78325bac",
+      "size": 51956,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/CMakeLists.txt"
+    },
+    {
+      "path": "include/blackbird/chat_view.hpp",
+      "sha256": "7676295576216067fea061707b05462d09cbc7989d7d7edca2dca0a9d01adacb",
+      "size": 5665,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/include/blackbird/chat_view.hpp"
+    },
+    {
+      "path": "scripts/check-linux",
+      "sha256": "50610c4b0ddab32a4be06c337e3ffbf2d9de72f241a97ffc430a7540396d5674",
+      "size": 6893,
+      "mode": "0o755",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/scripts/check-linux"
+    },
+    {
+      "path": "scripts/check-terminal-blocked",
+      "sha256": "c7afc7298009dbb226388e552f5d496dbcd20df81025746a47dbd49eaf72a74e",
+      "size": 4837,
+      "mode": "0o755",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/scripts/check-terminal-blocked"
+    },
+    {
+      "path": "scripts/terminal-screen-oracle.py",
+      "sha256": "33300b88646620b88e2be278cef5915d8aa2b0a2c0782225e3c098948d313cac",
+      "size": 8150,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/scripts/terminal-screen-oracle.py"
+    },
+    {
+      "path": "src/chat_view.cpp",
+      "sha256": "417c7343f4d2a812d54570b691750c4559c7c70b77c7c465184eac3432cac93e",
+      "size": 29939,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/src/chat_view.cpp"
+    },
+    {
+      "path": "src/command_jobs.cpp",
+      "sha256": "f22e42c5011b28c412817556713815036a35bff5bf67ac73563b43da81dad9ed",
+      "size": 88125,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/src/command_jobs.cpp"
+    },
+    {
+      "path": "src/terminal.cpp",
+      "sha256": "0f35a03e7f2cfda051a57715fe0f30d3af7b508911cc845558aee14a6fa0bd9d",
+      "size": 129734,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/src/terminal.cpp"
+    },
+    {
+      "path": "tests/chat_view_test.cpp",
+      "sha256": "f9a6aba9ecafe0106c4fbab5a923203c2ab2e2992d91d127ffda01573fc45251",
+      "size": 14358,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/tests/chat_view_test.cpp"
+    },
+    {
+      "path": "tests/command_raw_test.cpp",
+      "sha256": "83a5ee7de9377f096e1ad9b726609f0bfcbdbcec8a0ff35b769ed5d6cf9d2059",
+      "size": 68835,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/tests/command_raw_test.cpp"
+    },
+    {
+      "path": "tests/terminal_blocked_fixture.cpp",
+      "sha256": "f1052d05aebad3c4b9c9d6e7f9fb4a732938682403ffb51df16a3e6a4e25a011",
+      "size": 3681,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/tests/terminal_blocked_fixture.cpp"
+    },
+    {
+      "path": "tests/ui_raw_test.cpp",
+      "sha256": "d7c181628d807482246c3c6551a421bf625375617fb596c47f90bd162e3d9192",
+      "size": 57680,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/tests/ui_raw_test.cpp"
+    },
+    {
+      "path": "tests/coding_test.cpp",
+      "sha256": "592cef21b6e8e23cfdb49bc44a8f6e954a0d5ed2eeb45606627fc0c9970aebac",
+      "size": 78455,
+      "mode": "0o644",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/tests/coding_test.cpp"
+    },
+    {
+      "path": "scripts/check-terminal-pty",
+      "sha256": "63ca98de025c5bfe359f6b48b43185cce57c3ac51c5dbaca0f133958d82a99d6",
+      "size": 35746,
+      "mode": "0o755",
+      "retained_path": "context/tui-settlement-repair-2026-10-15/candidate/scripts/check-terminal-pty"
+    }
+  ],
+  "archive": {
+    "path": "context/tui-settlement-repair-2026-10-15/candidate/source-overlay.tar.gz",
+    "sha256": "ac0173823541a4de5be906f7a19a35d8ea946996697c18fb5c6ed4a4dbf59754",
+    "size": 123287
+  },
+  "checks": {
+    "linux_release": "13/13,12.28s",
+    "linux_asan_ubsan": "13/13,27.43s",
+    "mac_pty_selected_episodes": "9/9 with retained exact native candidate; each30s bound; state23.8772s",
+    "mac_coding_instrumented_before_decomposition": "1/1,16.48s",
+    "mac_coding_changed_source_clang_tidy": "pass",
+    "full_source_gate": "not run: required Debug link blocked in Apple ld"
+  },
+  "scope_note": "Original presenter/cancellation production files match retained prior candidate exactly. Only test grouping, synchronization, assertions and diagnostics change in this repair."
+}

@@ -9794,3 +9794,439 @@ are clean. Refresh the private context/quarantine archive under the primary
 checkout's context/retired-worktrees/paper-provider-2026-10-15, retain the merged
 source on master and session-name bead arconaut-vk5, then remove only this worktree.
 The live conversation files and provider authentication remain outside it.
+
+Operator says "send it": begin arconaut-rhi.3.3 from the written native-frame
+plan. One colleague owns the presenter and actual terminal integration; root
+owns an independent actual-TerminalUI control fixture and the integrated code
+challenge; the measurement owner prepares matched Release sources. Keep the
+launched AFL jobs and outputs untouched. Direct checks cover owned exact suffixes,
+each byte cut through escape/UTF-8 packets, cursor/grid publication, preparation
+allocation failure, allocation-denied completion, raw lifecycle, physical stdout
+backpressure and native controls, existing Microsoft/readable expectations and
+affected sanitizer profiles. Source publication still requires the full existing
+gate. No new runtime, library, workflow owner or live activation.
+
+Owned-frame implementation lane: wrote the short subplan in papers/tui-next-host-2026-10-15/IMPLEMENTATION.md, then red-compiled direct presenter tests before adding the API. Integrated immutable-in-flight packet/grid ownership in the actual TerminalUI, staged cursor and graphics observations, and nonallocating grid swap on complete output. Kept low-level ChatOutput, native write budgets and existing input paths. Focused chat_view/ui_raw pass; new explicit VT expectation initially omitted narrow-column clipping, corrected the fixture and rechecked successfully. Root owns the single independent product challenge and remaining qualification/performance. Independently challenged root-owned blocked-controls fixture once; no actionable finding. No AFL interaction.
+
+Root's one integrated source challenge finds no actionable presenter defect.
+The actual TerminalUI blocked-output fixture passes on Mac Debug: physical
+EAGAIN, cancellation acknowledgment before any stdout draining, exact native
+draft/cursor, scrolled ROW034–063 after32→36row resize, retained byte cursor on
+exit and restored input mode. Its colleague challenge found no actionable issue.
+Keep the serialized Ninja premature-EOF/recompile observation in arconaut-cfj;
+no tool/cache repair campaign. An initial Linux command named a nonexistent
+target; correct it to the actual tui_snapshot_test/tui_snapshots owning names,
+retaining the failed invocation log and the corrected qualification separately.
+Run the required full source hook on this frozen candidate while affected Linux
+profiles finish; preserve actual outcomes rather than infer a global pass.
+
+The source hook finishes146/147 in278.18seconds: existing terminal_pty line165
+again misses interrupted after slash /cancel; no source commit or full lint runs.
+All27 affected Linux Debug/Release/ASan cases pass, including actual stdout-blocked
+controls. The paired Release round completes120/120 runs and960 observations;
+input medians rise about0.07ms and wide startup/paste tails worsen under shared
+load. Retain all samples and add to arconaut-f8f, without a source-cause claim.
+
+One narrow source diagnosis identifies a real escaped stop obligation:
+CommandJobs::wait can throw interrupted during raw admission before its try, or
+from tick before its cancellation predicate, without stopping the already
+launched job. This is an egregious routine-cancellation boundary for the current
+unit, rather than an ordinary outlier to tune. Its exact role in the latest PTY
+failure remains inference because fixture cleanup removed the raw trace. Repair
+only the selected job's stop-on-cancel path before cancellable admission, using
+existing prepaid cleanup and join outside the mutex; prove both entry points with
+deterministic tests. Keep existing PTY assertions/deadlines, ordinary bug queue,
+source gate and the same bounded fix/recheck. Preserve the intermediate measured
+binary and add a final-source comparison if the repair qualifies.
+
+Both deterministic command-wait cases fail on the old implementation at the
+return-time child ownership assertion. The narrow repair now covers raw wait
+admission and interrupted tick through one prepaid specific-job stop/join path;
+refused admission records no invented wait request. Root's integration check
+finds no actionable issue in cleanup ownership, mutex release, original-error
+propagation or existing explicit-predicate behavior. Repaired command_raw passes
+6.43seconds including existing false/yield/raw cases. Recheck the complete source
+gate once on this repaired candidate, with scoped Linux ASan/Release checks and a
+separate final-source performance round. No further independent review layer or
+unrelated bug repair follows.
+
+The repaired source recheck passes147/147 in306.79seconds, including the original
+slash-cancel episode. Its full native analysis reports one root-authored test
+helper diagnostic: adjacent int/char parameters may be swapped. No other native
+analysis failure is reported. Replace the two-argument expectation helper with
+read_control(int) returning the actual byte; each caller compares its required
+P/F phase. Focused clang-tidy passes without suppression. This changes only
+tests/terminal_blocked_fixture.cpp; all measured production inputs remain exact,
+so preserve the7df6/0e6f benchmark originals and note the qualification-only test
+difference rather than rerunning or relabeling timings. The mandatory source hook
+reruns on the corrected helper; no fresh review or broader campaign.
+
+Final repaired-source Linux Release terminal_pty/command_raw pass2/2 in10.47seconds;
+ASan terminal_pty/command_raw/command_jobs_engine pass3/3 in28.91seconds. The final
+matched round again completes120/120 runs and960 observations. All original
+quantiles, outliers and exact identities remain in the final performance report.
+A local metadata-only ps probe fails to return; interrupt only its own process
+group. This does not diagnose static-analysis progress or product behavior.
+
+Final mandatory hook fails145/147 in372.14seconds: coding times out60.11seconds
+without stage output (new arconaut-rln), and terminal_pty line460 again misses
+quit during exec settlement (existing arconaut-xbf). Earlier slash-cancel and
+blocked-output cases pass. No full C++/Lua analysis runs after this failed CTest.
+Do not retry unchanged, increase timeouts or expand the exhausted two-layer unit.
+Preserve12 source files, modes/hashes/base, source-overlay archive and patch,
+final LastTest and compiled native under context/tui-next-host-2026-10-15/candidate.
+Restore active source to d987f6f and remove build/debug/blackbird after retaining
+its copy. arconaut-rhi.3.3 is blocked, not complete. No product source commit,
+source-hook bypass, main merge or live activation. Publish only documentation,
+original measurement data and source identities through the authorized text-only
+path after relevant checks and supported Beads backup.
+
+The independent next-component source map identifies actual missing visual
+properties/renderer, owner-published roster and independent composition VM;
+Participants::read drains and cannot be called as an effect-free paint query.
+A later shared collection/command-result inspector can serve conversation and
+current-session command center. This paper plans no new implementation or gate.
+
+Operator asks to solve the two failing tests and explain inactive source. Explain
+plainly: previous source was preserved then restored because mandatory gate
+failed; no implementation lost or deployed. This explicitly reopens arconaut-rln
+and arconaut-xbf. Verify all12 retained file hashes and restore the candidate.
+Independent conceptual owners diagnose cumulative coding stage cost and the
+specific restored-draft quit episode; retain failed synthetic sessions, keep
+deadlines/assertions and distinguish historical screen output from current
+settlement. New written scope: papers/tui-settlement-repair-2026-10-15/PLAN.md.
+No AFL interaction, artwork inspection, library adoption or blanket retry.
+
+The instrumented Mac coding monolith passes16.48seconds; retained timestamps and
+stage output show cumulative independent fixtures before ordinary cancellation,
+not a located stuck command. Split capacity/routing into separately registered
+cases, keep ordinary shared-journal phases intact and remove only exact duplicated
+prefix fixtures from stream capture. Every distinct assertion remains and all
+four coding registrations have60seconds; unknown mode exits2.
+
+The unchanged retained-native PTY diagnostic passes12.78seconds. Correct stale
+normal-recovered [exit0] screen matching with unique post-call split markers;
+keep actual busyquit separately, wait for a real shell READY/PID and require its
+leader/group disappear within the same5seconds. The corrected whole driver passes
+46.37seconds despite each step deadline passing, exceeding aggregate CTest30.
+Split nine independent episodes with30seconds each, preserving dependent state/
+restart/reopen sequence and per-step assertions. Preserve failing fixture dirs.
+Root's one integrated source challenge finds no dropped distinct case/deadline
+or remaining dependency on earlier selected episodes.
+
+Affected changed sources pass Linux Release13/13 in12.28seconds and ASan/UBSan
+13/13 in27.43seconds; owned remote workspace cleaned up. Mac retained exact-native
+PTY episodes9/9 pass, state23.88seconds, all below30seconds. Coding changed test
+passes focused clang-tidy. Presenter/cancellation production inputs still match
+the measured archive exactly, so preserve prior performance identities/rounds.
+
+Current Mac Debug build completes objects/static libraries but waits inside
+Apple ld before the new coding modes link. Interrupt only owning Ninja exit130;
+direct exact configured link with diagnostic-v reaches actual Xcode ld and also
+waits with negligible CPU. A targeted sampling probe also fails to return.
+Known-process libproc reads identify only owned linker/probe PID/start/cwd; send
+SIGKILL to exact owned jobs and stop their compiler/parent. Native ld/sample
+processes remain reported by the OS despite kill requests; no complete cleanup
+or kernelcause claim. Existing arconaut-ew5 records the Debug extension. No host
+restart, linker substitution, tool-policy change or full source-hook bypass.
+
+Keep restored implementation and test fixes in working tree this time, with
+complete14-file archive/hash manifest under context/tui-settlement-repair-2026-10-15
+and papers counterpart. rhi.3.3 source publication remains blocked by host linker;
+current authorization remains sufficient to finish gate/push when it works.
+Publish checked text/results/identities only. Original source archives, exact
+performance rounds, user artwork and AFL jobs/outputs remain untouched.
+
+Operator explicitly requests system study, analysis, written plan and repair of
+the remaining Mac build block. Current libproc snapshot22:36UTC shows prior
+owned linkers/probe gone and no current linker/compiler/Ninja/CMake/sample, a
+real host-state change. Parallel source owners study Apple/XNU process diagnostics
+and exact Ninja dependency-log recovery. Root owns controlled traced links,
+disposable-cache repair only after byte diagnosis, and eventual full source gate.
+Plan: papers/mac-link-repair-2026-10-15/PLAN.md. Preserve restored source, original
+archives, deadlines, user artwork and AFL state; no broad kills or toolchain swap.
+
+Read-only cache parser plus exact pinned upstream source establishes a complete
+invalid duplicate dependency record at2611704: checksumID1709, nextID1711. The
+Ninja reader retains that bad record during recovery. Preserve exact cache and
+remove only .ninja_deps with no builder active; same tools regenerate a valid log
+and regular coding/native links complete. A subsequent unchanged build reports
+no work, no EOF warning, no repeated foundation compile. Four Mac coding modes
+pass15.06seconds. No attribution of initial corrupt writer or previous kernelwait.
+
+Before cache repair, fresh traced configured-toolchain control0.336seconds and
+actual coding link0.270seconds both finish. Old pending ld/sample PIDs are gone
+at22:36UTC. Source research distinguishes thread state from misleading SRUN on
+SIGKILL, without further attachment/global process probes or securitytoolchanges.
+
+Root integration finding: eight new split PTY cases did not inherit the original
+RUN_SERIAL policy applied later to terminal_pty. Preserve that existing policy
+for the new episodes, not the whole suite; all30second/per-step deadlines remain.
+This CMake metadata change regenerates literal raw/workflow build identity tags,
+while production bodies/performance originals remain pinned. Stage intended
+source, papers and supported Beads backup, then run required full source hook.
+
+Installed source hook succeeds:157/157 in248.93seconds, then complete owned
+C++/Lua analysis. Original Git/hook/CTest survives a daemon restart despite loss
+of the tool session handle; verify exact process ancestry, follow same log, do
+not launch a duplicate. Source commit 676120c4b11de1496d1a9d9e7751fe87c1c3d009 created normally, without
+hook override. Presenter/cancel repair and meaningful test fixes now committed.
+Close rhi.3.3, rln and concrete cache fault cfj; keep broader rhi.3 active and
+historical native quit/linker attribution open. Correct component/source-status
+and delivery-plan docs to distinguish delivered native output from future
+renderer/Lua/shared application work. Preserve all original source/performance
+archives; final documentation/Beads-only follow-up uses relevant diff/data/link
+checks and explicit text-only exception, with no repeated source suite.
+
+Operator reports Ultramarine paper-provider pane corruption and capacity failures.
+Find exact default session-nIWneY after source-only initial triage. Read original
+audit/diagnostics metadata/raw records without reopening or replaying commands.
+34 exec starts,32 admissions/worker launch requests,2 pre-launch capacity
+refusals with max_records32. Generic exec settlement incorrectly presents an
+unknown effect; model invents interruption and retries, also refused. No failed
+build worker launched. Queue arconaut-zh2 and independent unresolved pane bug
+arconaut-6ao; report papers/ultramarine-triage-2026-10-15.md. No source change,
+provider call, live-session mutation or AFL inspection.
+
+Operator authorizes full repair of the Ultramarine session defects under doctrine.
+Start papers/ultramarine-repair-2026-10-15/PLAN.md: sustainable command observation
+lifecycle, known pre-launch refusal vs effect uncertainty, and independently
+reproduced pane fault. Delegate whole command-lifecycle and pane units plus a
+read-only failure-semantics adversary. Root owns integration/outcome contract,
+matched perf and final source gate. Preserve exact session read-only; no command
+replay/provider calls/AFL changes. Direct oracles and two-layer scope recorded.
+
+Command unit old-red fails at33 in both registry and retained engine. New bounded
+oldest-safe retirement passes40 with durable first output and single terminal.
+Call-local actual guard refusal status returns normal not_started/resource data
+and known failure; capture/terminal retention overrides this exemption. Native
+provider/control tests pass live/resident refusal and layer2 result-write fault:
+blocked writer stops continuation/new effects. Independent command reviewer finds
+no product defect; direct child-survival observation and pagination variable-default
+prose corrected. Two-layer work remains within listed defects.
+
+Pane owner reconstructs exact successful output and independently reproduces
+screenshot corruption in BOTH Microsoft Ghostty and Alacritty. Old owned oracle
+shared unconditional ZWJ join bug with renderer. Actual downloaded text includes
+space/ZWJ/space sequences; scanner predicts2 cells for3 spaces. Narrow pinned
+Unicode property data drives pictographic-only emoji join; literal cell tests,
+independent parsers and real backpressure/whole-window checks distinguish repair
+from merely accepting the old corrupted expectation. No borrowed-storage cause
+claimed. Source review also challenges zero-width non-Extend barriers in GB11.
+
+2026-10-15 — Pane lane reproduced arconaut-6ao from917008 original retained
+successful terminal bytes through both Microsoft Ghostty and Alacritty. Found
+plain-space/ASCII U+200D chains incorrectly collapsed to two cells by both the
+native cluster scanner and its prior VT-subset oracle. Wrote/reviewed the
+cause-specific plan, retained pinned Unicode17 EP/Extend data and license,
+implemented owned property-gated joining, and added direct old-red/new-green
+native/Microsoft expectations plus readable grid and physical EAGAIN/graphics/
+105×52 pane checks. Root's non-Extend barrier and Clang18 CTAD findings were
+integrated. No original session command, provider call or recovery executed.
+Detailed cause, bounded checks and source limits: papers/ultramarine-repair-2026-10-15/PANES.md.
+Root retains final integrated gates, performance, issue closure and checkpoint.
+
+2026-10-15 — Pane recheck: Linux ASan exposed that4096byte EAGAIN while filling
+a PTY did not establish one-byte pressure for small UI deltas. Updated only the
+blocked-output script to fill through1byte and top up Linux write/flip-buffer
+room during the existing no-drain nativeB/cancellationC waits. Both actual
+observations,5second steps and25second case limit remain. Both Mac episodes
+pass; root owns the single affected LinuxASan recheck and final integration.
+
+Integrated Mac Debug suite passes160/160 in254.38s. LinuxRelease selected24/24
+passes26.28s. MacTSan initial aggregate fixture exceeded original30s and new
+provider fixture lacked source working directory; repaired test partition/CTest
+metadata, retaining old30/45s deadlines. Corrected five cases pass112.25s,
+including40-command native41.06s and engine43.97s episodes.
+LinuxASan first passes23/24; newpane pressure fixture assumes a failed4KiB
+write means no small write fits. Correct only physicalfill (through1byte) and
+keep pressure during no-drain observations, preserving all original deadlines
+and actualEAGAIN/Ctrl-C checks. Mac selectedepisode and LinuxASan affected1/1
+pass (0.92s). Existing23passing cases stay recorded, no repeated broadASan.
+The temporary ASan runner cleaned its first workspace; the scoped recheck retains
+its ownedworkspace for final explicitcleanup. No production body changed.
+
+The first source hook's stagedtree is obsolete after that Pythonfixture fix.
+Preserve successful160test log, stop only the verified owned gateinterpreter and
+its nativeanalysischildren, and restage finalfixture/docs before running normal
+installedhook again. First gate's analysis was interrupted; no cleananalysis or
+sourcecommit claimed. Final gate uses one stable stagedtree; do not mutate it
+while the hook runs. Source snapshots and all failedattempts remain retained.
+
+Final stable-tree gate passes159/160; raw_runtime fails an existing fixture's
+unconditional recorder kill after supervisor death. Recorder may already exit on
+control EOF; actual errno was not retained. Record arconaut-gbu, study recorder
+and supervisor lifecycle, and obtain narrow independent review (RAW_FIXTURE.md).
+Observe supervisor SIGSTOP via waitpid(WUNTRACED), preserve actual queued status
+RPC barrier, kill recorder while stopped parent pins identity, then supervisor.
+Mac affected1/1 passes1.99s; LinuxRelease affected1/1 passes0.12s. No production
+body or measured binary changes. Run normal source hook on this final stagedtree.
+ASan scoped owned temporary workspace has now been explicitly cleaned.
+
+Ultramarine delivery source 65e5877dda1cc5b965b276a65c57668be0e1e038: the final normal installed hook
+passes160/160 Debug in260.95s and full native/Lua analysis, LuaLS no problems.
+This stable stagedtree is committed without override; no added suppressions.
+Close repaired zh2/6ao and fixture gbu, retain f8f shared-host startup tails.
+Matched LinuxRelease120/120 normal/960 endpoints, all30/source/size samples and
+source/binary identities published under papers/ultramarine-repair-2026-10-15/.
+Input/paste medians close/mixed; wide startup p95 29.283→95.466ms, max
+31.403→347.610ms; retain all trials, no general speedup/nonregression claim.
+Append the exact measured source in the performance tranche ledger; prior
+measurements and source labels remain unchanged.
+Final raw_runtime test-only source follow-up leaves measured main binary intact.
+The checked results/queue/backup/data-only follow-up uses the operator's explicit
+text-only hook exception; source qualification is already complete. Publish the
+work branch, preserving separate main integration and executable activation.
+Another authorized lane intentionally retired the old Paper checkout after its
+master integration. No original-session replay/recovery, provider call, AFL
+inspection or user-artwork access. No new library or main merge.
+
+2026-10-15 — Operator explicitly requests expert C++ staff subagents to find other
+instances of repaired bug classes and study guards/checks/lint/annotations that
+narrow the possibilities. Wrote boundary theory/plan at
+papers/cpp-bug-class-audit-2026-10-15/PLAN.md before any product work. Three
+conceptual reviewers survey registry lifetime, effect semantics and terminal
+representations; root owns process identity and actual compiler diagnostics.
+Product baseline095d7d1; no production/config/test source edits. No old repair
+assurance loop, source gate rerun, performance run, dependency adoption, real
+provider/session replay, artwork or AFL inspection. Rhizome watch directories
+absent in current/old workspace; use actual available primary source material.
+
+Staff reports establish R1 participant archive discards a late emergency semantic
+original after initial drain, R2 permanent mailbox capacity causes indefinite
+accepted-control deferral; E1–E3 ordinary participant/config/task bounds flatten
+into unknown/capture stop, E4 post-rename result allocation loses applied-effect
+knowledge; T1/T2/T4 grid mismeasures suffixes/zero-width styles/replacement, T3
+composer/wrapper/caret still sums scalar widths. Most have direct current-library
+scratch repros and external terminal cell observations; task/send source-only
+scope and compositor cursor inference remain explicit. Root challenges these
+new source/trigger claims once and consolidates common causes, not review reviews.
+Queue seven new open bugs th5/4y5/pd3/r38/2hh/haz/08t (arconaut- prefix), with
+severities, source lines, reproducer locations, limits and decisive repair checks.
+Participant raw bytes may survive semantic loss; no total-original-loss claim.
+
+Root's Child probe with ignored SIGCHLD observes ECHILD then intercepts a negative
+PGID signal attempt; no native signal is sent by the seam. Private Mac exec probe
+confirms ignored SIGCHLD survives exec on this host; platform allowance remains
+explicit. Negative survey distinguishes CommandJobs/EditorChild ECHILD custody,
+raw supervisor direct-child ownership, ambiguity-only recovery and cleared test
+PID owners. Stop/wait fixture hazards remain unconfirmed and separate.
+
+Six bad/good diagnostic/type pairs on Clang23.1.2 Mac/libc++ and Clang18.1.3
+Linux/libstdc++ produce12 intended failures and12 clean counterparts. Initial
+Mac scratch compilation omitted the qualified sysroot; preserve setup failures,
+correct to existing SDK, no suppression or profile change. Capability exclusion,
+consumed state, lifetimebound, exhaustive enums, existing nodiscard and byte/cell
+types each narrow a stated boundary, not all semantic correctness. Newer lifetime
+flag is available on23, unknown on18; not adopted globally. Exact source/commands
+and diagnostics saved in the report; no whole-codebase new-lint claim.
+
+Read primary thread-safety2014 sectionsII–V/limits, typestate1986 printed157–158
+visually, current Clang docs and actual LLVM18 diagnostic fixtures. Staff studies
+RocksDB/LevelDB/Linux reclamation, LLVM/Asio/FoundationDB effect models, Unicode
+and actual terminal sources. Acquired originals/PDFs/licenses stay ignored with
+tracked exact manifests/restoration; no reference implementation is a dependency.
+PREVENTION.md gives concrete owner APIs/invariants, limits and repair order, with
+highest-consequence emergency/custody work first. It changes no production rule.
+Finish relevant docs/links/data checks, supported Beads backup, text-only commit
+and branch push under the existing operator exception; product bugs remain open.
+The owned temporary Linux compiler-probe directory is explicitly removed after
+local raw results/source are saved; persistent campaigns and AFL are untouched.
+
+
+## 2026-10-16 — Oxcart native application away team
+
+The operator rejects owned browser pages and directs immediate live-site work, a
+simple Codex version bump in Oxcart, and a Blackbird interface delivered from an
+isolated away-team worktree. Created `blackbird-oxcart`, branch
+`work/oxcart-interface-2026-10-16`, from committed `84f5ea8`; the dirty TUI checkout
+and all its staged changes remain untouched. Issue `arconaut-ums`.
+
+The short [subplan](papers/2026-10-16-oxcart-interface-subplan.md) and
+[wire contract](docs/APPLICATION_INTERFACE.md) define one trusted native host over
+uint32 big-endian framed BBM2, capped at 4 MiB per packet. `--application` reuses
+normal session bootstrap, locking, recovery, raw instrumentation, provider and
+CodingEngine/workflow/tools. Host observations retain original BBM2 metadata and
+enter context as source-linked page evidence separately from the objective.
+Text/status/final events and steer/cancel/close/EOF support Oxcart's independent
+browser loop; no browser actuation or owned web page is added here.
+
+Root's one focused review found unbounded accumulated final text and transport
+failure cleanup/error-send holes. The implementation now retains at most a 2 MiB
+final prefix with a truthful truncation flag, streams all text in 64 KiB chunks,
+cleans command/participant owners on exceptions, suppresses SIGPIPE at the writer
+and refuses a second fatal-send exception when the reader is gone. Client review
+found Stop-after-Steer could strand a queued request ID; discarded replacements
+now receive cancelled finals after the active final. No review-of-review layer.
+
+A fresh local configure exposed a stale LLVM default SDK path:
+`/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk` does not exist. Apple ld
+hung linking compiler identification, and an explicit CLT linker probe hung too.
+No global tool configuration or pin changed. Setting this worktree's CMake
+`CMAKE_OSX_SYSROOT` to the installed Xcode `MacOSX.sdk` allowed compiler-ID, ABI
+and pthread executable links and the ordinary native debug build to proceed.
+Logs stay in ignored `context/application-*`. The selected Microsoft TUI test
+executable was installed from its pinned archive for the required source gate.
+
+Direct checks and publication results are recorded below when complete.
+
+Root exercised the preview executable against real current `https://www.python.org/`
+HTTP evidence: decoded gzip, extracted actual page text, sent the objective and
+observation separately over BBM2 to the real `gpt-6.1-sol` provider. The engine
+streamed a correct Python.org/Get Started answer, completed the turn, closed and
+exited zero. This checks live HTTP evidence through the provider/session/interface;
+it does not claim native browser capture. Root retained the original/final BBM2
+and stderr under its `context/oxcart-live-wire/` capture. Native browser work is
+separate and currently encountering the existing SafeStorage system prompt.
+
+The initial direct CLI test passes pure packet stdout, opening/invalid command/
+close, and reopening the actual retained session. The native fixture completed
+all six provider turns, including long streaming and cancellation, then its extra
+child-cleanup setup failed because a newly created test directory had default0755
+permissions. Native journal directories require0700. The fixture now applies the
+real directory rule before opening; this was a test setup error, no product bypass.
+Changed-unit lint's three findings (const-reference sends and named input/output
+descriptors) were fixed without suppressions; the changed-unit lint recheck passed.
+
+The disconnected-child fixture also exposed its own inherited socket peer: sockets
+without FD_CLOEXEC remained open in the actual sleep child, so closing the test's
+peer did not disconnect the application. The test now marks its private sockets
+close-on-exec and closes the peer to exercise EPIPE; no production CommandJobs
+change followed. The complete Mac direct suite now passes: six provider turns,
+fragmentation, uint64 metadata and separate evidence/objective,3MiB stream with
+truthful2MiB final prefix, active/replacement cancellation order, close, invalid
+frames, actual child cleanup on broken output, and EOF with no queued provider
+work. Real CLI opening/invalid-command/closing/reopening also passes.
+
+The required source commit hook now runs the ordinary full Debug/test/lint gate.
+A scoped Neuroses Debug/ASan run is in progress; its first source archive predates
+the fixture descriptor correction, so any stale-fixture failure will be followed
+only by the affected check against corrected source.
+
+Final source checkpoint `b84da24` passed the required full Debug build,162tests
+and all owned C++/Lua formatting/static/type checks without a hook override.
+The branch was pushed to `origin/work/oxcart-interface-2026-10-16`. Corrected-source
+Neuroses Debug and ASan application/native and real CLI tests both passed; raw
+logs are in `context/linux/run-bk078swj/checks.log`. No further source recheck.
+
+Post-gate issue bookkeeping encountered a Dolt lifecycle wrinkle: the original
+main-checkout listener had auto-closed01:04; bd auto-started an empty worktree data
+directory on13308 at01:12, which lacked the existing arconaut database. Stopped
+only that newly owned empty server, then started the normal server from existing
+`blackbird/.beads/dolt`. No DB creation, restore, migration or main source/index
+changes. Closed the delivered issue and ran the supported backup from the worktree.
+The final documentation/issue snapshot uses the existing text-only commit exemption.
+The worktree remains available for Oxcart's launcher; no main merge or checkout.
+
+## 2026-10-16 — Oxcart mainline integration and away-worktree retirement
+
+Operator explicitly requests merging the Oxcart interface and removing its
+worktree, then continuing Oxcart. Merge the delivered interface branch into
+master, retaining master's registered Responses provider and fresh-session
+startup behavior. Resolve the shared CMake target additions and CLI help by
+keeping both; combine the journals and refresh the supported issue snapshot
+from the existing primary-checkout database. The independent TUI repair branch
+and its untracked artwork remain untouched. This source merge uses the installed
+full Debug/owned-lint gate. Retain useful ignored worktree artifacts under the
+primary checkout before removing the worktree. Oxcart will launch a retained
+mainline application executable rather than depend on an away-team path.
