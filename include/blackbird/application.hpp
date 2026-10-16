@@ -17,7 +17,7 @@ public:
   Value open();
   int run(CodingEngine &engine, AuditLog &log, const SessionSettings &settings,
           const std::filesystem::path &session);
-  void error(std::string_view id, std::string_view message);
+  void error(std::string_view id, std::string_view message, bool final_follows = false);
   void fatal(std::string_view id, std::string_view message) noexcept;
 
 private:

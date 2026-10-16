@@ -125,7 +125,9 @@ void session(const std::filesystem::path &directory) {
       const auto ready = until(descriptors[1], "ready", "1");
       check(field(ready, "protocol") == Value{Number{1}});
       send(descriptors[1], command("invalid", "bad"));
-      check(string_field(receive(descriptors[1]), "type") == "error");
+      const auto rejected = receive(descriptors[1]);
+      check(string_field(rejected, "type") == "error" &&
+            !std::get<bool>(field(rejected, "final_follows").value()));
       auto first = command("turn", "2", "first objective");
       first.object().emplace_back("observations",
                                   Value{Value::Array{Value::object(
@@ -306,6 +308,70 @@ void disconnected(const std::filesystem::path &directory, bool broken_output) {
     (void)::close(descriptors[1]);
 }
 } // namespace
+void failed_turn(const std::filesystem::path &directory) {
+  std::filesystem::create_directory(directory);
+  std::filesystem::permissions(directory, std::filesystem::perms::owner_all);
+  int descriptors[2]{};
+  check(::socketpair(AF_UNIX, SOCK_STREAM, 0, descriptors) == 0);
+  std::exception_ptr host_failure;
+  std::jthread host{[&] {
+    try {
+      auto opening = command("open", "open");
+      opening.object().emplace_back("session", Value{directory.string()});
+      send(descriptors[1], opening);
+      (void)until(descriptors[1], "ready", "open");
+      send(descriptors[1], command("turn", "failed", "fail this admitted turn"));
+      Value error;
+      do {
+        error = receive(descriptors[1]);
+      } while (string_field(error, "type") != "error");
+      check(string_field(error, "id") == "failed" &&
+            std::get<bool>(field(error, "final_follows").value()));
+      check(string_field(until(descriptors[1], "final", "failed"), "outcome") ==
+            "failed");
+      send(descriptors[1], command("close", "close"));
+      (void)until(descriptors[1], "closed", "close");
+    } catch (...) {
+      host_failure = std::current_exception();
+    }
+    (void)::shutdown(descriptors[1], SHUT_RDWR);
+  }};
+  try {
+    ApplicationConnection application{
+        {.input = descriptors[0], .output = descriptors[0]}};
+    (void)application.open();
+    const JournalHeader header{id<EnvironmentId>(7),
+                               id<AuditStreamId>(8),
+                               1,
+                               {1024 * 1024, 4 * 1024 * 1024},
+                               std::nullopt};
+    auto root = unwrap(
+        RetainedState::create(std::make_unique<NativeJournalDirectory>(unwrap(
+                                  NativeJournalDirectory::open(directory.string()))),
+                              "audit", header, {64 * 1024 * 1024, 10000}));
+    AuditLog log{*root};
+    ContextStore context{log};
+    Provider provider;
+    CodingEngine engine{log, context, provider, "test-model"};
+    const auto program = directory / "fail.lua";
+    write_file(program.string(), "error('deliberate failed turn')");
+    SessionSettings settings;
+    settings.workflow = program.string();
+    settings.model = "test-model";
+    check(application.run(engine, log, settings, directory) == 0);
+  } catch (...) {
+    (void)::shutdown(descriptors[0], SHUT_RDWR);
+    host.join();
+    if (host_failure)
+      std::rethrow_exception(host_failure);
+    throw;
+  }
+  host.join();
+  (void)::close(descriptors[0]);
+  (void)::close(descriptors[1]);
+  if (host_failure)
+    std::rethrow_exception(host_failure);
+}
 int main() {
   const char *stage = "session";
   char name[] = "/tmp/blackbird-application-XXXXXX";
@@ -315,6 +381,8 @@ int main() {
   try {
     std::cerr << "Application session\n";
     session(directory);
+    stage = "failed admitted turn";
+    failed_turn(std::filesystem::path{directory} / "failed-turn");
     std::cerr << "Application invalid frames\n";
     stage = "oversized";
     bad_frame(true);

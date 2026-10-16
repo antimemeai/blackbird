@@ -40,7 +40,10 @@ Events carry `type` and `id`. `text` carries an assistant text delta in `text`;
 Final text retains at most the first 2 MiB; `text_truncated` states whether it is
 only a prefix. Text events carry the entire stream in chunks of at most 64 KiB;
 hosts retain their assembled stream when the final prefix was truncated.
-`error` carries `message`. Invalid commands emit an error without starting work.
+`error` carries `message` and boolean `final_follows`. Invalid/rejected commands
+set it false and emit no final. A failed admitted turn sets it true, then emits
+its failed `final`; retain that request until final rather than treating the
+error as the completed attempt. Fatal errors set it false and close transport.
 Malformed/oversized/truncated frames terminate the connection; clean EOF cancels
 active work and discards queued work. The host must continue reading output until
 exit and must keep input open until the work it wants has completed.

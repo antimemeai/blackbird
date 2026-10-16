@@ -3188,7 +3188,7 @@ Value CodingEngine::operation(
     std::string task_id;
     if (const auto *binding = input.find("task_id"); name == "exec" && binding) {
       task_id = binding->string();
-      if (!tasks_.state().item(task_id))
+      if (!task_id.empty() && !tasks_.state().item(task_id))
         throw Error{ErrorCode::invalid_range};
     }
     if (trace.callback(0, !pumping_commands_ && static_cast<bool>(cancelled),

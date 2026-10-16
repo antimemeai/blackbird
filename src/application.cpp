@@ -64,10 +64,12 @@ void ApplicationConnection::send(const Value &packet) {
   write_all(output_, header);
   write_all(output_, bytes);
 }
-void ApplicationConnection::error(std::string_view id, std::string_view message) {
+void ApplicationConnection::error(std::string_view id, std::string_view message,
+                                  bool final_follows) {
   send(Value::object({{"type", Value{"error"}},
                       {"id", Value{std::string{id}}},
-                      {"message", Value{std::string{message}}}}));
+                      {"message", Value{std::string{message}}},
+                      {"final_follows", Value{final_follows}}}));
 }
 void ApplicationConnection::fatal(std::string_view id,
                                   std::string_view message) noexcept {
@@ -306,7 +308,7 @@ int ApplicationConnection::run(CodingEngine &engine, AuditLog &log,
         throw;
       outcome = failure.code == ErrorCode::interrupted ? "cancelled" : "failed";
       if (outcome == "failed")
-        error(active_id, error_name(failure.code));
+        error(active_id, error_name(failure.code), true);
     }
     active_ = false;
     // EOF/close/cancel observed at a final engine check also cancels its result.

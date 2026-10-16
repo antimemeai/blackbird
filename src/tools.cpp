@@ -962,6 +962,7 @@ Value tool_definitions() {
                         Value::object(
                             {{"type", Value{"string"}},
                              {"description", Value{"Optional existing task/subtask ID; "
+                                                   "empty means unbound. "
                                                    "displays observed runtime activity "
                                                    "without completing it."}}})},
                        {"command", Value::object({{"type", Value{"string"}}})},

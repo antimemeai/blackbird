@@ -1,5 +1,26 @@
 # Arconaut journal
 
+## 2026-10-16 — Oxcart live empty task and failed-turn interface repair
+
+Away worktree from master; active TUI checkout left untouched. Oxcart's real
+Python.org reading reached the model, whose first exec call supplied task_id=""
+alongside a valid command. The optional placeholder was incorrectly looked up
+as an existing task, throwing invalid_range before dispatch. The direct native
+regression reproduced red, then passed after ignoring only the empty binding;
+nonempty unknown tasks still reject before their marker command executes.
+Updated the tool field description. Source/trigger and bounded work are in
+papers/2026-10-16-empty-exec-task.md.
+
+That failure also exposed error/final ambiguity: rejected commands end at error,
+but admitted failed turns emit error then final. Added final_follows explicitly
+to errors, true only for admitted failures. The native Oxcart client/coordinator
+uses it to keep the failed turn active and retain its response/submission/outcome
+before completing. Real ApplicationConnection tests check both rejection and
+admitted-failure framing. Four direct tests pass: empty_exec_task, application,
+application_cli and tasks. Native process/coordinator and real saved-reading
+checks run in Oxcart; no owned website, new dependency, provider release study,
+terminal changes, replay or input executor.
+
 ## 2026-09-29 — Clone and reopen the foundations
 
 Read the workspace Blackbird doctrine. The operator requested a clone and critical
