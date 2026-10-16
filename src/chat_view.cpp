@@ -1,6 +1,7 @@
 #include "blackbird/chat_view.hpp"
 #include "blackbird/terminal.hpp"
 #include "blackbird/workflows.hpp"
+#include "unicode_pictographic.hpp"
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -69,18 +70,30 @@ Rune rune(std::string_view s) {
 Rune cluster(std::string_view s) {
   auto result = rune(s);
   auto rest = s.substr(result.bytes);
-  bool join = result.scalar == 0x200d;
+  // An unattached joiner has no spacing cell and cannot absorb a later base.
+  if (result.scalar == 0x200d)
+    return result;
+  bool pictograph = detail::extended_pictographic(result.scalar);
+  bool join = false;
   bool regional = result.scalar >= 0x1f1e6 && result.scalar <= 0x1f1ff;
   while (!rest.empty()) {
     const auto r = rune(rest);
     const bool region = r.scalar >= 0x1f1e6 && r.scalar <= 0x1f1ff;
     const bool modifier = r.scalar >= 0x1f3fb && r.scalar <= 0x1f3ff;
-    if (r.width && !modifier && !join && !(region && regional))
+    const bool joined = join && detail::extended_pictographic(r.scalar);
+    if (r.width && !modifier && !joined && !(region && regional))
       break;
-    if (join || (region && regional) || r.scalar == 0xfe0f || r.scalar == 0x20e3)
+    if (joined || (region && regional) || r.scalar == 0xfe0f || r.scalar == 0x20e3)
       result.width = 2;
     result.bytes += r.bytes;
-    join = r.scalar == 0x200d;
+    // GB11 permits EP Extend* ZWJ EP, not arbitrary text joined by ZWJ.
+    join = r.scalar == 0x200d && pictograph;
+    if (r.scalar == 0x200d)
+      pictograph = false;
+    else if (joined)
+      pictograph = true;
+    else if (!detail::grapheme_extend(r.scalar))
+      pictograph = false;
     regional = region && !regional;
     rest.remove_prefix(r.bytes);
   }
@@ -480,6 +493,10 @@ void ChatGrid::line(std::size_t row, const ChatRow &content, std::size_t column)
     auto text = std::string_view{span.text};
     while (!text.empty()) {
       const auto r = cluster(text);
+      if (!r.width) {
+        text.remove_prefix(r.bytes);
+        continue;
+      }
       if (column + r.width > width)
         return;
       const auto erase_footprint = [&](std::size_t x) {

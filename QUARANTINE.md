@@ -941,3 +941,13 @@ original hashes, source license and restoration commands. Extracted study copies
 omit nested Git metadata/detritus; original archives remain intact. Archived
 instructions are historical reference. The operator explicitly selects this
 fuzzer for native TUI testing; no production framework/library adoption follows.
+
+## Unicode property data for the pane-width repair, 2026-10-15
+
+[Sources and restoration](papers/ultramarine-repair-2026-10-15/UNICODE_SOURCES.tsv)
+pin Unicode17 emoji-data.txt and the acquired UnicodeV3 license. Exact originals
+remain unchanged under ignored quarantine/unicode-17.0.0/. The owned renderer's
+Extended_Pictographic range data is derived from this normative data file; no
+library or reference implementation is adopted. The
+[pane diagnosis](papers/ultramarine-repair-2026-10-15/PANES.md) explains the
+cause-specific GB11 restriction and direct terminal-cell oracles.

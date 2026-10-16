@@ -71,8 +71,8 @@ Wait budgets use monotonic time and are independent of the launch-relative comma
 lifetime. Repeated foreground waits cannot renew the lifetime deadline. Completion
 and background/control admission are resolved against an exact job/wait identity
 under the registry lock. A request for a finishing job cannot detach or signal a
-later job. Completed jobs remain inspectable until explicit archive/capacity policy;
-capacity refuses new work and never kills a live job to evict it.
+later job. Completed jobs remain inspectable until explicit archive or resident
+admission pressure. Capacity never kills a live job to evict it.
 
 First defaults are eight live jobs and32 resident job records, configured explicitly
 through the job configuration interface while no jobs are live. Each job permits
@@ -80,8 +80,26 @@ through the job configuration interface while no jobs are live. Each job permits
 chunks), 64KiB pending input, 16MiB total retained input identity payload, and4096 retained control identities. Input request payloads share their immutable native bytes; the worker does not keep another string copy. Public reads are
 at most64KiB. Full queues apply bounded backpressure; lifetime/output exhaustion
 requests stop with an explicit incomplete/unknown result. Stop/background remain
-available when input/control capacity is exhausted. Completed records require
-explicit archive before resident slots can be reused; retained output survives it.
+available when input/control capacity is exhausted. At the resident bound, new
+admission automatically retires the oldest eligible record in original admission
+order. Eligibility requires a finished worker, retained terminal result, no
+pending captured bytes or native custody, no unfinished delivery, no foreground
+waiter, and no queued mailbox request targeting that exact job. Explicit archive
+uses the same predicate. If every record is protected, admission refuses before
+worker publication. The live-job limit is checked first and never retires a
+completed record merely to refuse the launch anyway.
+
+Retirement joins the finished worker and releases its native projection, live
+tail and input/control identity history outside the registry mutex. It emits a
+raw ownership transition and preserves the existing retained terminal result and
+original output. Retired jobs leave native discovery/read/control; their
+`output_ref` remains readable through `read_process_output`. A stale control
+fails lookup before effects. Original attempt admission owns launch identity;
+resident IDs and raw PIDs are never recycled as new command identities. A
+durably settled unknown result may retire after native custody ends; unretained
+capture or a pending child cannot. Sticky capture failure independently fences
+new work. No unbounded native tombstone history is introduced.
+
 These are declared resource choices, not process identity or provider limitations.
 
 ## Shared interfaces
@@ -221,3 +239,20 @@ Actual Darwin26.6 SDK probes showed exit-only waitid returning STOP and a contin
 event with an anomalous reported PID. Exit classification requires an exit kind
 and the owned PID; nonterminal observation uses the specific P_PID selector and
 STOP/CONT kind. The primary empirical source and full fields are in platform.md.
+
+## Admission refusal versus capture failure
+
+The registry reports its actual live/record guard through call-local native
+CommandStartStatus; generic raw/audit capacity is not reclassified from absence
+of a job. A registry refusal returns a retained normal tool result with
+`error=capacity`, `resource=live_commands|command_records`, actual `count` and
+`limit`, the audit `attempt` locator and `effect_outcome=not_started`. It has no
+process `output_ref`, because this command never launched. The attempt settles
+as failure, the activity says refused/not started, and the model receives this
+result rather than a generic turn-stopped placeholder. It can inspect current
+jobs and choose further work. This does not automatically retry any command.
+
+Failure to retain the refusal result or terminal observation preserves the
+capture stop/fence. Real post-start capture failure, cancellation and timeout
+retain their previous unknown-effect and exact-child cleanup contracts. A
+registry limit never implies provider context exhaustion or user interruption.

@@ -178,6 +178,10 @@ Value task(std::string id, std::string title, std::string status,
 }
 std::vector<Snapshot> scenarios() {
   std::vector<Snapshot> output;
+  ChatView joiners;
+  joiners.append(ChatKind::assistant, "A\u200dB\u200dC \u200d \u200d XZ");
+  output.push_back(rows("conversation-plain-joiners", joiners.rows(12), 12, 5));
+
   ChatView conversation;
   conversation.append(ChatKind::user, "Inspect the parser.");
   conversation.append(ChatKind::assistant,

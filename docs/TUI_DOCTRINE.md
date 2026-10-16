@@ -70,6 +70,11 @@ request to an owner, a saved file and a remote effect are different observations
 Show the relevant distinction where the next decision depends on it. Use plain
 language and compact state marks rather than a wall of lifecycle jargon.
 
+Admission to the audit does not prove that a command launched. A known refusal
+names its resource and says that execution did not start in both human activity
+and model tool results. Preserve unknown outcome for an actually uncertain effect;
+do not replace an observed refusal with a generic interruption story.
+
 ## 4. Make effective scope and activation legible
 
 Configuration work exposes its scope, inherited source, local override, saved
@@ -168,6 +173,12 @@ wide characters, fallback glyphs, light/dark backgrounds and terminal capabiliti
 belong to rendering design. Preserve exact content for copy and inspection while
 presenting readable Markdown, code, tables and structured results.
 
+The emitted text must occupy the cells that composition assigns it. Invisible
+format characters in ordinary fetched text belong to this contract. Use pinned
+Unicode properties for the relevant cluster rules and check literal positions in
+an independent terminal parser: a renderer and a test decoder can share the same
+width mistake. A clean modeled grid alone does not establish a clean terminal.
+
 Motion expresses real transition or activity and never delays information or
 input. Support reduced motion and static equivalents. Do not animate reading
 anchors or require continuous repaint when settled. Images, the Blackbird avatar,
@@ -180,6 +191,12 @@ Separate background activity, actionable exceptions, requested decisions and
 terminal outcomes. Repeated facts need not repeatedly interrupt. Preserve
 acknowledgment and unresolved intentions so an interruption need not be remembered
 in working memory. Let the operator choose what to pin, mute, fold or follow.
+
+Bound recent resident observations without turning routine work into a lifetime
+quota. Retire safely settled records under pressure while preserving originals
+and stable effect identity; live custody, pending capture and accepted controls
+remain owned. Expose the distinction between recent control views and retained
+history when an old observation leaves the resident view.
 
 A command center provides overview and paths into work. It does not turn the
 operator into a mandatory traffic controller. Team views show responsibilities,

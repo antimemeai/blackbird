@@ -11,7 +11,7 @@
 
 namespace {
 int observations = -1;
-bool reported_blocked = false;
+std::atomic_bool reported_blocked = false;
 using NativeWrite = ssize_t (*)(int, const void *, std::size_t);
 NativeWrite native_write() {
   static const auto function =
@@ -42,8 +42,7 @@ extern "C" ssize_t write(int descriptor, const void *bytes, std::size_t size) {
   const auto count = native_write()(descriptor, bytes, size);
   const int error = errno;
   if (descriptor == STDOUT_FILENO && count < 0 &&
-      (error == EAGAIN || error == EWOULDBLOCK) && !reported_blocked) {
-    reported_blocked = true;
+      (error == EAGAIN || error == EWOULDBLOCK) && !reported_blocked.exchange(true)) {
     constexpr char event = 'B';
     if (native_write()(observations, &event, 1) != 1)
       std::abort();
@@ -54,8 +53,9 @@ extern "C" ssize_t write(int descriptor, const void *bytes, std::size_t size) {
 
 int main(int argc, char **argv) {
   try {
-    if (argc != 4)
+    if (argc != 4 && argc != 5)
       throw std::runtime_error("fixture requires observation/control/state paths");
+    const bool pane = argc == 5 && std::string_view{argv[4]} == "pane";
     observations = std::stoi(argv[1]);
     const int controls = std::stoi(argv[2]);
     std::atomic_bool cancelled = false, finished = false;
@@ -67,12 +67,17 @@ int main(int argc, char **argv) {
           std::string transcript;
           for (unsigned row = 0; row < 80; ++row) {
             const auto number = std::to_string(row);
-            transcript += "ROW_" + std::string(3 - number.size(), '0') + number + "\n";
+            transcript += "ROW_" + std::string(3 - number.size(), '0') + number;
+            if (pane)
+              for (unsigned part = 0; part < 20; ++part)
+                transcript += " \u200d \u200d ";
+            transcript += "\n";
           }
           ui.text(transcript);
           observe('S');
           if (read_control(controls) != 'P')
             throw std::runtime_error("fixture expected publication control");
+          reported_blocked.store(false);
           ui.title("Blocked presentation");
           const auto deadline =
               std::chrono::steady_clock::now() + std::chrono::seconds{5};

@@ -9852,3 +9852,78 @@ unknown effect; model invents interruption and retries, also refused. No failed
 build worker launched. Queue arconaut-zh2 and independent unresolved pane bug
 arconaut-6ao; report papers/ultramarine-triage-2026-10-15.md. No source change,
 provider call, live-session mutation or AFL inspection.
+
+Operator authorizes full repair of the Ultramarine session defects under doctrine.
+Start papers/ultramarine-repair-2026-10-15/PLAN.md: sustainable command observation
+lifecycle, known pre-launch refusal vs effect uncertainty, and independently
+reproduced pane fault. Delegate whole command-lifecycle and pane units plus a
+read-only failure-semantics adversary. Root owns integration/outcome contract,
+matched perf and final source gate. Preserve exact session read-only; no command
+replay/provider calls/AFL changes. Direct oracles and two-layer scope recorded.
+
+Command unit old-red fails at33 in both registry and retained engine. New bounded
+oldest-safe retirement passes40 with durable first output and single terminal.
+Call-local actual guard refusal status returns normal not_started/resource data
+and known failure; capture/terminal retention overrides this exemption. Native
+provider/control tests pass live/resident refusal and layer2 result-write fault:
+blocked writer stops continuation/new effects. Independent command reviewer finds
+no product defect; direct child-survival observation and pagination variable-default
+prose corrected. Two-layer work remains within listed defects.
+
+Pane owner reconstructs exact successful output and independently reproduces
+screenshot corruption in BOTH Microsoft Ghostty and Alacritty. Old owned oracle
+shared unconditional ZWJ join bug with renderer. Actual downloaded text includes
+space/ZWJ/space sequences; scanner predicts2 cells for3 spaces. Narrow pinned
+Unicode property data drives pictographic-only emoji join; literal cell tests,
+independent parsers and real backpressure/whole-window checks distinguish repair
+from merely accepting the old corrupted expectation. No borrowed-storage cause
+claimed. Source review also challenges zero-width non-Extend barriers in GB11.
+
+2026-10-15 — Pane lane reproduced arconaut-6ao from917008 original retained
+successful terminal bytes through both Microsoft Ghostty and Alacritty. Found
+plain-space/ASCII U+200D chains incorrectly collapsed to two cells by both the
+native cluster scanner and its prior VT-subset oracle. Wrote/reviewed the
+cause-specific plan, retained pinned Unicode17 EP/Extend data and license,
+implemented owned property-gated joining, and added direct old-red/new-green
+native/Microsoft expectations plus readable grid and physical EAGAIN/graphics/
+105×52 pane checks. Root's non-Extend barrier and Clang18 CTAD findings were
+integrated. No original session command, provider call or recovery executed.
+Detailed cause, bounded checks and source limits: papers/ultramarine-repair-2026-10-15/PANES.md.
+Root retains final integrated gates, performance, issue closure and checkpoint.
+
+2026-10-15 — Pane recheck: Linux ASan exposed that4096byte EAGAIN while filling
+a PTY did not establish one-byte pressure for small UI deltas. Updated only the
+blocked-output script to fill through1byte and top up Linux write/flip-buffer
+room during the existing no-drain nativeB/cancellationC waits. Both actual
+observations,5second steps and25second case limit remain. Both Mac episodes
+pass; root owns the single affected LinuxASan recheck and final integration.
+
+Integrated Mac Debug suite passes160/160 in254.38s. LinuxRelease selected24/24
+passes26.28s. MacTSan initial aggregate fixture exceeded original30s and new
+provider fixture lacked source working directory; repaired test partition/CTest
+metadata, retaining old30/45s deadlines. Corrected five cases pass112.25s,
+including40-command native41.06s and engine43.97s episodes.
+LinuxASan first passes23/24; newpane pressure fixture assumes a failed4KiB
+write means no small write fits. Correct only physicalfill (through1byte) and
+keep pressure during no-drain observations, preserving all original deadlines
+and actualEAGAIN/Ctrl-C checks. Mac selectedepisode and LinuxASan affected1/1
+pass (0.92s). Existing23passing cases stay recorded, no repeated broadASan.
+The temporary ASan runner cleaned its first workspace; the scoped recheck retains
+its ownedworkspace for final explicitcleanup. No production body changed.
+
+The first source hook's stagedtree is obsolete after that Pythonfixture fix.
+Preserve successful160test log, stop only the verified owned gateinterpreter and
+its nativeanalysischildren, and restage finalfixture/docs before running normal
+installedhook again. First gate's analysis was interrupted; no cleananalysis or
+sourcecommit claimed. Final gate uses one stable stagedtree; do not mutate it
+while the hook runs. Source snapshots and all failedattempts remain retained.
+
+Final stable-tree gate passes159/160; raw_runtime fails an existing fixture's
+unconditional recorder kill after supervisor death. Recorder may already exit on
+control EOF; actual errno was not retained. Record arconaut-gbu, study recorder
+and supervisor lifecycle, and obtain narrow independent review (RAW_FIXTURE.md).
+Observe supervisor SIGSTOP via waitpid(WUNTRACED), preserve actual queued status
+RPC barrier, kill recorder while stopped parent pins identity, then supervisor.
+Mac affected1/1 passes1.99s; LinuxRelease affected1/1 passes0.12s. No production
+body or measured binary changes. Run normal source hook on this final stagedtree.
+ASan scoped owned temporary workspace has now been explicitly cleaned.

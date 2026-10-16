@@ -607,10 +607,20 @@ add_dependencies(raw_command_wake_test command_job_fixture)
 set_target_properties(raw_command_wake_test PROPERTIES ENABLE_EXPORTS ON)
 add_test(NAME raw_command_wake COMMAND raw_command_wake_test $<TARGET_FILE:command_job_fixture>)
 set_tests_properties(raw_command_wake PROPERTIES TIMEOUT 30)
+add_executable(command_admission_test tests/command_admission_test.cpp)
+target_link_libraries(command_admission_test PRIVATE blackbird_coding)
+add_test(NAME command_admission COMMAND command_admission_test)
+set_tests_properties(command_admission PROPERTIES TIMEOUT 30 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_executable(command_jobs_engine_test tests/command_jobs_engine_test.cpp)
 target_link_libraries(command_jobs_engine_test PRIVATE blackbird_coding)
 add_test(NAME command_jobs_engine COMMAND command_jobs_engine_test)
 set_tests_properties(command_jobs_engine PROPERTIES TIMEOUT 45)
+add_test(NAME command_job_retention COMMAND command_jobs_test --retention)
+add_test(NAME command_job_retention_engine COMMAND command_jobs_engine_test --retention)
+# These new episodes include forty cold instrumented child starts. Keep the
+# existing command suites at their original deadlines and give this work its own.
+set_tests_properties(command_job_retention command_job_retention_engine PROPERTIES TIMEOUT 60)
 
 add_test(NAME command_jobs_pty COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check-command-jobs-pty $<TARGET_FILE:blackbird>)
 set_tests_properties(command_jobs_pty PROPERTIES TIMEOUT 60)

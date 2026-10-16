@@ -76,3 +76,14 @@ selects one. Failed fixture directories are retained and reported. Coding uses
 `coding`, `coding_capacity`, `coding_routing` and `coding_stream_capture`, each
 with60seconds and its distinct assertions. See the [repair status](../papers/tui-settlement-repair-2026-10-15/RESULTS.md)
 for current source publication and actual checked profiles.
+
+The Ultramarine pane repair adds a105×52 production scenario to the Microsoft
+case. Synthetic ordinary spaces separated by U+200D must preserve all52 divider
+and gutter rows, task origin and composer cursor. Both Ghostty and Alacritty
+were exercised; a pre-repair executable fails the exact same divider assertion.
+The native blocked-output case retains its original80column scroll episode and
+adds a graphics-enabled121column to105×52 episode with real EAGAIN, cancellation
+before draining, literal pane cells and draft/mode restoration. The
+[diagnosis and source profile](../papers/ultramarine-repair-2026-10-15/PANES.md)
+distinguish the independently reproduced screenshot defect, the owned oracle's
+shared prior mistake, normative Unicode data and remaining width limitations.

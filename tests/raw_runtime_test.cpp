@@ -3,6 +3,7 @@
 
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -284,6 +285,13 @@ void supervisor_death_during_rpc() {
   auto runtime = require(RawRuntime::open(directory.name.data(), environment(), small));
   const auto status = require(runtime->status());
   CHECK(::kill(status.supervisor, SIGSTOP) == 0);
+  int stopped = 0;
+  pid_t observed;
+  do {
+    observed = ::waitpid(status.supervisor, &stopped, WUNTRACED);
+  } while (observed < 0 && errno == EINTR);
+  CHECK(observed == status.supervisor && WIFSTOPPED(stopped) &&
+        WSTOPSIG(stopped) == SIGSTOP);
   watch_status_send.store(true);
   status_sent.store(false);
   std::optional<Error> failure;
@@ -293,11 +301,14 @@ void supervisor_death_during_rpc() {
     failure = response.error();
   }};
   until([&] { return status_sent.load(); });
+  // The observed-stopped supervisor cannot reap its recorder. Kill that child
+  // while its identity is pinned, before parent death can make it exit on EOF.
+  // This separate socket still has the actual queued supervisor RPC above.
+  CHECK(::kill(status.recorder, SIGKILL) == 0);
   CHECK(::kill(status.supervisor, SIGKILL) == 0);
   requester.join();
   watch_status_send.store(false);
   CHECK(failure && failure->code == ErrorCode::audit_unavailable);
-  CHECK(::kill(status.recorder, SIGKILL) == 0);
   // No source producer was activated; unlink only this fixture's named lanes.
   for (const auto &entry : std::filesystem::directory_iterator{run_path(directory)})
     if (entry.path().filename().string().starts_with("lane.")) {

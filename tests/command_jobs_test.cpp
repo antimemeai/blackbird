@@ -155,6 +155,132 @@ long metadata(const Path &path, std::string_view key) {
       return std::stol(item.substr(prefix.size()));
   throw std::runtime_error("missing fixture identity field: " + std::string{key});
 }
+void retention(const Path &executable, const Path &root) {
+  Evidence sequential;
+  for (unsigned n = 0; n < 40; ++n) {
+    const auto child =
+        fixture({executable, root / ("sequential-" + std::to_string(n))});
+    const auto id = job_id(900 - n);
+    sequential.start(id, child, {"closed-stdio"});
+    expect_exit(sequential.wait(id), "0");
+    require(
+        sequential.originals[id] == "STDIO\n" && sequential.terminals[id] == 1 &&
+            contents(child.root / "launches") == "L",
+        "ordinary foreground commands retain exact output and launch once beyond32");
+    require(field(sequential.jobs.read(Value::object({})), "jobs").array().size() <= 32,
+            "sustainable execution keeps the declared resident bound");
+  }
+  require(
+      !sequential.jobs.contains(job_id(900)) && sequential.jobs.contains(job_id(861)),
+      "retirement follows admission order despite reverse-sorted attempt identities");
+  bool stale = false;
+  try {
+    (void)sequential.control(job_id(900), {"stop", "late-stop"});
+  } catch (const Error &error) {
+    stale = error.code == ErrorCode::invalid_range;
+  }
+  require(stale, "retired command control cannot reach a different process");
+  sequential.jobs.shutdown();
+
+  Evidence protected_jobs;
+  protected_jobs.jobs.control(Value::object({{"op", Value{"configure"}},
+                                             {"max_live", Value{Number{3}}},
+                                             {"max_records", Value{Number{3}}}}));
+  const auto a = job_id(900), b = job_id(100), c = job_id(500), d = job_id(400),
+             e = job_id(300);
+  const auto completed = fixture({executable, root / "mailbox-protected"});
+  protected_jobs.start(a, completed, {"closed-stdio"});
+  expect_exit(protected_jobs.wait(a), "0");
+  protected_jobs.jobs.request(
+      Value::object({{"op", Value{"read"}}, {"job_id", Value{a}}}));
+  const auto running = fixture({executable, root / "live-protected"});
+  protected_jobs.start(b, running, {"gate"});
+  protected_jobs.until(
+      b, [&] { return std::filesystem::exists(running.root / "ready"); },
+      "protected job actual readiness");
+  const auto pid = metadata(running.root / "identity", "pid");
+  const auto pending = fixture({executable, root / "capture-protected"});
+  protected_jobs.start(c, pending, {"closed-stdio"});
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{4};
+  while (string_field(protected_jobs.jobs.read(Value::object({{"job_id", Value{c}}})),
+                      "state") != "settling") {
+    require(std::chrono::steady_clock::now() < deadline,
+            "completed child reaches unretained capture without engine pumping");
+    std::this_thread::sleep_for(std::chrono::milliseconds{2});
+  }
+  const auto replacement = fixture({executable, root / "replacement"});
+  bool refused = false;
+  CommandStartStatus status;
+  try {
+    protected_jobs.jobs.start(d, arguments(replacement, {"closed-stdio"}), nullptr,
+                              &status);
+  } catch (const Error &error) {
+    refused = error.code == ErrorCode::capacity;
+  }
+  require(
+      refused && status.refusal == CommandStartStatus::Refusal::resident_limit &&
+          !status.worker_started && status.live == 2 && status.resident == 3 &&
+          status.max_live == 3 && status.max_records == 3 &&
+          !std::filesystem::exists(replacement.root / "launches") &&
+          protected_jobs.jobs.contains(a) && protected_jobs.jobs.contains(b) &&
+          protected_jobs.jobs.contains(c) && ::kill(static_cast<pid_t>(pid), 0) == 0,
+      "capacity preserves mailbox, live custody and unretained capture before effects");
+  protected_jobs.pump();
+  protected_jobs.pump();
+  protected_jobs.start(d, replacement, {"closed-stdio"});
+  expect_exit(protected_jobs.wait(d), "0");
+  require(protected_jobs.jobs.contains(a) && protected_jobs.jobs.contains(b) &&
+              !protected_jobs.jobs.contains(c) &&
+              protected_jobs.originals[c] == "STDIO\n" &&
+              protected_jobs.terminals[c] == 1 &&
+              contents(replacement.root / "launches") == "L",
+          "only capture-settled unprotected job retires under admission pressure");
+  require(protected_jobs.jobs.requests().size() == 1,
+          "pending control keeps original identity until its owner receives it");
+  const auto last = fixture({executable, root / "after-mailbox"});
+  protected_jobs.start(e, last, {"closed-stdio"});
+  expect_exit(protected_jobs.wait(e), "0");
+  require(
+      !protected_jobs.jobs.contains(a) && protected_jobs.jobs.contains(b) &&
+          protected_jobs.jobs.contains(d),
+      "delivered mailbox releases oldest completed record without touching live job");
+  release(running.root / "finish");
+  expect_exit(protected_jobs.wait(b), "0");
+  require(metadata(running.root / "identity", "pid") == pid &&
+              contents(running.root / "launches") == "L",
+          "retirement pressure preserves the same live child and one launch");
+  protected_jobs.jobs.control(
+      Value::object({{"op", Value{"configure"}}, {"max_live", Value{Number{1}}}}));
+  const auto live = fixture({executable, root / "live-limit"});
+  const auto f = job_id(50), g = job_id(60);
+  protected_jobs.start(f, live, {"gate"});
+  protected_jobs.until(
+      f, [&] { return std::filesystem::exists(live.root / "ready"); },
+      "live limit actual readiness");
+  const auto rejected = fixture({executable, root / "live-limit-refused"});
+  refused = false;
+  try {
+    protected_jobs.jobs.start(g, arguments(rejected, {"closed-stdio"}), nullptr,
+                              &status);
+  } catch (const Error &error) {
+    refused = error.code == ErrorCode::capacity;
+  }
+  require(refused && status.refusal == CommandStartStatus::Refusal::live_limit &&
+              !status.worker_started && status.live == 1 && status.max_live == 1 &&
+              protected_jobs.jobs.contains(d) && protected_jobs.jobs.contains(e) &&
+              protected_jobs.jobs.contains(f) &&
+              !std::filesystem::exists(rejected.root / "launches"),
+          "live limit refuses before retiring settled rows or launching replacement");
+  release(live.root / "finish");
+  expect_exit(protected_jobs.wait(f), "0");
+  protected_jobs.jobs.start(g, arguments(rejected, {"closed-stdio"}), nullptr, &status);
+  expect_exit(protected_jobs.wait(g), "0");
+  require(status.worker_started &&
+              status.refusal == CommandStartStatus::Refusal::none &&
+              contents(rejected.root / "launches") == "L",
+          "start status resets between refused and admitted calls without replay");
+  protected_jobs.jobs.shutdown();
+}
 int closed_stdio(const Fixture &settings) {
   const auto &executable = settings.executable;
   const auto &root = settings.root;
@@ -321,6 +447,10 @@ int main(int argc, char **argv) {
     if (argc == 3 && std::string_view{argv[1]} == "--resource-failure")
       return resource_failure({executable, Path{argv[2]}});
     Temporary temporary;
+    if (argc == 2 && std::string_view{argv[1]} == "--retention") {
+      retention(executable, temporary.root);
+      return 0;
+    }
     Evidence e;
     const auto first = fixture({executable, temporary.root / "identity"});
     const auto a = job_id(1);

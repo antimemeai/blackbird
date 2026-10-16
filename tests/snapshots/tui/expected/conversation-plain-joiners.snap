@@ -1,0 +1,10 @@
+styled-grid-v1
+size 12 5
+cursor none
+state component rows
+|{assistant:  BLACKBIRD}{normal: }|
+|{assistant:  │ }{normal:A‍B‍C ‍ ‍ XZ}|
+|{normal:            }|
+|{normal:            }|
+|{normal:            }|
+cell-widths

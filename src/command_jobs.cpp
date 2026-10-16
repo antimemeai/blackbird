@@ -14,6 +14,7 @@
 #include <cstring>
 #include <deque>
 #include <fcntl.h>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <new>
@@ -306,6 +307,7 @@ struct CommandJobs::Impl {
   };
   struct Job {
     std::string id;
+    std::uint64_t admission_order = 0;
     Launch launch;
     RawThreadHandle raw_context;
     std::unique_ptr<RawRetainedJobLoan> retained_loan;
@@ -372,7 +374,7 @@ struct CommandJobs::Impl {
   };
   std::deque<Mailbox> mailbox;
   std::string waiting;
-  std::uint64_t epoch = 0, request_counter = 0;
+  std::uint64_t epoch = 0, request_counter = 0, admission_counter = 0;
   bool text_input = false;
   std::size_t max_live = 8, max_records = 32;
   Job &find(const std::string &id) const {
@@ -388,6 +390,16 @@ struct CommandJobs::Impl {
                  entry.second->custody == Custody::pending ||
                  entry.second->custody == Custody::owned;
         }));
+  }
+  bool retirable(const Job &job) const {
+    return job.finished && job.terminal_retained && job.pending.empty() &&
+           job.custody != Custody::pending && job.custody != Custody::owned &&
+           waiting != job.id &&
+           std::none_of(job.deliveries.begin(), job.deliveries.end(),
+                        [](const auto &entry) { return !entry.second.done; }) &&
+           std::none_of(mailbox.begin(), mailbox.end(), [&](const Mailbox &entry) {
+             return string_field(entry.value, "job_id") == job.id;
+           });
   }
   struct View {
     std::size_t max_output = 0, offset = 0;
@@ -1086,7 +1098,9 @@ CommandJobs::~CommandJobs() {
   }
 }
 void CommandJobs::start(const std::string &id, const Value &arguments,
-                        RawRetainedExec *admission) {
+                        RawRetainedExec *admission, CommandStartStatus *status) {
+  if (status)
+    *status = {};
   const auto id_size = id.size();
   const std::uint8_t operation = 1, owner_present = 0;
   auto admission_credit = raw_command_claim(66);
@@ -1095,6 +1109,17 @@ void CommandJobs::start(const std::string &id, const Value &arguments,
                        raw_native_field(operation), raw_native_field(owner_present)});
   // Surplus preparation must retire after any product lock has unwound.
   RawThreadHandle cleanup_candidate;
+  struct RetiredJob {
+    std::shared_ptr<Impl::Job> job;
+    ~RetiredJob() {
+      // finished is published just before the worker returns. Join explicitly
+      // before releasing this owner, so the worker cannot destroy its own Job.
+      if (job && job->worker.joinable())
+        job->worker.join();
+      if (job && job->retained_loan)
+        job->retained_loan->joined();
+    }
+  } retired;
   try {
     auto launch = parse_launch(arguments);
     if (id.size() != 32 ||
@@ -1140,9 +1165,49 @@ void CommandJobs::start(const std::string &id, const Value &arguments,
     const std::lock_guard lock{impl_->mutex};
     if (impl_->jobs.contains(id))
       throw Error{ErrorCode::conflict};
-    if (impl_->jobs.size() >= impl_->max_records ||
-        impl_->debt_locked() >= impl_->max_live)
+    const auto live = impl_->debt_locked();
+    if (status) {
+      status->live = live;
+      status->resident = impl_->jobs.size();
+      status->max_live = impl_->max_live;
+      status->max_records = impl_->max_records;
+    }
+    if (live >= impl_->max_live) {
+      if (status)
+        status->refusal = CommandStartStatus::Refusal::live_limit;
       throw Error{ErrorCode::capacity};
+    }
+    if (impl_->admission_counter == std::numeric_limits<std::uint64_t>::max())
+      throw Error{ErrorCode::capacity};
+    if (impl_->jobs.size() >= impl_->max_records) {
+      auto oldest = impl_->jobs.end();
+      for (auto candidate = impl_->jobs.begin(); candidate != impl_->jobs.end();
+           ++candidate)
+        if (impl_->retirable(*candidate->second) &&
+            (oldest == impl_->jobs.end() ||
+             candidate->second->admission_order < oldest->second->admission_order))
+          oldest = candidate;
+      if (oldest == impl_->jobs.end()) {
+        if (status)
+          status->refusal = CommandStartStatus::Refusal::resident_limit;
+        throw Error{ErrorCode::capacity};
+      }
+      const auto length = oldest->first.size();
+      auto retirement_credit = raw_command_claim(75 + length);
+      const std::uint8_t retirement_operation = 4, branch = 1;
+      const Error error{};
+      (void)raw_command_linked(
+          2045, request,
+          std::array{raw_native_field(length), raw_string_field(oldest->first),
+                     raw_native_field(retirement_operation), raw_native_field(branch),
+                     raw_native_field(error.code), raw_native_field(error.detail),
+                     raw_native_field(impl_->max_live),
+                     raw_native_field(impl_->max_records)},
+          retirement_credit ? &*retirement_credit : nullptr);
+      retired.job = oldest->second;
+      impl_->jobs.erase(oldest);
+    }
+    job->admission_order = ++impl_->admission_counter;
     struct PendingOwnerCredit {
       Impl::Job &job;
       bool committed = false;
@@ -1168,6 +1233,8 @@ void CommandJobs::start(const std::string &id, const Value &arguments,
         job->retained_loan->started();
       job->stop_wake->publish();
       job->worker = std::jthread([state = impl_.get(), job] { state->run(job); });
+      if (status)
+        status->worker_started = true;
     } catch (...) {
       if (job->retained_loan)
         job->retained_loan->never_started();
@@ -1492,13 +1559,7 @@ Value CommandJobs::control(const Value &arguments) {
     const auto id = string_field(arguments, "job_id");
     auto &job = impl_->find(id);
     if (op == "archive") {
-      if (!job.terminal_retained || !job.pending.empty() ||
-          job.custody == Impl::Custody::pending ||
-          job.custody == Impl::Custody::owned || impl_->waiting == id ||
-          std::any_of(impl_->mailbox.begin(), impl_->mailbox.end(),
-                      [&](const Impl::Mailbox &entry) {
-                        return string_field(entry.value, "job_id") == id;
-                      }))
+      if (!impl_->retirable(job))
         throw Error{ErrorCode::busy};
       auto retained = impl_->jobs.at(id);
       impl_->jobs.erase(id);

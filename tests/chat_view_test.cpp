@@ -105,7 +105,7 @@ int main(int argc, char **) {
       require(::pipe(descriptors) == 0, "oracle presenter pipe");
       ChatPresenter presenter;
       presenter.attach(descriptors[1]);
-      for (int i = 0; i < 8; ++i) {
+      for (int i = 0; i < 9; ++i) {
         if (i == 6) {
           auto &tiny = presenter.prepare_tiny(2, 8, 0, 1);
           tiny = "\x1b[?2026h\x1b[H\x1b[2Jx\x1b[1;2H\x1b[?2026l";
@@ -126,6 +126,7 @@ int main(int argc, char **) {
         frame.line(0, {{i == 0   ? "hello long"
                         : i == 1 ? "界éx"
                         : i == 2 ? "h"
+                        : i == 8 ? "A\u200dB\u200dCx"
                                  : "👩‍💻🇺🇸",
                         Ink::assistant}});
         frame.line(1, {{"keyword", Ink::keyword}, {" string", Ink::string}});
@@ -243,6 +244,51 @@ int main(int argc, char **) {
     grid.reset(20, 4);
     grid.line(0, {{"👩‍💻x", Ink::normal}});
     require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x', "ZWJ cluster");
+    grid.reset(20, 4);
+    grid.line(0, {{" \u200d \u200d X", Ink::normal}});
+    require(grid.cells[0].width == 1 && grid.cells[1].width == 1 &&
+                grid.cells[2].width == 1 && grid.cells[3].scalar == U'X',
+            "plain-text joiners collapse spacing cells");
+    grid.reset(20, 4);
+    grid.line(0, {{"A\u200dB\u200dCx", Ink::normal}});
+    require(grid.cells[0].width == 1 && grid.cells[1].scalar == U'B' &&
+                grid.cells[2].scalar == U'C' && grid.cells[3].scalar == U'x',
+            "plain-text joiners collapse letter cells");
+    grid.reset(20, 4);
+    grid.line(0, {{"\u200dA", Ink::normal}});
+    require(grid.cells[0].scalar == U'A' && grid.cells[1].scalar == U' ',
+            "leading joiner consumes a spacing cell or next letter");
+    grid.reset(20, 4);
+    grid.line(0, {{"\u200d\u200dA", Ink::normal}});
+    require(grid.cells[0].scalar == U'A' && grid.cells[1].scalar == U' ',
+            "repeated leading joiners fail to advance input");
+    grid.reset(20, 4);
+    grid.line(0, {{"👩́\u200d💻x", Ink::normal}});
+    require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x',
+            "pictograph Extend ZWJ sequence split");
+    grid.reset(20, 4);
+    grid.line(0, {{"👩🏽\u200d💻x", Ink::normal}});
+    require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x',
+            "modified pictograph ZWJ sequence split");
+    for (const auto barrier_text :
+         {"👩\u200b\u200d💻x", "👩\u200e\u200d💻x", "👩\u200d́💻x"}) {
+      grid.reset(20, 4);
+      grid.line(0, {{barrier_text, Ink::normal}});
+      require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'💻' &&
+                  grid.cells[4].scalar == U'x',
+              "non-Extend barrier or post-ZWJ Extend joins pictographs");
+    }
+    grid.reset(20, 4);
+    grid.line(0, {{"👨\u200d👩\u200d👧\u200d👦x", Ink::normal}});
+    require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x',
+            "family pictograph ZWJ sequence split");
+    ChatView plain_joiners;
+    plain_joiners.append(ChatKind::assistant, " \u200d \u200d XZ");
+    const auto &joined_rows = plain_joiners.rows(8);
+    require(joined_rows.size() == 3 &&
+                chat_plain(joined_rows[1]) == "  │  \u200d \u200d X" &&
+                chat_plain(joined_rows[2]) == "  │ Z",
+            "plain joiners change wrap boundary");
     grid.reset(20, 4);
     grid.line(0, {{"🇺🇸x", Ink::normal}});
     require(grid.cells[0].width == 2 && grid.cells[2].scalar == U'x', "flag cluster");

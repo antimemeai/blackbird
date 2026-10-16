@@ -212,7 +212,8 @@ private:
                   const std::function<
                       Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
                             CommandTaskActivity *, RawRetainedExec *)> &body,
-                  RawProviderOperationContext *provider_operation = nullptr);
+                  RawProviderOperationContext *provider_operation = nullptr,
+                  const CommandStartStatus *command_start = nullptr);
   friend struct Runtime;
 };
 } // namespace blackbird

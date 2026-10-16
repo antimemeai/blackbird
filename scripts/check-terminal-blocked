@@ -21,90 +21,123 @@ spec = importlib.util.spec_from_file_location(
 oracle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(oracle)
 
-with tempfile.TemporaryDirectory(prefix="blackbird-blocked-") as work:
-    input_master, input_slave = pty.openpty()
-    output_master, output_slave = pty.openpty()
-    events_read, events_write = os.pipe()
-    controls_read, controls_write = os.pipe()
-    before = termios.tcgetattr(input_slave)
-    fcntl.ioctl(output_slave, termios.TIOCSWINSZ,
-                struct.pack("HHHH", 32, 80, 0, 0))
-    screen = oracle.Screen()
-    child = subprocess.Popen(
-        [str(Path(sys.argv[1]).resolve()), str(events_write), str(controls_read),
-         str(Path(work) / "state.bbm")],
-        stdin=input_slave, stdout=output_slave, stderr=subprocess.PIPE,
-        pass_fds=(events_write, controls_read), start_new_session=True,
-        env=dict(os.environ, BLACKBIRD_MASCOT="0", BLACKBIRD_GRAPHICS="off"))
-    os.close(events_write)
-    os.close(controls_read)
-    observations = bytearray()
-
-    def wait(predicate, label, drain=True):
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            descriptors = [events_read]
-            if drain:
-                descriptors.append(output_master)
-            for descriptor in select.select(descriptors, [], [], 0.02)[0]:
-                if descriptor == events_read:
-                    observations.extend(os.read(events_read, 4096))
-                else:
-                    try:
-                        screen.feed(os.read(output_master, 65536))
-                    except OSError as error:
-                        if error.errno != errno.EIO:
-                            raise
-            if predicate():
-                return
-            if child.poll() is not None:
-                break
-        raise AssertionError(label + "\nevents=" + repr(observations) +
-                             "\n" + screen.text())
-
-    try:
-        wait(lambda: "Workflow reloads" in screen.text(), "initial complete frame")
-        os.write(input_master, b"fixture\r")
-        wait(lambda: b"S" in observations and "ROW_079" in screen.text()
-             and not screen.synchronized_update, "local worker transcript frame")
-        # Fill the physical output queue after terminal setup. The writer's
-        # inherited nonblocking flag is shared by this retained slave descriptor.
-        filled = 0
-        while True:
-            try:
-                filled += os.write(output_slave, b"X" * 4096)
-            except BlockingIOError:
-                break
-        assert filled > 0, "physical stdout queue was not filled"
-        os.write(controls_write, b"P")
-        wait(lambda: b"B" in observations, "actual UI write sees EAGAIN", drain=False)
-        os.write(input_master, b"typed \x1b[200~" + "界 tail".encode() +
-                 b"\x1b[201~\x1b[5~\x03")
-        wait(lambda: b"C" in observations,
-             "worker observes Ctrl-C before any stdout is drained", drain=False)
+def check(pane):
+    with tempfile.TemporaryDirectory(prefix="blackbird-blocked-") as work:
+        input_master, input_slave = pty.openpty()
+        output_master, output_slave = pty.openpty()
+        events_read, events_write = os.pipe()
+        controls_read, controls_write = os.pipe()
+        before = termios.tcgetattr(input_slave)
         fcntl.ioctl(output_slave, termios.TIOCSWINSZ,
-                    struct.pack("HHHH", 36, 80, 0, 0))
-        os.kill(child.pid, signal.SIGWINCH)
-        # The completed old packet is followed by one current-geometry frame.
-        wait(lambda: "> typed 界 tail" in screen.text() and
-             "Up 16" in screen.text() and (screen.row, screen.col) == (33, 17)
-             and not screen.synchronized_update,
-             "retained draft, cursor, scroll and resized frame")
-        rows = [int(value) for value in re.findall(r"ROW_(\d{3})", screen.text())]
-        assert rows == list(range(34, 64)), ("wrong scrolled content", rows)
-        os.write(controls_write, b"F")
-        wait(lambda: b"D" in observations, "draft state preserved on clean exit")
-        assert child.wait(timeout=5) == 0, child.stderr.read().decode()
-        after = termios.tcgetattr(input_slave)
-        pending = getattr(termios, "PENDIN", 0)
-        before[3] &= ~pending
-        after[3] &= ~pending
-        assert after == before, "terminal input mode not restored"
-        print("Blocked stdout: native typing/paste/scroll/cancel/resize and draft retention pass")
-    finally:
-        if child.poll() is None:
-            os.killpg(child.pid, signal.SIGKILL)
-            child.wait(timeout=5)
-        for descriptor in (input_master, input_slave, output_master, output_slave,
-                           events_read, controls_write):
-            os.close(descriptor)
+                    struct.pack("HHHH", 52 if pane else 32, 121 if pane else 80, 0, 0))
+        screen = oracle.Screen()
+        child = subprocess.Popen(
+            [str(Path(sys.argv[1]).resolve()), str(events_write), str(controls_read),
+             str(Path(work) / "state.bbm")] + (["pane"] if pane else []),
+            stdin=input_slave, stdout=output_slave, stderr=subprocess.PIPE,
+            pass_fds=(events_write, controls_read), start_new_session=True,
+            env=dict(os.environ, BLACKBIRD_MASCOT="1" if pane else "0",
+                     BLACKBIRD_GRAPHICS="kitty" if pane else "off"))
+        os.close(events_write)
+        os.close(controls_read)
+        observations = bytearray()
+        received = bytearray()
+
+        def fill_output():
+            filled = 0
+            # A failed large write can leave enough PTY room for a small UI
+            # delta. Reach actual one-byte pressure, including queue fragments.
+            for extent in (4096, 256, 16, 1):
+                while True:
+                    try:
+                        filled += os.write(output_slave, b"X" * extent)
+                    except BlockingIOError:
+                        break
+            return filled
+
+        def wait(predicate, label, drain=True, keep_full=False):
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if keep_full:
+                    # Linux can move bytes from its write queue into a separate
+                    # PTY flip buffer even while nobody reads the master. Keep
+                    # that newly available room full until the native writer
+                    # itself reports EAGAIN; do not consume any output here.
+                    fill_output()
+                descriptors = [events_read]
+                if drain:
+                    descriptors.append(output_master)
+                for descriptor in select.select(descriptors, [], [], 0.02)[0]:
+                    if descriptor == events_read:
+                        observations.extend(os.read(events_read, 4096))
+                    else:
+                        try:
+                            chunk = os.read(output_master, 65536)
+                            received.extend(chunk)
+                            screen.feed(chunk)
+                        except OSError as error:
+                            if error.errno != errno.EIO:
+                                raise
+                if predicate():
+                    return
+                if child.poll() is not None:
+                    break
+            raise AssertionError(label + "\nevents=" + repr(observations) +
+                                 "\n" + screen.text())
+
+        try:
+            wait(lambda: ("│ > " in screen.text() if pane else "Workflow reloads" in screen.text())
+                 and not screen.synchronized_update, "initial complete frame")
+            os.write(input_master, b"fixture\r")
+            wait(lambda: b"S" in observations and "ROW_079" in screen.text()
+                 and not screen.synchronized_update, "local worker transcript frame")
+            # Fill the physical output queue after terminal setup. The writer's
+            # inherited nonblocking flag is shared by this retained slave descriptor.
+            observations.clear()
+            assert fill_output() > 0, "physical stdout queue was not filled"
+            os.write(controls_write, b"P")
+            wait(lambda: b"B" in observations, "actual UI write sees EAGAIN",
+                 drain=False, keep_full=True)
+            os.write(input_master, b"typed \x1b[200~" + "界 tail".encode() +
+                     b"\x1b[201~" + (b"" if pane else b"\x1b[5~") + b"\x03")
+            wait(lambda: b"C" in observations,
+                 "worker observes Ctrl-C before any stdout is drained",
+                 drain=False, keep_full=True)
+            fcntl.ioctl(output_slave, termios.TIOCSWINSZ,
+                        struct.pack("HHHH", 52 if pane else 36, 105 if pane else 80, 0, 0))
+            os.kill(child.pid, signal.SIGWINCH)
+            # The completed old packet is followed by one current-geometry frame.
+            wait(lambda: "> typed 界 tail" in screen.text() and
+                 (pane or "Up 16" in screen.text()) and
+                 (screen.row, screen.col) == (49 if pane else 33, 17)
+                 and not screen.synchronized_update,
+                 "retained draft, cursor, scroll and resized frame")
+            if pane:
+                assert all(screen.cells.get((row, 68)) == "│" for row in range(52)), "blocked wide pane divider corrupted"
+                assert all(screen.cells.get((row, 69)) == " " for row in range(52)), "blocked wide pane gutter corrupted"
+                assert screen.cells.get((7, 70)) == "T", "blocked task origin moved"
+                assert b"a=t,f=100,t=f,i=72171,q=2;" in received, "graphics load absent"
+                assert b"c=12,r=6;" in received, "corner graphics absent"
+            else:
+                rows = [int(value) for value in re.findall(r"ROW_(\d{3})", screen.text())]
+                assert rows == list(range(34, 64)), ("wrong scrolled content", rows)
+            os.write(controls_write, b"F")
+            wait(lambda: b"D" in observations, "draft state preserved on clean exit")
+            assert child.wait(timeout=5) == 0, child.stderr.read().decode()
+            after = termios.tcgetattr(input_slave)
+            pending = getattr(termios, "PENDIN", 0)
+            before[3] &= ~pending
+            after[3] &= ~pending
+            assert after == before, "terminal input mode not restored"
+            print("Blocked stdout: " + ("105x52 plain-joiner pane/graphics" if pane else "native scroll") +
+                  ", typing/paste/cancel/resize and draft retention pass")
+        finally:
+            if child.poll() is None:
+                os.killpg(child.pid, signal.SIGKILL)
+                child.wait(timeout=5)
+            for descriptor in (input_master, input_slave, output_master, output_slave,
+                               events_read, controls_write):
+                os.close(descriptor)
+
+check(False)
+check(True)
