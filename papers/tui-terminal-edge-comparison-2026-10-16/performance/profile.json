@@ -1,0 +1,38 @@
+{
+  "campaign_id": "tui-terminal-edge-20261016-qdv85I8D",
+  "native_tree": "eef11f879462e6c33e5112f3c9ad3a13c4983ef4ba4c59e3299e9bab9aa5c026",
+  "source_archive_sha256": "d6bef5c1c68e58f3e43b2001fb805c670d7a90b04afec7fe7c90284d9f94384f",
+  "native_fixture_sha256": "8ee33392e97391b2b83804a2ddba0f6d6c4fa56f5e3b1d6e6491fc121f268a40",
+  "source_base": "4af196d",
+  "delivered_commit": "0c62e9641a154bb90c8367368d2dff6d43b7c68f",
+  "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-Release-DebugOFF-none",
+  "host": "neuroses",
+  "platform": "Linux-6.8.0-146-generic-x86_64-with-glibc2.39",
+  "observer_sha256": "ba06db9f2f6624ae647a88fcbf241f6fee1a6689d9bdb1cb19c167a3f6c83854",
+  "report_sha256": "078e94684c8618185221bf62acf9aa88668282804475135e768437290ceeb87f",
+  "qualified_lua_library_sha256": "95fa79336051315a656c56e0271a2990ffb598adf6e8b1987ae0e239efff7fc2",
+  "remote_root": "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D",
+  "originals": {
+    "remote_root": "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D",
+    "archive": "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/originals.tar.gz",
+    "sha256": "1f80b05d7ff78d61ca9cb88d248ea5c5b48f1895df79a8bb8e01b604fd72158e",
+    "bytes": 6787141,
+    "entries": [
+      "qualification",
+      "round",
+      "round-corrected",
+      "observer-qualification-corrected",
+      "build-provenance.json",
+      "qualification.json",
+      "timing-release.json",
+      "timing-release-corrected.json",
+      "RESULTS-corrected.md",
+      "RESULTS-corrected.json",
+      "release/terminal_edge_fixture",
+      "release/terminal_edge_test",
+      "release/chat_view_test"
+    ]
+  },
+  "scope": "Policy competition, not actual application before/after; TerminalUI still uses columns-minus-one.",
+  "qualified_lua_archive_sha256": "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae"
+}

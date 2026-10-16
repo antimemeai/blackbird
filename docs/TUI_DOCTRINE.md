@@ -183,6 +183,12 @@ wide characters, fallback glyphs, light/dark backgrounds and terminal capabiliti
 belong to rendering design. Preserve exact content for copy and inspection while
 presenting readable Markdown, code, tables and structured results.
 
+The renderer owns every physical viewport cell, including the final column and
+bottom-right corner. Content bounds may leave deliberate space; that space still
+belongs to painting and recovery. Resize and invalidation must clear stale cells
+throughout the physical extent. The [terminal-edge comparison](../papers/tui-terminal-edge-comparison-2026-10-16/README.md)
+grounds this rule; its selected application integration remains separate.
+
 The emitted text must occupy the cells that composition assigns it. Invisible
 format characters in ordinary fetched text belong to this contract. Use pinned
 Unicode properties for the relevant cluster rules and check literal positions in

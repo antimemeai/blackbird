@@ -25,9 +25,8 @@ The independently derived report completed without discarded samples.
   content-identified Linux source snapshot.
 - Profile: Mac Debug development only. No performance inference follows.
 
-The required full physical Ghostty/Alacritty qualification and isolated Linux
-Release build precede the30-trial matched timing round. Remote timing has not
-started at this checkpoint.
+The full physical Ghostty/Alacritty qualification and isolated Linux Release
+build preceded the30-trial matched timing round described below.
 
 The first Linux matched attempt then stopped after44 process samples:43passed
 and one collector failed in addressed80x24 trial4. All ten frames and native
@@ -54,3 +53,19 @@ remain under ignored campaign context. This is qualification of the corrected
 observer, not a performance ranking. A fresh30-trial matched round is authorized
 because the original observer aborted; it is not a repeat of a valid result to
 improve tails.
+
+The corrected matched Linux Release round completes360/360 normal exit-zero
+processes on the unchanged native binary. It retains216,000 batch frames,1,800
+PTY packets,2,160 input acquisitions and all720 blocked edit/resize/quit
+acquisitions before drain. No failed or forced process occurs in that round.
+The [published competition](performance/README.md), [204 metric rows](performance/ALL_METRICS.md)
+and [raw samples](performance/round/samples.jsonl) give the actual CPU/byte and
+PTY p50/p95/max tradeoffs. The first44-process attempt is published separately;
+none of its observations are pooled into the corrected round.
+
+Source0c62e964 passes the full installed source hook:257/257 Debug385.30s plus
+all253 actual C++ units and owned Lua checks. The exact two differences from the
+compiled snapshot are CMake survivor-test registration and the external
+observer wait correction; native algorithms, fixture, scenes and transport are
+unchanged. This experiment selects integration direction, not a repaired actual
+TerminalUI or historical app before/after delta.

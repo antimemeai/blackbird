@@ -10785,3 +10785,39 @@ actual Linux qualification passes12/12 normal processes with natural exit0 again
 the unchanged native binary. One fresh360-process matched round is authorized;
 its source overlay and corrected observer hash remain distinct from the failed
 attempt. All tracked files stop changing before the mandatory fresh source gate.
+
+2026-10-16 full-viewport comparison delivered: source0c62e964 passes the fresh
+installed hook,257/257 Debug385.30s and all253 actual C++/owned Lua checks. The
+first interrupted hook remains recorded as interrupted, not a successful gate.
+Push the source checkpoint on work/tui-terminal-edge-comparison-2026-10-16;
+no master merge or running application activation.
+
+Independent Linux Release qualification passes5/5 native cases and258 physical
+planes (43 per survivor/backend). Corrected timing completes360/360 natural
+exit-zero processes,216,000 batch frames,1,800 PTY packets and720 blocked input
+acquisitions before drain. Publish all204 p50/p95/max metric rows and raw samples,
+with the failed first44-process attempt kept separate. Only CMake physical-test
+selection and external observer exit-wait correction differ from the compiled
+snapshot; native code/scenes/transport match. Originals remain intact locally
+and in the owned persistent remote directory; exact source mapping/restoration
+accompany the published report. No extra timing or duplicate qualification.
+
+Select addressed deltas as the physical-frame foundation; default-style blank-tail
+EL is a bandwidth optimization with mixed timing tails, not a universal speed win.
+Blank-scene bytes fall34–38%; sparse CPU medians rise8–9% (0.7–1.5µs/frame).
+Full repaint costs3.3–3.5 times sparse CPU and37–60 times sparse output bytes;
+retain explicit clear for recovery. Corner remains rejected by actual Ghostty
+combining failure. Record full physical extent ownership in the enduring doctrine,
+close only the comparison child3.7 and retain arw open for real application
+integration. This is one-tree policy comparison, not a historical app speed delta.
+Publication uses the text/data-only hook exception after relevant diff/link/data
+checks. Source gate is settled; do not rerun it for results or fast-forward work.
+AFL, artwork, launchers, live sessions and unrelated services remain untouched.
+
+Publication checks:27 result files,46 local Markdown links resolve,416 retained
+sample rows parse (360 corrected,44 failed-first,12 corrected qualification),
+JSON and TSV formats valid. Supported Beads backup retains173 issues/791 events.
+Two original unified patches each contain one context line consisting of the
+required single space. Preserve those original patch bytes; authored diff
+whitespace checks exclude only delivered-source-delta.patch and
+observer-exit-correction.patch. No other whitespace finding occurs.

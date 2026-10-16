@@ -86,3 +86,11 @@ publication. Nearest-rank p99 from 30 trials equals max, with no confidence boun
 There is no automatic scheduling-noise threshold. Investigate clear repeated
 regressions and queue concrete findings for collective action; repair immediately
 only when severity requires it.
+
+The [2026-10-16 physical-viewport contest](../../tui-terminal-edge-comparison-2026-10-16/performance/README.md)
+is a separate new-scenario policy comparison on one native fixture tree. Its
+[case ledger](../../tui-terminal-edge-comparison-2026-10-16/performance/CASES.tsv)
+records all three surviving policies at both geometries; the rejected fourth
+policy and aborted first measurement remain visible. It is not an application
+before/after row in TRANCHES.tsv. Actual application integration must run the
+usual matched previous/new executable comparison.

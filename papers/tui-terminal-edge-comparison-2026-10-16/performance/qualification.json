@@ -1,0 +1,60 @@
+{
+  "commands": [
+    [
+      "python3",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/source-eef11f879462e6c3/scripts/tui-test",
+      "--install"
+    ],
+    [
+      "python3",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/source-eef11f879462e6c3/scripts/tui-test",
+      "--check"
+    ],
+    [
+      "/usr/bin/ctest",
+      "--test-dir",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/release",
+      "--output-on-failure",
+      "--no-tests=error",
+      "--parallel",
+      "1",
+      "-R",
+      "^(terminal_edge_(addressed|erase|corner|full)|chat_view)$"
+    ],
+    [
+      "python3",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/source-eef11f879462e6c3/scripts/check-terminal-edge",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/release/terminal_edge_fixture",
+      "--artifacts",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/qualification/ghostty",
+      "--backend",
+      "ghostty",
+      "--strategy",
+      "addressed",
+      "--strategy",
+      "erase",
+      "--strategy",
+      "full"
+    ],
+    [
+      "python3",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/source-eef11f879462e6c3/scripts/check-terminal-edge",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/release/terminal_edge_fixture",
+      "--artifacts",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/qualification/alacritty",
+      "--backend",
+      "alacritty",
+      "--strategy",
+      "addressed",
+      "--strategy",
+      "erase",
+      "--strategy",
+      "full"
+    ]
+  ],
+  "started_utc": "2026-10-16T20:48:43Z",
+  "completed": true,
+  "tool_sha256": "c6b5629e0f7591f8d1dde672e5c9e12168527b8a88a8d3998547c28fddaa9e00",
+  "fixture_sha256": "8ee33392e97391b2b83804a2ddba0f6d6c4fa56f5e3b1d6e6491fc121f268a40",
+  "finished_utc": "2026-10-16T20:51:15Z"
+}

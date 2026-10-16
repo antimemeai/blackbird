@@ -124,3 +124,13 @@ selected-detail warning was an actual integration fault and was fixed by an
 explicit independent-comparison component relation. A TSan pressure-oracle setup
 failure was corrected with sustained physical capacity control, not a product
 change or relaxed assertion. AFL output remains untouched.
+
+The [full-viewport policy comparison](../papers/tui-terminal-edge-comparison-2026-10-16/README.md)
+completes under `arconaut-rhi.3.7`, source0c62e964. Addressed/erase/full pass both
+emulator profiles; corner is a rejected experimental policy because Ghostty2x2
+misplaces a bottom-right combining accent. Retain that counterexample rather
+than selecting it for production. The matched360-process competition supports
+addressed deltas, eligible default-tail erasure and full clearing for recovery.
+`arconaut-arw` stays open: actual application width still excludes the physical
+last column. App integration and its actual-main regression/performance delta
+remain next; no AFL output was inspected.

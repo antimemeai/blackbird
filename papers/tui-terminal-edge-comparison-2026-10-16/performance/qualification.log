@@ -1,0 +1,26 @@
+Installed microsoft/tui-test 0.1.0 from SHA256 c7096f55a1cdb58c46bc4bdb27f8b5e246f07a5324a904c5ccd1b0351df0466b
+tui-test 0.1.0
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/release
+    Start 18: terminal_edge_addressed
+1/5 Test #18: terminal_edge_addressed ..........   Passed    0.00 sec
+    Start 19: terminal_edge_erase
+2/5 Test #19: terminal_edge_erase ..............   Passed    0.00 sec
+    Start 20: terminal_edge_corner
+3/5 Test #20: terminal_edge_corner .............   Passed    0.00 sec
+    Start 21: terminal_edge_full
+4/5 Test #21: terminal_edge_full ...............   Passed    0.00 sec
+    Start 25: chat_view
+5/5 Test #25: chat_view ........................   Passed    0.05 sec
+
+100% tests passed, 0 tests failed out of 5
+
+Total Test time (real) =   0.07 sec
+tui-test 0.1.0
+ghostty addressed full: 43 complete physical planes, styles, cursor, Unicode, resize and tiny geometry and clean modes pass
+ghostty erase full: 43 complete physical planes, styles, cursor, Unicode, resize and tiny geometry and clean modes pass
+ghostty full full: 43 complete physical planes, styles, cursor, Unicode, resize and tiny geometry and clean modes pass
+tui-test 0.1.0
+alacritty addressed full: 43 complete physical planes, styles, cursor, Unicode, resize and tiny geometry and clean modes pass
+alacritty erase full: 43 complete physical planes, styles, cursor, Unicode, resize and tiny geometry and clean modes pass
+alacritty full full: 43 complete physical planes, styles, cursor, Unicode, resize and tiny geometry and clean modes pass

@@ -1,0 +1,22 @@
+{
+  "compiled_snapshot_tree": "eef11f879462e6c33e5112f3c9ad3a13c4983ef4ba4c59e3299e9bab9aa5c026",
+  "current_frozen_tree": "7efd2ed2917c8f832e48f3e95b749fb7786fbe3b10f5d6a90d3058b96ec1bfa1",
+  "changes": [
+    {
+      "path": "CMakeLists.txt",
+      "before_sha256": "be3935b86cb885510787567ee970ed509be452919215ab4db950945c09ea0976",
+      "current_sha256": "23ce1b7b301faa32bd87c0eae2d20db5fffc619131ee10bbce3afed4bdd553a4",
+      "before_bytes": 64048,
+      "current_bytes": 64104
+    },
+    {
+      "path": "scripts/bench-terminal-edge",
+      "before_sha256": "93453eab0623c8f1dabdd14ef89c1e8864ff246a606b53b66f1f21b32c9810cb",
+      "current_sha256": "ba06db9f2f6624ae647a88fcbf241f6fee1a6689d9bdb1cb19c167a3f6c83854",
+      "before_bytes": 14712,
+      "current_bytes": 14811
+    }
+  ],
+  "delivered_commit": "0c62e9641a154bb90c8367368d2dff6d43b7c68f",
+  "note": "Native algorithms, fixture, scenes and report unchanged. Final CMake selects three survivor physical tests. Corrected observer is separately uploaded, identified in round-corrected metadata, and is not compiled into the unchanged native binary."
+}
