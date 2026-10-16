@@ -10067,3 +10067,18 @@ The required source commit hook now runs the ordinary full Debug/test/lint gate.
 A scoped Neuroses Debug/ASan run is in progress; its first source archive predates
 the fixture descriptor correction, so any stale-fixture failure will be followed
 only by the affected check against corrected source.
+
+Final source checkpoint `b84da24` passed the required full Debug build,162tests
+and all owned C++/Lua formatting/static/type checks without a hook override.
+The branch was pushed to `origin/work/oxcart-interface-2026-10-16`. Corrected-source
+Neuroses Debug and ASan application/native and real CLI tests both passed; raw
+logs are in `context/linux/run-bk078swj/checks.log`. No further source recheck.
+
+Post-gate issue bookkeeping encountered a Dolt lifecycle wrinkle: the original
+main-checkout listener had auto-closed01:04; bd auto-started an empty worktree data
+directory on13308 at01:12, which lacked the existing arconaut database. Stopped
+only that newly owned empty server, then started the normal server from existing
+`blackbird/.beads/dolt`. No DB creation, restore, migration or main source/index
+changes. Closed the delivered issue and ran the supported backup from the worktree.
+The final documentation/issue snapshot uses the existing text-only commit exemption.
+The worktree remains available for Oxcart's launcher; no main merge or checkout.
