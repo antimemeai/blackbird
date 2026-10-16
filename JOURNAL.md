@@ -10699,3 +10699,29 @@ build logs. Keep those original bytes: both published logs compare byte-for-byte
 with the retained campaign files. Authored documents/data pass diff whitespace
 checks with only those two originals excluded. No active source or source gate
 changes; the publication records this distinction instead of rewriting raw logs.
+
+2026-10-16 terminal edge research: operator requests a frumentarius to find
+mature TUI candidate solutions before repairing arw. Spawn one conceptual source
+research lane; root maps current renderer/mode/presenter contracts and synthesizes
+options. New work branch starts at qualified Lua delivery40a9212. Research-only
+plan under papers/tui-terminal-edge-2026-10-16; no source/tests/builds, dependency
+selection, live activation, AFL or artwork interaction.
+
+The terminal-edge frumentarius completes four grounded candidates from existing
+pinned sources: tmux physical-tail EL/BCE guards, Neovim delayed-wrap/cursor
+handling, FINAL CUT bottom-right wrap suppression/insertion, and Notcurses explicit
+clear/damage-all recovery. Root maps the actual logical-width loss, committed
+frame extent, nonblocking packet ownership, exact raw recapture and editor mode
+lifecycle; source excerpts support the mechanisms. Synthesis favors full physical
+frame ownership with explicit content bounds and Neovim-style edge handling,
+EL for suitable blank tails and explicit invalidation/recovery. This is a research
+preference, not an implemented repair or selected dependency.
+
+Record four reused source revisions/licenses/archive hashes/restoration in the
+new research catalog. No source archives/extracts changed, new download, acquired
+execution, product edit, test or performance run. Actual arw remains open; its
+later RED must inspect the physical final column rather than crop to logical
+width. Check documents/links/catalog format, update the existing bug and supported
+Beads backup, then commit/push this research checkpoint under the documentation
+exception. Prior source qualification, running sessions, AFL and artwork stay
+unchanged.
