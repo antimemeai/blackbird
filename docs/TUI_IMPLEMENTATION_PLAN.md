@@ -66,8 +66,11 @@ independent VM. The [command-inspector tranche](../papers/tui-command-inspector-
 implements shared keyed collection/detail rendering and the conversation adapter:
 Ctrl-O preserves the draft, `/jobs` opens results, and retained bytes name their
 actual command and source extents. Owner/recording pressure retains the last good
-page visibly stale. Current-session center reuse and the independent Lua bridge
-remain the next units; this does not complete Units1–2.
+page visibly stale. The current-session center reuse tranche is now under
+[its owning plan](../papers/tui-command-center-2026-10-16/PLAN.md): pure bounded task
+and participant observation, the same controls, actual session scope and separate
+source coverage. Its results will record qualification and delivery. The independent
+Lua bridge remains open; this does not complete Units1–2.
 
 Source `52f9103` delivers that inspector after206/206 Debug tests, full C++/Lua
 analysis, affected sanitizers and58 scoped Linux Release checks. The same tranche

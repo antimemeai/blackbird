@@ -1,4 +1,5 @@
 #include "blackbird/chat_view.hpp"
+#include "blackbird/command_center.hpp"
 #include "blackbird/context.hpp"
 #include "blackbird/display_text.hpp"
 #include "blackbird/task_view.hpp"
@@ -282,6 +283,62 @@ std::vector<Snapshot> scenarios() {
   narrow_inspector.grid.reset(24, 8);
   unwrap(instrument_control.render(narrow_inspector.grid, {0, 0, 24, 8}));
   output.push_back(std::move(narrow_inspector));
+
+  TaskState center_tasks;
+  center_tasks.commit(center_tasks.prepare(Value::object(
+      {{"op_id", Value{"center-snapshot"}},
+       {"base", Value{Number{"0"}}},
+       {"ops", Value{Value::Array{Value::object(
+                   {{"op", Value{"add"}},
+                    {"title", Value{"Investigate retained result"}},
+                    {"status", Value{"blocked"}},
+                    {"owner", Value{"declared label"}},
+                    {"blocker", Value{"Await independent review"}},
+                    {"note", Value{"First source line\nSecond source line\n"
+                                   "Third source line\nFourth source line"}}})}}}})));
+  IdentityBytes center_environment{}, center_conversation{};
+  center_environment.fill(std::byte{0x31});
+  center_conversation.fill(std::byte{0x52});
+  CommandCenter center{{unwrap(EnvironmentId::from_bytes(center_environment)),
+                        unwrap(ConversationId::from_bytes(center_conversation))}};
+  bool center_busy = false;
+  CommandCenterSources center_sources;
+  center_sources.tasks = [&](const TaskObservationQuery &query) {
+    TaskPublishedObservation observed;
+    observed.publication =
+        center_busy ? TaskPublicationStatus::busy : TaskPublicationStatus::ready;
+    if (!center_busy) {
+      observed.value = center_tasks.observe(query);
+      observed.origin.revision = center_tasks.revision();
+    }
+    return observed;
+  };
+  center.toggle();
+  (void)center.refresh(center_sources, false);
+  (void)center.refresh(center_sources, false);
+  Snapshot wide_center{
+      "center-wide",
+      {},
+      {},
+      "route=center;selected-kind=task;selected-id=t1;declared=blocked;"
+      "participants=unavailable;commands=unavailable"};
+  wide_center.grid.reset(100, 16);
+  wide_center.grid.line(1, {{"COMMAND CENTER", Ink::heading}});
+  unwrap(center.render(wide_center.grid, {0, 2, 100, 14}));
+  output.push_back(std::move(wide_center));
+  unwrap(center.act(tui::InspectorAction::focus_detail));
+  center_busy = true;
+  (void)center.refresh(center_sources, false);
+  Snapshot narrow_center{"center-narrow-stale",
+                         {},
+                         {},
+                         "route=center;selected-kind=task;selected-id=t1;focus=detail;"
+                         "tasks=stale-last-good;declared=blocked"};
+  narrow_center.grid.reset(32, 12);
+  narrow_center.grid.line(
+      1, {{"COMMAND CENTER | " + std::string{center.notice()}, Ink::heading}});
+  unwrap(center.render(narrow_center.grid, {0, 2, 32, 10}));
+  output.push_back(std::move(narrow_center));
   return output;
 }
 } // namespace

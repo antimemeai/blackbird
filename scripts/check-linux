@@ -31,6 +31,7 @@ def main():
     paths.append("scripts/check-terminal-blocked")
     paths.append("scripts/check-display-text")
     paths.append("scripts/check-tui-inspector")
+    paths.append("scripts/check-tui-center")
     lua_archive = ROOT.parent / "quarantine_proj/archives/lua-5.4.8.tar.gz"
     if hashlib.sha256(lua_archive.read_bytes()).hexdigest() != "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae":
         raise RuntimeError("Lua 5.4.8 source archive checksum mismatch")
@@ -56,7 +57,7 @@ from pathlib import Path
 root = Path.cwd()
 # Explicit development-tool provisioning precedes configuration/testing.
 if test_regex is None or any(re.search(test_regex, name) for name in
-                             ('tui_microsoft', 'tui_command_inspector')):
+                             ('tui_microsoft', 'tui_command_inspector', 'tui_command_center')):
     subprocess.run(['python3', str(root / 'scripts/tui-test'), '--install'], check=True)
     subprocess.run(['python3', str(root / 'scripts/tui-test'), '--check'], check=True)
 print(platform.platform(), flush=True)

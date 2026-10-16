@@ -415,9 +415,10 @@ while True:
         assert pty_job != pipe_job, "different launches share job identity"
         foreground(pty_job, interactive=True)
         # A marker from the actual reader, not echoed composer text, proves input.
-        send("step-first\r")
-        wait(lambda: "1:step-first" in effects(), "foreground input reached actual PTY")
+        send("step-first\x18\r")
+        wait(lambda: "1:step-first\x18" in effects(), "foreground input reached actual PTY")
         visible("CHILD_STEP_1")
+        assert "COMMAND CENTER" not in screen.text(), "private PTY control opened center"
         send(b"\x02")
         command("/lua print('PTY_DETACHED_' .. 'LOCAL_WORK')")
         visible("PTY_DETACHED_LOCAL_WORK")
@@ -485,11 +486,11 @@ while True:
         pids.remove(pty_pid)
         assert (root / "pty.launches").read_text().splitlines() == [str(pty_pid)]
         assert [x for x in effects() if re.match(r"\d+:", x)] == [
-            "1:step-first", "2:step-delivery", "3:step-second", "4:step-paste\x02literal",
+            "1:step-first\x18", "2:step-delivery", "3:step-second", "4:step-paste\x02literal",
             "5:step-unicode-☃", "6:step-escape-\x1bliteral",
         ], "foreground transitions repeated or reordered child input"
         assert (root / "pty.input").read_bytes() == (
-            b"step-first\nstep-delivery\nsize\ncontrols\nstep-second\n"
+            b"step-first\x18\nstep-delivery\nsize\ncontrols\nstep-second\n"
             b"step-paste\x02literal\nstep-unicode-" + "☃".encode() +
             b"\nstep-escape-\x1bliteral\nfinish\n"
         ), "actual private tty reader lost, duplicated or redirected original bytes"

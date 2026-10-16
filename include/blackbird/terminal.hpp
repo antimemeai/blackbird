@@ -1,5 +1,6 @@
 #pragma once
 #include "blackbird/chat_view.hpp"
+#include "blackbird/command_center.hpp"
 #include "blackbird/command_jobs.hpp"
 #include "blackbird/display_text.hpp"
 #include "blackbird/raw_ui.hpp"
@@ -36,7 +37,8 @@ enum class InputAction {
   inspect_toggle_focus,
   inspect_focus_editor,
   inspect_previous_output,
-  inspect_next_output
+  inspect_next_output,
+  center_toggle
 };
 struct InputResult {
   InputAction action = InputAction::none;
@@ -150,6 +152,8 @@ public:
   void title(std::string_view text);
   void sessions(const Value &listing, RawUiValueOrigin origin = {});
   void tasks(const Value &publication, RawUiValueOrigin origin = {});
+  TaskPublishedObservation
+  try_observe_tasks(const TaskObservationQuery &query) noexcept;
   void task_activity(const Value &event, RawUiValueOrigin origin = {});
   void run(const std::function<void(std::string_view)> &perform,
            std::atomic_bool &cancelled,
@@ -158,7 +162,8 @@ public:
            const std::function<void()> &idle_work = {},
            std::shared_ptr<CommandJobs> commands = {}, int interrupt_fd = -1,
            const std::function<Result<void>()> &reset_interrupt = {},
-           RetainedState *raw_root = nullptr);
+           RetainedState *raw_root = nullptr,
+           std::optional<CommandCenterContext> center_context = {});
 
 private:
   enum class Kind {
@@ -194,6 +199,9 @@ private:
   std::vector<Message> messages_;
   std::string title_;
   TaskState task_state_;
+  bool task_publication_initialized_ = false, task_publication_failed_ = false;
+  RawUiValueOrigin task_publication_origin_{};
+  RawEventRef task_publication_ingress_{};
   bool tasks_dirty_ = true;
   std::map<std::string, Value> task_activity_;
   std::map<std::string, std::map<std::string, Value>> task_runs_;

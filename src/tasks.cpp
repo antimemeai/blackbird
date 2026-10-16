@@ -97,7 +97,202 @@ std::uint64_t now_seconds() {
           std::chrono::system_clock::now().time_since_epoch())
           .count());
 }
+// These helpers read the bounded current row schema without constructing Value
+// projections or formatting Number into allocating text.
+struct ObservedTaskFields {
+  std::array<const Value *, 9> values{};
+  bool read(const Value &row) noexcept {
+    static constexpr std::array<std::string_view, 9> names{
+        "id",   "parent",  "title",   "status", "owner",
+        "note", "blocker", "version", "updated"};
+    const auto *fields = std::get_if<Value::Object>(&row.value());
+    if (!fields || fields->size() != names.size())
+      return false;
+    for (const auto &[name, value] : *fields) {
+      const auto found = std::find(names.begin(), names.end(), name);
+      if (found == names.end())
+        return false;
+      const auto index = static_cast<std::size_t>(found - names.begin());
+      if (values[index])
+        return false;
+      values[index] = &value;
+    }
+    return true;
+  }
+};
+const std::string *observed_task_text(const Value *value, std::size_t limit) noexcept {
+  const auto *text = value ? std::get_if<std::string>(&value->value()) : nullptr;
+  return text && text->size() <= limit ? text : nullptr;
+}
+bool observed_task_number(const Value *value, std::uint64_t &result) noexcept {
+  const auto *number = value ? std::get_if<Number>(&value->value()) : nullptr;
+  if (!number)
+    return false;
+  const auto &storage = number->storage();
+  if (const auto *integer_value = std::get_if<std::uint64_t>(&storage)) {
+    result = *integer_value;
+    return true;
+  }
+  if (const auto *signed_value = std::get_if<std::int64_t>(&storage)) {
+    if (*signed_value < 0)
+      return false;
+    result = static_cast<std::uint64_t>(*signed_value);
+    return true;
+  }
+  if (const auto *decimal = std::get_if<Decimal>(&storage)) {
+    // Existing task acceptance parses Number::text as uint64. Decimal text only
+    // uses plain integral spelling for these nonnegative exponents; a valid
+    // accepted uint64 coefficient has no more than three base1e9 limbs.
+    if (decimal->negative || decimal->exponent < 0 || decimal->exponent > 16 ||
+        decimal->limbs.empty() || decimal->limbs.size() > 3)
+      return false;
+    result = 0;
+    for (auto limb = decimal->limbs.rbegin(); limb != decimal->limbs.rend(); ++limb) {
+      if (*limb >= 1000000000 || result > (UINT64_MAX - *limb) / 1000000000)
+        return false;
+      result = result * 1000000000 + *limb;
+    }
+    for (std::int64_t exponent = 0; exponent < decimal->exponent; ++exponent) {
+      if (result > UINT64_MAX / 10)
+        return false;
+      result *= 10;
+    }
+    return true;
+  }
+  if (const auto *real = std::get_if<double>(&storage)) {
+    char text[128];
+    const auto encoded = std::to_chars(text, text + sizeof(text), *real);
+    if (encoded.ec != std::errc{})
+      return false;
+    const auto parsed = std::from_chars(text, encoded.ptr, result);
+    return parsed.ec == std::errc{} && parsed.ptr == encoded.ptr;
+  }
+  return false;
+}
+std::optional<TaskObservationId> observed_task_id(std::string_view text) noexcept {
+  if (text.size() < 2 || text.size() > 21 || text.front() != 't' || text[1] == '0')
+    return {};
+  std::uint64_t ordinal = 0;
+  const auto parsed =
+      std::from_chars(text.data() + 1, text.data() + text.size(), ordinal);
+  if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || !ordinal)
+    return {};
+  return TaskObservationId{ordinal};
+}
+template <std::size_t Capacity>
+bool copy_task_text(std::string_view source, TaskObservationText<Capacity> &target,
+                    std::size_t &copied) noexcept {
+  if (source.size() > Capacity || source.find('\0') != std::string_view::npos)
+    return false;
+  std::copy(source.begin(), source.end(), target.bytes.begin());
+  target.size = source.size();
+  copied += source.size();
+  return true;
+}
 } // namespace
+
+TaskObservation TaskState::observe(const TaskObservationQuery &query) const noexcept {
+  TaskObservation out;
+  out.revision = revision_;
+  out.total = items_.size();
+  out.counts = counts_;
+  if (query.selected && query.selected->ordinal == 0) {
+    out.status = TaskObservationStatus::invalid_identity;
+    return out;
+  }
+  if (query.row_limit > out.rows.size()) {
+    out.status = TaskObservationStatus::invalid_range;
+    return out;
+  }
+  if (query.cursor && query.cursor->revision != revision_) {
+    out.status = TaskObservationStatus::revision_conflict;
+    return out;
+  }
+  const auto offset = query.cursor ? query.cursor->offset : 0;
+  if (offset > order_.size()) {
+    out.status = TaskObservationStatus::invalid_range;
+    return out;
+  }
+  if (order_.size() != items_.size() || title_.empty() ||
+      !copy_task_text(title_, out.title, out.copied_text_bytes) ||
+      !copy_task_text(bead_, out.bead, out.copied_text_bytes))
+    return out;
+  const auto project = [&](const auto &entry, TaskObservationRow &row,
+                           ObservedTaskFields *detail_fields = nullptr) noexcept {
+    ++out.examined_rows;
+    ObservedTaskFields fields;
+    if (!fields.read(entry.second))
+      return false;
+    const auto *id = observed_task_text(fields.values[0], 21);
+    const auto *parent = observed_task_text(fields.values[1], 21);
+    const auto *title = observed_task_text(fields.values[2], 512);
+    const auto *status = observed_task_text(fields.values[3], 7);
+    const auto *owner = observed_task_text(fields.values[4], 128);
+    if (!id || !parent || !title || title->empty() || !status || !owner ||
+        !observed_task_text(fields.values[5], 2048) ||
+        !observed_task_text(fields.values[6], 512) || *id != entry.first)
+      return false;
+    const auto identity = observed_task_id(*id);
+    if (!identity)
+      return false;
+    row.id = *identity;
+    if (!parent->empty()) {
+      row.parent = observed_task_id(*parent);
+      if (!row.parent)
+        return false;
+    }
+    const auto declared = std::find(statuses.begin(), statuses.end(), *status);
+    if (declared == statuses.end() ||
+        !observed_task_number(fields.values[7], row.version) || !row.version ||
+        !observed_task_number(fields.values[8], row.updated) ||
+        !copy_task_text(*title, row.title, out.copied_text_bytes) ||
+        !copy_task_text(*owner, row.owner, out.copied_text_bytes))
+      return false;
+    row.declared_status = static_cast<TaskDeclaredStatus>(declared - statuses.begin());
+    if (const auto rollup = rollups_.find(entry.first); rollup != rollups_.end()) {
+      row.subtasks = rollup->second[0];
+      row.subtasks_done = rollup->second[1];
+    }
+    if (detail_fields)
+      *detail_fields = fields;
+    return true;
+  };
+  auto cursor = offset;
+  while (cursor < order_.size() && out.row_count < query.row_limit) {
+    const auto entry = items_.find(order_[cursor]);
+    if (entry == items_.end() || !project(*entry, out.rows[out.row_count]))
+      return out;
+    ++out.row_count;
+    ++cursor;
+  }
+  out.more_rows = cursor < order_.size();
+  if (out.more_rows && out.row_count)
+    out.next = TaskObservationCursor{revision_, cursor};
+  if (query.selected) {
+    std::array<char, 21> key{};
+    key[0] = 't';
+    const auto formatted =
+        std::to_chars(key.data() + 1, key.data() + key.size(), query.selected->ordinal);
+    if (formatted.ec != std::errc{})
+      return out;
+    const auto entry = items_.find(std::string_view{
+        key.data(), static_cast<std::size_t>(formatted.ptr - key.data())});
+    if (entry == items_.end())
+      out.selection = TaskObservationSelection::not_resident;
+    else {
+      ObservedTaskFields fields;
+      if (!project(*entry, out.detail.row, &fields) ||
+          !copy_task_text(fields.values[5]->string(), out.detail.note,
+                          out.copied_text_bytes) ||
+          !copy_task_text(fields.values[6]->string(), out.detail.blocker,
+                          out.copied_text_bytes))
+        return out;
+      out.selection = TaskObservationSelection::resident;
+    }
+  }
+  out.status = TaskObservationStatus::ready;
+  return out;
+}
 
 const Value *TaskState::item(std::string_view id) const {
   const auto found = items_.find(std::string{id});

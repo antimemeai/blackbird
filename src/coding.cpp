@@ -2784,6 +2784,9 @@ void CodingEngine::poll_commands() {
     throw *command_failure_;
 }
 void CodingEngine::poll_participants() { participants_->drain(); }
+ParticipantObservationReader CodingEngine::participant_observer() const {
+  return participants_->observer();
+}
 void CodingEngine::shutdown_participants() {
   participants_->shutdown();
   if ((!cancelled || !cancelled()) && log_.root().state() == JournalWriterState::live)

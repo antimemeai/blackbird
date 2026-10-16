@@ -417,6 +417,9 @@ int main() {
     inspection.draft("kept draft");
     feed(inspection, "\x1b[D");
     const auto kept_cursor = inspection.cursor();
+    check(inspection.feed('\x18').action == InputAction::center_toggle);
+    check(inspection.text() == "kept draft" && inspection.cursor() == kept_cursor);
+    check(inspection.feed('\x18', nullptr, true).action == InputAction::center_toggle);
     check(inspection.feed('\x0f').action == InputAction::inspect_toggle);
     check(inspection.text() == "kept draft" && inspection.cursor() == kept_cursor);
     InputResult navigation;
@@ -436,8 +439,48 @@ int main() {
           inspection.pasted());
     check(inspection.feed('\x0f').action == InputAction::none);
     check(inspection.feed('\x03').action == InputAction::none);
+    check(inspection.feed('\x18').action == InputAction::none);
     feed(inspection, "\x1b[201~");
-    check(inspection.text() == std::string{"\x0f\x03", 2});
+    check(inspection.text() == std::string{"\x0f\x03\x18", 3});
+    TerminalUI task_ui{"Task observation fixture"};
+    TaskState source_tasks;
+    check(task_ui.try_observe_tasks({}).publication ==
+          TaskPublicationStatus::uninitialized);
+    task_ui.tasks(source_tasks.snapshot(), {2, {}, {}, source_tasks.revision()});
+    check(task_ui.try_observe_tasks({}).publication == TaskPublicationStatus::ready);
+    auto publish_add = [&] {
+      auto prepared = source_tasks.prepare(unwrap(parse_json(
+          R"({"op_id":"publication)" + std::to_string(source_tasks.revision()) +
+          R"(","base":)" + std::to_string(source_tasks.revision()) +
+          R"(,"ops":[{"op":"add","title":"Actual task"}]})")));
+      auto packet = prepared.packet;
+      source_tasks.commit(std::move(prepared));
+      return packet;
+    };
+    auto delta = publish_add();
+    task_ui.tasks(delta, {3, {}, {}, source_tasks.revision()});
+    const auto accepted = task_ui.try_observe_tasks({});
+    check(accepted.publication == TaskPublicationStatus::ready &&
+          accepted.value.revision == 1 && accepted.value.row_count == 1 &&
+          accepted.origin.revision == std::optional<std::uint64_t>{1});
+    auto missed = publish_add();
+    auto gap = publish_add();
+    bool publication_rejected = false;
+    try {
+      task_ui.tasks(gap, {3, {}, {}, source_tasks.revision()});
+    } catch (const Error &) {
+      publication_rejected = true;
+    }
+    const auto stale = task_ui.try_observe_tasks({});
+    check(publication_rejected && stale.publication == TaskPublicationStatus::stale &&
+          stale.value.revision == 1 &&
+          stale.origin.revision == std::optional<std::uint64_t>{1});
+    task_ui.tasks(missed, {3, {}, {}, 2});
+    check(task_ui.try_observe_tasks({}).publication == TaskPublicationStatus::stale);
+    task_ui.tasks(source_tasks.snapshot(), {2, {}, {}, source_tasks.revision()});
+    const auto repaired = task_ui.try_observe_tasks({});
+    check(repaired.publication == TaskPublicationStatus::ready &&
+          repaired.value.revision == 3 && repaired.value.row_count == 3);
     std::filesystem::remove_all(dir);
 
   } catch (const std::exception &e) {

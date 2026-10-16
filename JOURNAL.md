@@ -10194,3 +10194,57 @@ new row, and native tracked source remains identical to52f9103. Supported backup
 contains165 issues/761 events/121 dependencies. Publish via the explicit docs/data
 exception; unchanged observer/report are measured study artifacts under papers,
 not active tool/source additions.
+
+## 2026-10-16 — current-session center begins
+
+Operator send-it continues rhi.3 with second application of the shared native
+collection/inspector. Three staff studies establish pure bounded task observation
+on the existing UI reducer, a smaller guarded participant lifetime endpoint, and
+the actual-main inspection episode. Integrated PLAN.md records theory, owners,
+finite costs, actual scope and source cuts, Ctrl-X routing,4088/4089 literal/adopt
+recording and direct RED/GREEN/review/qualification. No new library, scheduler,
+command-task relation index, Lua VM or AFL interaction. Task and participant lanes
+now implement their own contracts; root owns adapter/main/input/raw integration.
+
+Actual-old-main Ctrl-X/mid-cursor behavioral RED captured with pinned Ghostty;
+actual old task read allocation RED and participant unavailable-seam runtime RED
+also fail their stated behaviors. Native task observation then passes6/6 and
+owning tidy. Root's one task source/oracle challenge finds no defect. UI wiring
+now retains successful task publication scope/ingress under existing mutex and
+try-observes outside input/paint. Failed task publication remains stale until
+an actual complete snapshot, including after a later contiguous delta; direct
+terminal semantic checks exercise that distinction. Participant owner9 focused
+new/existing cases pass pending review. Root extends real blocked-output and
+foreground-PTY input oracles to Ctrl-X without changing cancellation authority.
+
+Participant observer final focused9/9 passes Debug1.96s, ASan+UBSan4.82s and
+TSan9.95s; owner/test analysis clean and root one challenge no defect. Initial
+integrated Debug build succeeds. Actual-main Ghostty and Alacritty complete
+local-owner episodes pass; root oracle review tightens task-title waiting against
+old bound-participant detail, then both counterparts pass again. Exactly2 new
+readable expectations adopted after inspection; all18 compare, original16 intact.
+Terminal semantic, real UI publication-guard Busy, and Ctrl-X private-PTY priority
+pass. New blocked episode initially expected welcome although seeded tasks replace
+that line; corrected exact Tasks readiness marker, then all4 original-pressure/
+input/cancel/resize/draft episodes pass unchanged assertions. Root source analysis
+emits no diagnostics and explicit second task-publication/terminal analysis exits0.
+Native center review identifies finite credit, retirement identity, compact
+coverage/presentation and overflow defects; integrated review identifies stale
+navigation input origin. Owning fixes and direct native checks underway within
+these single review layers; full source qualification/performance not yet claimed.
+
+Final integrated relink includes exact two-reference control credit, explicit
+retired binding identity, compact per-source coverage, saturating view incarnation,
+current navigation input origin and selected stop/capture/source-availability facts.
+Native center3/3 and final integration9/9 pass35.64s; all18 grids unchanged outside
+the2 new specifications. ASan+UBSan integration12/12 passes7.11s and TSan5/5
+passes6.79s. Both sanitizer leases returned. Linux final native snapshota019f4e4
+now builds/checks its declared30-target/75-case Release profile; no timing.
+All owning source/test analysis clean. Prepare stable source/docs/Beads index for
+normal installed full Debug/C++/Lua hook; no source bypass or live activation.
+
+Final-source Alacritty actual-main counterpart passes after relink.17 document
+link sets resolve; all432 native inputs plus driver adjunct match Linux snapshot
+a019f4e4. All source owners are stable and explicitly instructed not to write
+tracked files/index/Beads during installed hook. Source issue remains in progress
+for whole-source gate, Linux qualification and matched performance.

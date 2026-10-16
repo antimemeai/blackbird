@@ -2,6 +2,7 @@
 #include "blackbird/admission.hpp"
 #include "blackbird/colleague.hpp"
 #include "blackbird/context.hpp"
+#include "blackbird/participant_observation.hpp"
 #include "blackbird/provider_original.hpp"
 #include "blackbird/raw_participants.hpp"
 #include <memory>
@@ -42,8 +43,10 @@ public:
   // Retention is a separate ordinary drain; it can remain pending after cancel.
   void shutdown();
   bool debt() const;
+  ParticipantObservationReader observer() const;
 
 private:
+  friend class ParticipantObservationReader;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

@@ -98,6 +98,7 @@ public:
   const Value &workflow_result() const noexcept { return workflow_result_; }
   ContextStore &context() noexcept { return context_; }
   TaskStore &tasks() noexcept { return tasks_; }
+  ParticipantObservationReader participant_observer() const;
   void model(std::string name) { model_ = std::move(name); }
   std::function<void(std::string_view)> display;
   std::function<void(std::string_view)> diagnostic;

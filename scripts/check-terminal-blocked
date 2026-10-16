@@ -21,7 +21,7 @@ spec = importlib.util.spec_from_file_location(
 oracle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(oracle)
 
-def check(pane, inspector=False):
+def check(pane, inspector=False, center=False):
     with tempfile.TemporaryDirectory(prefix="blackbird-blocked-") as work:
         input_master, input_slave = pty.openpty()
         output_master, output_slave = pty.openpty()
@@ -33,7 +33,7 @@ def check(pane, inspector=False):
         screen = oracle.Screen()
         child = subprocess.Popen(
             [str(Path(sys.argv[1]).resolve()), str(events_write), str(controls_read),
-             str(Path(work) / "state.bbm")] + (["pane"] if pane else ["inspector"] if inspector else []),
+             str(Path(work) / "state.bbm")] + (["pane"] if pane else ["inspector"] if inspector else ["center"] if center else []),
             stdin=input_slave, stdout=output_slave, stderr=subprocess.PIPE,
             pass_fds=(events_write, controls_read), start_new_session=True,
             env=dict(os.environ, BLACKBIRD_MASCOT="1" if pane else "0",
@@ -86,7 +86,7 @@ def check(pane, inspector=False):
                                  "\n" + screen.text())
 
         try:
-            wait(lambda: ("│ > " in screen.text() if pane else "Workflow reloads" in screen.text())
+            wait(lambda: ("│ > " in screen.text() if pane else "Tasks:" in screen.text() if center else "Workflow reloads" in screen.text())
                  and not screen.synchronized_update, "initial complete frame")
             os.write(input_master, b"fixture\r")
             wait(lambda: b"S" in observations and "ROW_079" in screen.text()
@@ -95,6 +95,10 @@ def check(pane, inspector=False):
                 os.write(input_master, b"\x0f\t")
                 wait(lambda: "COMMAND RESULTS" in screen.text() and "INSPECT_OUTPUT" in screen.text()
                      and not screen.synchronized_update, "actual command inspector before backpressure")
+            if center:
+                os.write(input_master, b"\x18\t")
+                wait(lambda: "COMMAND CENTER" in screen.text() and "Declared blocked" in screen.text()
+                     and not screen.synchronized_update, "actual command center before backpressure")
             # Fill the physical output queue after terminal setup. The writer's
             # inherited nonblocking flag is shared by this retained slave descriptor.
             observations.clear()
@@ -102,7 +106,7 @@ def check(pane, inspector=False):
             os.write(controls_write, b"P")
             wait(lambda: b"B" in observations, "actual UI write sees EAGAIN",
                  drain=False, keep_full=True)
-            os.write(input_master, (b"\x1b[6~\x1b[5~\x0f" if inspector else b"") + b"typed \x1b[200~" + "界 tail".encode() +
+            os.write(input_master, (b"\x1b[6~\x1b[5~\x0f" if inspector else b"\x1b[6~\x1b[5~\x18" if center else b"") + b"typed \x1b[200~" + "界 tail".encode() +
                      b"\x1b[201~" + (b"" if pane else b"\x1b[5~") + b"\x03")
             wait(lambda: b"C" in observations,
                  "worker observes Ctrl-C before any stdout is drained",
@@ -133,7 +137,7 @@ def check(pane, inspector=False):
             before[3] &= ~pending
             after[3] &= ~pending
             assert after == before, "terminal input mode not restored"
-            print("Blocked stdout: " + ("105x52 plain-joiner pane/graphics" if pane else "command inspector navigation" if inspector else "native scroll") +
+            print("Blocked stdout: " + ("105x52 plain-joiner pane/graphics" if pane else "command inspector navigation" if inspector else "command center navigation" if center else "native scroll") +
                   ", typing/paste/cancel/resize and draft retention pass")
         finally:
             if child.poll() is None:
@@ -147,3 +151,5 @@ check(False)
 check(True)
 
 check(False, inspector=True)
+
+check(False, center=True)

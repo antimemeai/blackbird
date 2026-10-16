@@ -58,6 +58,7 @@ int main(int argc, char **argv) {
       throw std::runtime_error("fixture requires observation/control/state paths");
     const bool pane = argc == 5 && std::string_view{argv[4]} == "pane";
     const bool inspecting = argc == 5 && std::string_view{argv[4]} == "inspector";
+    const bool centered = argc == 5 && std::string_view{argv[4]} == "center";
     std::shared_ptr<blackbird::CommandJobs> commands;
     if (inspecting) {
       commands = std::make_shared<blackbird::CommandJobs>();
@@ -87,6 +88,27 @@ int main(int argc, char **argv) {
     const int controls = std::stoi(argv[2]);
     std::atomic_bool cancelled = false, finished = false;
     blackbird::TerminalUI ui{"Blocked output fixture"};
+    std::optional<blackbird::CommandCenterContext> center_context;
+    if (centered) {
+      blackbird::IdentityBytes environment{}, conversation{};
+      environment[0] = std::byte{1};
+      conversation[0] = std::byte{2};
+      center_context.emplace(blackbird::CommandCenterContext{
+          {blackbird::unwrap(blackbird::EnvironmentId::from_bytes(environment)),
+           blackbird::unwrap(blackbird::ConversationId::from_bytes(conversation))},
+          {}});
+      blackbird::TaskState tasks;
+      auto prepared = tasks.prepare(blackbird::Value::object(
+          {{"op_id", blackbird::Value{"blocked-fixture"}},
+           {"base", blackbird::Value{blackbird::Number{0}}},
+           {"ops", blackbird::Value{blackbird::Value::Array{blackbird::Value::object(
+                       {{"op", blackbird::Value{"add"}},
+                        {"title", blackbird::Value{"Inspect blocked work"}},
+                        {"status", blackbird::Value{"blocked"}},
+                        {"blocker", blackbird::Value{"Await exact source"}}})}}}}));
+      tasks.commit(std::move(prepared));
+      ui.tasks(tasks.snapshot(), {2, {}, {}, tasks.revision()});
+    }
     ui.run(
         [&](std::string_view source) {
           if (source != "fixture")
@@ -121,7 +143,8 @@ int main(int argc, char **argv) {
             throw std::runtime_error("fixture expected finish control");
           finished.store(true);
         },
-        cancelled, [&] { return finished.load(); }, {}, argv[3], {}, commands);
+        cancelled, [&] { return finished.load(); }, {}, argv[3], {}, commands, -1, {},
+        nullptr, center_context);
     const auto state = blackbird::load_terminal_state(argv[3]);
     if (state.draft != "typed 界 tail" || state.cursor != state.draft.size())
       throw std::runtime_error("blocked native draft/cursor was not retained");

@@ -1453,6 +1453,9 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       const auto initial_kind =
           resume_turn ? RawMainInputKind::resume : RawMainInputKind::tui;
       const auto initial_length = initial.size();
+      const CommandCenterContext center_context{
+          {root->environment(), session_identity(log, &session_capture).conversation},
+          engine.participant_observer()};
       RawSessionCall initial_input{
           4200, 4201, &session_capture,
           std::array{detail::raw_native_field(initial_kind),
@@ -1491,7 +1494,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
               }
             },
             engine.command_jobs(), interrupt_wake.read_fd(),
-            [&] { return interrupt_owner.reset(); }, root.get());
+            [&] { return interrupt_owner.reset(); }, root.get(), center_context);
       });
       return finish_interactive();
     }

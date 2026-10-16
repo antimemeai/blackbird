@@ -70,3 +70,9 @@ the original VT-subset oracle incorrectly collapsed plain joined spaces/letters.
 The production105×52 whole-window case in the Microsoft driver independently
 checks divider/gutter cells in both Ghostty and Alacritty qualification; this
 component snapshot alone cannot establish real terminal width behavior.
+
+`center-wide` and `center-narrow-stale` use the actual current-session
+CommandCenter and a real TaskState. They specify the shared controls' composed
+coverage, selected task and blocked detail, including narrow stale last-good
+content. They preserve all16 earlier expectations. Actual-main source identity,
+participant/command behavior and the sole editor are checked separately.

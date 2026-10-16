@@ -87,3 +87,18 @@ before draining, literal pane cells and draft/mode restoration. The
 [diagnosis and source profile](../papers/ultramarine-repair-2026-10-15/PANES.md)
 distinguish the independently reproduced screenshot defect, the owned oracle's
 shared prior mistake, normative Unicode data and remaining width limitations.
+
+The current-session command-center case `tui_command_center` runs actual main
+with local gated command and fake-Claude transports, independently returned
+owner IDs and effect/request ledgers. Ctrl-X, route/draft/reading continuity,
+declared task versus observed execution state, unbound participants, literal
+paste and resize have Microsoft Ghostty and Alacritty counterparts. The native
+`command_center_*`, `task_observation_*`, `participant_observation_*` and
+`task_publication_busy` cases separately attack bounded work, actual guard
+contention, lifetime retirement, native literal/source linkage and physical
+DATA/CONTROL admission. Readable expectations now total18: the original16 plus
+center-wide and center-narrow-stale. The blocked-output fixture adds a fourth
+center episode with actual EAGAIN and cancellation acknowledged before draining.
+The private-PTY fixture requires Ctrl-X to reach the child as literal input.
+See the [center plan/results](../papers/tui-command-center-2026-10-16/PLAN.md)
+for exact qualification status; a screenshot does not establish responsiveness.

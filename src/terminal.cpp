@@ -91,6 +91,8 @@ const std::array builtin_commands{
                 "Tools"},
     ChatCommand{"/exec", "JSON", "Launch a command; yield_ms releases its wait",
                 "Tools"},
+    ChatCommand{"/center", "",
+                "Open current-session work; Ctrl-X preserves draft (TUI)", "TUI"},
     ChatCommand{"/jobs", "", "Open command results; Ctrl-O preserves draft (TUI)",
                 "Tools"},
     ChatCommand{"/fg", "JOB", "Wait for the same command; PTY text input", "Tools"},
@@ -308,7 +310,9 @@ std::string terminal_key_help() {
          "  Ctrl-C       Request stop and clear pending queue; keep unsent draft\n"
          "  Ctrl-B       Background foreground command; preserve composer\n"
          "  Ctrl-O       Inspect command results; preserve draft/cursor\n"
+         "  Ctrl-X       Current-session command center; preserve draft/cursor\n"
          "  Inspector    Arrows/Home/End/Page navigate; Tab focus; Esc draft\n"
+         "  Center       T tasks, P participants, J jobs; + means more rows\n"
          "               Ctrl-Left/Right source pages; typing returns to draft\n"
          "  PTY input    Keys and Ctrl-C reach selected command; Ctrl-B returns\n"
          "  Ctrl-Q       Stop and exit; preserve unsent draft\n"
@@ -986,6 +990,10 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
     palette_open_ = slash_open_ = false;
     return {InputAction::inspect_toggle, {}};
   }
+  if (c == 24) {
+    palette_open_ = slash_open_ = false;
+    return {InputAction::center_toggle, {}};
+  }
   if (inspecting) {
     if (c == 9)
       return {InputAction::inspect_toggle_focus, {}};
@@ -1493,38 +1501,73 @@ void TerminalUI::operation_completed(std::string_view value, Ink outcome) {
 void TerminalUI::failed() { post(Kind::failure, {}); }
 void TerminalUI::title(std::string_view value) { post(Kind::title, value); }
 void TerminalUI::tasks(const Value &publication, RawUiValueOrigin origin) {
-  auto trace = raw_ui_value_trace(raw_capture_, origin);
-  trace.run([&] {
-    if (trace.enabled() && (!origin.source || !raw_ui_source_valid(*origin.source)))
-      throw Error{ErrorCode::invalid_identity};
-    const bool snapshot = string_field(publication, "label") == "task-state-v1";
-    auto task_credit = raw_ui_control(true, snapshot ? 221 : 552, RawWaitControl{});
-    auto task_data =
-        snapshot ? std::optional<RawCapacityClaim>{}
-                 : raw_ui_data(true, ValueLimits{}.bytes + 48, RawWaitControl{});
-    RawTaskOrigin task_origin{trace.enabled() ? std::optional{trace.reference()}
-                                              : std::nullopt,
-                              false, nullptr, task_data ? &*task_data : nullptr,
-                              task_credit ? &*task_credit : nullptr};
+  try {
+    auto trace = raw_ui_value_trace(raw_capture_, origin);
+    trace.run([&] {
+      if (trace.enabled() && (!origin.source || !raw_ui_source_valid(*origin.source)))
+        throw Error{ErrorCode::invalid_identity};
+      const bool snapshot = string_field(publication, "label") == "task-state-v1";
+      auto task_credit = raw_ui_control(true, snapshot ? 221 : 552, RawWaitControl{});
+      auto task_data =
+          snapshot ? std::optional<RawCapacityClaim>{}
+                   : raw_ui_data(true, ValueLimits{}.bytes + 48, RawWaitControl{});
+      RawTaskOrigin task_origin{trace.enabled() ? std::optional{trace.reference()}
+                                                : std::nullopt,
+                                false, nullptr, task_data ? &*task_data : nullptr,
+                                task_credit ? &*task_credit : nullptr};
+      const std::lock_guard lock{mutex_};
+      if (snapshot)
+        task_state_.restore(publication, task_origin);
+      else
+        task_state_.replay(publication, task_origin);
+      if (publication.find("order"))
+        if (const auto position = task_state_.position(task_anchor_))
+          task_offset_ = *position;
+      if (const auto *removed = publication.find("removed"))
+        for (const auto &id : removed->array()) {
+          task_activity_.erase(id.string());
+          task_runs_.erase(id.string());
+          task_folded_.erase(id.string());
+        }
+      task_publication_initialized_ = true;
+      if (snapshot)
+        task_publication_failed_ = false;
+      task_publication_origin_ = origin;
+      task_publication_ingress_ = trace.reference();
+      // One mutable derived view, not a queued snapshot per update.
+      tasks_dirty_ = true;
+      raw_ui_notify(trace, notification_);
+      trace.finish();
+    });
+  } catch (...) {
     const std::lock_guard lock{mutex_};
-    if (snapshot)
-      task_state_.restore(publication, task_origin);
-    else
-      task_state_.replay(publication, task_origin);
-    if (publication.find("order"))
-      if (const auto position = task_state_.position(task_anchor_))
-        task_offset_ = *position;
-    if (const auto *removed = publication.find("removed"))
-      for (const auto &id : removed->array()) {
-        task_activity_.erase(id.string());
-        task_runs_.erase(id.string());
-        task_folded_.erase(id.string());
-      }
-    // One mutable derived view, not a queued snapshot per update.
-    tasks_dirty_ = true;
-    raw_ui_notify(trace, notification_);
-    trace.finish();
-  });
+    task_publication_failed_ = true;
+    throw;
+  }
+}
+TaskPublishedObservation
+TerminalUI::try_observe_tasks(const TaskObservationQuery &query) noexcept {
+  TaskPublishedObservation out;
+  try {
+    const std::unique_lock lock{mutex_, std::try_to_lock};
+    if (!lock.owns_lock()) {
+      out.publication = TaskPublicationStatus::busy;
+      return out;
+    }
+    if (!task_publication_initialized_) {
+      if (task_publication_failed_)
+        out.publication = TaskPublicationStatus::stale;
+      return out;
+    }
+    out.publication = task_publication_failed_ ? TaskPublicationStatus::stale
+                                               : TaskPublicationStatus::ready;
+    out.value = task_state_.observe(query);
+    out.origin = task_publication_origin_;
+    out.ingress = task_publication_ingress_;
+  } catch (...) {
+    out.publication = TaskPublicationStatus::stale;
+  }
+  return out;
 }
 void TerminalUI::task_activity(const Value &event, RawUiValueOrigin origin) {
   auto trace = raw_ui_value_trace(raw_capture_, origin);
@@ -1559,7 +1602,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                      const std::function<void()> &idle_work,
                      std::shared_ptr<CommandJobs> commands, int interrupt_fd,
                      const std::function<Result<void>()> &reset_interrupt,
-                     RetainedState *raw_root) {
+                     RetainedState *raw_root,
+                     std::optional<CommandCenterContext> center_context) {
   RawCaptureFailureScope ui_capture{raw_capture_ && raw_enabled()};
   const RawAdapterContext terminal_context{
       nullptr,
@@ -1713,6 +1757,53 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     }
     return false;
   };
+  std::unique_ptr<CommandCenter> center;
+  bool center_refused = false;
+  auto ensure_center = [&] {
+    if (!center_context) {
+      center_refused = true;
+      return false;
+    }
+    try {
+      if (!center)
+        center = std::make_unique<CommandCenter>(center_context->scope);
+      center_refused = false;
+      return true;
+    } catch (const Error &) {
+      center_refused = true;
+    } catch (const std::bad_alloc &) {
+      center_refused = true;
+    } catch (const std::length_error &) {
+      center_refused = true;
+    }
+    return false;
+  };
+  CommandCenterSources center_sources{
+      [this](const TaskObservationQuery &query) { return try_observe_tasks(query); },
+      center_context ? center_context->participants : ParticipantObservationReader{},
+      commands.get()};
+  auto close_center = [&] {
+    if (center && center->open())
+      center->toggle();
+  };
+  auto close_inspector = [&] {
+    if (inspector && inspector->open())
+      inspector->toggle();
+  };
+  auto inspection_open = [&] {
+    return (center && center->open()) || (inspector && inspector->open());
+  };
+  auto inspection_focused = [&] {
+    return (center && center->open() && center->focused()) ||
+           (inspector && inspector->open() && inspector->focused());
+  };
+  auto visit_inspection = [&](auto &&action) {
+    if (center && center->open())
+      action(*center);
+    else if (inspector && inspector->open())
+      action(*inspector);
+  };
+  auto center_refresh = std::chrono::steady_clock::time_point::min();
   auto inspector_refresh = std::chrono::steady_clock::time_point::min();
   ChatView transcript{raw_capture_};
   bool welcoming = initial.empty();
@@ -2275,6 +2366,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     if (!busy && idle_work && (!raw_root || !raw_root->raw_owner_blocked()))
       idle_work();
     // Bounded derived owner observations run outside keyboard handling/painting.
+    if (center && center->open() &&
+        (center->needs_refresh() ||
+         std::chrono::steady_clock::now() >= center_refresh)) {
+      redraw = center->refresh(center_sources, raw_capture_) || redraw;
+      center_refresh = std::chrono::steady_clock::now() + std::chrono::milliseconds(80);
+    }
     if (inspector && inspector->open() &&
         (inspector->needs_refresh() ||
          std::chrono::steady_clock::now() >= inspector_refresh)) {
@@ -2455,7 +2552,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           layout.finish();
           continue;
         }
-        const bool inspecting = inspector && inspector->open();
+        const bool inspecting = inspection_open();
         const bool show_task_pane =
             !inspecting && !welcoming && !tasks_hidden && width >= 90 && rows >= 18;
         const auto pane_width =
@@ -2622,14 +2719,23 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         }
         std::optional<tui::InspectorLayout> inspection_layout;
         if (inspecting) {
-          inspection_layout =
-              unwrap(inspector->render(grid, {0, 2, main_width, height}));
-          auto caption = std::string{"COMMAND RESULTS"};
-          if (!inspector->notice().empty())
-            caption += " · " + std::string{inspector->notice()};
-          caption += " · Ctrl-O close · Tab focus · Esc draft";
+          const bool centered = center && center->open();
+          auto caption = std::string{centered ? "COMMAND CENTER" : "COMMAND RESULTS"};
+          visit_inspection([&](auto &view) {
+            inspection_layout = unwrap(view.render(grid, {0, 2, main_width, height}));
+            if (!view.notice().empty())
+              caption += " · " + std::string{view.notice()};
+          });
+          caption += centered ? " · Ctrl-X close · Tab focus · Esc draft"
+                              : " · Ctrl-O close · Tab focus · Esc draft";
           grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
           grid.line(1, {{terminal_lines(caption, main_width).front(), Ink::heading}});
+        } else if (center_refused) {
+          grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
+          grid.line(1, {{terminal_lines("Command center unavailable; draft retained",
+                                        main_width)
+                             .front(),
+                         Ink::failure}});
         } else if (inspector_refused) {
           grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
           grid.line(1, {{terminal_lines("Command inspector unavailable; draft retained",
@@ -2694,12 +2800,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         const auto cursor_line = height + palette.size() + 4 + cursor_row - draft_begin;
         const auto cells = caret.column.value;
         const auto display_cursor_line =
-            inspecting && inspector->focused() && inspection_layout
+            inspecting && inspection_focused() && inspection_layout
                 ? inspection_layout->bounds.y + 1
             : composer.palette_open() ? height + 3
                                       : cursor_line;
         const auto display_cursor_cells =
-            inspecting && inspector->focused() ? 1
+            inspecting && inspection_focused() ? 1
             : composer.palette_open()
                 ? terminal_caret(palette.front(), {palette.front().size() - 1},
                                  {std::numeric_limits<std::size_t>::max()})
@@ -2791,8 +2897,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     const auto dispatch = terminal_input_dispatch(
         composer, std::chrono::steady_clock::now(), escape_deadline, inputs[0].revents);
     redraw = redraw || dispatch.redraw;
-    if (dispatch.redraw && inspector && inspector->open())
-      inspector->focus_editor();
+    if (dispatch.redraw)
+      visit_inspection([](auto &view) { view.focus_editor(); });
     if (!dispatch.read_input)
       continue;
     char bytes[128];
@@ -2903,8 +3009,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                           session_data ? &*session_data : nullptr,
                           session_control ? &*session_control : nullptr,
                           {}};
-        auto outcome = composer.feed(
-            bytes[i], &origin, inspector && inspector->open() && inspector->focused());
+        auto outcome = composer.feed(bytes[i], &origin, inspection_focused());
         keyboard_process.progress(static_cast<std::size_t>(i) + 1);
         return outcome;
       });
@@ -2933,11 +3038,19 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           escape_deadline =
               std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
         redraw = true;
-        if (result.action == InputAction::inspect_toggle) {
-          if (ensure_inspector())
-            inspector->toggle(result.source.record);
+        if (result.action == InputAction::center_toggle) {
+          if (ensure_center()) {
+            close_inspector();
+            center->toggle(result.source.record);
+          }
         }
-        if (inspector && inspector->open()) {
+        if (result.action == InputAction::inspect_toggle) {
+          if (ensure_inspector()) {
+            close_center();
+            inspector->toggle(result.source.record);
+          }
+        }
+        if (inspection_open()) {
           std::optional<tui::InspectorAction> navigation;
           switch (result.action) {
           case InputAction::inspect_previous:
@@ -2968,19 +3081,29 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             navigation = tui::InspectorAction::toggle_focus;
             break;
           case InputAction::inspect_focus_editor:
-            inspector->focus_editor();
+            visit_inspection([](auto &view) { view.focus_editor(); });
             break;
           case InputAction::inspect_previous_output:
-            inspector->page(false);
+            if (center && center->open())
+              center->page(false, result.source.record);
+            else if (inspector && inspector->open())
+              inspector->page(false);
             break;
           case InputAction::inspect_next_output:
-            inspector->page(true);
+            if (center && center->open())
+              center->page(true, result.source.record);
+            else if (inspector && inspector->open())
+              inspector->page(true);
             break;
           default:
             break;
           }
           if (navigation) {
-            const auto moved = inspector->act(*navigation);
+            auto moved = Result<void>::success();
+            if (center && center->open())
+              moved = center->act(*navigation, result.source.record);
+            else if (inspector && inspector->open())
+              moved = inspector->act(*navigation);
             if (!moved.has_value())
               transcript += std::string{"\nInspection navigation refused: "} +
                             error_name(moved.error().code) + "\n";
@@ -3053,9 +3176,16 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           cancel_turn();
         }
         if (result.action == InputAction::submit && !result.text.empty() && !quitting) {
-          if (result.text == "/jobs") {
-            if (ensure_inspector())
+          if (result.text == "/center") {
+            if (ensure_center()) {
+              close_inspector();
+              center->first_page(result.source.record);
+            }
+          } else if (result.text == "/jobs") {
+            if (ensure_inspector()) {
+              close_center();
               inspector->first_page(result.source.record);
+            }
           } else if (commands &&
                      (result.text == "/bg" || result.text.starts_with("/bg "))) {
             release_command(result.text == "/bg"
