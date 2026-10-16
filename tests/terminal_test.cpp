@@ -413,6 +413,31 @@ int main() {
       rejected = true;
     }
     check(rejected);
+    Composer inspection;
+    inspection.draft("kept draft");
+    feed(inspection, "\x1b[D");
+    const auto kept_cursor = inspection.cursor();
+    check(inspection.feed('\x0f').action == InputAction::inspect_toggle);
+    check(inspection.text() == "kept draft" && inspection.cursor() == kept_cursor);
+    InputResult navigation;
+    for (const auto byte : std::string_view{"\x1b[A"})
+      navigation = inspection.feed(byte, nullptr, true);
+    check(navigation.action == InputAction::inspect_previous);
+    check(inspection.text() == "kept draft" && inspection.cursor() == kept_cursor);
+    check(inspection.feed('\t', nullptr, true).action ==
+          InputAction::inspect_toggle_focus);
+    check(inspection.feed('X', nullptr, true).action ==
+          InputAction::inspect_focus_editor);
+    check(inspection.text() == "kept drafXt");
+    inspection.draft("");
+    for (const auto byte : std::string_view{"\x1b[200~"})
+      navigation = inspection.feed(byte, nullptr, true);
+    check(navigation.action == InputAction::inspect_focus_editor &&
+          inspection.pasted());
+    check(inspection.feed('\x0f').action == InputAction::none);
+    check(inspection.feed('\x03').action == InputAction::none);
+    feed(inspection, "\x1b[201~");
+    check(inspection.text() == std::string{"\x0f\x03", 2});
     std::filesystem::remove_all(dir);
 
   } catch (const std::exception &e) {

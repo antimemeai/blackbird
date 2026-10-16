@@ -3,6 +3,7 @@
 #include "blackbird/display_text.hpp"
 #include "blackbird/task_view.hpp"
 #include "blackbird/terminal.hpp"
+#include "blackbird/tui_inspector.hpp"
 #include <algorithm>
 #include <array>
 #include <clocale>
@@ -244,6 +245,43 @@ std::vector<Snapshot> scenarios() {
       "Sessions");
   feed(palette, "zzzz");
   output.push_back(palette_frame("palette-no-match", palette));
+  auto scene = unwrap(tui::SceneHost::create({71, 1}, {8, 128, 8192}));
+  tui::SceneCandidate instrument;
+  instrument.view = {71, 1};
+  instrument.nodes = {{"list", {}, tui::NodeKind::collection, true},
+                      {"detail", {}, tui::NodeKind::inspector, true}};
+  const tui::TargetRef alpha{"fixture", "command", "alpha", 1};
+  const tui::TargetRef beta{"fixture", "command", "beta", 1};
+  instrument.collections = {
+      {"list",
+       {{"alpha", "alpha  settled", alpha}, {"beta", "beta   running", beta}},
+       "COMMANDS",
+       {}}};
+  instrument.inspectors = {{"detail",
+                            "alpha · retained result",
+                            alpha,
+                            {{{"Exit 7 | native reaped", Ink::failure}},
+                             {{"Retained 30 | received 30", Ink::muted}},
+                             {{"same source · e", Ink::normal}, {"́ 界", Ink::code}},
+                             {{"line 2: actual bounded content", Ink::normal}},
+                             {{"line 3: more readable output", Ink::normal}},
+                             {{"line 4: last line", Ink::normal}}},
+                            {},
+                            0}};
+  unwrap(scene.publish(instrument));
+  auto instrument_control =
+      unwrap(tui::CollectionInspector::create(scene, "list", "detail"));
+  Snapshot wide_inspector{
+      "inspector-wide", {}, {}, "selected=alpha;target=alpha;draft=external"};
+  wide_inspector.grid.reset(84, 10);
+  unwrap(instrument_control.render(wide_inspector.grid, {0, 0, 84, 10}));
+  output.push_back(std::move(wide_inspector));
+  unwrap(instrument_control.act(tui::InspectorAction::focus_detail));
+  Snapshot narrow_inspector{
+      "inspector-narrow", {}, {}, "selected=alpha;focus=detail;target=alpha"};
+  narrow_inspector.grid.reset(24, 8);
+  unwrap(instrument_control.render(narrow_inspector.grid, {0, 0, 24, 8}));
+  output.push_back(std::move(narrow_inspector));
   return output;
 }
 } // namespace

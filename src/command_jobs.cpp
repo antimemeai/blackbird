@@ -355,7 +355,7 @@ struct CommandJobs::Impl {
   std::condition_variable condition;
   RawThreadHandle cleanup_context;
   std::optional<RawControlToken> shutdown_credit;
-  std::map<std::string, std::shared_ptr<Job>> jobs;
+  std::map<std::string, std::shared_ptr<Job>, std::less<>> jobs;
   // Every access to cleanup producer/claims is serialized by mutex.
   void caller_stop(Job &job, std::uint8_t source) noexcept {
     RawThreadBinding owner{cleanup_context};
@@ -1435,6 +1435,145 @@ Value CommandJobs::wait(const std::string &id, JobWaitOptions options,
   }
 }
 
+CommandObservation
+CommandJobs::try_observe(const CommandObservationQuery &query) const noexcept {
+  CommandObservation out;
+  const auto valid = [](const std::optional<CommandObservationId> &id) noexcept {
+    return !id || std::all_of(id->bytes.begin(), id->bytes.end(), [](char byte) {
+      return (byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f');
+    });
+  };
+  if (!valid(query.after) || !valid(query.selected)) {
+    out.status = CommandObservationStatus::invalid_identity;
+    return out;
+  }
+  if (query.row_limit > out.rows.size() || query.byte_limit > out.window.bytes.size() ||
+      query.chunk_limit > out.window.sources.size()) {
+    out.status = CommandObservationStatus::invalid_range;
+    return out;
+  }
+  try {
+    const std::unique_lock lock{impl_->mutex, std::try_to_lock};
+    if (!lock.owns_lock()) {
+      out.status = CommandObservationStatus::busy;
+      return out;
+    }
+    const auto project = [&](const Impl::Job &job) noexcept {
+      CommandObservationRow row;
+      std::copy_n(job.id.begin(), row.id.bytes.size(), row.id.bytes.begin());
+      row.admission_order = job.admission_order;
+      row.phase = job.terminal_retained ? CommandObservationPhase::settled
+                  : job.finished        ? CommandObservationPhase::settling
+                  : job.leader_exited   ? CommandObservationPhase::draining
+                  : job.stopped         ? CommandObservationPhase::stopped
+                  : job.ready           ? CommandObservationPhase::running
+                                        : CommandObservationPhase::starting;
+      switch (job.custody) {
+      case Impl::Custody::not_launched:
+        row.custody = CommandObservationCustody::not_launched;
+        break;
+      case Impl::Custody::owned:
+        row.custody = CommandObservationCustody::owned;
+        break;
+      case Impl::Custody::reaped:
+        row.custody = CommandObservationCustody::reaped;
+        break;
+      case Impl::Custody::unavailable:
+        row.custody = CommandObservationCustody::unavailable;
+        break;
+      case Impl::Custody::pending:
+        row.custody = CommandObservationCustody::pending;
+        break;
+      }
+      row.received = job.received;
+      row.retained = job.retained;
+      row.pty = job.launch.pty;
+      row.leader_exited = job.leader_exited;
+      row.output_closed = job.output_closed;
+      row.worker_finished = job.finished;
+      row.terminal_retained = job.terminal_retained;
+      row.capture_complete = job.capture_complete;
+      row.stop_requested = job.stop;
+      row.timed_out = job.timed_out;
+      row.has_exit = job.leader_exited;
+      row.sealed = job.terminal_retained && job.capture_complete &&
+                   job.custody == Impl::Custody::reaped;
+      row.exit_code = job.exit_code;
+      row.signal = job.signal;
+      row.failure = job.failure;
+      row.launch = job.launch_ref;
+      row.terminal = job.terminal_ref;
+      ++out.examined_rows;
+      return row;
+    };
+    auto entry = query.after ? impl_->jobs.upper_bound(query.after->view())
+                             : impl_->jobs.begin();
+    while (entry != impl_->jobs.end() && out.row_count < query.row_limit) {
+      out.rows[out.row_count++] = project(*entry->second);
+      ++entry;
+    }
+    out.more_rows = entry != impl_->jobs.end();
+    if (out.more_rows && out.row_count)
+      out.next = out.rows[out.row_count - 1].id;
+    out.status = CommandObservationStatus::ready;
+    if (!query.selected)
+      return out;
+    const auto selected = impl_->jobs.find(query.selected->view());
+    if (selected == impl_->jobs.end()) {
+      out.selection = CommandObservationSelection::not_resident;
+      return out;
+    }
+    out.selection = CommandObservationSelection::resident;
+    const auto &job = *selected->second;
+    out.detail = project(job);
+    auto &window = out.window;
+    window.requested = query.offset;
+    window.cached_begin = job.tail.empty() ? job.retained : job.tail.front().offset;
+    window.retained_end = job.retained;
+    window.received_end = job.received;
+    if (query.offset > job.retained) {
+      out.status = CommandObservationStatus::invalid_range;
+      return out;
+    }
+    window.begin = std::min(job.retained, std::max(query.offset, window.cached_begin));
+    window.next = window.begin;
+    window.omitted_prefix = window.begin > query.offset;
+    auto chunk = std::lower_bound(
+        job.tail.begin(), job.tail.end(), window.begin,
+        [&](const Impl::Chunk &candidate, std::size_t offset) noexcept {
+          ++out.seek_steps;
+          return candidate.offset + candidate.bytes->size() <= offset;
+        });
+    while (window.next < job.retained && chunk != job.tail.end()) {
+      if (window.size == query.byte_limit) {
+        window.end = CommandObservationPageEnd::byte_limit;
+        break;
+      }
+      if (window.source_count == query.chunk_limit) {
+        window.end = CommandObservationPageEnd::chunk_limit;
+        break;
+      }
+      ++out.examined_chunks;
+      const auto at = window.next - chunk->offset;
+      const auto length =
+          std::min({chunk->bytes->size() - at, query.byte_limit - window.size,
+                    job.retained - window.next});
+      std::memcpy(window.bytes.data() + window.size, chunk->bytes->data() + at, length);
+      window.sources[window.source_count++] = {chunk->original, chunk->offset, at,
+                                               length};
+      if (chunk->original.ordinal == 0)
+        window.provenance_complete = false;
+      window.size += length;
+      window.next += length;
+      ++chunk;
+    }
+    return out;
+  } catch (...) {
+    // A failed native mutex acquisition has no useful projection or side effect.
+    out.status = CommandObservationStatus::unavailable;
+    return out;
+  }
+}
 Value CommandJobs::read(const Value &arguments) const {
   auto credit = raw_command_claim(58);
   const auto id =

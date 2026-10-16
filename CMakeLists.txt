@@ -855,3 +855,28 @@ foreach(wait_case filtered filtered-raw lost)
   add_test(NAME command_wait_custody_${wait_case} COMMAND command_wait_custody_test ${wait_case})
   set_tests_properties(command_wait_custody_${wait_case} PROPERTIES TIMEOUT 15)
 endforeach()
+
+# Native reusable inspector; the grid/text implementation currently lives in coding.
+target_sources(blackbird_coding PRIVATE src/tui_inspector.cpp src/command_inspector.cpp)
+add_executable(tui_inspector_test tests/tui_inspector_test.cpp)
+target_link_libraries(tui_inspector_test PRIVATE blackbird_coding)
+add_test(NAME tui_inspector COMMAND tui_inspector_test)
+set_tests_properties(tui_inspector PROPERTIES TIMEOUT 20)
+
+add_executable(command_observation_test tests/command_observation_test.cpp)
+target_link_libraries(command_observation_test PRIVATE blackbird_foundation Threads::Threads)
+foreach(observation_case allocation ranges ranges-raw busy lifecycle)
+  add_test(NAME command_observation_${observation_case} COMMAND command_observation_test ${observation_case})
+  set_tests_properties(command_observation_${observation_case} PROPERTIES TIMEOUT 20)
+endforeach()
+add_test(NAME tui_command_inspector COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-tui-inspector $<TARGET_FILE:blackbird>
+  --artifacts ${CMAKE_BINARY_DIR}/tui-command-inspector)
+set_tests_properties(tui_command_inspector PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+
+add_executable(command_inspector_test tests/command_inspector_test.cpp)
+target_link_libraries(command_inspector_test PRIVATE blackbird_coding Threads::Threads)
+foreach(inspector_case semantic raw pressure runtime-pressure)
+  add_test(NAME command_inspector_${inspector_case} COMMAND command_inspector_test ${inspector_case})
+  set_tests_properties(command_inspector_${inspector_case} PROPERTIES TIMEOUT 20)
+endforeach()

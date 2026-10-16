@@ -10092,3 +10092,75 @@ identical to deliveredabaee8a. Beads closes all eight and backup writes164 issue
 751 events and120 dependencies. Text/data publication uses the operator's
 explicit documentation-only hook exception; unchanged observer/report copies
 are study artifacts from the measured run, not active tooling additions.
+
+2026-10-16 — Operator resumes TUI campaign after repair intermission. Study real
+scene host/terminal/CommandJobs seams and existing acquired Ito/HCI design. Write
+tui-command-inspector PLAN, staff component/owner plans and bounded read study.
+Claim arconaut-rhi.3.4. Permanent actual-main Microsoft test on45b1454 binary
+fails exact Ctrl-O COMMAND RESULTS visibility with nonempty draft, preserving
+its real terminal artifacts. Opening must be a local read-only instrument, not
+JSON transcript projection or a model turn. Staff own generic keyed controls
+and pure bounded owner query; root owns actual input/raw/view adapter.
+
+Command-inspector implementation: pure CommandJobs try-observation bounds catalog8
+plus selected1, retained4096bytes/16chunks with logarithmic seek and native refs.
+Shared SceneHost accepts safe immutable collection/detail properties; native
+controls preserve keyed selection and source reading anchors across reflow.
+Root reviews owner/component once with no findings. Actual Ctrl-O and /jobs
+adapter uses the sole Composer, refreshes outside input/paint and prepays exact
+4087 CONTROL via nonblocking try before adoption. Pressure preserves last scene
+and successful reference; source bytes resolve to original2008 records.
+
+Direct integration GREEN: adapter4/4 including separate-producer runtime pressure;
+actual-main Microsoft Ghostty and Alacritty draft/navigation/real-source/no-rerun;
+blocked stdout3 episodes;16 readable baselines including2 explicit new ones and
+14 unchanged. Existing command_jobs PTY/station and terminal5/5 pass31.03s.
+PTY discovery intentionally moves from old /jobs JSON scraping to explicit Lua
+process read with exact fixture PID and one canonical ID. First adapter compile
+missed context.hpp declarations, recorded as setup failure then corrected, never
+RED. Initial actual old-source behavioral REDs remain in each unit report.
+Lazy view-construction refusal now leaves conversation/draft usable with native
+feedback; no domain cancellation. Independent integration review, affected
+sanitizers/Linux, full source gate and matched performance remain underway.
+
+Single independent integrated input/raw/adapter review finds no concrete defect;
+REVIEW.md records scope. Final source ready for installed206-case Debug/full
+C++/Lua hook, affected sanitizer and matched-profile Linux checks. Their results
+and actual performance will follow without implying completion in advance.
+
+ASan+UBSan12/12 and TSan6/6 pass scoped native checks without diagnostics.
+First installed gate205/206 in286.42s fails existing raw_recorder_cuts60.08s
+explicit-recovery episode, before lint/commit. Preserve exact full Debug log and
+append existing arconaut-3wt, no duplicate or cause claim. Single unchanged stop
+mode passes; bounded stage-instrumented diagnostic reproduces trial24 before
+recover(): parent handle retirement waits while fixture recorder poll waits for
+a later stop. Owning fixture synchronization fix underway with the same checks
+and watchdog; product raw semantics are not diagnosed by this timeout. Linux
+build continues; timing waits.
+
+Recorder fixture cause: selected one-byte producer STREAM space notices were
+misclassified as DGRAM lifecycle replies. Strengthened permanent fixture arms a
+real lane notification, requires STREAM notice with zero stop arms, then exactly
+one DGRAM arm and all original stop/wake/literal assertions. Old-selector scratch
+raises the actual wrong-arm error (behavioral RED); corrected full Mac fixture
+passes0.58s, owning tidy clean, root single review no finding. Final Linux source
+passes57/57 in34.99s plus fixture-only overlay1/1 in0.17s; final native tree991b8f,
+product binary unchanged451271fc. Full failed gate preserved, arconaut-3wt remains
+open pending source delivery. Retry installed normal hook; no widened watchdog,
+source bypass or new runtime repair. Timing waits until all owned checks stop.
+
+Hook retry passes206/206 Debug in226.78s, including repaired recorder0.79s in
+parallel suite, then full native analysis rejects15 diagnostics across four new
+translations. Preserve complete attempt02 output. Fix plans recorded before
+edits: required direct CollectionInspector member removes empty adapter state;
+typed cell widths/Rect remove swappable renderer scalars; bound local selection
+proves optional access. Test helpers gain scoped part and named path arguments,
+explicit local detail checks and same invalid Ink byte255 through fixed-byte
+representation. No oracle/suppression/watchdog changes. Run actual owning tidy
+and affected semantic/screen/sanitizer/Linux rechecks before normal full hook.
+
+Concrete lint remediations now pass all four actual owning translation checks.
+Component2/2, adapter4/4, relinked actual-main Ghostty/blocked/snapshots3/3 in9.91s
+and affected ASan6/6 plusTSan4/4 remain green with unchanged oracles. Final Linux
+overlay native treea23d707 is being qualified under same profile; no timing yet.
+Stage intended source/docs/Beads only, then retry full installed source hook.

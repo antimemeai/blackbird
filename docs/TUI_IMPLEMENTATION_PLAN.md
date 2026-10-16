@@ -62,9 +62,12 @@ retain exact earlier performance runs and actual build/test faults.
 
 The [next-slice source map](../papers/tui-next-components-2026-10-15/SOURCE_MAP.md)
 identifies the missing visual properties/renderer, owner publications and
-independent VM. Shared collection/command-result inspection across conversation
-and a real current-session center remains a proposal to ground the rest of
-Units1–2, not an implemented reusable view or Lua bridge.
+independent VM. The [command-inspector tranche](../papers/tui-command-inspector-2026-10-16/PLAN.md)
+implements shared keyed collection/detail rendering and the conversation adapter:
+Ctrl-O preserves the draft, `/jobs` opens results, and retained bytes name their
+actual command and source extents. Owner/recording pressure retains the last good
+page visibly stale. Current-session center reuse and the independent Lua bridge
+remain the next units; this does not complete Units1–2.
 
 Separate terminal decoding from native editor/palette behavior while retaining
 present draft/history/paste/editor controls, including literal insertion followed

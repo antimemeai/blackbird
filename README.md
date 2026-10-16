@@ -226,6 +226,9 @@ The basic controls are intentionally ordinary:
 | Up / Down | Recall submitted prompts. |
 | Ctrl-C | Stop the active turn, clear its queue, and preserve the current draft. |
 | Ctrl-Q | Exit with drafts and queued work preserved as recoverable drafts. |
+| Ctrl-O / `/jobs` | Inspect resident command results; Ctrl-O preserves the draft and toggles back. |
+| Inspector arrows / PgUp / PgDn / Home / End | Navigate the focused command collection or result. Tab changes focus; Escape or typing returns to the draft. |
+| Inspector Ctrl-Left / Ctrl-Right | Page the command catalog or retained output, according to focus. |
 | `/exit` or `/quit` | Exit, stopping active work first. |
 | `/session`, `/stats`, `/context` | Inspect settings, sizes, or current context. |
 | `/name`, `/sessions`, `/resume DIRECTORY` | Name, select and return to saved working state. |

@@ -327,25 +327,28 @@ while True:
 
     def job_id(pid):
         command("/clear")
-        command("/jobs")
+        prefix = "OWNED_JOB_%s:" % pid
+        command("/lua local q=blackbird.call('process',{op='read'}); local n=0; "
+                "for _,j in ipairs(q.jobs) do if j.pid==%s then n=n+1; "
+                "print('OWNED_' .. 'JOB_%s:' .. j.job_id .. ':' .. "
+                "tostring(j.pid) .. ':END') end end; assert(n==1)" % (pid, pid))
         found = []
 
         def extract():
             # Discard the side pane and display gutters before joining wrapped
-            # JSON; only a fresh /jobs response may satisfy discovery.
+            # output. The requested native registry read must match the actual
+            # fixture PID; the echoed Lua contains no literal matching job ID.
             text = main_text()
             text = re.sub(r"\s+", "", text)
-            if '"jobs":[' not in text:
-                return False
             found[:] = [
                 identifier for identifier, observed_pid in re.findall(
-                    r'\{[^{}]*"job_id":"([a-f0-9]{32})"[^{}]*"pid":(\d+)[^{}]*\}', text
+                    re.escape(prefix) + r'([a-f0-9]{32}):(\d+):END', text
                 ) if int(observed_pid) == pid
             ]
-            return bool(found)
+            return len(found) == 1
 
         wait(extract, "job discovery exposes stable launch identity")
-        return found[-1]
+        return found[0]
 
     def launch(kind, **options):
         (root / (kind + ".pid")).unlink(missing_ok=True)

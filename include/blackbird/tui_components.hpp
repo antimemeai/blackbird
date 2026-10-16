@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/chat_view.hpp"
 #include "blackbird/foundation.hpp"
 #include <map>
 #include <memory>
@@ -29,10 +30,25 @@ struct Item {
   std::optional<TargetRef> target;
   bool operator==(const Item &) const = default;
 };
+enum class NoticeKind : std::uint8_t { none, loading, stale, unavailable, failed };
+struct Notice {
+  NoticeKind kind = NoticeKind::none;
+  std::string text;
+  bool operator==(const Notice &) const = default;
+};
 struct Collection {
   std::string node;
   std::vector<Item> items;
+  std::string title{};
+  Notice notice{};
   bool operator==(const Collection &) const = default;
+};
+struct Inspector {
+  std::string node, title;
+  std::optional<TargetRef> target;
+  std::vector<ChatRow> lines;
+  Notice notice;
+  std::uint64_t content_offset = 0;
 };
 struct DraftEdit {
   std::uint64_t base_revision = 0;
@@ -45,16 +61,19 @@ struct SceneCandidate {
   std::vector<Node> nodes;
   std::vector<Collection> collections;
   std::optional<DraftEdit> draft;
+  std::vector<Inspector> inspectors{};
 };
 struct Scene {
   ViewIdentity view;
   std::uint64_t revision = 0;
   std::vector<Node> nodes;
   std::vector<Collection> collections;
+  std::vector<Inspector> inspectors{};
 };
 struct Limits {
   // Scene-owned strings sum to at most bytes; the independent shell draft also
-  // has that byte limit. Node/item counts apply to the supplied bounded window.
+  // has that byte limit. items counts collection rows, detail lines and style
+  // spans, including empty spans, within the supplied bounded window.
   std::size_t nodes = 0, items = 0, bytes = 0;
 };
 struct NodeHandle {
@@ -93,6 +112,8 @@ public:
   Result<void> select(const NodeHandle &node, std::string_view item);
   Result<void> anchor(const NodeHandle &node, std::string_view item,
                       std::size_t offset = 0);
+  Result<void> position(const NodeHandle &node, std::string_view selected,
+                        std::string_view anchor);
   Result<CollectionState> collection_state(const NodeHandle &node) const;
   Result<void> edit_draft(const DraftEdit &edit);
   const Draft &draft() const noexcept { return draft_; }

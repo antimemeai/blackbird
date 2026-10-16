@@ -23,7 +23,20 @@ enum class InputAction {
   page_up,
   page_down,
   edit,
-  choose_command
+  choose_command,
+  inspect_toggle,
+  inspect_previous,
+  inspect_next,
+  inspect_first,
+  inspect_last,
+  inspect_page_up,
+  inspect_page_down,
+  inspect_focus_collection,
+  inspect_focus_detail,
+  inspect_toggle_focus,
+  inspect_focus_editor,
+  inspect_previous_output,
+  inspect_next_output
 };
 struct InputResult {
   InputAction action = InputAction::none;
@@ -58,7 +71,7 @@ struct ComposerChoice {
 };
 class Composer {
 public:
-  InputResult feed(char byte, RawUiInput *raw = nullptr);
+  InputResult feed(char byte, RawUiInput *raw = nullptr, bool inspecting = false);
   std::uint64_t capture_bound(std::size_t acquired_bytes) const;
   void restore(const TerminalState &state);
   TerminalState state() const;
@@ -74,7 +87,7 @@ public:
   std::size_t cursor() const noexcept { return cursor_; }
 
 private:
-  InputResult feed_impl(char byte, RawUiInput *raw);
+  InputResult feed_impl(char byte, RawUiInput *raw, bool inspecting = false);
   std::size_t history_capture_bound_ = 0, choice_capture_bound_ = 0;
   std::shared_ptr<const std::vector<ComposerChoice>> choices_;
   mutable std::shared_ptr<const std::vector<ComposerChoice>> capture_catalog_;

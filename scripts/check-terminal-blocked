@@ -21,7 +21,7 @@ spec = importlib.util.spec_from_file_location(
 oracle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(oracle)
 
-def check(pane):
+def check(pane, inspector=False):
     with tempfile.TemporaryDirectory(prefix="blackbird-blocked-") as work:
         input_master, input_slave = pty.openpty()
         output_master, output_slave = pty.openpty()
@@ -33,7 +33,7 @@ def check(pane):
         screen = oracle.Screen()
         child = subprocess.Popen(
             [str(Path(sys.argv[1]).resolve()), str(events_write), str(controls_read),
-             str(Path(work) / "state.bbm")] + (["pane"] if pane else []),
+             str(Path(work) / "state.bbm")] + (["pane"] if pane else ["inspector"] if inspector else []),
             stdin=input_slave, stdout=output_slave, stderr=subprocess.PIPE,
             pass_fds=(events_write, controls_read), start_new_session=True,
             env=dict(os.environ, BLACKBIRD_MASCOT="1" if pane else "0",
@@ -91,6 +91,10 @@ def check(pane):
             os.write(input_master, b"fixture\r")
             wait(lambda: b"S" in observations and "ROW_079" in screen.text()
                  and not screen.synchronized_update, "local worker transcript frame")
+            if inspector:
+                os.write(input_master, b"\x0f\t")
+                wait(lambda: "COMMAND RESULTS" in screen.text() and "INSPECT_OUTPUT" in screen.text()
+                     and not screen.synchronized_update, "actual command inspector before backpressure")
             # Fill the physical output queue after terminal setup. The writer's
             # inherited nonblocking flag is shared by this retained slave descriptor.
             observations.clear()
@@ -98,7 +102,7 @@ def check(pane):
             os.write(controls_write, b"P")
             wait(lambda: b"B" in observations, "actual UI write sees EAGAIN",
                  drain=False, keep_full=True)
-            os.write(input_master, b"typed \x1b[200~" + "界 tail".encode() +
+            os.write(input_master, (b"\x1b[6~\x1b[5~\x0f" if inspector else b"") + b"typed \x1b[200~" + "界 tail".encode() +
                      b"\x1b[201~" + (b"" if pane else b"\x1b[5~") + b"\x03")
             wait(lambda: b"C" in observations,
                  "worker observes Ctrl-C before any stdout is drained",
@@ -129,7 +133,7 @@ def check(pane):
             before[3] &= ~pending
             after[3] &= ~pending
             assert after == before, "terminal input mode not restored"
-            print("Blocked stdout: " + ("105x52 plain-joiner pane/graphics" if pane else "native scroll") +
+            print("Blocked stdout: " + ("105x52 plain-joiner pane/graphics" if pane else "command inspector navigation" if inspector else "native scroll") +
                   ", typing/paste/cancel/resize and draft retention pass")
         finally:
             if child.poll() is None:
@@ -141,3 +145,5 @@ def check(pane):
 
 check(False)
 check(True)
+
+check(False, inspector=True)

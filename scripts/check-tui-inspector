@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""Actual native command inspection through the pinned Microsoft VT engine."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import tempfile
+import time
+import uuid
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('executable', type=Path)
+    parser.add_argument('--artifacts', type=Path, required=True)
+    parser.add_argument('--backend', choices=('ghostty', 'alacritty'), default='ghostty')
+    args = parser.parse_args()
+    executable = args.executable.resolve()
+    artifacts = args.artifacts.resolve() / (args.backend + '-' + uuid.uuid4().hex[:10])
+    artifacts.mkdir(parents=True)
+    tool = ROOT / 'scripts/tui-test'
+    subprocess.run([str(tool), '--check'], check=True, timeout=10)
+    session = 'blackbird-inspector-' + uuid.uuid4().hex
+    history = []
+
+    def call(*command, check=True):
+        record = {'command': list(command)}
+        history.append(record)
+        result = subprocess.run([str(tool), '--session', session, '--json',
+                                 '--failure-artifacts', str(artifacts), *command],
+                                capture_output=True, text=True, timeout=12)
+        record.update(returncode=result.returncode, stdout=result.stdout, stderr=result.stderr)
+        if check and result.returncode:
+            raise AssertionError(f'{command}: {result.stdout}\n{result.stderr}')
+        return json.loads(result.stdout) if result.stdout.strip() else {}
+
+    def state():
+        return call('state')['data']
+
+    def expect(text):
+        call('expect', 'text', text, '--timeout', '4000')
+
+    def wait_state(predicate, label):
+        deadline = time.monotonic() + 4
+        latest = None
+        while time.monotonic() < deadline:
+            latest = state()
+            if predicate(latest):
+                return latest
+            time.sleep(.03)
+        raise AssertionError(f'{label}: {latest}')
+
+    def interrupted(number, _frame):
+        raise InterruptedError(f'inspector fixture interrupted by signal {number}')
+
+    prior = {number: signal.signal(number, interrupted)
+             for number in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)}
+    failure = cleanup_error = None
+    opened = False
+    signal.alarm(45)
+    with tempfile.TemporaryDirectory(prefix='blackbird-inspector-') as temporary:
+        work = Path(temporary)
+        effects = work / 'effects'
+        workflow = work / 'turn.lua'
+        workflow.write_text(
+            "local a=blackbird.call('exec',{argv={'/bin/sh','-c'," +
+            json.dumps("printf A >> \"$1\"; printf 'INSPECT_ALPHA\\nalpha_second\\n'") +
+            ",'fixture'," + json.dumps(str(effects)) + "}})\n" +
+            "local b=blackbird.call('exec',{argv={'/bin/sh','-c'," +
+            json.dumps("printf B >> \"$1\"; printf 'INSPECT_BETA\\nbeta_second\\n'") +
+            ",'fixture'," + json.dumps(str(effects)) + "}})\n" +
+            "print('JOB_ALPHA '..a.job_id); print('JOB_BETA '..b.job_id); print('INSPECT_READY')\n")
+        config = work / 'tui-test.toml'
+        config.write_text('')
+        (artifacts / 'identity.json').write_text(json.dumps({
+            'executable': str(executable),
+            'sha256': hashlib.sha256(executable.read_bytes()).hexdigest(),
+            'backend': args.backend, 'session': session}, indent=2) + '\n')
+        try:
+            opened = True
+            call('run', '--backend', args.backend, '--config', str(config),
+                 '--env', 'BLACKBIRD_GRAPHICS=off', '--cols', '101', '--rows', '30',
+                 '--', str(executable), '--session', str(work / 'session'),
+                 '--workflow', str(workflow), '--model', 'gpt-6.1-sol')
+            expect('Workflow reloads')
+            call('write', 'DRAFT_SENTRY')
+            call('key', 'press', 'Left')
+            call('key', 'press', 'Left')
+            before = state()
+            call('write', '\x0f')
+            expect('COMMAND RESULTS')  # Permanent old-source RED: Ctrl-O was ignored.
+            expect('No resident commands')
+            assert not effects.exists(), 'opening inspection executed a workflow'
+            call('write', '\x0f')
+            restored = wait_state(lambda s: 'COMMAND RESULTS' not in s['text'], 'close inspection')
+            assert 'DRAFT_SENTRY' in restored['text'], 'inspection lost the original draft'
+            assert restored['cursor'] == before['cursor'], 'inspection moved the original byte cursor'
+            call('write', '\x15fixture\r')
+            expect('INSPECT_READY')
+            expect('Turn complete')
+            ready = state()
+            ids = dict(re.findall(r'JOB_(ALPHA|BETA) ([a-f0-9]{32})', ready['text']))
+            assert set(ids) == {'ALPHA', 'BETA'} and ids['ALPHA'] != ids['BETA'], ready
+            call('write', 'return_draft\x0f')
+            expect('COMMAND RESULTS')
+            selected = wait_state(lambda s: any('INSPECT_' + k in s['text'] and v in s['text']
+                                                for k, v in ids.items()), 'real selected output')
+            first = next(k for k, v in ids.items() if 'INSPECT_' + k in selected['text'] and v in selected['text'])
+            # Home/End select distinct real IDs, independent of randomized ID ordering.
+            seen = set()
+            for key, wanted in (('Home', min(ids, key=ids.get)), ('End', max(ids, key=ids.get))):
+                call('key', 'press', key)
+                selected = wait_state(lambda s: 'INSPECT_' + wanted in s['text'] and
+                                      ids[wanted] in s['text'], 'selected source linkage')
+                seen.update(k for k, v in ids.items() if 'INSPECT_' + k in selected['text'] and v in selected['text'])
+            assert seen == {'ALPHA', 'BETA'}, ('selection failed to inspect both results', first, seen)
+            call('resize', '32', '12')
+            expect('COMMAND RESULTS')
+            small = state()
+            assert 0 <= small['cursor']['x'] < 32 and 0 <= small['cursor']['y'] < 12
+            call('resize', '101', '30')
+            call('write', '\x0f')
+            expect('return_draft')
+            call('write', '\x15\x1b[200~literal \x0f \x03 data\x1b[201~')
+            expect('literal \\x0f \\x03 data')
+            assert 'COMMAND RESULTS' not in state()['text'], 'pasted control opened inspection'
+            call('write', '\x15/jobs\r')
+            expect('COMMAND RESULTS')
+            (artifacts / 'final-state.json').write_text(json.dumps(state(), indent=2) + '\n')
+            call('screenshot', '-o', str(artifacts / 'final.svg'))
+            call('write', '\x0f\x11')
+            call('wait', 'exit', '--timeout', '4000')
+            assert effects.read_bytes() == b'AB', 'navigation or refresh re-executed commands'
+        except BaseException as error:
+            failure = error
+        finally:
+            signal.alarm(0)
+            for number in prior:
+                signal.signal(number, signal.SIG_IGN)
+            try:
+                if opened:
+                    result = call('close', check=False)
+                    if result.get('ok') is not True:
+                        raise AssertionError(f'owned terminal cleanup failed: {result}')
+            except BaseException as error:
+                cleanup_error = error
+            finally:
+                (artifacts / 'commands.json').write_text(json.dumps(history, indent=2) + '\n')
+                for number, handler in prior.items():
+                    signal.signal(number, handler)
+            if failure is not None:
+                if cleanup_error is not None:
+                    failure.add_note(f'Cleanup: {cleanup_error!r}')
+                raise failure
+            if cleanup_error is not None:
+                raise cleanup_error
+    print(f'Native inspector {args.backend}: draft, real sources, navigation, resize, literal paste, no replay: {artifacts}')
+
+
+if __name__ == '__main__':
+    main()

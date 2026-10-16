@@ -132,6 +132,15 @@ Ctrl-C in this input mode goes through the private terminal driver; explicit job
 stop remains separate. The operator tty stays raw/no-ISIG under the established
 TUI mode and its foreground process group is never given away by the harness.
 
+The TUI opens the shared native command-results inspector with `/jobs` or Ctrl-O.
+Ctrl-O preserves the existing draft/cursor. Its read-only resident observation is
+allocation-free and nonblocking, bounded to eight catalog rows plus one selected
+detail,4096 retained bytes and16 original source chunks. Missing resident history
+is explicit; this path does not scan the retained journal. Recording pressure
+keeps the last accepted page visibly stale. Selection/navigation never starts,
+foregrounds, signals or stops a command. Plain-mode `/jobs` and explicit process
+reads retain their existing structured output.
+
 This is interactive text foregrounding, not an arbitrary full-screen terminal
 emulator. ANSI/control bytes remain exact in originals, without replaying raw
 suffixes, alternate-screen state or terminal queries into the operator terminal.
