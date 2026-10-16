@@ -1,0 +1,23 @@
+{
+  "baseline_commit": "0bf6712afea66989e94ba9601205888cd5ca342c",
+  "native_scopes": [
+    "CMakeLists.txt",
+    "include",
+    "src",
+    "tests",
+    "programs",
+    "assets",
+    "scripts",
+    "tooling/probes",
+    "tooling/tui-test-profile.json"
+  ],
+  "remote_root": "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg",
+  "baseline_executable": "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/baseline-release/blackbird",
+  "profile": "release",
+  "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF",
+  "observer_sha256": "f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377",
+  "report_sha256": "dd4227cf1b29825ccc758f3aeb6da39fab23670310149b1d1935f585eb73650c",
+  "prior_campaign": "/home/patrick/.local/share/blackbird-campaigns/tui-command-center-20261016-_ycd6jjo",
+  "lua_library_sha256": "95fa79336051315a656c56e0271a2990ffb598adf6e8b1987ae0e239efff7fc2",
+  "lua_archive_sha256": "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae"
+}

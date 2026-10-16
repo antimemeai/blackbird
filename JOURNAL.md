@@ -10669,3 +10669,27 @@ one5s deadline. Exact20 handoffs/order, accepted_requests and replay assertions
 are unchanged. Before-source/patch hashes and complete failed hook remain in
 bridge/hook-busy-repair. This does not identify the original ASan abort14o.
 All lanes stop writes and release Debug for the mandatory full source gate.
+
+Qualified and pushed source `3e3a561b89b712e52f586d5727f8a1aebfd84ff2` after the installed hook passes252/252
+Debug in265.84s plus all251 actual C++ translation units and owned C++/Lua checks.
+The preceding merge remains pushed at master0bf6712; this new tranche stays on
+its work branch. No running launcher/provider session was activated.
+
+Publish the one matched Linux Release round:120/120 normal processes,960 endpoint
+observations, all tails retained. Baseline is exact integrated master0bf6712;
+measured after native tree34c5d5a1 and qualified fixture overlayb4483f0c remain
+immutable. Source differs in only the persistent-readiness script, optional
+snapshot guard and explicit-busy bridge fixture. Exact hashes/patch are published;
+production/defaultLua/observer/scenarios are unchanged, so no timing repeat.
+Input medians remain close; startup medians and paste p95 rise with mixed tails
+on the shared host. Append one 10-field TSV tranche row and retain f8f/arw/14o.
+
+Closed only arconaut-rhi.3.6 after publication. Parent rhi.3 remains open for the
+real CodingEngine operation locator across human/model/Lua, configurable bindings,
+collection continuation and remaining reusable components/views. Follow the
+explicit AGENTS documentation-only exception for this results/data/Beads commit:
+relevant link/diff/TSV checks, no repeat of unchanged full source tests/analysis.
+
+Final publication checks:46 relative links resolve across10 changed/publication
+Markdown files, all tranche rows have10 TAB fields, JSON parses and all120 raw
+process samples remain. Supported Beads backup records171 issues/782 events.

@@ -1,7 +1,9 @@
 # Authored retained-result instrument
 
 2026-10-16. Work branch `work/tui-lua-composition-2026-10-16` starts from merged
-master0bf6712. [Plan](PLAN.md), [VM contract](OWNER_PLAN.md), [native bridge](BRIDGE_PLAN.md)
+master `0bf6712`. Qualified source
+`3e3a561b89b712e52f586d5727f8a1aebfd84ff2` is pushed on that branch.
+[Plan](PLAN.md), [VM contract](OWNER_PLAN.md), [native bridge](BRIDGE_PLAN.md)
 and [adapter contract](ADAPTER_PLAN.md) precede implementation. The interaction
 theory and TUI doctrine remain the basis; no framework/device dependency is added.
 
@@ -40,15 +42,22 @@ pass, and20 styled expectations include two actual Lua-composed comparisons.
 Physical rightmost-column resize residue is queued as arconaut-arw and retained
 in the actual narrow captures. It is not called a clean physical resize.
 
-The first installed source gate251/252 exposed the transient readiness message
-assumption also found on Linux. Corrected persistent readiness passes its actual
-application cases. The second gate251/252 exposed the bridge fixture's one-shot
-unwrap of documented nonblocking busy. Its correction waits only on pre-operation
-trigger mint/read busy within the original deadline, preserving all exact20
-mailbox/order/dedup facts. The current full gate remains pending. The matched Release round
-has120/120 samples with zero failures; exact tables will be published after the
-gate. This file will be updated with the final qualification. Exact working logs and failed attempts remain in ignored
-`context/tui-lua-composition-2026-10-16/`; old campaigns stay immutable. AFL and
+The installed source hook passes **252/252 Debug tests in 265.84s**, all 251
+actual C++ translation units, formatting, Lua syntax, LuaLS and the Lua contract
+probe. The earlier gates retain their failures: transient readiness text had
+scrolled away, and a bridge fixture unwrapped documented nonblocking busy. The
+corrections preserve finite deadlines, exact child/effect IDs, all 20 handoffs,
+order and deduplication; they change no product behavior. Independent source and
+oracle reviews are complete.
+
+The [matched Linux Release report](performance/FINAL_RESULTS.md) publishes all
+120 runs and 960 endpoint observations. No trial failed or was discarded. Input
+medians stayed close; startup medians and paste p95 increased, with mixed tails
+on the shared host. This is not a blanket nonregression or source-causation claim.
+The report maps the measured native tree to this source commit and lists the
+three test-only differences. All production inputs and the authored Lua are
+unchanged. Original working logs/failures remain under ignored
+`context/tui-lua-composition-2026-10-16/`; prior campaigns stay intact. AFL and
 operator artwork remain untouched.
 
 This tranche does not close the whole native host/application program. Current

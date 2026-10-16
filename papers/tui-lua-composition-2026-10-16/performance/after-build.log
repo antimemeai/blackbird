@@ -1,0 +1,121 @@
+-- The CXX compiler identification is Clang 18.1.3
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/clang++-18 - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+-- Found Lua: /home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/lua-5.4.8/src/liblua.a;/usr/lib/x86_64-linux-gnu/libm.so;dl (found suitable exact version "5.4.8") 
+-- Configuring done (0.9s)
+-- Generating done (0.2s)
+-- Build files have been written to: /home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release
+[0/2] Re-checking globbed directories...
+[1/106] Building CXX object CMakeFiles/blackbird-job-runner.dir/src/command_job_runner.cpp.o
+[2/106] Linking CXX executable blackbird-job-runner
+[3/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/journal.cpp.o
+[4/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/foundation.cpp.o
+[5/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/journal_storage.cpp.o
+[6/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/diagnostics.cpp.o
+[7/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/journal_checkpoint.cpp.o
+[8/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/journal_writer.cpp.o
+[9/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/retained_events.cpp.o
+[10/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/recovery_index.cpp.o
+[11/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/saved_state.cpp.o
+[12/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/archive_catalog.cpp.o
+[13/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/retained_state.cpp.o
+[14/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/environment_head.cpp.o
+[15/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/retained_proposal.cpp.o
+[16/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/local_timing.cpp.o
+[17/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_clock.cpp.o
+[18/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_channel.cpp.o
+[19/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/retained_environment.cpp.o
+[20/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_audit.cpp.o
+[21/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_reader.cpp.o
+[22/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_provider.cpp.o
+[23/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_runtime.cpp.o
+[24/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_sampler.cpp.o
+[25/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_command.cpp.o
+[26/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_authored.cpp.o
+[27/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/provider_original.cpp.o
+[28/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_participants.cpp.o
+[29/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_query.cpp.o
+[30/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_turn.cpp.o
+[31/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_context.cpp.o
+[32/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_operation.cpp.o
+[33/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_storage.cpp.o
+[34/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_retained.cpp.o
+[35/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_caller.cpp.o
+[36/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_ui.cpp.o
+[37/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_file.cpp.o
+[38/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_program.cpp.o
+[39/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_session.cpp.o
+[40/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_input.cpp.o
+[41/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_beads.cpp.o
+[42/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_station.cpp.o
+[43/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_bridge.cpp.o
+[44/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_complaint.cpp.o
+[45/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_backstop.cpp.o
+[46/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_restart.cpp.o
+[47/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_candidate.cpp.o
+[48/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_plain.cpp.o
+[49/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/request_cache.cpp.o
+[50/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/token_usage.cpp.o
+[51/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/trace_archive_worker.cpp.o
+[52/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/presentation.cpp.o
+[53/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/value.cpp.o
+[54/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/json.cpp.o
+[55/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/packet.cpp.o
+[56/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/openai.cpp.o
+[57/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/provider_auth.cpp.o
+[58/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/provider_oauth.cpp.o
+[59/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/audit.cpp.o
+[60/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/context.cpp.o
+[61/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/observations.cpp.o
+[62/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/beads.cpp.o
+[63/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/decision_models.cpp.o
+[64/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/tasks.cpp.o
+[65/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_tasks.cpp.o
+[66/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/raw_auth.cpp.o
+[67/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/tools.cpp.o
+[68/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/command_jobs.cpp.o
+[69/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/workflow_executor.cpp.o
+[70/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/workflow_join.cpp.o
+[71/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/workflow_host.cpp.o
+[72/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/workflow_store.cpp.o
+[73/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/admission.cpp.o
+[74/106] Building CXX object CMakeFiles/blackbird-archive.dir/src/trace_archive_main.cpp.o
+[75/106] Building CXX object CMakeFiles/blackbird_foundation.dir/src/workflow_runtime.cpp.o
+[76/106] Linking CXX static library libblackbird_foundation.a
+[77/106] Linking CXX executable blackbird-archive
+[78/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/workflows.cpp.o
+[79/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/chat_view.cpp.o
+[80/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/task_view.cpp.o
+[81/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/sprite.cpp.o
+[82/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/coding.cpp.o
+[83/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/terminal_custody.cpp.o
+[84/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/terminal.cpp.o
+[85/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/session.cpp.o
+[86/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/backstop.cpp.o
+[87/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/station.cpp.o
+[88/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/openrouter.cpp.o
+[89/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/responses_provider.cpp.o
+[90/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/application.cpp.o
+[91/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/tui_components.cpp.o
+[92/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/display_text.cpp.o
+[93/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/tui_inspector.cpp.o
+[94/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/command_inspector.cpp.o
+[95/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/command_center.cpp.o
+[96/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/tui_lua.cpp.o
+[97/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/tui_action_bridge.cpp.o
+[98/106] Building CXX object CMakeFiles/blackbird_coding.dir/src/tui_instrument.cpp.o
+[99/106] Building CXX object CMakeFiles/tui_snapshot_test.dir/tests/tui_snapshot_test.cpp.o
+[100/106] Building CXX object CMakeFiles/blackbird.dir/src/main.cpp.o
+[101/106] Building CXX object CMakeFiles/blackbird_colleague.dir/src/colleague.cpp.o
+[102/106] Building CXX object CMakeFiles/blackbird_colleague.dir/src/participants.cpp.o
+[103/106] Linking CXX static library libblackbird_colleague.a
+[104/106] Linking CXX static library libblackbird_coding.a
+[105/106] Linking CXX executable tui_snapshot_test
+[106/106] Linking CXX executable blackbird

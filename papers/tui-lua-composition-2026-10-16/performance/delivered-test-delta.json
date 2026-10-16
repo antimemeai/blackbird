@@ -1,0 +1,24 @@
+{
+  "source_commit": "3e3a561b89b712e52f586d5727f8a1aebfd84ff2",
+  "compiled_native_tree_sha256": "34c5d5a1b17959bcf491c9629416e9b5cab527ad2fe168be077629eef487fb0e",
+  "qualified_fixture_tree_sha256": "b4483f0c233bef889d1ecb0e746af05eafb16933e180f07ca62fa81611a73230",
+  "differences": [
+    {
+      "path": "scripts/check-tui-instrument",
+      "compiled_sha256": "6fb6bc95f1abc4616b3df3c44ad7b1b72cc2a3ec19dcf66dc89b3577953d9d08",
+      "delivered_sha256": "17fad3c1cf47ebb4b256494d5d67cdbeca54f669347bc045edce6035c1b534d6"
+    },
+    {
+      "path": "tests/tui_action_bridge_test.cpp",
+      "compiled_sha256": "50700edf507c82861010dec6daad413b742d4f5f52282377fd4295a3e1977a35",
+      "delivered_sha256": "006a40b771e044145f7ee390fce1580c52d247458991d728318d44170178af8d"
+    },
+    {
+      "path": "tests/tui_snapshot_test.cpp",
+      "compiled_sha256": "7fc9d1f3ee1c17ff9e94e82a18da78b7cd4caed3da271c05a2ae36177039307c",
+      "delivered_sha256": "10978695de6a4e4c15c1fbae92c24bfcdd7c45fc98fd69282e035f134673cb9a"
+    }
+  ],
+  "scope": "Only test fixtures differ from compiled native tree. Production source, default Lua, observer and measured scenarios unchanged.",
+  "patch": "delivered-test-delta.patch"
+}

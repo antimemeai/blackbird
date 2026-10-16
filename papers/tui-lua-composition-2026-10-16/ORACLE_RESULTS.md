@@ -112,7 +112,7 @@ oracle/alacritty-final-binding.log. The final
 original effect ledger, geometry and cells. They remove the false detail-target
 warning; the earlier captures remain unchanged history. The physical gutter
 finding remains queued. The registered default Ghostty source gate separately
-exercises the final source; this report does not preclaim that future gate.
+passes on the final source in the complete 252/252 Debug gate.
 
 ## Authored Lua native styled expectations
 
@@ -141,5 +141,13 @@ full A/B metadata, literal escaped controls and correct role/padding; narrow wra
 each full ID across28+4 characters and retains both original payloads. No old
 expectation was updated. Final check:20/20 comparisons GREEN. Logs retain initial
 failure, configure/build, each explicit update and final check under ignored
-oracle/snapshot-*. Root's single independent review of this new fixture unit is
-pending. Both Debug leases were returned after all owned checks completed.
+oracle/snapshot-*. Root's single independent source/golden challenge completed
+without a finding. Both Debug leases were returned after all owned checks completed.
+
+The first complete gate and Linux actual-main check exposed the same transient
+readiness text assumption. Readiness now requires persistent turn-complete status,
+actual B output and the independently written native job IDs together, within
+unchanged 4s. All downstream exact IDs, effects, target and private-input assertions
+remain. Corrected Linux actual-main plus snapshots pass 2/2 in 23.97s; corrected
+Mac Ghostty and the final complete source hook also pass. Original failed captures
+remain unchanged in context and the performance qualification report.
