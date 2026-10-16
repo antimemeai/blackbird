@@ -10693,3 +10693,9 @@ relevant link/diff/TSV checks, no repeat of unchanged full source tests/analysis
 Final publication checks:46 relative links resolve across10 changed/publication
 Markdown files, all tranche rows have10 TAB fields, JSON parses and all120 raw
 process samples remain. Supported Beads backup records171 issues/782 events.
+
+Publication diff check reports six trailing-space lines in the two original CMake
+build logs. Keep those original bytes: both published logs compare byte-for-byte
+with the retained campaign files. Authored documents/data pass diff whitespace
+checks with only those two originals excluded. No active source or source gate
+changes; the publication records this distinction instead of rewriting raw logs.
