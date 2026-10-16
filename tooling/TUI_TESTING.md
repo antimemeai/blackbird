@@ -102,3 +102,13 @@ center episode with actual EAGAIN and cancellation acknowledged before draining.
 The private-PTY fixture requires Ctrl-X to reach the child as literal input.
 See the [center plan/results](../papers/tui-command-center-2026-10-16/PLAN.md)
 for exact qualification status; a screenshot does not establish responsiveness.
+
+The authored result lab adds `tui_retained_result` against actual main and two
+Lua-composed `instrument-lua-{wide,narrow}` styled expectations (20 total).
+Actual Ghostty/Alacritty episodes use independently returned native job IDs,
+child launch/SIGINT/input ledgers, immutable-vs-later source bytes, named interrupt
+receipts, failed/looping/preview source, reload, draft/routes/resize/paste and
+private-PTY original controls. Native VM8, adapter6, bridge5, delivery5 and inspector
+cases attack separate phase/lifetime/identity/pressure mechanisms. Known physical
+reserved-column resize residue stays visible in the recorded Microsoft captures
+under arconaut-arw. See the [instrument contract/results](../papers/tui-lua-composition-2026-10-16/README.md).

@@ -3,6 +3,8 @@
 #include <span>
 
 namespace blackbird {
+// Pure byte-preserving sanitization/wrapping shared by native and Lua presentation.
+std::vector<std::string> terminal_lines(std::string_view text, std::size_t columns);
 struct ByteOffset {
   std::size_t value = 0;
 };

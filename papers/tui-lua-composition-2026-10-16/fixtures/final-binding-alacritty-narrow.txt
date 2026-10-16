@@ -1,0 +1,11 @@
+ Blackbird · gpt-6.1-sol · mediu
+RETAINED RESULT LAB · Source act
+> A / B comparison
+Job 6c78aa0e4ad1bbd9150000000000
+00000 bytes 0..18 of observed 10
+8
+B_PINNED_ORIGINAL
+
+╭ Enter send · / commands · Ct╮
+│ > LAB_RETURN_DRAFT          │
+╰─────────────────────────────╯

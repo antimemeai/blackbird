@@ -76,3 +76,25 @@ CommandCenter and a real TaskState. They specify the shared controls' composed
 coverage, selected task and blocked detail, including narrow stale last-good
 content. They preserve all16 earlier expectations. Actual-main source identity,
 participant/command behavior and the sole editor are checked separately.
+
+`instrument-lua-wide` and `instrument-lua-narrow` load the actual authored
+`programs/instruments/results.lua` through `Script` and the bounded asynchronous
+`PresentationOwner`. Two synthetic rows and original pinned byte windows have
+stable fixture-only IDs; ESC and embedded NUL must render as literal escaped
+bytes, while tab uses the shared terminal sanitizer's two spaces. The returned
+Lua candidate is adopted through `lua::publish` into a real `SceneHost`, then
+rendered with the explicit independent `CollectionInspector` binding. Wide keeps
+collection focus with B selected and A anchored; narrow keeps B selected and focuses the
+comparison. Both original full IDs and source suffixes are asserted in the
+rendered grid independently of the baseline text. Compose accepts no action and
+the actual native inbox must remain empty. The worker's real completion is
+awaited within a finite five-second allowance.
+
+These two cases cover authored composition, native scene adoption and readable
+styled rendering. Their scope is synthetic retained windows: they do not claim
+native command-query capture, actual source reload, signal delivery, raw-input
+provenance, the sole Composer or the physical whole-window layout. Those have
+separate actual-main/native owner checks. The existing18 expectations are
+unchanged. Physical terminal gutter residue after resize is preserved separately
+in the instrument episode's paper fixtures; a freshly reset native grid cannot
+establish that a real terminal erased its previous cells.

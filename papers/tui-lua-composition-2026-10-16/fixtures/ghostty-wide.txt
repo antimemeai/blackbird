@@ -1,0 +1,29 @@
+ Blackbird · gpt-6.1-sol · medium · session
+RETAINED RESULT LAB · Source active · F6 A · F7 B · F8 interrupt · Ctrl-] close
+  RESULTS                        │> A / B comparison
+  e364ec5e1087ebb8110000000000000│Detail target differs from selection
+> e364ec5e1087ebb8150000000000000│A_ROW_11
+                                 │A_ROW_12
+                                 │A_ROW_13
+                                 │A_ROW_14
+                                 │A_ROW_15
+                                 │A_ROW_16
+                                 │A_ROW_17
+                                 │A_ROW_18
+                                 │A_ROW_19
+                                 │A_ROW_20
+                                 │A_ROW_21
+                                 │A_ROW_22
+                                 │A_ROW_23
+                                 │A_SETTLED_EXIT_7
+                                 │
+                                 │
+                                 │B
+                                 │Job e364ec5e1087ebb81500000000000000 bytes 0..18 of observed 18
+                                 │B_PINNED_ORIGINAL
+                                 │
+Selected e364ec5e1087ebb81500000000000000 running
+No action receipt
+╭ Enter send · / commands · Ctrl-G editor ─────────────────────────────────────────────────────────╮
+│ > LAB_RETURN_DRAFT                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

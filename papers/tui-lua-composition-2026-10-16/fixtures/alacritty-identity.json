@@ -1,0 +1,7 @@
+{
+  "executable": "/Users/patrickbeam/projects/blackbird/build/debug/blackbird",
+  "sha256": "5d4c48981e6fda6defc01659d1d6668de847a712bcc4b8ad94d8fcafa3e3b222",
+  "declared_source_checkpoint": "659f62bc9435ae0931da578574ddb805fac77e94+working-instrument-overlay",
+  "backend": "alacritty",
+  "session": "blackbird-instrument-821392049aaa44628d80557a95a4b4d3"
+}

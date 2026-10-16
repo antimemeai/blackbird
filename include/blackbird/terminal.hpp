@@ -5,6 +5,7 @@
 #include "blackbird/display_text.hpp"
 #include "blackbird/raw_ui.hpp"
 #include "blackbird/tasks.hpp"
+#include "blackbird/tui_instrument.hpp"
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -38,7 +39,9 @@ enum class InputAction {
   inspect_focus_editor,
   inspect_previous_output,
   inspect_next_output,
-  center_toggle
+  center_toggle,
+  instrument_toggle,
+  instrument_action
 };
 struct InputResult {
   InputAction action = InputAction::none;
@@ -129,7 +132,6 @@ std::vector<ChatRow> terminal_powerword_lines(std::string_view text,
 ByteOffset terminal_byte_at_column(std::string_view text, CellCount column);
 DisplayPosition terminal_caret(std::string_view text, ByteOffset source,
                                CellCount columns);
-std::vector<std::string> terminal_lines(std::string_view text, std::size_t columns);
 class TerminalUI {
 public:
   explicit TerminalUI(std::string title);
@@ -151,6 +153,7 @@ public:
   void failed();
   void title(std::string_view text);
   void sessions(const Value &listing, RawUiValueOrigin origin = {});
+  void instrument_source(InstrumentSource source);
   void tasks(const Value &publication, RawUiValueOrigin origin = {});
   TaskPublishedObservation
   try_observe_tasks(const TaskObservationQuery &query) noexcept;
@@ -163,7 +166,8 @@ public:
            std::shared_ptr<CommandJobs> commands = {}, int interrupt_fd = -1,
            const std::function<Result<void>()> &reset_interrupt = {},
            RetainedState *raw_root = nullptr,
-           std::optional<CommandCenterContext> center_context = {});
+           std::optional<CommandCenterContext> center_context = {},
+           std::optional<InstrumentSource> instrument_source = {});
 
 private:
   enum class Kind {
@@ -180,7 +184,8 @@ private:
     sessions,
     complete,
     operation_complete,
-    failure
+    failure,
+    instrument_source
   };
   struct Message {
     Kind kind;
@@ -189,6 +194,7 @@ private:
     Value data;
     RawEventRef enqueue{}, latest{};
     RawUiValueOrigin origin{};
+    std::optional<InstrumentSource> instrument{};
   };
   bool raw_capture_ = false;
   RawUiSource initial_source_{};

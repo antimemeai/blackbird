@@ -7,6 +7,7 @@
 #include "blackbird/tools.hpp"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <charconv>
 #include <chrono>
@@ -37,6 +38,30 @@ using Clock = std::chrono::steady_clock;
 constexpr std::size_t pending_limit = 1024 * 1024;
 constexpr std::size_t output_limit = 16 * 1024 * 1024;
 constexpr std::size_t input_limit = 65536;
+std::uint64_t delivery_incarnation() {
+  static std::atomic<std::uint64_t> next{1};
+  auto current = next.load();
+  for (;;) {
+    if (current == std::numeric_limits<std::uint64_t>::max())
+      throw Error{ErrorCode::overflow};
+    if (next.compare_exchange_weak(current, current + 1))
+      return current;
+  }
+}
+CommandDeliveryOperation delivery_operation(std::string_view operation) noexcept {
+  return operation == "input"    ? CommandDeliveryOperation::input
+         : operation == "resize" ? CommandDeliveryOperation::resize
+         : operation == "signal" ? CommandDeliveryOperation::signal
+                                 : CommandDeliveryOperation::absent;
+}
+CommandDeliverySignal delivery_signal(std::string_view name) noexcept {
+  return name == "stop"        ? CommandDeliverySignal::stop
+         : name == "continue"  ? CommandDeliverySignal::resume
+         : name == "interrupt" ? CommandDeliverySignal::interrupt
+         : name == "terminate" ? CommandDeliverySignal::terminate
+         : name == "kill"      ? CommandDeliverySignal::kill
+                               : CommandDeliverySignal::unsupported;
+}
 std::uint64_t integer(const Value &v, std::string_view key, std::uint64_t fallback) {
   const auto *p = v.find(key);
   if (!p)
@@ -292,11 +317,20 @@ struct CommandJobs::Impl {
     std::size_t written = 0;
     bool done = false;
     bool failed = false;
+    CommandDeliveryOperation operation = CommandDeliveryOperation::absent;
+    CommandDeliverySignal signal = CommandDeliverySignal::absent;
+    CommandDeliveryConsumption consumption = CommandDeliveryConsumption::pending;
+    RawEventRef admission{}, enqueue{}, selection{}, control{};
+    std::array<CommandDeliveryCall, 3> calls{};
+    std::size_t call_count = 0;
   };
   struct Reservation {
     std::shared_ptr<const Value> request;
     std::size_t bytes = 0;
     bool selected = false;
+    CommandDeliveryOperation operation = CommandDeliveryOperation::absent;
+    CommandDeliverySignal signal = CommandDeliverySignal::absent;
+    RawEventRef admission{}, enqueue{}, selection{};
   };
   struct Chunk {
     std::size_t offset;
@@ -334,8 +368,8 @@ struct CommandJobs::Impl {
     std::string termination = "unobserved";
     bool capture_complete = true, capture_refused = false;
     std::deque<Chunk> pending, tail;
-    std::map<std::string, Delivery> deliveries;
-    std::map<std::string, Reservation> reservations;
+    std::map<std::string, Delivery, std::less<>> deliveries;
+    std::map<std::string, Reservation, std::less<>> reservations;
     std::deque<std::string> input, signals;
     Clock::time_point deadline;
     Value terminal;
@@ -352,6 +386,7 @@ struct CommandJobs::Impl {
     }
   };
   mutable std::mutex mutex;
+  const std::uint64_t incarnation = delivery_incarnation();
   std::condition_variable condition;
   RawThreadHandle cleanup_context;
   std::optional<RawControlToken> shutdown_credit;
@@ -522,7 +557,8 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
     }
   };
   auto signal_owned = [&](int number, RawControlToken *credit,
-                          std::string_view delivery = {}) {
+                          std::string_view delivery = {},
+                          Delivery *observed = nullptr) {
     if (pid <= 0 || reaped)
       return;
     const auto length = delivery.size();
@@ -536,18 +572,24 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
       const int result =
           method == 3 ? static_cast<int>(::getpgid(target)) : ::kill(target, number);
       const int error = errno;
+      RawEventRef returned;
       if (method == 3) {
         const auto group = static_cast<pid_t>(result);
-        (void)raw_command_linked(2021, request,
-                                 std::array{raw_native_field(result),
-                                            raw_native_field(error),
-                                            raw_native_field(group)},
-                                 credit);
+        returned = raw_command_linked(2021, request,
+                                      std::array{raw_native_field(result),
+                                                 raw_native_field(error),
+                                                 raw_native_field(group)},
+                                      credit);
       } else {
-        (void)raw_command_linked(
+        returned = raw_command_linked(
             2021, request,
             std::array{raw_native_field(result), raw_native_field(error)}, credit);
       }
+      // Only an explicit delivery passes observed, while holding mutex. Cleanup
+      // calls retain their existing empty-key routing and do not alter a receipt.
+      if (observed && observed->call_count < observed->calls.size())
+        observed->calls[observed->call_count++] = {method, target,  number,  result,
+                                                   error,  request, returned};
       return result;
     };
     if (!group_ready || operation(1, -pid) != 0 || operation(3, pid) != pid)
@@ -556,11 +598,15 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
   try {
     const auto launch_id_size = job->id.size();
     const auto lifetime = job->launch.lifetime.count();
-    job->launch_ref = raw_command_linked(
+    const auto launch_ref = raw_command_linked(
         2002, job->request,
         std::array{raw_native_field(launch_id_size), raw_string_field(job->id),
                    raw_native_field(job->launch.pty), raw_native_field(lifetime)},
         held);
+    {
+      const std::lock_guard lock{mutex};
+      job->launch_ref = launch_ref;
+    }
     std::uint8_t channel = 0;
     for (auto *fd : {&input_read, &input_write, &output_read, &output_write, &boot_read,
                      &boot_write}) {
@@ -807,7 +853,8 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
                                                    : SIGKILL;
           delivery.failed = job->leader_exited;
           if (!delivery.failed)
-            signal_owned(number, control_held, job->signals.front());
+            signal_owned(number, control_held, job->signals.front(), &delivery);
+          delivery.consumption = CommandDeliveryConsumption::worker;
           delivery.done = true;
           job->signals.pop_front();
         }
@@ -843,6 +890,8 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
             }
             delivery.done =
                 delivery.failed || delivery.written == delivery.bytes().size();
+            if (delivery.done)
+              delivery.consumption = CommandDeliveryConsumption::worker;
           } else if (op == "resize" && group_ready) {
             winsize size{
                 static_cast<unsigned short>(integer(delivery.request, "rows", 24)),
@@ -865,6 +914,7 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
                 control_held);
             delivery.failed = rc != 0;
             delivery.done = true;
+            delivery.consumption = CommandDeliveryConsumption::worker;
           }
           if (delivery.done)
             job->input.pop_front();
@@ -1115,6 +1165,7 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
     if (!delivery.done) {
       delivery.failed = true;
       delivery.done = true;
+      delivery.consumption = CommandDeliveryConsumption::abandoned;
     }
   }
   job->finished = true;
@@ -1433,6 +1484,78 @@ Value CommandJobs::wait(const std::string &id, JobWaitOptions options,
     failure(6, {ErrorCode::external_unknown});
     throw;
   }
+}
+
+CommandDeliveryObservation
+CommandJobs::try_observe_delivery(const CommandDeliveryQuery &query) const noexcept {
+  CommandDeliveryObservation out;
+  out.incarnation = impl_->incarnation;
+  if (query.request.empty() || query.request.size() > out.request.size() ||
+      !std::all_of(query.job.bytes.begin(), query.job.bytes.end(), [](char byte) {
+        return (byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f');
+      })) {
+    out.status = CommandDeliveryStatus::invalid_identity;
+    return out;
+  }
+  if (query.incarnation && query.incarnation != out.incarnation) {
+    out.status = CommandDeliveryStatus::scope_mismatch;
+    return out;
+  }
+  out.job = query.job;
+  out.request_size = query.request.size();
+  std::copy(query.request.begin(), query.request.end(), out.request.begin());
+  try {
+    const std::unique_lock lock{impl_->mutex, std::try_to_lock};
+    if (!lock.owns_lock()) {
+      out.status = CommandDeliveryStatus::busy;
+      return out;
+    }
+    out.status = CommandDeliveryStatus::ready;
+    ++out.lookup_count;
+    const auto found = impl_->jobs.find(query.job.view());
+    if (found == impl_->jobs.end())
+      return out;
+    const auto &job = *found->second;
+    out.launch = job.launch_ref;
+    ++out.lookup_count;
+    const auto delivery = job.deliveries.find(query.request);
+    if (delivery != job.deliveries.end()) {
+      const auto &value = delivery->second;
+      out.stage = value.failed ? CommandDeliveryStage::failed
+                  : value.done ? CommandDeliveryStage::consumed
+                               : CommandDeliveryStage::queued;
+      out.operation = value.operation;
+      out.signal = value.signal;
+      out.consumption = value.consumption;
+      out.written = value.written;
+      out.done = value.done;
+      out.failed = value.failed;
+      out.admission = value.admission;
+      out.enqueue = value.enqueue;
+      out.selection = value.selection;
+      out.control = value.control;
+      out.calls = value.calls;
+      out.call_count = value.call_count;
+      return out;
+    }
+    ++out.lookup_count;
+    const auto promised = job.reservations.find(query.request);
+    if (promised == job.reservations.end()) {
+      out.stage = CommandDeliveryStage::key_not_resident;
+      return out;
+    }
+    const auto &value = promised->second;
+    out.stage = value.selected ? CommandDeliveryStage::selected
+                               : CommandDeliveryStage::reserved;
+    out.operation = value.operation;
+    out.signal = value.signal;
+    out.admission = value.admission;
+    out.enqueue = value.enqueue;
+    out.selection = value.selection;
+  } catch (...) {
+    out.status = CommandDeliveryStatus::unavailable;
+  }
+  return out;
 }
 
 CommandObservation
@@ -1820,7 +1943,17 @@ Value CommandJobs::control(const Value &arguments) {
     }
     if (job.finished)
       throw Error{ErrorCode::busy};
-    Impl::Delivery delivery{arguments, 0, false, false};
+    Impl::Delivery delivery{arguments};
+    delivery.operation = delivery_operation(op);
+    delivery.signal = op == "signal"
+                          ? delivery_signal(string_field(arguments, "signal"))
+                          : CommandDeliverySignal::absent;
+    delivery.control = trace.reference();
+    if (release.promised) {
+      delivery.admission = promised->second.admission;
+      delivery.enqueue = promised->second.enqueue;
+      delivery.selection = promised->second.selection;
+    }
     const auto bytes = op == "input" ? delivery.bytes().size() : 0;
     switch (
         Impl::admission(job, bytes, release.promised ? &promised->second : nullptr)) {
@@ -1834,6 +1967,8 @@ Value CommandJobs::control(const Value &arguments) {
       if (!job.launch.pty)
         throw Error{ErrorCode::unsupported};
       delivery.done = delivery.bytes().empty();
+      if (delivery.done)
+        delivery.consumption = CommandDeliveryConsumption::immediate;
     } else if (op == "resize") {
       const auto rows = integer(arguments, "rows", 24);
       const auto columns = integer(arguments, "columns", 80);
@@ -1956,7 +2091,13 @@ void CommandJobs::request(Value arguments) {
     const auto &delivery = string_field(*owned, "request_id"),
                &owned_id = string_field(*owned, "job_id");
     if (reserve_new) {
-      job.reservations.emplace(delivery, Impl::Reservation{owned, bytes, false});
+      Impl::Reservation reservation{owned, bytes, false};
+      reservation.operation = delivery_operation(op);
+      reservation.signal = op == "signal"
+                               ? delivery_signal(string_field(*owned, "signal"))
+                               : CommandDeliverySignal::absent;
+      reservation.admission = trace.reference();
+      job.reservations.emplace(delivery, std::move(reservation));
       job.reserved_bytes += bytes;
     }
     const auto id_size = owned_id.size(), delivery_size = delivery.size();
@@ -1973,6 +2114,8 @@ void CommandJobs::request(Value arguments) {
         Impl::release_reservation(job, delivery);
       throw;
     }
+    if (reserve_new)
+      job.reservations.find(delivery)->second.enqueue = source;
     impl_->condition.notify_all();
     trace.finish(1, 0, false, false);
   } catch (const Error &error) {
@@ -2048,19 +2191,23 @@ std::vector<Value> CommandJobs::requests() {
     const auto &delivery = string_field(*entry->value, "request_id");
     const auto op = string_field(*entry->value, "op");
     const bool control = op == "input" || op == "resize" || op == "signal";
-    if (const auto promised =
-            control ? job.reservations.find(delivery) : job.reservations.end();
-        promised != job.reservations.end() && !promised->second.selected) {
+    const auto promised =
+        control ? job.reservations.find(delivery) : job.reservations.end();
+    const bool first_selection =
+        promised != job.reservations.end() && !promised->second.selected;
+    if (first_selection) {
       promised->second.selected = true;
       job.selected_bytes += promised->second.bytes;
     }
     const auto id_size = id.size(), delivery_size = delivery.size();
     const std::uint8_t branch = 2;
-    (void)raw_command_linked(2015, entry->source,
-                             std::array{raw_native_field(id_size), raw_string_field(id),
-                                        raw_native_field(delivery_size),
-                                        raw_string_field(delivery),
-                                        raw_native_field(branch)});
+    const auto source = raw_command_linked(
+        2015, entry->source,
+        std::array{raw_native_field(id_size), raw_string_field(id),
+                   raw_native_field(delivery_size), raw_string_field(delivery),
+                   raw_native_field(branch)});
+    if (first_selection)
+      promised->second.selection = source;
     entry = impl_->mailbox.erase(entry);
   }
   return out;

@@ -278,3 +278,14 @@ retain their separate scope.
 The design unit is `arconaut-rhi.2`; these implementation issues remain open.
 Known ESC recovery stays `arconaut-600`. Existing workflow/peer delivery issues
 retain their owning contracts rather than being duplicated as a UI scheduler.
+
+2026-10-16 authored-instrument candidate: isolated bounded Lua composition and
+named handlers, exact-key native process mailbox bridge/delivery observations,
+Ctrl-] /instrument, immutable A/B pins, async source reload/preview, native source
+pages/selection and explicit independent comparison relation are implemented on
+work/tui-lua-composition-2026-10-16. [Contract/results](../papers/tui-lua-composition-2026-10-16/README.md)
+distinguish focused qualification from pending full source gate/performance.
+The current receipt deliberately lacks a retained CodingEngine operation locator;
+Unit2's explicit cross-human/model/Lua semantic locator comparison remains open.
+The catalog is currently a visible bounded first8-job cut. No claim that every
+Unit1–2 component, configurable binding system or future view is complete.

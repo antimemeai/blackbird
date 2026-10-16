@@ -91,6 +91,8 @@ const std::array builtin_commands{
                 "Tools"},
     ChatCommand{"/exec", "JSON", "Launch a command; yield_ms releases its wait",
                 "Tools"},
+    ChatCommand{"/instrument", "[reload|preview PATH]",
+                "Authored retained-result comparison (local TUI)", "View"},
     ChatCommand{"/center", "",
                 "Open current-session work; Ctrl-X preserves draft (TUI)", "TUI"},
     ChatCommand{"/jobs", "", "Open command results; Ctrl-O preserves draft (TUI)",
@@ -311,6 +313,7 @@ std::string terminal_key_help() {
          "  Ctrl-B       Background foreground command; preserve composer\n"
          "  Ctrl-O       Inspect command results; preserve draft/cursor\n"
          "  Ctrl-X       Current-session command center; preserve draft/cursor\n"
+         "  Ctrl-]       Authored result lab; F6/F7 pin A/B; F8 request interrupt\n"
          "  Inspector    Arrows/Home/End/Page navigate; Tab focus; Esc draft\n"
          "  Center       T tasks, P participants, J jobs; + means more rows\n"
          "               Ctrl-Left/Right source pages; typing returns to draft\n"
@@ -894,6 +897,14 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
       return {};
     if (escape_.size() >= 3 && c >= 0x30U && c <= 0x3fU)
       return {};
+    if (inspecting &&
+        (escape_ == "\x1b[17~" || escape_ == "\x1b[18~" || escape_ == "\x1b[19~")) {
+      const auto name = escape_ == "\x1b[17~"   ? "pin_a"
+                        : escape_ == "\x1b[18~" ? "pin_b"
+                                                : "interrupt";
+      escape_.clear();
+      return {InputAction::instrument_action, name};
+    }
     if (inspecting) {
       const auto action =
           escape_ == "\x1b[A" || escape_ == "\x1bOA"   ? InputAction::inspect_previous
@@ -989,6 +1000,10 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
   if (c == 15) {
     palette_open_ = slash_open_ = false;
     return {InputAction::inspect_toggle, {}};
+  }
+  if (c == 29) {
+    palette_open_ = slash_open_ = false;
+    return {InputAction::instrument_toggle, {}};
   }
   if (c == 24) {
     palette_open_ = slash_open_ = false;
@@ -1457,6 +1472,23 @@ void TerminalUI::sessions(const Value &listing, RawUiValueOrigin origin) {
     trace.finish();
   });
 }
+void TerminalUI::instrument_source(InstrumentSource source) {
+  RawUiValueOrigin origin;
+  origin.kind = 4;
+  origin.source = source.original;
+  auto trace = raw_ui_value_trace(raw_capture_, origin);
+  trace.run([&] {
+    if (trace.enabled() && !raw_ui_source_valid(source.original))
+      throw Error{ErrorCode::invalid_identity};
+    const std::lock_guard lock{mutex_};
+    Message message{Kind::instrument_source, "",    Ink::muted, {}, trace.reference(),
+                    trace.reference(),       origin};
+    message.instrument.emplace(std::move(source));
+    messages_.push_back(std::move(message));
+    raw_ui_notify(trace, notification_);
+    trace.finish();
+  });
+}
 void TerminalUI::text(std::string_view value) { post(Kind::text, value); }
 void TerminalUI::notice(std::string_view value) { post(Kind::notice, value); }
 void TerminalUI::process_output(std::string_view value) { post(Kind::process, value); }
@@ -1603,7 +1635,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                      std::shared_ptr<CommandJobs> commands, int interrupt_fd,
                      const std::function<Result<void>()> &reset_interrupt,
                      RetainedState *raw_root,
-                     std::optional<CommandCenterContext> center_context) {
+                     std::optional<CommandCenterContext> center_context,
+                     std::optional<InstrumentSource> instrument_source) {
   RawCaptureFailureScope ui_capture{raw_capture_ && raw_enabled()};
   const RawAdapterContext terminal_context{
       nullptr,
@@ -1740,6 +1773,21 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     }
   };
 
+  std::unique_ptr<TuiInstrument> instrument;
+  bool instrument_refused = false;
+  if (center_context && commands) {
+    auto created = TuiInstrument::create(
+        center_context->scope, commands,
+        instrument_source ? std::move(*instrument_source) : InstrumentSource{});
+    if (created.has_value())
+      instrument = std::move(created).value();
+    else
+      instrument_refused = true;
+  }
+  auto close_instrument = [&] {
+    if (instrument && instrument->open())
+      instrument->toggle();
+  };
   std::unique_ptr<CommandInspector> inspector;
   bool inspector_refused = false;
   auto ensure_inspector = [&] {
@@ -1791,18 +1839,23 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       inspector->toggle();
   };
   auto inspection_open = [&] {
-    return (center && center->open()) || (inspector && inspector->open());
+    return (instrument && instrument->open()) || (center && center->open()) ||
+           (inspector && inspector->open());
   };
   auto inspection_focused = [&] {
-    return (center && center->open() && center->focused()) ||
+    return (instrument && instrument->open() && instrument->focused()) ||
+           (center && center->open() && center->focused()) ||
            (inspector && inspector->open() && inspector->focused());
   };
   auto visit_inspection = [&](auto &&action) {
-    if (center && center->open())
+    if (instrument && instrument->open())
+      action(*instrument);
+    else if (center && center->open())
       action(*center);
     else if (inspector && inspector->open())
       action(*inspector);
   };
+  auto instrument_refresh = std::chrono::steady_clock::time_point::min();
   auto center_refresh = std::chrono::steady_clock::time_point::min();
   auto inspector_refresh = std::chrono::steady_clock::time_point::min();
   ChatView transcript{raw_capture_};
@@ -2273,6 +2326,16 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                                     detail::raw_native_field(size)},
                          152};
         apply.run([&] {
+          if (message.kind == Kind::instrument_source && message.instrument) {
+            if (instrument) {
+              const auto applied_source =
+                  instrument->source(*message.instrument, raw_capture_);
+              if (!applied_source.has_value())
+                transcript.append(ChatKind::notice,
+                                  "Instrument source refused; last good retained");
+            } else
+              instrument_refused = true;
+          }
           if (message.kind == Kind::sessions) {
             std::vector<ComposerChoice> entries;
             const auto &listing = message.data;
@@ -2365,6 +2428,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     });
     if (!busy && idle_work && (!raw_root || !raw_root->raw_owner_blocked()))
       idle_work();
+    // Poll results even with the route closed: intents/results outlive a view.
+    if (instrument && std::chrono::steady_clock::now() >= instrument_refresh) {
+      redraw = instrument->refresh(raw_capture_) || redraw;
+      instrument_refresh =
+          std::chrono::steady_clock::now() + std::chrono::milliseconds(40);
+    }
     // Bounded derived owner observations run outside keyboard handling/painting.
     if (center && center->open() &&
         (center->needs_refresh() ||
@@ -2720,16 +2789,22 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         std::optional<tui::InspectorLayout> inspection_layout;
         if (inspecting) {
           const bool centered = center && center->open();
-          auto caption = std::string{centered ? "COMMAND CENTER" : "COMMAND RESULTS"};
+          const bool authored = instrument && instrument->open();
+          auto caption = std::string{authored   ? "RETAINED RESULT LAB"
+                                     : centered ? "COMMAND CENTER"
+                                                : "COMMAND RESULTS"};
           visit_inspection([&](auto &view) {
             inspection_layout = unwrap(view.render(grid, {0, 2, main_width, height}));
             if (!view.notice().empty())
               caption += " · " + std::string{view.notice()};
           });
-          caption += centered ? " · Ctrl-X close · Tab focus · Esc draft"
-                              : " · Ctrl-O close · Tab focus · Esc draft";
+          caption += authored   ? " · F6 A · F7 B · F8 interrupt · Ctrl-] close"
+                     : centered ? " · Ctrl-X close · Tab focus · Esc draft"
+                                : " · Ctrl-O close · Tab focus · Esc draft";
           grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
           grid.line(1, {{terminal_lines(caption, main_width).front(), Ink::heading}});
+        } else if (instrument_refused) {
+          grid.line(1, {{"Instrument unavailable; draft retained", Ink::failure}});
         } else if (center_refused) {
           grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
           grid.line(1, {{terminal_lines("Command center unavailable; draft retained",
@@ -3038,15 +3113,38 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           escape_deadline =
               std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
         redraw = true;
+        if (result.action == InputAction::instrument_toggle) {
+          if (instrument) {
+            close_center();
+            close_inspector();
+            instrument->toggle(result.source.record);
+          } else
+            instrument_refused = true;
+        }
+        if (result.action == InputAction::instrument_action && instrument &&
+            instrument->open() && instrument->focused()) {
+          const auto acted =
+              result.text == "pin_a"
+                  ? instrument->pin(0, result.source.record, raw_capture_)
+              : result.text == "pin_b"
+                  ? instrument->pin(1, result.source.record, raw_capture_)
+                  : instrument->request_interrupt(result.source.record, raw_capture_);
+          if (!acted.has_value())
+            transcript.append(ChatKind::notice,
+                              std::string{"Instrument action unavailable: "} +
+                                  error_name(acted.error().code));
+        }
         if (result.action == InputAction::center_toggle) {
           if (ensure_center()) {
             close_inspector();
+            close_instrument();
             center->toggle(result.source.record);
           }
         }
         if (result.action == InputAction::inspect_toggle) {
           if (ensure_inspector()) {
             close_center();
+            close_instrument();
             inspector->toggle(result.source.record);
           }
         }
@@ -3084,13 +3182,17 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             visit_inspection([](auto &view) { view.focus_editor(); });
             break;
           case InputAction::inspect_previous_output:
-            if (center && center->open())
+            if (instrument && instrument->open())
+              instrument->page(false, result.source.record);
+            else if (center && center->open())
               center->page(false, result.source.record);
             else if (inspector && inspector->open())
               inspector->page(false);
             break;
           case InputAction::inspect_next_output:
-            if (center && center->open())
+            if (instrument && instrument->open())
+              instrument->page(true, result.source.record);
+            else if (center && center->open())
               center->page(true, result.source.record);
             else if (inspector && inspector->open())
               inspector->page(true);
@@ -3100,7 +3202,9 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           }
           if (navigation) {
             auto moved = Result<void>::success();
-            if (center && center->open())
+            if (instrument && instrument->open())
+              moved = instrument->act(*navigation, result.source.record);
+            else if (center && center->open())
               moved = center->act(*navigation, result.source.record);
             else if (inspector && inspector->open())
               moved = inspector->act(*navigation);
@@ -3176,14 +3280,23 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           cancel_turn();
         }
         if (result.action == InputAction::submit && !result.text.empty() && !quitting) {
-          if (result.text == "/center") {
+          if (result.text == "/instrument") {
+            if (instrument) {
+              close_center();
+              close_inspector();
+              instrument->first_page(result.source.record);
+            } else
+              instrument_refused = true;
+          } else if (result.text == "/center") {
             if (ensure_center()) {
               close_inspector();
+              close_instrument();
               center->first_page(result.source.record);
             }
           } else if (result.text == "/jobs") {
             if (ensure_inspector()) {
               close_center();
+              close_instrument();
               inspector->first_page(result.source.record);
             }
           } else if (commands &&

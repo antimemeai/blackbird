@@ -112,3 +112,15 @@ preserves30s/512KiB and actual EAGAIN plus refusal; the original failure lacked
 terminal artifacts, so throughput causality remains unknown. CTest now retains
 unique terminal/keyboard/pressure artifacts. Passing direct checks do not resolve
 the historical timeout.
+
+The authored-instrument tranche retains two ordinary findings: `arconaut-arw`,
+physical x31 stale residue on101×30→32×12 in both Microsoft backends, and
+`arconaut-14o`, one private bridge ASan native Error abort with no sanitizer report
+and a passing diagnostic rerun whose original native code remains unknown.
+[Actual captures](../papers/tui-lua-composition-2026-10-16/ORACLE_RESULTS.md) and
+[bridge results](../papers/tui-lua-composition-2026-10-16/BRIDGE_RESULTS.md) retain
+both observations; neither is silently called repaired. The adapter's false
+selected-detail warning was an actual integration fault and was fixed by an
+explicit independent-comparison component relation. A TSan pressure-oracle setup
+failure was corrected with sustained physical capacity control, not a product
+change or relaxed assertion. AFL output remains untouched.

@@ -235,3 +235,80 @@ without a lease. Root subsequently registers actual translation units and does
 whole-source integration. Preserve actual flags, failures and source identities.
 One root independent implementation challenge/fixes, owning sanitizers/profile
 checks and ordinary installed full source gate; no additional review layer.
+
+## Accepted-envelope handoff completes the declared inbox gap
+
+Before implementing the actual instrument bridge, add explicit native
+`ActionInbox::acknowledge(ActionKey)` to release one pending slot only after its
+consumer owns the immutable envelope and real domain reference or retained unknown
+disposition. This transfers bridge responsibility; it does not prove domain success.
+Lua never calls acknowledgment, and a view/reload never acknowledges by itself.
+Use an explicit Result on missing/busy; native retry of acknowledgment has no effect.
+
+Keep idempotency with the unforgeable native Trigger, rather than an unbounded
+second operation history. Each issued Trigger holds native shared state with at
+most8 original accepted envelopes. The inbox mutex protects that state. Identical
+redelivery through the same live Trigger returns the original local acceptance
+without enqueueing again, even after acknowledgment; changed arguments/target/
+handler/stamp under that key conflict. No API reconstructs a Trigger from ActionKey.
+When all native copies of a Trigger disappear no legal handler redelivery can
+present it; its scratch dedup state can disappear too. Native accepted pending
+entries remain in the independent inbox until consumer handoff. Trigger state pins
+no Job, domain worker, VM or view. Document its fixed per-trigger storage cost;
+normal owner queues admit at most2 pending plus1 active handler. Native callers
+own retained token copies like they own immutable Script inputs.
+
+Allocate native token state before issuing its checked monotonic serial; allocation
+failure refuses cleanly. Distinguish the actual native owner identity from a
+caller-reused byte string so tokens cannot transplant into another inbox. First
+queue acceptance gets a checked monotonic acceptance-order value; try_read returns
+pending envelopes in that order even after slot reuse. Replay comparison ignores
+that owner-assigned order and returns the original canonical acceptance. No counter
+wrap or same-key aliasing. Native APIs use try-lock; callbacks perform no capture,
+domain lookup or blocking wait.
+
+Direct tests: accepted entry survives VM/source retirement; acknowledge frees
+capacity only through native API; duplicate after acknowledgment re-enqueues
+nothing; changed envelope under the retained token conflicts; more than8 sequential
+legitimate handoffs progress; recycled slots preserve acceptance order. Actual
+domain broker must query by original key on uncertainty and never automatically
+resubmit after lost acknowledgment. This closes the already-declared consumption
+gap in the same conceptual owner; it does not introduce a second audit/review layer.
+
+## Implementation choices within this owner
+
+The acknowledgment addendum supersedes the earlier non-destructive-only inbox
+paragraph. Trigger retains8 canonical envelopes; ActionKey adds a checked native
+process-local owner serial distinct from caller-provided incarnation bytes.
+Mailbox fixed inputs include separate512-byte detail titles, exposed as
+ui.detail_title(i); Outcome returns the sorted8-entry named handler catalog from
+the validated module. Source/local-input/query stamps remain separate from scene
+revision. No Lua draft API is present.
+
+Aggregate inspector source text is bounded16384 bytes, allowing two4096 originals
+plus authored labels/separators; final safe text, row/span/node/item charges obey
+existing center Limits. The exact newline-heavy/control-heavy cases are permanent.
+No userdata/finalizer exists in the initial profile. Fresh VM invocation scratch
+is discarded after every result, so mutable globals/upvalues cannot leak into the
+next invocation. Existing terminal_lines is reused through display_text.hpp.
+
+The first API's checked publish(outcome,current,SceneHost) rejects mismatched
+source/view/input/query dependencies; the actual application owns capture
+admission before calling it. An unread outcome stops new invocation start.
+After cooperative stop, pending discrete requests remain explicit stopped outcomes
+until the native caller consumes or destroys this owner; actual accepted envelopes
+remain in the separately owned inbox. No stopped thread is detached.
+
+## Concrete stop-notification correction before qualification
+
+An atomic stop flag plus condition_variable notification without holding its
+predicate mutex permits a lost notification between predicate check and wait.
+That can hang idle owner destruction even though the flag is true. Replace only
+worker parking with C++20 atomic_flag wait/notify. Worker clears wake BEFORE reading
+the guarded mailbox and atomic stop; native notifiers set wake and notify. A
+notification before clearing is represented by the subsequently checked persistent
+state, while one after clearing prevents the later wait. Worker alone waits; UI
+admission/poll remain try-lock and stop remains atomic notification. No timeout,
+periodic polling, counter wrap, detached thread or invented quiescence is added.
+Retain actual active/pending stop oracle and add immediate idle stop in the same
+permanent lifecycle mode. This is a concrete correction inside the current unit.

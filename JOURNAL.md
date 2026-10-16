@@ -10607,3 +10607,65 @@ VM implementation proceeds against its permanent8-mode contract. Preserve defaul
 qualified native libraries via APFS clones for private links before the focused
 shared Debug lease; no executable activation. Research checkpoint is text/data
 plus unchanged probe study artifacts; active native/script changes remain unstaged.
+
+Lua retained-result implementation now includes fresh protected bounded Lua VM,
+typed scene/action inbox, native exact-key interrupt handoff and actual pure
+process-delivery facts, authored2-pin lab, independent comparison relation and
+asynchronous source reload/preview. All owning reviews/fixes closed:2VMoracle
+findings,1bridge worker-lineage omission,6adapter identity/admission/lifecycle
+faults, plus actual-main comparison relation. Runtime REDs precede implementation;
+live mapped-key F8 freezes actual B despite selecting A afterward. Source-less
+startup recovers by reload. Constructor-prepaid4098 preserves accepted remaining
+intents as unknown on whole-runtime exit after both workers join.
+
+Focused Debug, private owner8/bridge5/adapter6 profiles and Linux25 pass within
+recorded scopes. Preserve initial bridge ASan native Error abort (queued14o),
+pressurefixture TSan assertion and setup failures. Correct pressure by separate
+fixed no-consumer UI producer; unchanged product passes changed rawcase in both
+sanitizers. Two actual-main backends pass;20 readable styled expectations include
+actual defaultLua composition. False selected-detail warning fixed; physical
+narrow gutter residue queuedarw with originals. Root single neworacle/snapshot
+challenges find no defect. No added review panels or AFL/artwork interaction.
+
+Prepare stable source/index/Beads for installed full source hook. New Release
+baseline is integrated master0bf6712, not oldcenter: persistent owned Neuroses
+campaign baseline13+PTY1 qualifies; next matched round includes actual unchanged
+observer/source/profile identity. StyLua-only results.lua formatting after native
+Linux25 will be qualified by final authored snapshots/actual-main source gate and
+new Linux application checks, not by pretending that native fixture lane ran it.
+Full source gate/performance remain pending at this checkpoint preparation.
+
+First installed source hook251/252 Debug275.20s fails only the new actual-main
+oracle's transient INSTRUMENT_FIXTURE_READY text, matching the new Linux
+application failure: both actual children and returned IDs already exist, but
+faster output scrolls that message away. No analysis phase or commit occurred;
+no test process was signalled. Replace readiness with persistent turn completion,
+B's actual output and the independently written native IDs, preserving4s and
+all exact downstream ID/effect/private-input assertions. Corrected MacGhostty
+and Linux actual-main+20snapshots pass. Prepare the same staged source for the
+fresh mandatory complete source gate; no native change or new review panel.
+
+The matched Release round completes120/120 with zero failed/repeated samples,
+all originals retained. Median input remains comparable; startup/paste tails are
+mixed, including worse wide startup/paste p95. Publish the exact tables after
+source gate, keep f8f open and avoid source-causation claims on this shared host.
+
+Second installed source hook251/252 Debug265.92s fails only
+`tui_action_bridge_recent` with native busy/detail0. Unlike the earlier ASan
+abort, this diagnostic preserves the exact current native error. The bridge
+fixture unwraps nonblocking inbox reads/trigger creation while its real worker
+can hold the mutex; documented busy is not a completed operation. Return the
+owning fixture to its original owner: wait only on busy within the same finite
+watchdog, preserve all exact20 handoff/order/dedup assertions, fail other errors,
+and never retry an ambiguously accepted handler/effect. Preserve the complete
+failed gate. Native product and completed performance binaries remain unchanged;
+record the final test-only delta rather than rerunning timing to improve tails.
+
+The bridge owner returns the explicit busy fixture correction:5/5 owning Debug
+cases pass in1.54s and actual test-TU clang-tidy is clean. Root reads the exact
+diff and finds no issue: only pre-acceptance trigger mint and read busy wait,
+non-busy errors retain operation/code/detail, and existing predicates retain
+one5s deadline. Exact20 handoffs/order, accepted_requests and replay assertions
+are unchanged. Before-source/patch hashes and complete failed hook remain in
+bridge/hook-busy-repair. This does not identify the original ASan abort14o.
+All lanes stop writes and release Debug for the mandatory full source gate.

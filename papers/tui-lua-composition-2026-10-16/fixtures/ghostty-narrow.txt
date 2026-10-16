@@ -1,0 +1,11 @@
+ Blackbird · gpt-6.1-sol · medi
+RETAINED RESULT LAB · Source ac
+> A / B comparison
+Detail target differs from sele
+00000 bytes 0..18 of observed 1
+8                              0
+B_PINNED_ORIGINAL              4
+                               m
+╭ Enter send · / commands · Ct╮l
+│ > LAB_RETURN_DRAFT          │
+╰─────────────────────────────╯─

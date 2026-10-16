@@ -149,6 +149,30 @@ void narrow_and_text() {
   accept(widget.act(InspectorAction::focus_collection));
   check(take(widget.state()).selected == "a", "narrow return changed selection");
 }
+void independent_detail() {
+  auto owner = host();
+  auto strict = take(CollectionInspector::create(owner, "list", "detail"));
+  accept(strict.act(InspectorAction::next));
+  ChatGrid grid;
+  grid.reset(100, 10);
+  (void)take(strict.render(grid, {0, 0, 100, 10}));
+  const auto text = [&] {
+    std::string result;
+    for (const auto &cell : grid.cells)
+      result += cell.scalar < 128 ? static_cast<char>(cell.scalar) : '?';
+    return result;
+  };
+  check(text().find("Detail target differs from selection") != std::string::npos,
+        "selected-detail relation must still warn on mismatched target");
+  auto independent = take(CollectionInspector::create(owner, "list", "detail",
+                                                      InspectorBinding::independent));
+  grid.reset(100, 10);
+  (void)take(independent.render(grid, {0, 0, 100, 10}));
+  check(text().find("Detail target differs from selection") == std::string::npos,
+        "independent comparison must not claim selected-detail relation");
+  check(take(independent.state()).selected == "b",
+        "relation policy cannot change native selection");
+}
 void reading_continuity() {
   auto owner = host();
   auto widget = take(CollectionInspector::create(owner, "list", "detail"));
@@ -218,6 +242,7 @@ int main() {
         {"literal layout", literal_layout},
         {"narrow text", narrow_and_text},
         {"reading continuity", reading_continuity},
+        {"independent comparison", independent_detail},
         {"clipping and retirement", clipping_and_retirement}}) {
     try {
       run();
