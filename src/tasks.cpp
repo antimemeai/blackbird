@@ -109,8 +109,8 @@ std::optional<std::size_t> TaskState::position(std::string_view id) const {
     return std::nullopt;
   return static_cast<std::size_t>(found - order_.begin());
 }
-TaskState::Prepared TaskState::prepare(const Value &request,
-                                       RawTaskOrigin origin) const {
+TaskState::Prepared TaskState::prepare(const Value &request, RawTaskOrigin origin,
+                                       DomainAdmission *admission) const {
   RawTaskTrace trace{origin.replay ? RawTaskAction::replay_prepare
                                    : RawTaskAction::prepare,
                      revision_, origin, 206};
@@ -230,9 +230,18 @@ TaskState::Prepared TaskState::prepare(const Value &request,
             std::count_if(p.changed.begin(), p.changed.end(), [&](const auto &entry) {
               return !items_.contains(entry.first);
             }));
-        if (items_.size() - old_removed + new_items >= max_items ||
-            p.next == UINT64_MAX)
+        const auto candidate_count = items_.size() - old_removed + new_items;
+        if (candidate_count >= max_items) {
+          if (admission)
+            admission->reject(AdmissionResource::task_items, candidate_count,
+                              max_items);
           throw Error{ErrorCode::capacity};
+        }
+        if (p.next == UINT64_MAX) {
+          if (admission)
+            admission->reject(AdmissionResource::task_identifiers, p.next, UINT64_MAX);
+          throw Error{ErrorCode::capacity};
+        }
         const auto id = "t" + std::to_string(p.next++);
         const auto parent = resolve(op, "parent");
         if (!parent.empty()) {
@@ -315,8 +324,11 @@ TaskState::Prepared TaskState::prepare(const Value &request,
       } else
         throw Error{ErrorCode::invalid_range};
       const auto version = integer(field(*old, "version"));
-      if (version == UINT64_MAX)
+      if (version == UINT64_MAX) {
+        if (admission)
+          admission->reject(AdmissionResource::task_version, version, UINT64_MAX);
         throw Error{ErrorCode::capacity};
+      }
       put(row, "version", number(version + 1));
       put(row, "updated", number(timestamp));
       validate_row(row);
@@ -719,12 +731,13 @@ TaskStore::TaskStore(AuditLog &log) : log_(log) {
     if (string_field(packet, "label") == "task-state-v1")
       state_.restore(packet);
 }
-Value TaskStore::edit(const Value &request, RawTaskOrigin origin) {
+Value TaskStore::edit(const Value &request, RawTaskOrigin origin,
+                      DomainAdmission *admission) {
   RawTaskTrace trace{RawTaskAction::edit, state_.revision(), origin, 518};
   return trace.run([&] {
     try {
       trace.stage(3);
-      auto prepared = state_.prepare(request, trace.child());
+      auto prepared = state_.prepare(request, trace.child(), admission);
       if (prepared.packet == Value{}) {
         trace.finish(1);
         return prepared.result;

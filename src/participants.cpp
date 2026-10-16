@@ -220,6 +220,14 @@ struct Participants::Impl {
     }
     return false;
   }
+  bool archivable_locked(const Run &run) const noexcept {
+    if (!run.finished || run.worker.joinable() || !run.cleanup_closed || run.emergency)
+      return false;
+    for (auto *capture = captures.get(); capture; capture = capture->next.get())
+      if (capture->run == &run)
+        return false;
+    return true;
+  }
   void state(Run &run, RawParticipantBank &bank, std::uint8_t branch) noexcept {
     const bool stopped = run.stop.load();
     (void)event(bank, 2106, run.reference,
@@ -940,13 +948,15 @@ void Participants::drain() {
         impl_->stop_all(bank, capture->handoff, 3);
         throw;
       }
+      std::unique_ptr<Impl::Capture> retired;
       {
         std::lock_guard lock{impl_->mutex};
         if (emergency)
-          emergency->emergency.reset();
+          retired = std::move(emergency->emergency);
         else {
           const auto bytes = original.bytes().size();
-          impl_->captures = std::move(capture->next);
+          retired = std::move(impl_->captures);
+          impl_->captures = std::move(retired->next);
           impl_->capture_bytes -= bytes;
           --impl_->capture_count;
           if (!impl_->captures)
@@ -986,7 +996,7 @@ Value Participants::configure(const Value &args) {
 }
 Value Participants::start(std::string id, const Value &args,
                           const ParticipantTransport &transport,
-                          RawParticipantOrigin origin) {
+                          RawParticipantOrigin origin, DomainAdmission *admission) {
   impl_->entry(RawParticipantAction::start, origin);
   drain();
   return action(
@@ -1005,8 +1015,18 @@ Value Participants::start(std::string id, const Value &args,
             (void)key;
             live += run->finished ? 0U : 1U;
           }
-          if (impl_->runs.size() >= max_runs || live >= impl_->concurrency)
+          if (impl_->runs.size() >= max_runs) {
+            if (admission)
+              admission->reject(AdmissionResource::participant_runs, impl_->runs.size(),
+                                max_runs);
             throw Error{ErrorCode::capacity};
+          }
+          if (live >= impl_->concurrency) {
+            if (admission)
+              admission->reject(AdmissionResource::participant_concurrency, live,
+                                impl_->concurrency);
+            throw Error{ErrorCode::capacity};
+          }
           if (impl_->runs.contains(id))
             throw Error{ErrorCode::conflict};
         }
@@ -1147,7 +1167,8 @@ Value Participants::read(const Value &args) {
                           {"runs", Value{std::move(rows)}}});
   });
 }
-Value Participants::send(const Value &args, RawParticipantOrigin origin) {
+Value Participants::send(const Value &args, RawParticipantOrigin origin,
+                         DomainAdmission *admission) {
   impl_->entry(RawParticipantAction::send, origin);
   drain();
   return action(
@@ -1212,8 +1233,18 @@ Value Participants::send(const Value &args, RawParticipantOrigin origin) {
             }
             if (run->finished || run->sealed || run->stop.load())
               throw Error{ErrorCode::busy};
-            if (run->queued >= max_inbox || run->receipts.size() >= max_messages)
+            if (run->queued >= max_inbox) {
+              if (admission)
+                admission->reject(AdmissionResource::participant_pending_directions,
+                                  run->queued, max_inbox);
               throw Error{ErrorCode::capacity};
+            }
+            if (run->receipts.size() >= max_messages) {
+              if (admission)
+                admission->reject(AdmissionResource::participant_direction_receipts,
+                                  run->receipts.size(), max_messages);
+              throw Error{ErrorCode::capacity};
+            }
             request = field(run->row, "request");
             set(request, "request_id",
                 Value{string_field(request, "request_id") + ":" + message});
@@ -1403,13 +1434,22 @@ Value Participants::archive(const Value &args) {
                   auto result = Value::object({{"archived", field(args, "run_id")}});
                   impl_->join_native(*run, trace.bank(), trace.reference());
                   impl_->cleanup_run(*run);
+                  // Join closes the worker's last publication opportunity. A
+                  // business-terminal row alone says nothing about its final
+                  // emergency original; retain it before releasing its owner.
+                  drain();
+                  std::unique_ptr<Impl::Run> retired;
                   {
                     std::lock_guard lock{impl_->mutex};
+                    if (!impl_->archivable_locked(*run))
+                      throw Error{ErrorCode::incomplete};
                     const std::uint8_t branch = 1;
                     (void)event(trace.bank(), 2134, trace.reference(),
                                 {f(run->reference.lane), f(run->reference.ordinal),
                                  f(branch), f(impl_->runs.size())});
-                    impl_->runs.erase(string_field(args, "run_id"));
+                    const auto found = impl_->runs.find(string_field(args, "run_id"));
+                    retired = std::move(found->second);
+                    impl_->runs.erase(found);
                     impl_->dirty = true;
                   }
                   impl_->save_snapshot(trace.bank(), trace.reference());

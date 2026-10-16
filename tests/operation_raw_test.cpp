@@ -103,7 +103,7 @@ struct Fixture {
 };
 void normal_fields(const std::vector<Record> &records, RetainedState &root,
                    ByteView input, ByteView result);
-void post_effect_fields(const std::vector<Record> &records, bool allocation);
+void failed_receipt_fields(const std::vector<Record> &records);
 void whole_request(bool vector_cut, bool receipt_cut) {
   Fixture fixture{{65536, 4 * 1024 * 1024}};
   const auto target = (fixture.directory.path / "actual-result.bin").string();
@@ -127,9 +127,17 @@ void whole_request(bool vector_cut, bool receipt_cut) {
     std::optional<Error> native_error;
     try {
       const auto result = engine.operator_call("write_file", arguments);
-      require(!vector_cut && !receipt_cut && field(result, "written") == Value{true} &&
-                  string_field(result, "path") == target,
-              "actual native write returned its business result");
+      if (vector_cut) {
+        require(!receipt_cut && string_field(result, "error") == "allocation" &&
+                    field(result, "detail") == Value{Number{0}} &&
+                    string_field(result, "effect_outcome") == "applied",
+                "post-encoder allocation preserves actual applied effect");
+        allocation = true;
+      } else
+        require(!receipt_cut && field(result, "written") == Value{true} &&
+                    string_field(result, "path") == target &&
+                    string_field(result, "effect_outcome") == "applied",
+                "actual native write returned its business result");
     } catch (const std::bad_alloc &) {
       allocation = true;
     } catch (const Error &error) {
@@ -196,8 +204,37 @@ void whole_request(bool vector_cut, bool receipt_cut) {
             "exact once-only independent operation original");
   if (!vector_cut && !receipt_cut)
     normal_fields(records, *fixture.root, input, primary);
-  else
-    post_effect_fields(records, vector_cut);
+  else if (vector_cut) {
+    const auto failure = applied_allocation_result();
+    normal_fields(records, *fixture.root, input, failure);
+    require(std::count_if(records.begin(), records.end(),
+                          [&](const auto &record) {
+                            return record.site == 2402 &&
+                                   record.bytes ==
+                                       original(request->reference, 2, failure);
+                          }) == 1,
+            "known applied allocation fallback has one exact original");
+    require(std::count_if(records.begin(), records.end(),
+                          [&](const auto &record) {
+                            if (record.site != 2402)
+                              return false;
+                            ByteView bytes{record.bytes};
+                            return same(reference(bytes), request->reference) &&
+                                   read<std::uint8_t>(bytes) == 1;
+                          }) == 1,
+            "recovered allocation cannot invent a second primary original");
+    unsigned known_failures = 0;
+    for (const auto &record : records)
+      if (record.site == 2412) {
+        ByteView bytes{record.bytes};
+        require(same(reference(bytes), request->reference), "actual allocation owner");
+        known_failures +=
+            read<AttemptDisposition>(bytes) == AttemptDisposition::failure;
+      }
+    require(known_failures == 1,
+            "applied allocation settles as known failure, never unknown");
+  } else
+    failed_receipt_fields(records);
 }
 void rejection(bool split, bool native_failure = false) {
   Fixture fixture{split ? JournalLimits{1024, 1112} : JournalLimits{4096, 32768}};
@@ -529,22 +566,17 @@ void normal_fields(const std::vector<Record> &records, RetainedState &root,
   terminal_branch(records, owner, RawOperationBranch::returned);
   metadata_has_no_writer_time(root);
 }
-void post_effect_fields(const std::vector<Record> &records, bool allocation) {
+void failed_receipt_fields(const std::vector<Record> &records) {
   const auto owner = only(records, 2400).reference;
   effect_branch(records, owner, RawOperationBranch::returned);
   dispatch_result(records, owner);
   auto report = body(only(records, 2408, owner), owner);
-  require(read<bool>(report) && read<bool>(report) && read<bool>(report) == allocation,
+  require(read<bool>(report) && read<bool>(report) && !read<bool>(report),
           "receipt recording failure is distinct from successful effect");
-  if (!allocation)
-    require(read<ErrorCode>(report) == ErrorCode::io &&
-                read<std::int64_t>(report) == EIO,
-            "actual native short-write receipt EIO unchanged");
+  require(read<ErrorCode>(report) == ErrorCode::io && read<std::int64_t>(report) == EIO,
+          "actual native short-write receipt EIO unchanged");
   require(report.empty(), "report has no fabricated status fields");
-  terminal_branch(records, owner,
-                  allocation ? RawOperationBranch::allocation
-                             : RawOperationBranch::error,
-                  allocation ? std::nullopt : std::optional{Error{ErrorCode::io, EIO}});
+  terminal_branch(records, owner, RawOperationBranch::error, Error{ErrorCode::io, EIO});
   original_links(records, owner);
   require(std::none_of(records.begin(), records.end(),
                        [](const auto &record) {

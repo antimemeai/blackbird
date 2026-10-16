@@ -9997,3 +9997,76 @@ Finish relevant docs/links/data checks, supported Beads backup, text-only commit
 and branch push under the existing operator exception; product bugs remain open.
 The owned temporary Linux compiler-probe directory is explicitly removed after
 local raw results/source are saved; persistent campaigns and AFL are untouched.
+
+2026-10-15 — Operator requests repair intermission for all seven audited causes,
+starting with strong REDs, then return to TUI. Wrote cpp-intermission PLAN and
+owner subplans before source. Permanent old-source tests reproduce late original
+loss, unsafe numeric group signaling after child custody loss, permanent mailbox
+budget acceptance, ordinary domain refusals aborting turns, malformed display
+footprints/caret drift, and real rename followed by lost applied knowledge.
+Implement owned call-local statuses, final worker/retention checks, explicit child
+custody, immutable mailbox reservations, shared byte/cell cursor, preallocated
+file results and native applied observation. No new library.
+
+One independent implementation challenge per conceptual owner: fix private raw
+fixture signature/public refusal expectations; actual physical terminal literals
+fix VS16/modifier and bare-keycap authority; actual two-fault file test exposes
+new-turn escape from ordinary capacity stop. Persistent unretained-applied guard
+now fences later turns without replay. Reject speculative raw mailbox linkage
+throw (actual noexcept) and ZWSP width suspicion (actual named engine result).
+Queue broader descendant/group-cleanup certainty separately as arconaut-ruj.
+Initial domain6, child7 and final file8 checks pass; shared source gate, changed
+profile checks and matched measurements remain pending. All failed setups and
+counterexamples retained; do not claim candidate published/activated yet.
+
+First installed source gate stops at189/192 in250.77s, before lint/commit.
+Existing workflows312 catches raw token coloring changed by escaping first;
+restore raw token matching with one contiguous sanitizer/style map. Existing
+provider_raw overflow catches Darwin exiting leader: waitid succeeds pid0,
+killEPERM, WNOHANGwait0 falsely releases unreaped owner. Restore original blocking
+exact finalwait after proven custody, retain ECHILD/error authority revocation;
+queue broader denial/hang certainty in arconaut-ruj. Revised cleanup
+observation-EINTR test gets its own old-header RED, seven current GREEN; provider
+assertion unchanged. Root source review dispositions those concrete fixes.
+Independent operation BBM2 literal now includes intentional applied field;
+post-encoder failure returns retained allocation/applied fallback, with exactly
+one original primary and actual adapter receipt unchanged. Preserve unrelated Lua
+capacity and receipt-EIO oracles. Owning workflow/display6, child/provider8 and
+operation/file9 checks pass. Initial after Release unmeasured inputs/provenance
+retained separately; recapture final sources and rebuild for final comparisons.
+
+Final changed integration ASan/UBSan22/22 in87.46s. Final-source isolated TSan
+participants_raw passes57.63s at unchanged60s, preserving earlier60.42 aggregate
+timeout; queue narrow instrumentation headroom rather than declare it disproved.
+Earlier custody3/mailbox5 TSan checks pass with no changed ownership since.
+Linux final frozen-source Release38/38 includes blocked output and all three
+existing regressions. Correct stale incremental objects caused by epoch archive
+mtime, preserve failed setup and force only changed inputs current before actual
+rebuild; no stale binary timed. Fold learned source escaping/capacity/applied
+contracts into TUI_DOCTRINE. Restage final code/fixtures/reports for installed
+source gate; no further tracked/index/backup changes during it.
+
+Full192 Debug tests pass247.26s; complete native analysis then finds four lint
+issues in command mailbox move flow and three fixture patterns. No sourcecommit.
+Simplify mailbox to one argument move with immutable borrowed fields, retain
+promise/receipt sharing; two test parameters borrow conststrings. Extract the
+file fixture's actual fault+malloc body into a shared helper, keeping globalnew
+engine faults and a directly matched native malloc/free consume. All affected
+translation units analyze clean, scoped Debug/ASan/TSan owning checks pass.
+
+Ordinary Linux command_jobs newly added check stillfails finalreap (other19pass).
+Direct selector/errno/PID diagnostics prove a continued CommandJobs child, not
+legacy Child, remains WNOWAIT-waitable after filteredstatus ECHILD. Worker marks
+unavailable/reaped and skips nativefinalwait; test's finalwait reaps it. P1
+arconaut-vyi enters repair as critical eighth sibling with written WAIT_SELECTOR
+plan, deterministic actualchild RED first and true-loss/raw counterparts. Do not
+attribute intentional uncontained_exec launch policy to this bug or weaken the
+existing finalreap assertion. No new broad campaign, dependency or reviewpanel.
+
+2026-10-16 — Selector-aware child custody repair completes permanent old-source
+RED on actual Linux and Mac's explicitly modeled Linux return, plus raw and
+genuine externally-reaped counterparts. Only exit-inclusive ECHILD revokes exit
+custody; no new native poll or normalized result. Debugaffected5/5, ASan/UBSan5/5
+and TSannew3/3 pass; both owning translation units analyze clean. Root's one
+independent concrete code/oracle challenge finds no defect. Final native Linux
+overlay, installed source gate and matched performance remain delivery work.

@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/file_effect.hpp"
 #include "blackbird/provider_original.hpp"
 #include "blackbird/raw_caller.hpp"
 #include <filesystem>
@@ -91,7 +92,8 @@ std::string raw_file_read_prefix(const std::filesystem::path &, std::size_t,
 std::string raw_file_read(const std::filesystem::path &, std::size_t,
                           const RawAdapterContext *, RawEventRef * = nullptr);
 void raw_file_write(const std::filesystem::path &, std::string_view,
-                    const RawAdapterContext *, const RawFileInput * = nullptr);
+                    const RawAdapterContext *, const RawFileInput * = nullptr,
+                    FileEffectObservation * = nullptr);
 bool raw_file_exists(const std::filesystem::path &, std::error_code &,
                      const RawAdapterContext * = nullptr);
 std::filesystem::path raw_file_canonical(const std::filesystem::path &,

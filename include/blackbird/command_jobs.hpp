@@ -47,6 +47,9 @@ public:
              const std::function<void()> &tick, const std::function<bool()> &cancelled);
   Value read(const Value &arguments) const;
   Value control(const Value &arguments);
+  // Enqueue reserves unique delivery identity/history capacity through dispatch.
+  // Permanent exhaustion refuses synchronously; only pending PTY input can wait.
+  // Exact duplicates share their reservation or retained delivery receipt.
   void request(Value arguments);
   std::vector<Value> requests();
   std::vector<JobEvent> drain();

@@ -73,9 +73,15 @@ def main():
             # The terminator is essential: without it tui-test consumes the
             # target's --session as its own global option.
             opened = True
+            launch = [str(executable)]
+            if args.backend == "ghostty":
+                # Select the named Unicode profile for all emoji cell checks.
+                launch = ["/usr/bin/python3", "-u", "-c",
+                          "import os,sys; os.write(1,b'\\x1b[?2027h'); "
+                          "os.execv(sys.argv[1],sys.argv[1:])", str(executable)]
             result = call("run", "--backend", args.backend, "--config", str(config),
                           "--env", "BLACKBIRD_GRAPHICS=off", "--cols", "80", "--rows", "24",
-                          "--", str(executable), "--session", str(work / "session"),
+                          "--", *launch, "--session", str(work / "session"),
                           "--workflow", str(workflow), "--model", "gpt-6.1-sol")
             assert result["data"]["session"] == session, "target argument escaped into driver options"
             expect("Workflow reloads")
@@ -131,6 +137,23 @@ def main():
             (artifacts / "wide-state.json").write_text(json.dumps(wide, indent=2) + "\n")
             (artifacts / "wide-screen.txt").write_text(wide["text"] + "\n")
             call("screenshot", "-o", str(artifacts / "wide.svg"))
+            if args.backend == "ghostty":
+                call("write", "\x1b[200~ab👩‍💻X\x1b[201~")
+                expect("ab👩‍💻X")
+                emoji = state()
+                assert (emoji["cursor"]["x"], emoji["cursor"]["y"]) == (9, 49)
+                composer = call("cells", "0", "49", "70", "1")["data"]["cells"]
+                assert composer[8]["char"] == "X" and composer[67]["char"] == "│"
+                # 12 columns => 7 inner cells: the joined emoji fits intact.
+                call("resize", "12", "24")
+                expect("ab👩‍💻X")
+                narrow = state()
+                assert (narrow["cursor"]["x"], narrow["cursor"]["y"]) == (9, 21)
+                border = call("cells", "10", "21", "1", "1")["data"]["cells"]
+                assert border[0]["char"] == "│"
+                (artifacts / "emoji-composer-state.json").write_text(json.dumps(narrow, indent=2) + "\n")
+                call("write", "\x15")
+                call("resize", "105", "52")
             call("write", "/exit\r")
             call("wait", "exit", "--timeout", "4000")
         except BaseException as error:

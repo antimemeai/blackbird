@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/admission.hpp"
 #include "blackbird/colleague.hpp"
 #include "blackbird/context.hpp"
 #include "blackbird/provider_original.hpp"
@@ -26,9 +27,11 @@ public:
   Participants &operator=(const Participants &) = delete;
   Value configure(const Value &arguments);
   Value start(std::string id, const Value &arguments,
-              const ParticipantTransport &transport, RawParticipantOrigin origin = {});
+              const ParticipantTransport &transport, RawParticipantOrigin origin = {},
+              DomainAdmission *admission = nullptr);
   Value read(const Value &arguments = Value::object({}));
-  Value send(const Value &arguments, RawParticipantOrigin origin = {});
+  Value send(const Value &arguments, RawParticipantOrigin origin = {},
+             DomainAdmission *admission = nullptr);
   Value cancel(const Value &arguments);
   Value await(const Value &arguments, const std::function<bool()> &cancelled = {});
   Value join(const Value &arguments, const std::function<bool()> &cancelled = {});

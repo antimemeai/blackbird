@@ -312,7 +312,7 @@ std::string config_packet(std::string_view source) {
   return body;
 }
 struct ProgramAccess {
-  using Type = Value (CodingEngine::*)(const Value &);
+  using Type = Value (CodingEngine::*)(const Value &, DomainAdmission *);
   friend Type member(ProgramAccess);
 };
 template <class Tag, typename Tag::Type Method> struct Access {
@@ -395,7 +395,7 @@ void lifecycle(const std::filesystem::path &base) {
         std::jthread worker{[&, handle = std::move(worker_handle)] {
           try {
             RawThreadBinding worker_binding{handle};
-            const auto staged = (engine.*member(ProgramAccess{}))(proposal);
+            const auto staged = (engine.*member(ProgramAccess{}))(proposal, nullptr);
             require(field(staged, "staged") == Value{true});
           } catch (...) {
             failed = std::current_exception();
@@ -882,12 +882,10 @@ void invalid_oracles(const std::filesystem::path &base) {
               Value::object({{"proposal", config(mode ? std::string(65536, 'x')
                                                       : "not lua syntax !!!")}});
           if (mode) {
-            try {
-              (void)engine.operator_call("program_config", proposal);
-              require(false);
-            } catch (const Error &error) {
-              require(error == Error{ErrorCode::capacity});
-            }
+            const auto refused = engine.operator_call("program_config", proposal);
+            require(string_field(refused, "error") == "capacity" &&
+                    string_field(refused, "resource") == "program_encoding" &&
+                    string_field(refused, "effect_outcome") == "not_started");
           } else
             require(string_field(engine.operator_call("program_config", proposal),
                                  "error") == "invalid_range");
@@ -924,7 +922,7 @@ void pending_destruction(const std::filesystem::path &base) {
       scenario(base / "pending-destruction", [&](CodingEngine &engine, RawRuntime &) {
         engine.turn({"", "return true"});
         const auto proposal = Value::object({{"proposal", config("return true")}});
-        require(field((engine.*member(ProgramAccess{}))(proposal), "staged") ==
+        require(field((engine.*member(ProgramAccess{}))(proposal, nullptr), "staged") ==
                 Value{true});
         // Return with the actual pending state still installed. scenario destroys
         // its runtime object before the engine; the retained original issuer keeps
@@ -972,7 +970,7 @@ void cpp_allocation_oracles(const std::filesystem::path &base) {
         cuts::cpp_engine = &engine;
         cuts::cpp_mode = 2;
         try {
-          (void)(engine.*member(ProgramAccess{}))(proposal);
+          (void)(engine.*member(ProgramAccess{}))(proposal, nullptr);
           require(false);
         } catch (const std::bad_alloc &) {
         }
@@ -1061,8 +1059,10 @@ void reopen_oracle(const std::filesystem::path &base) {
     }
     // Leave a genuine staged generation for ordinary destruction, after the
     // genuinely parked continuation was discarded by its protocol refusal.
-    const auto staged = (engine.*member(ProgramAccess{}))(Value::object(
-        {{"proposal", config("error('abandoned-pending-must-not-restore')")}}));
+    const auto staged = (engine.*member(ProgramAccess{}))(
+        Value::object(
+            {{"proposal", config("error('abandoned-pending-must-not-restore')")}}),
+        nullptr);
     require(field(staged, "staged") == Value{true});
     require(engine.workflows()->revision() == revision && provider.calls == 1);
     require(!std::filesystem::exists(effect));

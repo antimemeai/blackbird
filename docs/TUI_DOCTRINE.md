@@ -75,6 +75,16 @@ names its resource and says that execution did not start in both human activity
 and model tool results. Preserve unknown outcome for an actually uncertain effect;
 do not replace an observed refusal with a generic interruption story.
 
+Keep the question with its answer: a filtered query that finds no eligible event
+does not prove the underlying work or owner is absent. Native error codes and
+empty result pages need their selector, coverage and scope before becoming a
+human or model status.
+
+An error after an observed file replacement must still identify that replacement
+as applied. Result allocation, presentation and retention are separate outcomes.
+If that observation cannot be preserved, further effects remain blocked across
+turn boundaries. Formatting failure grants no authority to retry the operation.
+
 ## 4. Make effective scope and activation legible
 
 Configuration work exposes its scope, inherited source, local override, saved
@@ -179,6 +189,12 @@ Unicode properties for the relevant cluster rules and check literal positions in
 an independent terminal parser: a renderer and a test decoder can share the same
 width mistake. A clean modeled grid alone does not establish a clean terminal.
 
+Source matching precedes display escaping. Escaping a control must not invent a
+word boundary or remove a real one. Wrapping, styled rasterization, fallback,
+caret placement and vertical motion share one explicit byte-to-cell contract;
+style spans do not split display clusters. A visible replacement owns its actual
+footprint throughout that contract. Keep terminal-profile limitations explicit.
+
 Motion expresses real transition or activity and never delays information or
 input. Support reduced motion and static equivalents. Do not animate reading
 anchors or require continuous repaint when settled. Images, the Blackbird avatar,
@@ -195,7 +211,10 @@ in working memory. Let the operator choose what to pin, mute, fold or follow.
 Bound recent resident observations without turning routine work into a lifetime
 quota. Retire safely settled records under pressure while preserving originals
 and stable effect identity; live custody, pending capture and accepted controls
-remain owned. Expose the distinction between recent control views and retained
+remain owned. A control accepted for dispatch reserves its finite delivery capacity
+through selection until dispatch or explicit refusal. Transient input pressure
+may wait for actual consumption; an exhausted per-job history budget must refuse
+immediately and visibly, since waiting alone cannot release it. Expose the distinction between recent control views and retained
 history when an old observation leaves the resident view.
 
 A command center provides overview and paths into work. It does not turn the

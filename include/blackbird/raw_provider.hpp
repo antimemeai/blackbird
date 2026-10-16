@@ -71,6 +71,8 @@ public:
                                   const char *bytes) noexcept;
   void wait(RawNativePermit &permit, const siginfo_t &observed, int result,
             int error) noexcept;
+  // One final nonblocking custody check, paid before child acquisition.
+  void cleanup_wait(const siginfo_t &observed, int result, int error) noexcept;
   void close(std::uint8_t channel, int fd, int result, int error) noexcept;
   void signal(pid_t group, int signal, int result, int error) noexcept;
   void reap(pid_t pid, pid_t result, int error, bool status_valid, int status) noexcept;

@@ -1,11 +1,11 @@
 #include "blackbird/chat_view.hpp"
 #include "blackbird/context.hpp"
+#include "blackbird/display_text.hpp"
 #include "blackbird/task_view.hpp"
 #include "blackbird/terminal.hpp"
 #include <algorithm>
 #include <array>
 #include <clocale>
-#include <cwchar>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -127,20 +127,10 @@ InputResult feed(Composer &composer, std::string_view bytes) {
 }
 Snapshot composer_frame(std::string name, const Composer &composer, std::size_t width) {
   const auto content = terminal_powerword_lines("> " + composer.text(), width);
-  const auto prefix =
-      terminal_lines("> " + composer.text().substr(0, composer.cursor()), width);
+  const auto caret =
+      terminal_caret("> " + composer.text(), {composer.cursor() + 2}, {width});
   auto result = rows(std::move(name), content, width, 5);
-  std::size_t columns = 0;
-  std::mbstate_t state{};
-  auto remain = std::string_view{prefix.back()};
-  while (!remain.empty()) {
-    wchar_t scalar{};
-    const auto count = std::mbrtowc(&scalar, remain.data(), remain.size(), &state);
-    require(count != 0 && count <= remain.size(), "invalid displayed composer UTF-8");
-    columns += static_cast<std::size_t>(std::max(0, ::wcwidth(scalar)));
-    remain.remove_prefix(count);
-  }
-  result.cursor = {prefix.size() - 1, std::min(columns, width - 1)};
+  result.cursor = {caret.row, std::min(caret.column.value, width - 1)};
   result.state = "draft=" + composer.text() +
                  " cursor_bytes=" + std::to_string(composer.cursor()) +
                  " pasted=" + (composer.pasted() ? "true" : "false");
@@ -201,6 +191,14 @@ std::vector<Snapshot> scenarios() {
   feed(pasted, "\x1b[200~/hel\t\n界é\x1b[201~");
   require(pasted.text() == "/hel\t\n界é", "paste became a command or completion");
   output.push_back(composer_frame("composer-literal-paste", pasted, 20));
+  Composer emoji;
+  emoji.draft("ab👩‍💻X");
+  output.push_back(composer_frame("composer-joined-emoji", emoji, 6));
+  output.push_back(rows("display-suffix-boundaries",
+                        {{{"A️X A🏽X A⃣X", Ink::normal}},
+                         {{"e", Ink::heading}, {"́X", Ink::normal}},
+                         {{"́X ​X", Ink::normal}}},
+                        24, 4));
   Composer unicode;
   unicode.draft("a界éz\nx\n1234");
   feed(unicode, "\x1b[A\x1b[A");

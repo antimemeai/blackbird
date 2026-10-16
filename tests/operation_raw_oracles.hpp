@@ -52,12 +52,14 @@ inline std::vector<std::byte> write_input(WriteInput input) {
 }
 inline std::vector<std::byte> write_result(std::string_view path) {
   std::vector<std::byte> out{std::byte{'B'}, std::byte{'B'}, std::byte{'M'},
-                             std::byte{2},   std::byte{10},  std::byte{2}};
+                             std::byte{2},   std::byte{10},  std::byte{3}};
   text(out, "written");
   out.push_back(std::byte{2}); // actual true business value
   out.push_back(std::byte{8});
   out.push_back(std::byte{29});
   text(out, path);
+  text(out, "effect_outcome");
+  text(out, "applied");
   return out;
 }
 inline std::vector<std::byte> capacity_fallback() {
@@ -70,6 +72,18 @@ inline std::vector<std::byte> capacity_fallback() {
       std::byte{'i'}, std::byte{'t'}, std::byte{'y'}, std::byte{6},   std::byte{6},
       std::byte{'d'}, std::byte{'e'}, std::byte{'t'}, std::byte{'a'}, std::byte{'i'},
       std::byte{'l'}, std::byte{3},   std::byte{0}};
+}
+inline std::vector<std::byte> applied_allocation_result() {
+  std::vector<std::byte> out{std::byte{'B'}, std::byte{'B'}, std::byte{'M'},
+                             std::byte{2},   std::byte{10},  std::byte{3}};
+  text(out, "error");
+  text(out, "allocation");
+  text(out, "detail");
+  out.push_back(std::byte{3}); // native nonnegative integer tag
+  out.push_back(std::byte{0});
+  text(out, "effect_outcome");
+  text(out, "applied");
+  return out;
 }
 inline std::vector<std::byte> reservation(std::uint64_t counter) {
   std::vector<std::byte> out;

@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/admission.hpp"
 #include "blackbird/context.hpp"
 #include "blackbird/raw_tasks.hpp"
 #include <array>
@@ -30,7 +31,8 @@ public:
     Value packet, result;
     std::optional<RawEventRef> raw_prepare;
   };
-  Prepared prepare(const Value &request, RawTaskOrigin origin = {}) const;
+  Prepared prepare(const Value &request, RawTaskOrigin origin = {},
+                   DomainAdmission *admission = nullptr) const;
   void commit(Prepared &&prepared, RawTaskOrigin origin = {});
   void replay(const Value &packet, RawTaskOrigin origin = {});
   void restore(const Value &snapshot, RawTaskOrigin origin = {});
@@ -58,7 +60,8 @@ public:
   Value read(const Value &query = Value::object({}), RawTaskOrigin origin = {}) const {
     return state_.read(query, origin);
   }
-  Value edit(const Value &request, RawTaskOrigin origin = {});
+  Value edit(const Value &request, RawTaskOrigin origin = {},
+             DomainAdmission *admission = nullptr);
   Value operator_command(std::string_view command);
   Value snapshot(RawEventRef *completion = nullptr) const {
     return state_.snapshot({}, completion);

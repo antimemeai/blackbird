@@ -72,6 +72,59 @@ ff9e..ff9f 101fd 102e0 10376..1037a 10a01..10a03 10a05..10a06 10a0c..10a0f 10a38
 1e944..1e94a 1f3fb..1f3ff e0020..e007f e0100..e01ef
 """)
 
+EMOJI = property_ranges("""
+0023 002a 0030..0039 00a9 00ae 203c 2049 2122 2139 2194..2199
+21a9..21aa 231a..231b 2328 23cf 23e9..23ec 23ed..23ee 23ef 23f0 23f1..23f2 23f3
+23f8..23fa 24c2 25aa..25ab 25b6 25c0 25fb..25fe 2600..2601 2602..2603 2604 260e
+2611 2614..2615 2618 261d 2620 2622..2623 2626 262a 262e 262f
+2638..2639 263a 2640 2642 2648..2653 265f 2660 2663 2665..2666 2668
+267b 267e 267f 2692 2693 2694 2695 2696..2697 2699 269b..269c
+26a0..26a1 26a7 26aa..26ab 26b0..26b1 26bd..26be 26c4..26c5 26c8 26ce 26cf 26d1
+26d3 26d4 26e9 26ea 26f0..26f1 26f2..26f3 26f4 26f5 26f7..26f9 26fa
+26fd 2702 2705 2708..270c 270d 270f 2712 2714 2716 271d
+2721 2728 2733..2734 2744 2747 274c 274e 2753..2755 2757 2763
+2764 2795..2797 27a1 27b0 27bf 2934..2935 2b05..2b07 2b1b..2b1c 2b50 2b55
+3030 303d 3297 3299 1f004 1f0cf 1f170..1f171 1f17e..1f17f 1f18e 1f191..1f19a
+1f1e6..1f1ff 1f201..1f202 1f21a 1f22f 1f232..1f23a 1f250..1f251 1f300..1f30c 1f30d..1f30e 1f30f 1f310
+1f311 1f312 1f313..1f315 1f316..1f318 1f319 1f31a 1f31b 1f31c 1f31d..1f31e 1f31f..1f320
+1f321 1f324..1f32c 1f32d..1f32f 1f330..1f331 1f332..1f333 1f334..1f335 1f336 1f337..1f34a 1f34b 1f34c..1f34f
+1f350 1f351..1f37b 1f37c 1f37d 1f37e..1f37f 1f380..1f393 1f396..1f397 1f399..1f39b 1f39e..1f39f 1f3a0..1f3c4
+1f3c5 1f3c6 1f3c7 1f3c8 1f3c9 1f3ca 1f3cb..1f3ce 1f3cf..1f3d3 1f3d4..1f3df 1f3e0..1f3e3
+1f3e4 1f3e5..1f3f0 1f3f3 1f3f4 1f3f5 1f3f7 1f3f8..1f407 1f408 1f409..1f40b 1f40c..1f40e
+1f40f..1f410 1f411..1f412 1f413 1f414 1f415 1f416 1f417..1f429 1f42a 1f42b..1f43e 1f43f
+1f440 1f441 1f442..1f464 1f465 1f466..1f46b 1f46c..1f46d 1f46e..1f4ac 1f4ad 1f4ae..1f4b5 1f4b6..1f4b7
+1f4b8..1f4eb 1f4ec..1f4ed 1f4ee 1f4ef 1f4f0..1f4f4 1f4f5 1f4f6..1f4f7 1f4f8 1f4f9..1f4fc 1f4fd
+1f4ff..1f502 1f503 1f504..1f507 1f508 1f509 1f50a..1f514 1f515 1f516..1f52b 1f52c..1f52d 1f52e..1f53d
+1f549..1f54a 1f54b..1f54e 1f550..1f55b 1f55c..1f567 1f56f..1f570 1f573..1f579 1f57a 1f587 1f58a..1f58d 1f590
+1f595..1f596 1f5a4 1f5a5 1f5a8 1f5b1..1f5b2 1f5bc 1f5c2..1f5c4 1f5d1..1f5d3 1f5dc..1f5de 1f5e1
+1f5e3 1f5e8 1f5ef 1f5f3 1f5fa 1f5fb..1f5ff 1f600 1f601..1f606 1f607..1f608 1f609..1f60d
+1f60e 1f60f 1f610 1f611 1f612..1f614 1f615 1f616 1f617 1f618 1f619
+1f61a 1f61b 1f61c..1f61e 1f61f 1f620..1f625 1f626..1f627 1f628..1f62b 1f62c 1f62d 1f62e..1f62f
+1f630..1f633 1f634 1f635 1f636 1f637..1f640 1f641..1f644 1f645..1f64f 1f680 1f681..1f682 1f683..1f685
+1f686 1f687 1f688 1f689 1f68a..1f68b 1f68c 1f68d 1f68e 1f68f 1f690
+1f691..1f693 1f694 1f695 1f696 1f697 1f698 1f699..1f69a 1f69b..1f6a1 1f6a2 1f6a3
+1f6a4..1f6a5 1f6a6 1f6a7..1f6ad 1f6ae..1f6b1 1f6b2 1f6b3..1f6b5 1f6b6 1f6b7..1f6b8 1f6b9..1f6be 1f6bf
+1f6c0 1f6c1..1f6c5 1f6cb 1f6cc 1f6cd..1f6cf 1f6d0 1f6d1..1f6d2 1f6d5 1f6d6..1f6d7 1f6d8
+1f6dc 1f6dd..1f6df 1f6e0..1f6e5 1f6e9 1f6eb..1f6ec 1f6f0 1f6f3 1f6f4..1f6f6 1f6f7..1f6f8 1f6f9
+1f6fa 1f6fb..1f6fc 1f7e0..1f7eb 1f7f0 1f90c 1f90d..1f90f 1f910..1f918 1f919..1f91e 1f91f 1f920..1f927
+1f928..1f92f 1f930 1f931..1f932 1f933..1f93a 1f93c..1f93e 1f93f 1f940..1f945 1f947..1f94b 1f94c 1f94d..1f94f
+1f950..1f95e 1f95f..1f96b 1f96c..1f970 1f971 1f972 1f973..1f976 1f977..1f978 1f979 1f97a 1f97b
+1f97c..1f97f 1f980..1f984 1f985..1f991 1f992..1f997 1f998..1f9a2 1f9a3..1f9a4 1f9a5..1f9aa 1f9ab..1f9ad 1f9ae..1f9af 1f9b0..1f9b9
+1f9ba..1f9bf 1f9c0 1f9c1..1f9c2 1f9c3..1f9ca 1f9cb 1f9cc 1f9cd..1f9cf 1f9d0..1f9e6 1f9e7..1f9ff 1fa70..1fa73
+1fa74 1fa75..1fa77 1fa78..1fa7a 1fa7b..1fa7c 1fa80..1fa82 1fa83..1fa86 1fa87..1fa88 1fa89 1fa8a 1fa8e
+1fa8f 1fa90..1fa95 1fa96..1faa8 1faa9..1faac 1faad..1faaf 1fab0..1fab6 1fab7..1faba 1fabb..1fabd 1fabe 1fabf
+1fac0..1fac2 1fac3..1fac5 1fac6 1fac8 1facd 1face..1facf 1fad0..1fad6 1fad7..1fad9 1fada..1fadb 1fadc
+1fadf 1fae0..1fae7 1fae8 1fae9 1faea 1faef 1faf0..1faf6 1faf7..1faf8
+""")
+
+MODIFIER_BASE = property_ranges("""
+261d 26f9 270a..270c 270d 1f385 1f3c2..1f3c4 1f3c7 1f3ca 1f3cb..1f3cc 1f442..1f443
+1f446..1f450 1f466..1f46b 1f46c..1f46d 1f46e..1f478 1f47c 1f481..1f483 1f485..1f487 1f48f 1f491 1f4aa
+1f574..1f575 1f57a 1f590 1f595..1f596 1f645..1f647 1f64b..1f64f 1f6a3 1f6b4..1f6b5 1f6b6 1f6c0
+1f6cc 1f90c 1f90f 1f918 1f919..1f91e 1f91f 1f926 1f930 1f931..1f932 1f933..1f939
+1f93c..1f93e 1f977 1f9b5..1f9b6 1f9b8..1f9b9 1f9bb 1f9cd..1f9cf 1f9d1..1f9dd 1fac3..1fac5 1faf0..1faf6 1faf7..1faf8
+""")
+
 def grapheme_extend(character):
     scalar = ord(character)
     return scalar >= 0x300 and any(a <= scalar <= b for a, b in EXTEND)
@@ -87,6 +140,8 @@ class Screen:
         self.style = '0'
         self.prior = None
         self.join = self.regional = self.pictograph = False
+        self.modifier_base = False
+        self.emoji_previous = 0
         self.saved_cursor = (0, 0)
         self.synchronized_update = False
         self.row = self.col = 0
@@ -128,6 +183,8 @@ class Screen:
                         parts = values.split(';')
                         self.prior = None
                         self.join = self.regional = self.pictograph = False
+                        self.modifier_base = False
+                        self.emoji_previous = 0
                         self.row = int(parts[0] or 1)-1
                         self.col = int(parts[1] or 1)-1 if len(parts)>1 else 0
                     elif cmd == 'm': self.style = values or '0'
@@ -148,15 +205,19 @@ class Screen:
             if c == '\r': self.col = 0
             elif c == '\n': self.row += 1
             elif ord(c) >= 32:
-                if unicodedata.category(c) == 'Cf' and self.prior is None:
+                if (unicodedata.category(c) in ('Cf', 'Mn', 'Me')) and self.prior is None:
                     pos += 1
                     continue
                 region = 0x1f1e6 <= ord(c) <= 0x1f1ff
                 modifier = 0x1f3fb <= ord(c) <= 0x1f3ff
                 combining = unicodedata.combining(c) or unicodedata.category(c) == 'Cf' or c in ('\u200d','\ufe0f','\ufe0e','\u20e3')
-                if self.prior is not None and (combining or modifier or (self.join and pictographic(c)) or (region and self.regional)):
+                if self.prior is not None and (combining or (modifier and self.modifier_base) or (self.join and pictographic(c)) or (region and self.regional)):
                     self.cells[self.prior] += c
-                    if ((self.join and pictographic(c)) or (region and self.regional) or c in ('\ufe0f','\u20e3')) and self.col == self.prior[1]+1:
+                    base = self.emoji_previous
+                    promoted = ((self.join and pictographic(c)) or (region and self.regional)
+                                or (modifier and self.modifier_base)
+                                or (c == '\ufe0f' and any(a <= base <= b for a, b in EMOJI)))
+                    if promoted and self.col == self.prior[1]+1:
                         self.cells[self.row,self.col] = ''
                         self.styles[self.row,self.col] = self.style
                         self.col += 1
@@ -170,6 +231,9 @@ class Screen:
                         self.styles[self.row,self.col+1]=self.style
                     self.col += width
                 joined = self.join and pictographic(c)
+                if c != '\u200b':
+                    self.emoji_previous = ord(c)
+                    self.modifier_base = any(a <= ord(c) <= b for a, b in MODIFIER_BASE)
                 self.join = c == '\u200d' and self.pictograph
                 if c == '\u200d': self.pictograph = False
                 elif joined or not grapheme_extend(c): self.pictograph = pictographic(c)
@@ -219,6 +283,20 @@ if __name__ == '__main__':
             screen.feed(data[:split]); screen.feed(data[split:])
             assert screen.cells == expected, 'plain joiner spacing cells'
             assert (screen.row,screen.col) == cursor, 'plain joiner cursor'
+    for data, expected, cursor in (
+        ('👍️🏽X'.encode(), {(0,0): '👍️', (0,1): '', (0,2): '🏽', (0,3): '', (0,4): 'X'}, (0,5)),
+        ('👩‍1⃣X'.encode(), {(0,0): '👩‍', (0,1): '', (0,2): '1⃣', (0,3): 'X'}, (0,4)),
+        ('A️X'.encode(), {(0,0): 'A️', (0,1): 'X'}, (0,2)),
+        ('A🏽X'.encode(), {(0,0): 'A', (0,1): '🏽', (0,2): '', (0,3): 'X'}, (0,4)),
+        ('A⃣X'.encode(), {(0,0): 'A⃣', (0,1): 'X'}, (0,2)),
+        ('́X'.encode(), {(0,0): 'X'}, (0,1)),
+        ('e\x1b[1ḿX'.encode(), {(0,0): 'é', (0,1): 'X'}, (0,2)),
+    ):
+        for split in range(len(data) + 1):
+            screen = Screen()
+            screen.feed(data[:split]); screen.feed(data[split:])
+            assert screen.cells == expected, 'literal suffix/zero cells'
+            assert (screen.row, screen.col) == cursor, 'literal suffix/zero cursor'
     lines = subprocess.check_output([sys.argv[1], '--packets'], text=True).splitlines()
     incremental = Screen()
     for index in range(0, len(lines), 3):

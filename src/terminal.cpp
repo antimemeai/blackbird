@@ -1,4 +1,5 @@
 #include "blackbird/terminal.hpp"
+#include "blackbird/display_text.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/local_timing.hpp"
 #include "blackbird/packet.hpp"
@@ -20,7 +21,6 @@
 #include <clocale>
 #include <csignal>
 #include <cstdlib>
-#include <cwchar>
 #include <exception>
 #include <fcntl.h>
 #include <iostream>
@@ -265,23 +265,8 @@ std::size_t line_end(std::string_view text, std::size_t cursor) {
   const auto newline = text.find('\n', cursor);
   return newline == std::string_view::npos ? text.size() : newline;
 }
-std::size_t display_width(std::string_view text) {
-  std::size_t cells = 0;
-  while (!text.empty()) {
-    if (text.front() == '\t') {
-      cells += 2;
-      text.remove_prefix(1);
-      continue;
-    }
-    wchar_t wide{};
-    std::mbstate_t state{};
-    const auto n = std::mbrtowc(&wide, text.data(), text.size(), &state);
-    const auto width = n != 0 && n <= text.size() ? ::wcwidth(wide) : -1;
-    cells += width < 0 ? 4 : static_cast<std::size_t>(width);
-    text.remove_prefix(width < 0 ? 1 : n);
-  }
-  return cells;
-}
+std::size_t display_width(std::string_view text) { return display_cells(text).value; }
+
 bool word_space(std::string_view text, std::size_t position) {
   // Whitespace-delimited words, rather than imposing a language's punctuation rules.
   const auto c = static_cast<unsigned char>(text[position]);
@@ -773,20 +758,16 @@ void Composer::vertical(bool up) {
   }
   if (!goal_column_)
     goal_column_ =
-        display_width(std::string_view{text_}.substr(begin, cursor_ - begin));
+        terminal_caret(std::string_view{text_}.substr(begin, end - begin),
+                       {cursor_ - begin}, {std::numeric_limits<std::size_t>::max()})
+            .column.value;
   const auto target_begin = up ? line_start(text_, begin - 1) : end + 1;
   const auto target_end = line_end(text_, target_begin);
-  std::size_t position = target_begin, cells = 0;
-  while (position < target_end) {
-    const auto after = next(text_, position);
-    const auto width =
-        display_width(std::string_view{text_}.substr(position, after - position));
-    if (cells + width > *goal_column_)
-      break;
-    cells += width;
-    position = after;
-  }
-  cursor_ = position;
+  cursor_ = target_begin +
+            terminal_byte_at_column(
+                std::string_view{text_}.substr(target_begin, target_end - target_begin),
+                {*goal_column_})
+                .value;
 }
 void Composer::kill(std::size_t begin, std::size_t end) {
   slash_open_ = false;
@@ -1135,48 +1116,146 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw) {
     insert(byte);
   return {};
 }
+namespace {
+std::size_t safe_scalar_bytes(unsigned char byte, const DisplayScalar &scalar) {
+  if (byte == '\t')
+    return 2;
+  if (byte != '\n' && (byte < 32 || byte == 127 || scalar.cells < 0))
+    return 4;
+  return scalar.bytes;
+}
+struct SafeScalar {
+  std::size_t source_bytes, emitted_bytes;
+  bool changed;
+};
+SafeScalar safe_scalar(std::string_view source) {
+  const auto byte = static_cast<unsigned char>(source.front());
+  const auto scalar = display_scalar(source);
+  const auto emitted = safe_scalar_bytes(byte, scalar);
+  const bool changed = emitted != scalar.bytes || (scalar.cells < 0 && byte != '\n');
+  return {changed ? 1 : scalar.bytes, emitted, changed};
+}
+void append_safe_scalar(std::string &out, std::string_view source,
+                        const SafeScalar &scalar) {
+  if (!scalar.changed) {
+    out.append(source.substr(0, scalar.source_bytes));
+    return;
+  }
+  const auto byte = static_cast<unsigned char>(source.front());
+  if (byte == '\t')
+    out += "  ";
+  else {
+    constexpr char hex[] = "0123456789abcdef";
+    out += '\\';
+    out += 'x';
+    out += hex[byte >> 4U];
+    out += hex[byte & 15U];
+  }
+}
+std::string_view safe_terminal_text(std::string_view text, std::string &sanitized,
+                                    ByteOffset *mapped = nullptr) {
+  const auto source_cursor = mapped ? mapped->value : 0;
+  bool copied = false;
+  for (std::size_t offset = 0; offset < text.size();) {
+    const auto source = text.substr(offset);
+    const auto scalar = safe_scalar(source);
+    if (scalar.changed && !copied) {
+      sanitized.assign(text.substr(0, offset));
+      copied = true;
+    }
+    if (copied)
+      append_safe_scalar(sanitized, source, scalar);
+    if (mapped && scalar.changed && offset < source_cursor)
+      mapped->value += scalar.emitted_bytes - scalar.source_bytes;
+    offset += scalar.source_bytes;
+  }
+  return copied ? std::string_view{sanitized} : text;
+}
+ChatRow safe_terminal_row(std::string_view source, const ChatRow &colors) {
+  ChatRow safe;
+  std::size_t index = 0, within = 0;
+  while (!source.empty()) {
+    while (index < colors.size() && within == colors[index].text.size()) {
+      ++index;
+      within = 0;
+    }
+    const auto ink = index < colors.size() ? colors[index].ink : Ink::normal;
+    const auto scalar = safe_scalar(source);
+    if (safe.empty() || safe.back().ink != ink)
+      safe.push_back({{}, ink});
+    append_safe_scalar(safe.back().text, source, scalar);
+    // Decode the contiguous original, even if style metadata splits its UTF-8.
+    // The first source byte supplies scalar ink; grapheme ink is resolved later.
+    auto bytes = scalar.source_bytes;
+    while (bytes && index < colors.size()) {
+      const auto count = std::min(bytes, colors[index].text.size() - within);
+      within += count;
+      bytes -= count;
+      if (within == colors[index].text.size()) {
+        ++index;
+        within = 0;
+      }
+    }
+    source.remove_prefix(scalar.source_bytes);
+  }
+  return safe;
+}
+} // namespace
+ByteOffset terminal_byte_at_column(std::string_view text, CellCount column) {
+  std::string sanitized;
+  const auto safe = safe_terminal_text(text, sanitized);
+  DisplayCursor cursor{safe};
+  DisplayCluster cluster;
+  std::size_t cells = 0, boundary = 0;
+  while (cursor.next(cluster)) {
+    if (cells + cluster.cells.value > column.value)
+      break;
+    cells += cluster.cells.value;
+    boundary = cluster.end.value;
+  }
+  if (sanitized.empty())
+    return {boundary};
+  // Invert the same sanitizer expansion at the selected display boundary.
+  std::size_t source = 0, emitted = 0;
+  while (source < text.size()) {
+    const auto scalar = safe_scalar(text.substr(source));
+    if (emitted + scalar.emitted_bytes > boundary)
+      break;
+    emitted += scalar.emitted_bytes;
+    source += scalar.source_bytes;
+  }
+  return {source};
+}
+DisplayPosition terminal_caret(std::string_view text, ByteOffset source,
+                               CellCount columns) {
+  std::string sanitized;
+  const auto safe = safe_terminal_text(text, sanitized, &source);
+  return display_position(safe, source, columns);
+}
 std::vector<std::string> terminal_lines(std::string_view text, std::size_t columns) {
   columns = std::max<std::size_t>(columns, 1);
+  std::string sanitized;
+  text = safe_terminal_text(text, sanitized);
   std::vector<std::string> lines(1);
-  std::size_t width = 0;
-  auto add = [&](std::string_view value, std::size_t cells) {
-    if (width != 0 && width + cells > columns) {
-      lines.emplace_back();
-      width = 0;
+  do {
+    const auto newline = text.find('\n');
+    DisplayCursor cursor{text.substr(0, newline)};
+    DisplayCluster cluster;
+    std::size_t cells = 0;
+    while (cursor.next(cluster)) {
+      display_fit(cluster, {columns});
+      if (cells && cells + cluster.cells.value > columns) {
+        lines.emplace_back();
+        cells = 0;
+      }
+      cursor.append(lines.back(), cluster);
+      cells += cluster.cells.value;
     }
-    lines.back().append(value);
-    width += cells;
-  };
-  while (!text.empty()) {
-    const auto c = static_cast<unsigned char>(text.front());
-    if (c == '\n') {
-      lines.emplace_back();
-      width = 0;
-      text.remove_prefix(1);
-      continue;
-    }
-    if (c == '\t') {
-      add("  ", 2);
-      text.remove_prefix(1);
-      continue;
-    }
-    wchar_t wide{};
-    std::mbstate_t state{};
-    auto count = std::mbrtowc(&wide, text.data(), text.size(), &state);
-    const auto cells = count != static_cast<std::size_t>(-1) &&
-                               count != static_cast<std::size_t>(-2) && count != 0
-                           ? ::wcwidth(wide)
-                           : -1;
-    if (c < 32 || c == 127 || cells < 0) {
-      constexpr char hex[] = "0123456789abcdef";
-      const char escaped[] = {'\\', 'x', hex[c >> 4U], hex[c & 15U]};
-      for (const auto value : escaped)
-        add(std::string_view{&value, 1}, 1);
-      count = 1;
-    } else
-      add(text.substr(0, count), static_cast<std::size_t>(cells));
-    text.remove_prefix(count);
-  }
+    if (newline == std::string_view::npos)
+      break;
+    lines.emplace_back();
+    text.remove_prefix(newline + 1);
+  } while (true);
   return lines;
 }
 std::vector<ChatRow> terminal_powerword_lines(std::string_view text,
@@ -1186,31 +1265,28 @@ std::vector<ChatRow> terminal_powerword_lines(std::string_view text,
   do {
     const auto end = text.find('\n');
     const auto raw = text.substr(0, end);
-    auto spans =
+    const auto colors =
         registry ? registry->color(raw) : ChatRow{{std::string{raw}, Ink::normal}};
-    std::string safe;
-    for (auto &span : spans) {
-      span.text =
-          terminal_lines(span.text, std::numeric_limits<std::size_t>::max()).front();
-      safe += span.text;
-    }
-    std::size_t index = 0, offset = 0;
-    for (const auto &line : terminal_lines(safe, columns)) {
-      ChatRow row;
-      std::size_t remaining = line.size();
-      while (remaining && index < spans.size()) {
-        const auto count = std::min(remaining, spans[index].text.size() - offset);
-        if (count)
-          row.push_back({spans[index].text.substr(offset, count), spans[index].ink});
-        remaining -= count;
-        offset += count;
-        if (offset == spans[index].text.size()) {
-          ++index;
-          offset = 0;
-        }
+    const auto spans = safe_terminal_row(raw, colors);
+    ChatRow row;
+    std::size_t cells = 0;
+    DisplayCursor cursor{spans};
+    DisplayCluster cluster;
+    while (cursor.next(cluster)) {
+      if (!cluster.cells.value)
+        continue;
+      display_fit(cluster, {columns});
+      if (cells && cells + cluster.cells.value > std::max<std::size_t>(columns, 1)) {
+        result.push_back(std::move(row));
+        row.clear();
+        cells = 0;
       }
-      result.push_back(std::move(row));
+      if (row.empty() || row.back().ink != cluster.ink)
+        row.push_back({{}, cluster.ink});
+      cursor.append(row.back().text, cluster);
+      cells += cluster.cells.value;
     }
+    result.push_back(std::move(row));
     if (end == std::string_view::npos)
       break;
     text.remove_prefix(end + 1);
@@ -2313,8 +2389,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         const auto inner_width = main_width - 4;
         const auto composed =
             terminal_powerword_lines("> " + composer.text(), inner_width);
-        const auto prefix = terminal_lines(
-            "> " + composer.text().substr(0, composer.cursor()), inner_width);
+        const auto caret = terminal_caret("> " + composer.text(),
+                                          {composer.cursor() + 2}, {inner_width});
         const auto draft_height = std::min<std::size_t>(
             {6, composed.size(), static_cast<std::size_t>(rows - 7)});
         const auto palette =
@@ -2499,7 +2575,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           return out + std::string{corners.second};
         };
         grid.line(menu_row++, {{border({"╭", "╮"}, hint), Ink::border}});
-        const auto cursor_row = prefix.size() - 1;
+        const auto cursor_row = caret.row;
         const auto draft_begin =
             cursor_row >= draft_height ? cursor_row - draft_height + 1 : 0;
         for (std::size_t row = 0; row < draft_height; ++row) {
@@ -2520,23 +2596,14 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         }
         grid.line(menu_row, {{border({"╰", "╯"}, ""), Ink::border}});
         const auto cursor_line = height + palette.size() + 4 + cursor_row - draft_begin;
-        // Derive cursor cells with the same terminal width rules, including UTF-8.
-        std::size_t cells = 0;
-        std::mbstate_t state{};
-        auto remain = std::string_view{prefix.back()};
-        while (!remain.empty()) {
-          wchar_t wide{};
-          const auto n = std::mbrtowc(&wide, remain.data(), remain.size(), &state);
-          if (n == 0 || n > remain.size())
-            break;
-          cells += static_cast<std::size_t>(std::max(0, ::wcwidth(wide)));
-          remain.remove_prefix(n);
-        }
+        const auto cells = caret.column.value;
         const auto display_cursor_line =
             composer.palette_open() ? height + 3 : cursor_line;
         const auto display_cursor_cells =
             composer.palette_open()
-                ? display_width(palette.front().substr(0, palette.front().size() - 1)) +
+                ? terminal_caret(palette.front(), {palette.front().size() - 1},
+                                 {std::numeric_limits<std::size_t>::max()})
+                          .column.value +
                       1
                 : cells + 3;
         layout.stage(3);

@@ -293,6 +293,11 @@ struct CommandJobs::Impl {
     bool done = false;
     bool failed = false;
   };
+  struct Reservation {
+    std::shared_ptr<const Value> request;
+    std::size_t bytes = 0;
+    bool selected = false;
+  };
   struct Chunk {
     std::size_t offset;
     std::shared_ptr<const std::string> bytes;
@@ -324,11 +329,13 @@ struct CommandJobs::Impl {
     bool terminal_retained = false, stop = false, timed_out = false;
     std::size_t received = 0, retained = 0, pending_bytes = 0, tail_bytes = 0;
     std::size_t input_bytes = 0, input_history_bytes = 0;
+    std::size_t reserved_bytes = 0, selected_bytes = 0;
     int exit_code = 0, signal = 0, failure = 0;
     std::string termination = "unobserved";
     bool capture_complete = true, capture_refused = false;
     std::deque<Chunk> pending, tail;
     std::map<std::string, Delivery> deliveries;
+    std::map<std::string, Reservation> reservations;
     std::deque<std::string> input, signals;
     Clock::time_point deadline;
     Value terminal;
@@ -369,7 +376,7 @@ struct CommandJobs::Impl {
     job.caller_stop_credit.reset();
   }
   struct Mailbox {
-    Value value;
+    std::shared_ptr<const Value> value;
     RawEventRef source;
   };
   std::deque<Mailbox> mailbox;
@@ -387,6 +394,7 @@ struct CommandJobs::Impl {
     return static_cast<std::size_t>(
         std::count_if(jobs.begin(), jobs.end(), [](const auto &entry) {
           return !entry.second->terminal_retained || !entry.second->pending.empty() ||
+                 !entry.second->reservations.empty() ||
                  entry.second->custody == Custody::pending ||
                  entry.second->custody == Custody::owned;
         }));
@@ -394,12 +402,37 @@ struct CommandJobs::Impl {
   bool retirable(const Job &job) const {
     return job.finished && job.terminal_retained && job.pending.empty() &&
            job.custody != Custody::pending && job.custody != Custody::owned &&
-           waiting != job.id &&
+           waiting != job.id && job.reservations.empty() &&
            std::none_of(job.deliveries.begin(), job.deliveries.end(),
                         [](const auto &entry) { return !entry.second.done; }) &&
            std::none_of(mailbox.begin(), mailbox.end(), [&](const Mailbox &entry) {
-             return string_field(entry.value, "job_id") == job.id;
+             return string_field(*entry.value, "job_id") == job.id;
            });
+  }
+  static void release_reservation(Job &job, const std::string &request) noexcept {
+    const auto found = job.reservations.find(request);
+    if (found == job.reservations.end())
+      return;
+    job.reserved_bytes -= found->second.bytes;
+    if (found->second.selected)
+      job.selected_bytes -= found->second.bytes;
+    job.reservations.erase(found);
+  }
+  enum class Admission { ready, wait_pending_input, refuse_history };
+  static Admission admission(const Job &job, std::size_t bytes,
+                             const Reservation *own = nullptr,
+                             std::size_t selected = 0) noexcept {
+    const auto other_controls = job.reservations.size() - (own ? 1U : 0U);
+    const auto own_bytes = own ? own->bytes : 0;
+    const auto own_selected = own && own->selected ? own_bytes : 0;
+    if (job.deliveries.size() + other_controls >= 4096 ||
+        bytes >
+            output_limit - job.input_history_bytes - (job.reserved_bytes - own_bytes))
+      return Admission::refuse_history;
+    if (bytes >
+        input_limit - job.input_bytes - (job.selected_bytes - own_selected) - selected)
+      return Admission::wait_pending_input;
+    return Admission::ready;
   }
   struct View {
     std::size_t max_output = 0, offset = 0;
@@ -930,7 +963,9 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
                                             raw_native_field(observed.si_code),
                                             raw_native_field(observed.si_status)},
                                  credit ? &*credit : nullptr);
-        if (result < 0 && error == ECHILD) {
+        // A status-only selector can report ECHILD for our unreaped zombie.
+        // Only an exit-inclusive query can revoke final-reap custody.
+        if (result < 0 && error == ECHILD && (options & WEXITED) != 0) {
           reaped = true;
           const std::lock_guard lock{mutex};
           job->custody = Custody::unavailable;
@@ -1613,6 +1648,21 @@ Value CommandJobs::control(const Value &arguments) {
     const auto request = string_field(arguments, "request_id");
     if (request.empty() || request.size() > 128)
       throw Error{ErrorCode::invalid_range};
+    const auto promised = job.reservations.find(request);
+    if (promised != job.reservations.end() &&
+        !same_request(*promised->second.request, arguments))
+      throw Error{ErrorCode::conflict};
+    // A selected promise remains charged until dispatch either succeeds or
+    // explicitly refuses. A conflicting caller cannot withdraw its owner.
+    struct Release {
+      Impl::Job &job;
+      const std::string &request;
+      bool promised;
+      ~Release() {
+        if (promised)
+          Impl::release_reservation(job, request);
+      }
+    } release{job, request, promised != job.reservations.end()};
     if (const auto existing = job.deliveries.find(request);
         existing != job.deliveries.end()) {
       if (!same_request(existing->second.request, arguments))
@@ -1629,15 +1679,21 @@ Value CommandJobs::control(const Value &arguments) {
       trace.finish(2, delivery.written, delivery.done, delivery.failed);
       return result;
     }
-    if (job.finished || job.deliveries.size() >= 4096)
-      throw Error{job.finished ? ErrorCode::busy : ErrorCode::capacity};
+    if (job.finished)
+      throw Error{ErrorCode::busy};
     Impl::Delivery delivery{arguments, 0, false, false};
+    const auto bytes = op == "input" ? delivery.bytes().size() : 0;
+    switch (
+        Impl::admission(job, bytes, release.promised ? &promised->second : nullptr)) {
+    case Impl::Admission::ready:
+      break;
+    case Impl::Admission::wait_pending_input:
+    case Impl::Admission::refuse_history:
+      throw Error{ErrorCode::capacity};
+    }
     if (op == "input") {
       if (!job.launch.pty)
         throw Error{ErrorCode::unsupported};
-      if (delivery.bytes().size() > input_limit - job.input_bytes ||
-          delivery.bytes().size() > output_limit - job.input_history_bytes)
-        throw Error{ErrorCode::capacity};
       delivery.done = delivery.bytes().empty();
     } else if (op == "resize") {
       const auto rows = integer(arguments, "rows", 24);
@@ -1717,7 +1773,7 @@ void CommandJobs::request(Value arguments) {
         throw Error{ErrorCode::busy};
       put(arguments, "job_id", Value{id});
     }
-    const auto &job = impl_->find(id);
+    auto &job = impl_->find(id);
     if (string_field(arguments, "op") == "input" &&
         (!job.launch.pty || string_field(arguments, "bytes").size() > input_limit))
       throw Error{ErrorCode::invalid_range};
@@ -1726,15 +1782,58 @@ void CommandJobs::request(Value arguments) {
           Value{id + ":ui:" + std::to_string(++impl_->request_counter)});
     if (string_field(arguments, "op") == "background" && !arguments.find("wait_epoch"))
       put(arguments, "wait_epoch", Value{Number{impl_->epoch}});
-    const auto &delivery = string_field(arguments, "request_id");
-    const auto id_size = id.size(), delivery_size = delivery.size();
+    const bool control = op == "input" || op == "resize" || op == "signal";
+    const auto bytes = op == "input" ? string_field(arguments, "bytes").size() : 0;
+    std::shared_ptr<const Value> owned;
+    bool reserve_new = false;
+    if (control) {
+      const auto &delivery = string_field(arguments, "request_id");
+      if (delivery.empty())
+        throw Error{ErrorCode::invalid_range};
+      const auto existing = job.deliveries.find(delivery);
+      const auto promised = job.reservations.find(delivery);
+      if (existing != job.deliveries.end()) {
+        if (!same_request(existing->second.request, arguments))
+          throw Error{ErrorCode::conflict};
+      } else if (promised != job.reservations.end()) {
+        if (!same_request(*promised->second.request, arguments))
+          throw Error{ErrorCode::conflict};
+        owned = promised->second.request;
+      } else {
+        if (job.finished)
+          throw Error{ErrorCode::busy};
+        switch (Impl::admission(job, bytes)) {
+        case Impl::Admission::ready:
+        case Impl::Admission::wait_pending_input:
+          break;
+        case Impl::Admission::refuse_history:
+          throw Error{ErrorCode::capacity};
+        }
+        reserve_new = true;
+      }
+    }
+    if (!owned)
+      owned = std::make_shared<const Value>(std::move(arguments));
+    const auto &delivery = string_field(*owned, "request_id"),
+               &owned_id = string_field(*owned, "job_id");
+    if (reserve_new) {
+      job.reservations.emplace(delivery, Impl::Reservation{owned, bytes, false});
+      job.reserved_bytes += bytes;
+    }
+    const auto id_size = owned_id.size(), delivery_size = delivery.size();
     const std::uint8_t branch = 1;
     const auto source = raw_command_linked(
         2015, trace.reference(),
-        std::array{raw_native_field(id_size), raw_string_field(id),
+        std::array{raw_native_field(id_size), raw_string_field(owned_id),
                    raw_native_field(delivery_size), raw_string_field(delivery),
                    raw_native_field(branch)});
-    impl_->mailbox.push_back({std::move(arguments), source});
+    try {
+      impl_->mailbox.push_back({std::move(owned), source});
+    } catch (...) {
+      if (reserve_new)
+        Impl::release_reservation(job, delivery);
+      throw;
+    }
     impl_->condition.notify_all();
     trace.finish(1, 0, false, false);
   } catch (const Error &error) {
@@ -1754,30 +1853,68 @@ std::vector<Value> CommandJobs::requests() {
   raw_command_data_credit(mailbox_count * 145);
   const std::lock_guard lock{impl_->mutex};
   std::vector<Value> out;
+  out.reserve(mailbox_count);
+  std::vector<std::size_t> selected;
+  selected.reserve(mailbox_count);
   std::map<std::string, std::size_t> selected_bytes;
-  std::map<std::string, std::size_t> selected_controls;
-  std::size_t visited = 0;
-  for (auto entry = impl_->mailbox.begin();
-       entry != impl_->mailbox.end() && visited++ < mailbox_count;) {
-    const auto id = string_field(entry->value, "job_id");
+  std::vector<const Impl::Reservation *> charged;
+  charged.reserve(mailbox_count);
+  std::size_t index = 0;
+  for (const auto &entry : impl_->mailbox) {
+    if (index >= mailbox_count)
+      break;
+    const auto current = index++;
+    const auto id = string_field(*entry.value, "job_id");
     auto &job = impl_->find(id);
-    const auto op = string_field(entry->value, "op");
+    const auto op = string_field(*entry.value, "op");
     const bool control = op == "input" || op == "resize" || op == "signal";
-    const auto bytes = op == "input" ? string_field(entry->value, "bytes").size() : 0;
-    const bool duplicate =
-        control && job.deliveries.contains(string_field(entry->value, "request_id"));
-    if (!job.finished && control && !duplicate &&
-        (job.deliveries.size() + selected_controls[id] >= 4096 ||
-         bytes > input_limit - job.input_bytes - selected_bytes[id] ||
-         bytes > output_limit - job.input_history_bytes - selected_bytes[id])) {
+    const auto promised =
+        control ? job.reservations.find(string_field(*entry.value, "request_id"))
+                : job.reservations.end();
+    if (promised != job.reservations.end() && !promised->second.selected &&
+        std::find(charged.begin(), charged.end(), &promised->second) == charged.end()) {
+      const auto bytes = promised->second.bytes;
+      if (!job.finished) {
+        const auto admission =
+            Impl::admission(job, bytes, &promised->second, selected_bytes[id]);
+        switch (admission) {
+        case Impl::Admission::wait_pending_input:
+          continue;
+        case Impl::Admission::ready:
+        case Impl::Admission::refuse_history:
+          // A permanent refusal must reach control and produce explicit
+          // feedback; no history state is allowed to strand a queue entry.
+          break;
+        }
+      }
+      selected_bytes[id] += bytes;
+      charged.push_back(&promised->second);
+    }
+    out.push_back(*entry.value);
+    selected.push_back(current);
+  }
+  // All allocating result construction finishes before accepted entries move.
+  // Promises remain live after selection, until explicit control dispatch.
+  index = 0;
+  std::size_t selection = 0;
+  for (auto entry = impl_->mailbox.begin();
+       entry != impl_->mailbox.end() && selection < selected.size();) {
+    if (index++ != selected[selection]) {
       ++entry;
       continue;
     }
-    if (control && !duplicate) {
-      selected_bytes[id] += bytes;
-      ++selected_controls[id];
+    ++selection;
+    const auto &id = string_field(*entry->value, "job_id");
+    auto &job = impl_->find(id);
+    const auto &delivery = string_field(*entry->value, "request_id");
+    const auto op = string_field(*entry->value, "op");
+    const bool control = op == "input" || op == "resize" || op == "signal";
+    if (const auto promised =
+            control ? job.reservations.find(delivery) : job.reservations.end();
+        promised != job.reservations.end() && !promised->second.selected) {
+      promised->second.selected = true;
+      job.selected_bytes += promised->second.bytes;
     }
-    const auto &delivery = string_field(entry->value, "request_id");
     const auto id_size = id.size(), delivery_size = delivery.size();
     const std::uint8_t branch = 2;
     (void)raw_command_linked(2015, entry->source,
@@ -1785,7 +1922,6 @@ std::vector<Value> CommandJobs::requests() {
                                         raw_native_field(delivery_size),
                                         raw_string_field(delivery),
                                         raw_native_field(branch)});
-    out.push_back(std::move(entry->value));
     entry = impl_->mailbox.erase(entry);
   }
   return out;

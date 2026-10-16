@@ -145,6 +145,7 @@ private:
   bool pumping_commands_ = false;
   bool uncontained_exec_recovery_ = false;
   bool capacity_stopped_ = false;
+  bool file_effect_unretained_ = false;
   std::size_t operation_depth_ = 0;
   std::size_t unretained_bytes_ = 0;
   void protect_workflow(const Value::Array &entries, const Value &proposal,
@@ -182,7 +183,7 @@ private:
   void drain_workflows();
   Value pending_program_config_;
   std::string program_revision_ = "initial-empty", pending_program_revision_;
-  Value program_config(const Value &arguments);
+  Value program_config(const Value &arguments, DomainAdmission *admission = nullptr);
   Value module_source(const Value &arguments);
   Value tool_registry() const;
   Value define_tool(const Value &arguments);
@@ -213,7 +214,9 @@ private:
                       Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
                             CommandTaskActivity *, RawRetainedExec *)> &body,
                   RawProviderOperationContext *provider_operation = nullptr,
-                  const CommandStartStatus *command_start = nullptr);
+                  const CommandStartStatus *command_start = nullptr,
+                  const DomainAdmission *domain_admission = nullptr,
+                  const FileEffectObservation *file_effect = nullptr);
   friend struct Runtime;
 };
 } // namespace blackbird

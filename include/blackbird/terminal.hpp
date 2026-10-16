@@ -1,6 +1,7 @@
 #pragma once
 #include "blackbird/chat_view.hpp"
 #include "blackbird/command_jobs.hpp"
+#include "blackbird/display_text.hpp"
 #include "blackbird/raw_ui.hpp"
 #include "blackbird/tasks.hpp"
 #include <atomic>
@@ -109,6 +110,10 @@ std::size_t terminal_scroll_after_output(const TerminalScrollUpdate &update);
 void trim_terminal_transcript(std::string &text);
 std::vector<ChatRow> terminal_powerword_lines(std::string_view text,
                                               std::size_t columns);
+// Invert a display column within one raw logical line; edits retain source bytes.
+ByteOffset terminal_byte_at_column(std::string_view text, CellCount column);
+DisplayPosition terminal_caret(std::string_view text, ByteOffset source,
+                               CellCount columns);
 std::vector<std::string> terminal_lines(std::string_view text, std::size_t columns);
 class TerminalUI {
 public:
