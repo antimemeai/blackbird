@@ -10230,3 +10230,43 @@ and its untracked artwork remain untouched. This source merge uses the installed
 full Debug/owned-lint gate. Retain useful ignored worktree artifacts under the
 primary checkout before removing the worktree. Oxcart will launch a retained
 mainline application executable rather than depend on an away-team path.
+
+
+### Mainline publication, stable runtime and retirement preconditions
+
+The merged source passed165Debug tests (419.23s) and the installed full owned
+C++/Lua formatting/static/type gate. Merge `be4a46f` is pushed to `origin/master`;
+no further test or review layer followed. Oxcart also completed actual native
+Python.org capture through the real model to a final answer and clean CEF
+shutdown, and a separate actual Hacker News capture with clean shutdown.
+Those browser artifacts remain in Oxcart's live-check capture directories.
+
+New independent TUI command-inspector work appeared in the primary checkout
+during the gate, including tracked and untracked source edits. No checkout,
+stash, source reset or index mutation was performed there. The TUI branch remains
+at `45b14541749119399ce2f6e4f07aee9c082c8e41`, and supplied artwork remains in place.
+
+To leave a usable mainline runtime without occupying another Git worktree,
+exported the merged owned build inputs into primary
+`context/mainline-runtime/source` and retained `source-be4a46f.tar`. An ordinary
+blackbird-target build using Clang23 and the installed Xcode SDK26.2 completed at
+`context/mainline-runtime/build/debug/blackbird`. All compiled workflow, sprite,
+command-helper and archive-helper paths now refer to this stable runtime.
+This builds identical merged source and does not repeat settled source checks.
+
+Reopened the normal Oxcart session
+`/Users/patrickbeam/projects_old/inactive-2026-10-07/bow_shock/context/runtime/live/blackbird`
+through the normal CLI with `--workflow` selecting the exported
+`source/programs/turn.lua`, `--plain` and stdin EOF. It exited zero, preserving
+conversation history/provider/auth and making no model request. Probe histories
+keep their original source paths; no compatibility or migration layer was added.
+
+Away context and quarantine originals, generated primary backup bytes and source
+hashes are retained under primary
+`context/retired-worktrees/oxcart-2026-10-16/`. The disposable2.1GiB build is not
+retained. The operator-owned application runs have ended; the stable runtime and
+saved session no longer need away files. After this text/issue-snapshot checkpoint
+is pushed, remove only the away worktree and its now-merged local
+`work/oxcart-interface-2026-10-16` branch. Remote feature history stays.
+The primary's active source/index remain untouched; only the already-owned
+generated Beads backup files were refreshed with supported `bd backup`.
