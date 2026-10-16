@@ -57,3 +57,12 @@ shape (`arconaut-rln`) are repaired and closed; native presenter slice rhi.3.3 i
 closed. Source is committed. Historical native quit/linker causes remain open:
 passing current fixtures does not identify those earlier waits. [Build and delivery](../papers/mac-link-repair-2026-10-15/RESULTS.md)
 records the direct cache proof, same-tool repair and actual source gate.
+
+The Ultramarine screenshot issues are repaired in source65e5877: arconaut-zh2
+(bounds incorrectly becoming a command lifetime limit and misleading refusal
+semantics), arconaut-6ao (plain-text joiners undercounting cells), and arconaut-gbu
+(the existing recorder fixture's post-parent-death cleanup race). Final Debug
+160/160 and full C++/Lua analysis pass. [Repair results](../papers/ultramarine-repair-2026-10-15/RESULTS.md)
+retain the actual causes, red/green and sanitizer/terminal checks. That tranche's
+120/120 matched runs remain mixed; wide startup p95/max worsen and stay in the
+existing arconaut-f8f observation. No broader program closure or AFL inspection.

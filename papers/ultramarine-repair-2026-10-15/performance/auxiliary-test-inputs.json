@@ -1,0 +1,7 @@
+[
+  {
+    "path": "tooling/tui-test-profile.json",
+    "sha256": "1c8e09006461b2c115bd8bb1abde3977047b05988994a54faad7403b422236d3",
+    "purpose": "Pinned auxiliary development-tool profile; no native build input changed"
+  }
+]

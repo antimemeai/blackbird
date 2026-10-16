@@ -9927,3 +9927,21 @@ RPC barrier, kill recorder while stopped parent pins identity, then supervisor.
 Mac affected1/1 passes1.99s; LinuxRelease affected1/1 passes0.12s. No production
 body or measured binary changes. Run normal source hook on this final stagedtree.
 ASan scoped owned temporary workspace has now been explicitly cleaned.
+
+Ultramarine delivery source 65e5877dda1cc5b965b276a65c57668be0e1e038: the final normal installed hook
+passes160/160 Debug in260.95s and full native/Lua analysis, LuaLS no problems.
+This stable stagedtree is committed without override; no added suppressions.
+Close repaired zh2/6ao and fixture gbu, retain f8f shared-host startup tails.
+Matched LinuxRelease120/120 normal/960 endpoints, all30/source/size samples and
+source/binary identities published under papers/ultramarine-repair-2026-10-15/.
+Input/paste medians close/mixed; wide startup p95 29.283→95.466ms, max
+31.403→347.610ms; retain all trials, no general speedup/nonregression claim.
+Append the exact measured source in the performance tranche ledger; prior
+measurements and source labels remain unchanged.
+Final raw_runtime test-only source follow-up leaves measured main binary intact.
+The checked results/queue/backup/data-only follow-up uses the operator's explicit
+text-only hook exception; source qualification is already complete. Publish the
+work branch, preserving separate main integration and executable activation.
+Another authorized lane intentionally retired the old Paper checkout after its
+master integration. No original-session replay/recovery, provider call, AFL
+inspection or user-artwork access. No new library or main merge.

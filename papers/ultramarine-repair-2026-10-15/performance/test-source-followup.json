@@ -1,0 +1,12 @@
+{
+  "reason": "Final source gate exposed existing supervisor-death fixture cleanup race; reorder only test lifecycle. Production bodies and measured binaries unchanged.",
+  "path": "tests/raw_runtime_test.cpp",
+  "sha256": "b79051f4d4f15cd7725614e8520fcdf896fc6e4fe573c841a6d4b1d698eafb02",
+  "linux_campaign": "/home/patrick/.local/share/blackbird-campaigns/ultramarine-20261015-nQtYVG34",
+  "linux_target": "raw_runtime_test",
+  "checks": {
+    "mac_debug": "raw-fixture-mac.log",
+    "linux_release": "raw-fixture-linux.log"
+  },
+  "review": "../RAW_FIXTURE.md"
+}
