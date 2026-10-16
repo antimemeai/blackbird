@@ -207,3 +207,12 @@ builder is active, remove only that derived dependency log and rebuild with the
 pinned tools. One unchanged build should report no work. Do not automatically
 delete caches, infer another actor, replace the linker or erase application data
 from the warning alone. Original linker stalls remain a distinct host finding.
+
+The operator-requested [C++ sibling-bug audit](../papers/cpp-bug-class-audit-2026-10-15/README.md)
+records new custody/refusal/display findings and a proposed prevention sequence.
+Its [diagnostic study](../papers/cpp-bug-class-audit-2026-10-15/TOOLING.md)
+demonstrates six bad/good mechanisms on the actual Clang23/18 profiles, including
+capability join exclusion, exhaustive enum handling and distinct byte/cell types.
+These are research probes, not enabled source rules or replacement qualification.
+`Result` is already nodiscard; semantic retention, effect and physical-cell
+invariants still need their actual owner contracts and direct behavioral checks.

@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+    "-std=c++20",
+    "-isysroot",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+    "-fsyntax-only",
+    "-Werror=unknown-warning-option",
+    "-Wlifetime-safety-permissive",
+    "context/cpp-bug-class-audit-2026-10-15/diagnostics/borrow-bad.cpp"
+  ],
+  "exit_code": 0,
+  "diagnostics": "context/cpp-bug-class-audit-2026-10-15/diagnostics/borrow-bad.cpp:2:28: warning: temporary bound to local reference 'r' will be destroyed at the end of the full-expression [-Wdangling]\n    2 | int f(){const int&r=borrow(42);return r;}\n      |                            ^~\ncontext/cpp-bug-class-audit-2026-10-15/diagnostics/borrow-bad.cpp:2:28: warning: temporary object does not live long enough [-Wlifetime-safety-use-after-scope]\n    2 | int f(){const int&r=borrow(42);return r;}\n      |                            ^~\ncontext/cpp-bug-class-audit-2026-10-15/diagnostics/borrow-bad.cpp:2:30: note: temporary object is destroyed here\n    2 | int f(){const int&r=borrow(42);return r;}\n      |                              ^\ncontext/cpp-bug-class-audit-2026-10-15/diagnostics/borrow-bad.cpp:2:21: note: result of call to 'borrow' aliases the storage of temporary object\n    2 | int f(){const int&r=borrow(42);return r;}\n      |                     ^~~~~~~~~~\ncontext/cpp-bug-class-audit-2026-10-15/diagnostics/borrow-bad.cpp:2:39: note: later used here\n    2 | int f(){const int&r=borrow(42);return r;}\n      |                                       ^\n2 warnings generated.\n"
+}

@@ -1,0 +1,236 @@
+[
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/llvm-error-18.1.8.h",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/llvm/include/llvm/Support/Error.h",
+    "author": "LLVM contributors",
+    "revision": "llvmorg-18.1.8",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "acquired_utc": "2026-10-16T02:01:28.071966+00:00",
+    "sha256": "aa9bb67dc344c23e7f2019c35c67ae7ab419a32674925bc0c1d6b4cf48eb9858",
+    "bytes": 46536,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/llvm/include/llvm/Support/Error.h",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/llvm-error-18.1.8.h"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/llvm-license.txt",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/llvm/LICENSE.TXT",
+    "author": "LLVM contributors",
+    "revision": "llvmorg-18.1.8",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "acquired_utc": "2026-10-16T02:01:28.762424+00:00",
+    "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee",
+    "bytes": 15141,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/llvm/LICENSE.TXT",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/llvm-license.txt"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/llvm-programmers.html",
+    "url": "https://llvm.org/docs/ProgrammersManual.html",
+    "author": "LLVM contributors",
+    "revision": "live page captured with SHA-256",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "acquired_utc": "2026-10-16T02:01:29.881342+00:00",
+    "sha256": "9040053e50dd28e8e11856703de3a7fcd2f09f43629c791049cf5c84531e2b23",
+    "bytes": 486760,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://llvm.org/docs/ProgrammersManual.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/llvm-programmers.html"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/asio-cancellation-1.85.0.hpp",
+    "url": "https://raw.githubusercontent.com/boostorg/asio/boost-1.85.0/include/boost/asio/cancellation_type.hpp",
+    "author": "Christopher M. Kohlhoff",
+    "revision": "boost-1.85.0",
+    "license": "BSL-1.0",
+    "acquired_utc": "2026-10-16T02:01:30.375277+00:00",
+    "sha256": "f400b490af5d94cfcd574cc0ce0f39889a2d7829e28f1a1757647290612ada98",
+    "bytes": 3871,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/boostorg/asio/boost-1.85.0/include/boost/asio/cancellation_type.hpp",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/asio-cancellation-1.85.0.hpp"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/asio-cancellation-1.85.0.qbk",
+    "url": "https://raw.githubusercontent.com/boostorg/asio/boost-1.85.0/doc/overview/cancellation.qbk",
+    "author": "Christopher M. Kohlhoff",
+    "revision": "boost-1.85.0",
+    "license": "BSL-1.0",
+    "acquired_utc": "2026-10-16T02:01:30.834500+00:00",
+    "sha256": "a87a8ecca067e18402c496cb248362dd6dd42ec8ad38113f1858eb98c8be35ab",
+    "bytes": 9819,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/boostorg/asio/boost-1.85.0/doc/overview/cancellation.qbk",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/asio-cancellation-1.85.0.qbk"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/boost-license.txt",
+    "url": "https://raw.githubusercontent.com/boostorg/boost/boost-1.85.0/LICENSE_1_0.txt",
+    "author": "Boost authors",
+    "revision": "boost-1.85.0",
+    "license": "BSL-1.0",
+    "acquired_utc": "2026-10-16T02:01:31.043215+00:00",
+    "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566",
+    "bytes": 1338,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/boostorg/boost/boost-1.85.0/LICENSE_1_0.txt",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/boost-license.txt"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/grpc-status.html",
+    "url": "https://grpc.io/docs/guides/status-codes/",
+    "author": "gRPC authors",
+    "revision": "live page captured with SHA-256",
+    "license": "CC-BY-4.0 content, except code samples Apache-2.0; acquired grpc-site-license.txt",
+    "acquired_utc": "2026-10-16T02:01:31.524456+00:00",
+    "sha256": "230e74a5e2ec38e1e23d3d429f42a188846997b83f9fd4b4628a4f37bb78a2d9",
+    "bytes": 74095,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://grpc.io/docs/guides/status-codes/",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/grpc-status.html"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/foundationdb-developer-guide.html",
+    "url": "https://apple.github.io/foundationdb/developer-guide.html",
+    "author": "FoundationDB contributors",
+    "revision": "8.0.0 docs captured with SHA-256",
+    "license": "Apache-2.0 project (acquired project LICENSE); page copyright 2013-2025 Apple, Inc and FoundationDB project authors; last updated Oct 02 2026",
+    "acquired_utc": "2026-10-16T02:01:32.297935+00:00",
+    "sha256": "c6be49ae619e6853b6aab1e2435a739240e68ee73c16cb21a250a4c1726d4d85",
+    "bytes": 138015,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://apple.github.io/foundationdb/developer-guide.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/foundationdb-developer-guide.html"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/clang-attributes.html",
+    "url": "https://clang.llvm.org/docs/AttributeReference.html",
+    "author": "LLVM contributors",
+    "revision": "live page captured with SHA-256",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "acquired_utc": "2026-10-16T02:01:34.079320+00:00",
+    "sha256": "2f7a5f00ce77691fa3f2a0904481db3f17cd8ddce41cf9014603817660142005",
+    "bytes": 1602135,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://clang.llvm.org/docs/AttributeReference.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/clang-attributes.html"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/clang-unused-return.html",
+    "url": "https://clang.llvm.org/extra/clang-tidy/checks/bugprone/unused-return-value.html",
+    "author": "LLVM contributors",
+    "revision": "live page captured with SHA-256",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "acquired_utc": "2026-10-16T02:01:35.457685+00:00",
+    "sha256": "d0ae0be0b2640c6ded0b8b121c4b7853c16eb7a56d0419de45c7b35316cd35ed",
+    "bytes": 106560,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://clang.llvm.org/extra/clang-tidy/checks/bugprone/unused-return-value.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/clang-unused-return.html"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/hames-error-2016.pdf",
+    "url": "https://llvm.org/devmtg/2016-11/Slides/Hames-Error.pdf",
+    "author": "Lang Hames",
+    "revision": "2016 LLVM Developers Meeting",
+    "license": "No explicit presentation reuse license; study only",
+    "acquired_utc": "2026-10-16T02:01:36.595054+00:00",
+    "sha256": "f3776f6f4c495242a31f6189ae3ae00e83d3b0750acabd39a83230f4aacf0fd3",
+    "bytes": 105552,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://llvm.org/devmtg/2016-11/Slides/Hames-Error.pdf",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/hames-error-2016.pdf"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/grpc-site-license.txt",
+    "url": "https://raw.githubusercontent.com/grpc/grpc.io/main/LICENSE",
+    "author": "gRPC authors",
+    "revision": "main captured exact SHA-256",
+    "license": "CC-BY-4.0 content, except code samples Apache-2.0; acquired grpc-site-license.txt",
+    "acquired_utc": "2026-10-16T02:08:40.792162+00:00",
+    "sha256": "9e3d1e4ba9165f24c03622be6cb83529b09d56201a6a51fb614506172c640201",
+    "bytes": 19070,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/grpc/grpc.io/main/LICENSE",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/grpc-site-license.txt"
+    ]
+  },
+  {
+    "file": "quarantine/cpp-bug-class-audit-2026-10-15/effects/foundationdb-license.txt",
+    "url": "https://raw.githubusercontent.com/apple/foundationdb/7.3.63/LICENSE",
+    "author": "Apple, Inc and FoundationDB project authors",
+    "revision": "7.3.63",
+    "license": "Apache-2.0",
+    "acquired_utc": "2026-10-16T02:08:41.276517+00:00",
+    "sha256": "2f841c1cd8c117763475eb8317f4a4afa0172212f8684a84c38fb937a8c1b220",
+    "bytes": 11665,
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/apple/foundationdb/7.3.63/LICENSE",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/effects/foundationdb-license.txt"
+    ]
+  }
+]

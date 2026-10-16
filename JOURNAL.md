@@ -9945,3 +9945,55 @@ work branch, preserving separate main integration and executable activation.
 Another authorized lane intentionally retired the old Paper checkout after its
 master integration. No original-session replay/recovery, provider call, AFL
 inspection or user-artwork access. No new library or main merge.
+
+2026-10-15 — Operator explicitly requests expert C++ staff subagents to find other
+instances of repaired bug classes and study guards/checks/lint/annotations that
+narrow the possibilities. Wrote boundary theory/plan at
+papers/cpp-bug-class-audit-2026-10-15/PLAN.md before any product work. Three
+conceptual reviewers survey registry lifetime, effect semantics and terminal
+representations; root owns process identity and actual compiler diagnostics.
+Product baseline095d7d1; no production/config/test source edits. No old repair
+assurance loop, source gate rerun, performance run, dependency adoption, real
+provider/session replay, artwork or AFL inspection. Rhizome watch directories
+absent in current/old workspace; use actual available primary source material.
+
+Staff reports establish R1 participant archive discards a late emergency semantic
+original after initial drain, R2 permanent mailbox capacity causes indefinite
+accepted-control deferral; E1–E3 ordinary participant/config/task bounds flatten
+into unknown/capture stop, E4 post-rename result allocation loses applied-effect
+knowledge; T1/T2/T4 grid mismeasures suffixes/zero-width styles/replacement, T3
+composer/wrapper/caret still sums scalar widths. Most have direct current-library
+scratch repros and external terminal cell observations; task/send source-only
+scope and compositor cursor inference remain explicit. Root challenges these
+new source/trigger claims once and consolidates common causes, not review reviews.
+Queue seven new open bugs th5/4y5/pd3/r38/2hh/haz/08t (arconaut- prefix), with
+severities, source lines, reproducer locations, limits and decisive repair checks.
+Participant raw bytes may survive semantic loss; no total-original-loss claim.
+
+Root's Child probe with ignored SIGCHLD observes ECHILD then intercepts a negative
+PGID signal attempt; no native signal is sent by the seam. Private Mac exec probe
+confirms ignored SIGCHLD survives exec on this host; platform allowance remains
+explicit. Negative survey distinguishes CommandJobs/EditorChild ECHILD custody,
+raw supervisor direct-child ownership, ambiguity-only recovery and cleared test
+PID owners. Stop/wait fixture hazards remain unconfirmed and separate.
+
+Six bad/good diagnostic/type pairs on Clang23.1.2 Mac/libc++ and Clang18.1.3
+Linux/libstdc++ produce12 intended failures and12 clean counterparts. Initial
+Mac scratch compilation omitted the qualified sysroot; preserve setup failures,
+correct to existing SDK, no suppression or profile change. Capability exclusion,
+consumed state, lifetimebound, exhaustive enums, existing nodiscard and byte/cell
+types each narrow a stated boundary, not all semantic correctness. Newer lifetime
+flag is available on23, unknown on18; not adopted globally. Exact source/commands
+and diagnostics saved in the report; no whole-codebase new-lint claim.
+
+Read primary thread-safety2014 sectionsII–V/limits, typestate1986 printed157–158
+visually, current Clang docs and actual LLVM18 diagnostic fixtures. Staff studies
+RocksDB/LevelDB/Linux reclamation, LLVM/Asio/FoundationDB effect models, Unicode
+and actual terminal sources. Acquired originals/PDFs/licenses stay ignored with
+tracked exact manifests/restoration; no reference implementation is a dependency.
+PREVENTION.md gives concrete owner APIs/invariants, limits and repair order, with
+highest-consequence emergency/custody work first. It changes no production rule.
+Finish relevant docs/links/data checks, supported Beads backup, text-only commit
+and branch push under the existing operator exception; product bugs remain open.
+The owned temporary Linux compiler-probe directory is explicitly removed after
+local raw results/source are saved; persistent campaigns and AFL are untouched.

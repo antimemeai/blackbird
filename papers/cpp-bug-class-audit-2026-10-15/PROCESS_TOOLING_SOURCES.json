@@ -1,0 +1,304 @@
+[
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/clang-thread-safety.html",
+    "url": "https://clang.llvm.org/docs/ThreadSafetyAnalysis.html",
+    "author": "LLVM project",
+    "revision": "current documentation snapshot; compiler availability tested separately",
+    "acquired_utc": "2026-10-16T02:06:18.371247+00:00",
+    "license": "LLVM documentation; see LLVM license; study only",
+    "bytes": 149975,
+    "sha256": "cf9fa861988ffd94da5098bf36ff84308d03ee1ba712e5def2ec4382f8b8c00e",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://clang.llvm.org/docs/ThreadSafetyAnalysis.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/clang-thread-safety.html"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/clang-attributes.html",
+    "url": "https://clang.llvm.org/docs/AttributeReference.html",
+    "author": "LLVM project",
+    "revision": "current documentation snapshot; compiler availability tested separately",
+    "acquired_utc": "2026-10-16T02:06:26.394899+00:00",
+    "license": "LLVM documentation; see LLVM license; study only",
+    "bytes": 1602135,
+    "sha256": "2f7a5f00ce77691fa3f2a0904481db3f17cd8ddce41cf9014603817660142005",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://clang.llvm.org/docs/AttributeReference.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/clang-attributes.html"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/clang-lifetime-safety.html",
+    "url": "https://clang.llvm.org/docs/LifetimeSafety.html",
+    "author": "LLVM project",
+    "revision": "current documentation snapshot; compiler availability tested separately",
+    "acquired_utc": "2026-10-16T02:06:27.400941+00:00",
+    "license": "LLVM documentation; see LLVM license; study only",
+    "bytes": 107941,
+    "sha256": "135544496580ac36696b54cc0be9c6783203fc9b94fe3d7d29bd661289343b25",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://clang.llvm.org/docs/LifetimeSafety.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/clang-lifetime-safety.html"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/clang-diagnostics.html",
+    "url": "https://clang.llvm.org/docs/DiagnosticsReference.html",
+    "author": "LLVM project",
+    "revision": "current documentation snapshot; compiler availability tested separately",
+    "acquired_utc": "2026-10-16T02:06:36.617516+00:00",
+    "license": "LLVM documentation; see LLVM license; study only",
+    "bytes": 1733255,
+    "sha256": "dcd3d095924e7bb5c8f7a5ac0a5379b90064a7a3421bdc513b343a3103b1489e",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://clang.llvm.org/docs/DiagnosticsReference.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/clang-diagnostics.html"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/llvm-license.txt",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/LICENSE.TXT",
+    "author": "LLVM project",
+    "revision": "llvmorg-18.1.8",
+    "acquired_utc": "2026-10-16T02:06:36.986800+00:00",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "bytes": 15141,
+    "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/LICENSE.TXT",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/llvm-license.txt"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/llvm18-thread-safety.h",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang/test/SemaCXX/warn-thread-safety-analysis.cpp",
+    "author": "LLVM project",
+    "revision": "llvmorg-18.1.8",
+    "acquired_utc": "2026-10-16T02:06:37.813224+00:00",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "bytes": 153128,
+    "sha256": "d40b03581358ed7c7f99cb172bdea963bcd66a72f82d8cdd1d546dab804d97b5",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang/test/SemaCXX/warn-thread-safety-analysis.cpp",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/llvm18-thread-safety.h"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/llvm18-thread-safety-negative.cpp",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang/test/SemaCXX/warn-thread-safety-negative.cpp",
+    "author": "LLVM project",
+    "revision": "llvmorg-18.1.8",
+    "acquired_utc": "2026-10-16T02:06:38.304543+00:00",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "bytes": 4112,
+    "sha256": "df91909de762727a1bc4812aa452408560d720e5140128c9f4ebc7acef42cc50",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang/test/SemaCXX/warn-thread-safety-negative.cpp",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/llvm18-thread-safety-negative.cpp"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/llvm18-consumed.cpp",
+    "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang/test/SemaCXX/warn-consumed-analysis.cpp",
+    "author": "LLVM project",
+    "revision": "llvmorg-18.1.8",
+    "acquired_utc": "2026-10-16T02:06:38.917901+00:00",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "bytes": 30393,
+    "sha256": "5faf8bb3fdccbf9dfef9ea696e8ca50bed98da07534f2272c007be6fe8752384",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/clang/test/SemaCXX/warn-consumed-analysis.cpp",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/llvm18-consumed.cpp"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/posix2008-wait.html",
+    "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/wait.html",
+    "author": "The Open Group/IEEE",
+    "revision": "2008 edition as maintained",
+    "acquired_utc": "2026-10-16T02:06:39.393784+00:00",
+    "license": "The Open Group/IEEE copyright; study only",
+    "bytes": 35394,
+    "sha256": "b01de0737d5b7b93d69bf50efde7d1e3849cbbae814ea2ef80a8132713983f81",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://pubs.opengroup.org/onlinepubs/9699919799/functions/wait.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/posix2008-wait.html"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/posix2008-sigaction.html",
+    "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/sigaction.html",
+    "author": "The Open Group/IEEE",
+    "revision": "2008 edition as maintained",
+    "acquired_utc": "2026-10-16T02:06:39.674193+00:00",
+    "license": "The Open Group/IEEE copyright; study only",
+    "bytes": 32014,
+    "sha256": "2f5b973ba0073294657b7669bf308cffb7ea3c3d0cc9292e63806a24565924dd",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://pubs.opengroup.org/onlinepubs/9699919799/functions/sigaction.html",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/posix2008-sigaction.html"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/wait.2",
+    "source_archive": "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+    "archive_member": "man-pages-6.19/man/man2/wait.2",
+    "author": "Linux man-pages project; file headers retain authors",
+    "revision": "6.19",
+    "license": "Linux-man-pages-copyleft (SPDX in retained source header)",
+    "bytes": 17806,
+    "sha256": "6b812363b6caa579ad5cdb40d2ccfb4eb1d44d1de85bf533d77fb9f82c7acb8d",
+    "restore": [
+      "tar",
+      "-xOf",
+      "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+      "man-pages-6.19/man/man2/wait.2"
+    ],
+    "acquired_utc": "2026-10-16T02:06:39.977739+00:00"
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/kill.2",
+    "source_archive": "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+    "archive_member": "man-pages-6.19/man/man2/kill.2",
+    "author": "Linux man-pages project; file headers retain authors",
+    "revision": "6.19",
+    "license": "Linux-man-pages-copyleft (SPDX in retained source header)",
+    "bytes": 4627,
+    "sha256": "2ba4cca41fea2c71ffaff11b6cc90e944b147f6604b1ba12d2237f3c0bcef213",
+    "restore": [
+      "tar",
+      "-xOf",
+      "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+      "man-pages-6.19/man/man2/kill.2"
+    ],
+    "acquired_utc": "2026-10-16T02:06:40.014396+00:00"
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/pidfd_open.2",
+    "source_archive": "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+    "archive_member": "man-pages-6.19/man/man2/pidfd_open.2",
+    "author": "Linux man-pages project; file headers retain authors",
+    "revision": "6.19",
+    "license": "Linux-man-pages-copyleft (SPDX in retained source header)",
+    "bytes": 7262,
+    "sha256": "f20481bef7a3259e57ca555d13ce0de9daf6c8c8a5b7366f4c3ce61a40e6c8d2",
+    "restore": [
+      "tar",
+      "-xOf",
+      "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+      "man-pages-6.19/man/man2/pidfd_open.2"
+    ],
+    "acquired_utc": "2026-10-16T02:06:40.022017+00:00"
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/pidfd_send_signal.2",
+    "source_archive": "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+    "archive_member": "man-pages-6.19/man/man2/pidfd_send_signal.2",
+    "author": "Linux man-pages project; file headers retain authors",
+    "revision": "6.19",
+    "license": "Linux-man-pages-copyleft (SPDX in retained source header)",
+    "bytes": 6705,
+    "sha256": "92593c2d2aaa4c2a472e5eaa204a79dded5a2aa52c5e41b2a6abfaf87e771122",
+    "restore": [
+      "tar",
+      "-xOf",
+      "quarantine/raw-recorder-2026-10-10/man-pages-6.19.tar.xz",
+      "man-pages-6.19/man/man2/pidfd_send_signal.2"
+    ],
+    "acquired_utc": "2026-10-16T02:06:40.022294+00:00"
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/thread-safety-2014.pdf",
+    "url": "https://research.google.com/pubs/archive/42958.pdf",
+    "author": "DeLesley Hutchins; Aaron Ballman; Dean Sutherland",
+    "revision": "IEEE SCAM2014",
+    "license": "Publisher/author copyright; study only",
+    "acquired_utc": "2026-10-16T02:07:16.596303+00:00",
+    "bytes": 151648,
+    "sha256": "52363803cf635e981d6d3ad2b970cceddf1d701d12106b17a2a10b29275cfce3",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://research.google.com/pubs/archive/42958.pdf",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/thread-safety-2014.pdf"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/typestate-1986.pdf",
+    "url": "https://www.cs.cmu.edu/~aldrich/papers/classic/tse12-typestate.pdf",
+    "author": "Robert E. Strom; Shaula Yemini",
+    "revision": "IEEE TSE12(1)157\u2013171,1986, DOI10.1109/TSE.1986.6312929",
+    "license": "Publisher/author copyright; study only",
+    "acquired_utc": "2026-10-16T02:07:21.596597+00:00",
+    "bytes": 1571307,
+    "sha256": "45fce538d9bccafa8c71904608e9c51efda7224105ddefc2093dc76e25460ab2",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://www.cs.cmu.edu/~aldrich/papers/classic/tse12-typestate.pdf",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/typestate-1986.pdf"
+    ]
+  },
+  {
+    "path": "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/core-guidelines.html",
+    "url": "https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines",
+    "author": "C++ Core Guidelines editors and contributors",
+    "revision": "current snapshot",
+    "license": "C++ Core Guidelines copyright/license in document; study only",
+    "acquired_utc": "2026-10-16T02:07:22.307586+00:00",
+    "bytes": 1273757,
+    "sha256": "ba777a34713d7bc694da2974ee50964c7b9464d0e3207a8b87361d6ad6a44176",
+    "restore": [
+      "curl",
+      "--fail",
+      "--location",
+      "https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines",
+      "--output",
+      "quarantine/cpp-bug-class-audit-2026-10-15/process-tooling/core-guidelines.html"
+    ]
+  }
+]

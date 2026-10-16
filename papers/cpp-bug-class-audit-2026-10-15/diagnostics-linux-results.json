@@ -1,0 +1,242 @@
+{
+  "cwd": "/home/patrick/.local/share/blackbird-campaigns/cpp-class-probes-20261015-bsQPmeBv",
+  "compiler": "Ubuntu clang version 18.1.3 (1ubuntu1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/bin\n",
+  "results": [
+    {
+      "case": "borrow",
+      "variant": "bad",
+      "source": "const int& borrow(const int& x [[clang::lifetimebound]]);\nint f(){const int&r=borrow(42);return r;}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wdangling",
+        "borrow-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "borrow-bad.cpp:2:28: error: temporary bound to local reference 'r' will be destroyed at the end of the full-expression [-Werror,-Wdangling]\n    2 | int f(){const int&r=borrow(42);return r;}\n      |                            ^~\n1 error generated.\n"
+    },
+    {
+      "case": "borrow",
+      "variant": "good",
+      "source": "const int& borrow(const int& x [[clang::lifetimebound]]);\nint f(){const int value=42;const int&r=borrow(value);return r;}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wdangling",
+        "borrow-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": ""
+    },
+    {
+      "case": "consumed",
+      "variant": "bad",
+      "source": "class __attribute__((consumable(unconsumed))) Child {public:Child() __attribute__((return_typestate(unconsumed)));void reap() __attribute__((callable_when(unconsumed),set_typestate(consumed)));void signal() __attribute__((callable_when(unconsumed)));};\nvoid f(){Child c;c.reap();c.signal();}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wconsumed",
+        "consumed-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "consumed-bad.cpp:2:29: error: invalid invocation of method 'signal' on object 'c' while it is in the 'consumed' state [-Werror,-Wconsumed]\n    2 | void f(){Child c;c.reap();c.signal();}\n      |                             ^\n1 error generated.\n"
+    },
+    {
+      "case": "consumed",
+      "variant": "good",
+      "source": "class __attribute__((consumable(unconsumed))) Child {public:Child() __attribute__((return_typestate(unconsumed)));void reap() __attribute__((callable_when(unconsumed),set_typestate(consumed)));void signal() __attribute__((callable_when(unconsumed)));};\nvoid f(){Child c;c.signal();c.reap();}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wconsumed",
+        "consumed-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": ""
+    },
+    {
+      "case": "lock",
+      "variant": "bad",
+      "source": "class __attribute__((capability(\"mutex\"))) Mutex {public:void lock() __attribute__((acquire_capability(this)));void unlock() __attribute__((release_capability(this)));};\nclass __attribute__((scoped_lockable)) Guard {public:Guard(Mutex&m) __attribute__((acquire_capability(m)));~Guard() __attribute__((release_capability()));};\nMutex mu;void join_worker() __attribute__((locks_excluded(mu)));\nvoid f(){Guard g(mu);join_worker();}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wthread-safety",
+        "lock-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "lock-bad.cpp:4:22: error: cannot call function 'join_worker' while mutex 'mu' is held [-Werror,-Wthread-safety-analysis]\n    4 | void f(){Guard g(mu);join_worker();}\n      |                      ^\n1 error generated.\n"
+    },
+    {
+      "case": "lock",
+      "variant": "good",
+      "source": "class __attribute__((capability(\"mutex\"))) Mutex {public:void lock() __attribute__((acquire_capability(this)));void unlock() __attribute__((release_capability(this)));};\nclass __attribute__((scoped_lockable)) Guard {public:Guard(Mutex&m) __attribute__((acquire_capability(m)));~Guard() __attribute__((release_capability()));};\nMutex mu;void join_worker() __attribute__((locks_excluded(mu)));\nvoid f(){{Guard g(mu);}join_worker();}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wthread-safety",
+        "lock-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": ""
+    },
+    {
+      "case": "nodiscard",
+      "variant": "bad",
+      "source": "#include \"blackbird/foundation.hpp\"\nvoid f(){blackbird::Result<int>::success(1);}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "nodiscard-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "nodiscard-bad.cpp:2:10: error: ignoring return value of function declared with 'nodiscard' attribute [-Werror,-Wunused-result]\n    2 | void f(){blackbird::Result<int>::success(1);}\n      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ~\n1 error generated.\n"
+    },
+    {
+      "case": "nodiscard",
+      "variant": "good",
+      "source": "#include \"blackbird/foundation.hpp\"\nint f(){auto r=blackbird::Result<int>::success(1);return r.value();}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "nodiscard-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": ""
+    },
+    {
+      "case": "switch",
+      "variant": "bad",
+      "source": "enum class Outcome {not_started,started,unknown};\nint result(Outcome o){switch(o){case Outcome::not_started:return 0;case Outcome::started:return 1;default:return 2;}}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wswitch-enum",
+        "switch-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "switch-bad.cpp:2:30: error: enumeration value 'unknown' not explicitly handled in switch [-Werror,-Wswitch-enum]\n    2 | int result(Outcome o){switch(o){case Outcome::not_started:return 0;case Outcome::started:return 1;default:return 2;}}\n      |                              ^\n1 error generated.\n"
+    },
+    {
+      "case": "switch",
+      "variant": "good",
+      "source": "enum class Outcome {not_started,started,unknown};\nint result(Outcome o){switch(o){case Outcome::not_started:return 0;case Outcome::started:return 1;case Outcome::unknown:return 2;}return 3;}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wswitch-enum",
+        "switch-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": ""
+    },
+    {
+      "case": "units",
+      "variant": "bad",
+      "source": "struct Cells{unsigned value;};struct Bytes{unsigned value;};void move_to(Cells);void f(){move_to(Bytes{3});}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "units-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "units-bad.cpp:1:90: error: no matching function for call to 'move_to'\n    1 | struct Cells{unsigned value;};struct Bytes{unsigned value;};void move_to(Cells);void f(){move_to(Bytes{3});}\n      |                                                                                          ^~~~~~~\nunits-bad.cpp:1:66: note: candidate function not viable: no known conversion from 'Bytes' to 'Cells' for 1st argument\n    1 | struct Cells{unsigned value;};struct Bytes{unsigned value;};void move_to(Cells);void f(){move_to(Bytes{3});}\n      |                                                                  ^       ~~~~~\n1 error generated.\n"
+    },
+    {
+      "case": "units",
+      "variant": "good",
+      "source": "struct Cells{unsigned value;};struct Bytes{unsigned value;};void move_to(Cells);void f(){move_to(Cells{3});}\n",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-std=c++20",
+        "-stdlib=libstdc++",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "units-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": ""
+    }
+  ]
+}

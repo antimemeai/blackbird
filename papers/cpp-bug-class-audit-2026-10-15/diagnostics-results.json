@@ -1,0 +1,255 @@
+{
+  "compiler": "Homebrew clang version 23.1.2\nTarget: arm64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /opt/homebrew/Cellar/llvm/23.1.2/bin\nConfiguration file: /opt/homebrew/Cellar/llvm/23.1.2/etc/clang/arm64-apple-darwin25.cfg\n",
+  "utc": "2026-10-16T02:01:49.021457+00:00",
+  "results": [
+    {
+      "case": "switch",
+      "variant": "bad",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wswitch-enum",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/switch-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "context/cpp-bug-class-audit-2026-10-15/diagnostics/switch-bad.cpp:2:30: error: enumeration value 'unknown' not explicitly handled in switch [-Werror,-Wswitch-enum]\n    2 | int result(Outcome o){switch(o){case Outcome::not_started:return 0;case Outcome::started:return 1;default:return 2;}}\n      |                              ^\n1 error generated.\n",
+      "source": "enum class Outcome {not_started,started,unknown};\nint result(Outcome o){switch(o){case Outcome::not_started:return 0;case Outcome::started:return 1;default:return 2;}}\n"
+    },
+    {
+      "case": "switch",
+      "variant": "good",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wswitch-enum",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/switch-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": "",
+      "source": "enum class Outcome {not_started,started,unknown};\nint result(Outcome o){switch(o){case Outcome::not_started:return 0;case Outcome::started:return 1;case Outcome::unknown:return 2;}return 3;}\n"
+    },
+    {
+      "case": "nodiscard",
+      "variant": "bad",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/nodiscard-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "context/cpp-bug-class-audit-2026-10-15/diagnostics/nodiscard-bad.cpp:2:10: error: ignoring return value of type 'Result<int>' declared with 'nodiscard' attribute [-Werror,-Wunused-value]\n    2 | void f(){blackbird::Result<int>::success(1);}\n      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n1 error generated.\n",
+      "source": "#include \"blackbird/foundation.hpp\"\nvoid f(){blackbird::Result<int>::success(1);}\n"
+    },
+    {
+      "case": "nodiscard",
+      "variant": "good",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/nodiscard-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": "",
+      "source": "#include \"blackbird/foundation.hpp\"\nint f(){auto r=blackbird::Result<int>::success(1);return r.value();}\n"
+    },
+    {
+      "case": "lock",
+      "variant": "bad",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wthread-safety",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/lock-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "context/cpp-bug-class-audit-2026-10-15/diagnostics/lock-bad.cpp:4:22: error: cannot call function 'join_worker' while mutex 'mu' is held [-Werror,-Wthread-safety-analysis]\n    4 | void f(){Guard g(mu);join_worker();}\n      |                      ^\n1 error generated.\n",
+      "source": "class __attribute__((capability(\"mutex\"))) Mutex {public:void lock() __attribute__((acquire_capability(this)));void unlock() __attribute__((release_capability(this)));};\nclass __attribute__((scoped_lockable)) Guard {public:Guard(Mutex&m) __attribute__((acquire_capability(m)));~Guard() __attribute__((release_capability()));};\nMutex mu;void join_worker() __attribute__((locks_excluded(mu)));\nvoid f(){Guard g(mu);join_worker();}\n"
+    },
+    {
+      "case": "lock",
+      "variant": "good",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wthread-safety",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/lock-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": "",
+      "source": "class __attribute__((capability(\"mutex\"))) Mutex {public:void lock() __attribute__((acquire_capability(this)));void unlock() __attribute__((release_capability(this)));};\nclass __attribute__((scoped_lockable)) Guard {public:Guard(Mutex&m) __attribute__((acquire_capability(m)));~Guard() __attribute__((release_capability()));};\nMutex mu;void join_worker() __attribute__((locks_excluded(mu)));\nvoid f(){{Guard g(mu);}join_worker();}\n"
+    },
+    {
+      "case": "borrow",
+      "variant": "bad",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wdangling",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/borrow-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "context/cpp-bug-class-audit-2026-10-15/diagnostics/borrow-bad.cpp:2:28: error: temporary bound to local reference 'r' will be destroyed at the end of the full-expression [-Werror,-Wdangling]\n    2 | int f(){const int&r=borrow(42);return r;}\n      |                            ^~\n1 error generated.\n",
+      "source": "const int& borrow(const int& x [[clang::lifetimebound]]);\nint f(){const int&r=borrow(42);return r;}\n"
+    },
+    {
+      "case": "borrow",
+      "variant": "good",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wdangling",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/borrow-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": "",
+      "source": "const int& borrow(const int& x [[clang::lifetimebound]]);\nint f(){const int value=42;const int&r=borrow(value);return r;}\n"
+    },
+    {
+      "case": "consumed",
+      "variant": "bad",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wconsumed",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/consumed-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "context/cpp-bug-class-audit-2026-10-15/diagnostics/consumed-bad.cpp:2:29: error: invalid invocation of method 'signal' on object 'c' while it is in the 'consumed' state [-Werror,-Wconsumed]\n    2 | void f(){Child c;c.reap();c.signal();}\n      |                             ^\n1 error generated.\n",
+      "source": "class __attribute__((consumable(unconsumed))) Child {public:Child() __attribute__((return_typestate(unconsumed)));void reap() __attribute__((callable_when(unconsumed),set_typestate(consumed)));void signal() __attribute__((callable_when(unconsumed)));};\nvoid f(){Child c;c.reap();c.signal();}\n"
+    },
+    {
+      "case": "consumed",
+      "variant": "good",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "-Wconsumed",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/consumed-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": "",
+      "source": "class __attribute__((consumable(unconsumed))) Child {public:Child() __attribute__((return_typestate(unconsumed)));void reap() __attribute__((callable_when(unconsumed),set_typestate(consumed)));void signal() __attribute__((callable_when(unconsumed)));};\nvoid f(){Child c;c.signal();c.reap();}\n"
+    },
+    {
+      "case": "units",
+      "variant": "bad",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/units-bad.cpp"
+      ],
+      "exit_code": 1,
+      "diagnostics": "context/cpp-bug-class-audit-2026-10-15/diagnostics/units-bad.cpp:1:90: error: no matching function for call to 'move_to'\n    1 | struct Cells{unsigned value;};struct Bytes{unsigned value;};void move_to(Cells);void f(){move_to(Bytes{3});}\n      |                                                                                          ^~~~~~~\ncontext/cpp-bug-class-audit-2026-10-15/diagnostics/units-bad.cpp:1:66: note: candidate function not viable: no known conversion from 'Bytes' to 'Cells' for 1st argument\n    1 | struct Cells{unsigned value;};struct Bytes{unsigned value;};void move_to(Cells);void f(){move_to(Bytes{3});}\n      |                                                                  ^       ~~~~~\n1 error generated.\n",
+      "source": "struct Cells{unsigned value;};struct Bytes{unsigned value;};void move_to(Cells);void f(){move_to(Bytes{3});}\n"
+    },
+    {
+      "case": "units",
+      "variant": "good",
+      "command": [
+        "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+        "-isysroot",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Werror=unknown-warning-option",
+        "-Iinclude",
+        "-fsyntax-only",
+        "context/cpp-bug-class-audit-2026-10-15/diagnostics/units-good.cpp"
+      ],
+      "exit_code": 0,
+      "diagnostics": "",
+      "source": "struct Cells{unsigned value;};struct Bytes{unsigned value;};void move_to(Cells);void f(){move_to(Cells{3});}\n"
+    }
+  ],
+  "qualified_sysroot": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+}

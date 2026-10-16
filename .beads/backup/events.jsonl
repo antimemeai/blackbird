@@ -704,3 +704,24 @@
 {"actor":"antimemeai","comment":null,"created_at":"2026-10-15T20:33:53Z","event_type":"closed","id":704,"issue_id":"arconaut-zh2","new_value":"Repaired in65e5877; direct regressions plus final installed source gate160/160 and full C++/Lua analysis pass. See papers/ultramarine-repair-2026-10-15/RESULTS.md.","old_value":""}
 {"actor":"antimemeai","comment":null,"created_at":"2026-10-15T20:33:53Z","event_type":"closed","id":705,"issue_id":"arconaut-6ao","new_value":"Repaired in65e5877; direct regressions plus final installed source gate160/160 and full C++/Lua analysis pass. See papers/ultramarine-repair-2026-10-15/RESULTS.md.","old_value":""}
 {"actor":"antimemeai","comment":null,"created_at":"2026-10-15T20:33:53Z","event_type":"closed","id":706,"issue_id":"arconaut-gbu","new_value":"Repaired in65e5877; direct regressions plus final installed source gate160/160 and full C++/Lua analysis pass. See papers/ultramarine-repair-2026-10-15/RESULTS.md.","old_value":""}
+{"actor":"antimemeai","comment":null,"created_at":"2026-10-15T22:12:08Z","event_type":"created","id":707,"issue_id":"arconaut-th5","new_value":"","old_value":""}
+{"actor":"antimemeai","comment":"Added label: tui-campaign-bug","created_at":"2026-10-15T22:12:08Z","event_type":"label_added","id":708,"issue_id":"arconaut-th5","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":"Added label: cpp-bug-class-audit","created_at":"2026-10-15T22:12:08Z","event_type":"label_added","id":709,"issue_id":"arconaut-th5","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":null,"created_at":"2026-10-15T22:12:09Z","event_type":"created","id":710,"issue_id":"arconaut-4y5","new_value":"","old_value":""}
+{"actor":"antimemeai","comment":"Added label: tui-campaign-bug","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":711,"issue_id":"arconaut-4y5","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":"Added label: cpp-bug-class-audit","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":712,"issue_id":"arconaut-4y5","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":null,"created_at":"2026-10-15T22:12:09Z","event_type":"created","id":713,"issue_id":"arconaut-pd3","new_value":"","old_value":""}
+{"actor":"antimemeai","comment":"Added label: tui-campaign-bug","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":714,"issue_id":"arconaut-pd3","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":"Added label: cpp-bug-class-audit","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":715,"issue_id":"arconaut-pd3","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":null,"created_at":"2026-10-15T22:12:09Z","event_type":"created","id":716,"issue_id":"arconaut-r38","new_value":"","old_value":""}
+{"actor":"antimemeai","comment":"Added label: tui-campaign-bug","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":717,"issue_id":"arconaut-r38","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":"Added label: cpp-bug-class-audit","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":718,"issue_id":"arconaut-r38","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":null,"created_at":"2026-10-15T22:12:09Z","event_type":"created","id":719,"issue_id":"arconaut-2hh","new_value":"","old_value":""}
+{"actor":"antimemeai","comment":"Added label: tui-campaign-bug","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":720,"issue_id":"arconaut-2hh","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":"Added label: cpp-bug-class-audit","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":721,"issue_id":"arconaut-2hh","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":null,"created_at":"2026-10-15T22:12:09Z","event_type":"created","id":722,"issue_id":"arconaut-haz","new_value":"","old_value":""}
+{"actor":"antimemeai","comment":"Added label: tui-campaign-bug","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":723,"issue_id":"arconaut-haz","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":"Added label: cpp-bug-class-audit","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":724,"issue_id":"arconaut-haz","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":null,"created_at":"2026-10-15T22:12:09Z","event_type":"created","id":725,"issue_id":"arconaut-08t","new_value":"","old_value":""}
+{"actor":"antimemeai","comment":"Added label: tui-campaign-bug","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":726,"issue_id":"arconaut-08t","new_value":null,"old_value":null}
+{"actor":"antimemeai","comment":"Added label: cpp-bug-class-audit","created_at":"2026-10-15T22:12:09Z","event_type":"label_added","id":727,"issue_id":"arconaut-08t","new_value":null,"old_value":null}
