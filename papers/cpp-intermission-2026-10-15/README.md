@@ -61,8 +61,10 @@ custody skips the final reap. Permanent ordinary/raw tests reproduce it before
 the one-condition owner repair; a real externally reaped child remains the
 negative control. Root independently reviews this eighth unit once.
 
-Required full source gate, changed-path sanitizer/Linux checks and matched
-performance results are recorded here after completion. Detailed command logs,
+Delivered sourceabaee8a passes the full installed gate:195/195 Debug tests in
+233.52s and complete C++/Lua analysis. Final Linux Release43/43, changed-path
+sanitizers and matched120-run performance are recorded in [RESULTS](RESULTS.md).
+Startup tails worsen; all samples remain visible and queued in arconaut-f8f. Detailed command logs,
 exact binaries/source snapshots and failures are retained under ignored
 context/cpp-intermission-2026-10-15/; source manifests and publishable metrics
 remain tracked with the final result.

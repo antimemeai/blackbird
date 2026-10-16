@@ -1,0 +1,14 @@
+{
+  "before": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/cpp-intermission-20261015-rDlHIhMM/before-release/blackbird",
+    "source": "84f5ea88a8c1f635dad93def1e87073e0873b1fe",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  },
+  "after": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/cpp-intermission-20261015-rDlHIhMM/after-release/blackbird",
+    "source": "84f5ea88a8c1f635dad93def1e87073e0873b1fe+native-tree-48027f980f11cfd5ce6913db9d56fe9f4f94b0d7bea23e64d14605e2e0f097d0",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  }
+}

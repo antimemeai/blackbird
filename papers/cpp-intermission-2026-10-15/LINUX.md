@@ -42,3 +42,11 @@ preserved archive timestamps and reused stale terminal/coding objects; new tests
 exposed that setup defect. Preserve that failed build/selection separately. Set
 current timestamps on exactly the seven changed inputs, rebuild actual native
 objects and re-run the same38 cases; all pass. No failed/stale binary was timed.
+
+Final delivered native tree48027f980f11cfd5ce6913db9d56fe9f4f94b0d7bea23e64d14605e2e0f097d0
+passes43/43 in18.91s after the mailbox/fixture lint fixes and selector-custody
+repair. Existing command_jobs exact final-reap and command_raw pass alongside
+new filtered, filtered-raw and genuine-loss cases. Exact final source/build
+metadata and direct CTest output are published with [performance](performance/README.md).
+This result supersedes the earlier limited checks for the timed binary; earlier
+actual failures and stale-build diagnostics remain preserved.

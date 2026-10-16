@@ -10070,3 +10070,25 @@ custody; no new native poll or normalized result. Debugaffected5/5, ASan/UBSan5/
 and TSannew3/3 pass; both owning translation units analyze clean. Root's one
 independent concrete code/oracle challenge finds no defect. Final native Linux
 overlay, installed source gate and matched performance remain delivery work.
+
+Full installed source gate passes195/195 Debug233.52s and complete C++/Lua
+analysis, no new suppression. Sourceabaee8a commits and pushes work branch.
+Final exact Linux native tree passes43/43 in18.91s, including the unchanged
+command_jobs final-reap assertion and new filtered/raw/lost cases. No further
+root build/check runs during timing. Matched120/120 normal runs yield960 raw
+endpoints; binaries unchanged. Startupp95 worsens28.089→112.375ms wide and
+27.400→230.796ms narrow, input medians nearly unchanged, paste/other endpoints
+mixed. Shared-host load unisolated; preserve all samples, no causal source or
+nonregression claim, append f8f. Publish exact metadata/deltas/source/build
+identities and terminal hashes, close eight repaired Beads issues, preserve ruj
+and ldt follow-ups, supported backup, checked text/data-only commit and push.
+No main merge/activation. Return to bounded shared collection/inspector, first
+real command-result detail then current-session center; Lua composition follows.
+
+Publication checks:19 document link sets resolve;9 JSON files and1198 JSONL
+records parse; tranche ledger keeps its existing10-field tab format. Corrected
+the new row's literal escape to actual tabs. Native/tooling source remains
+identical to deliveredabaee8a. Beads closes all eight and backup writes164 issues,
+751 events and120 dependencies. Text/data publication uses the operator's
+explicit documentation-only hook exception; unchanged observer/report copies
+are study artifacts from the measured run, not active tooling additions.

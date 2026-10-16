@@ -79,3 +79,12 @@ bytes may survive. The child signal was intercepted, not sent to another process
 Ordinary findings remain queued; these research results implement no product
 repair. No AFL output was inspected. Root's aggregate grid priorityP2 preserves
 the staff report's higher presentation-priority assessment in its notes.
+
+The operator then requests the repair intermission. Sourceabaee8a repairs those
+seven causes and the actual Linux filtered-wait custody sibling arconaut-vyi.
+[Results](../papers/cpp-intermission-2026-10-15/RESULTS.md) retain permanent
+old-source REDs, one independent challenge per unit,195/195 Debug plus full lint,
+Linux43/43 and affected sanitizers. Close those eight issues; broader process
+group cleanup arconaut-ruj and aggregate TSan timing headroom arconaut-ldt remain
+queued. The120/120 paired performance round has mixed deltas and worse startup
+p95/max in both sizes; append to arconaut-f8f without a source-causation claim.
