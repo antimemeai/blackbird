@@ -1,3 +1,4 @@
+#include "blackbird/application.hpp"
 #include "blackbird/backstop.hpp"
 #include "blackbird/coding.hpp"
 #include "blackbird/json.hpp"
@@ -68,7 +69,8 @@ struct SessionSuccessorOutputs {
 };
 } // namespace
 int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
-                RawSuccessorHandoff *selected_handoff = nullptr) {
+                RawSuccessorHandoff *selected_handoff = nullptr,
+                ApplicationConnection *application = nullptr) {
   auto &next_session = outputs.next;
   auto &fallback_session = outputs.fallback;
   RawSuccessorHandoff local_handoff;
@@ -97,7 +99,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         continue;
       }
       if (arg == "--help") {
-        std::cout << "blackbird [--session DIRECTORY] [--provider openai|openrouter] "
+        std::cout << "blackbird --application (native framed BBM2 interface)\n"
+                     "blackbird [--session DIRECTORY] [--provider openai|openrouter] "
                      "[--model NAME] [--workflow FILE] "
                      "[--once "
                      "PROMPT] [--audit-last] [--effort low|medium|high|xhigh] "
@@ -466,6 +469,15 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         unwrap(context.checkpoint());
     }
     engine.effort(effort);
+    if (application) {
+      save_session_info(session, settings, session_identity(log, &session_capture),
+                        &session_capture);
+      if (startup) {
+        startup->outcome(RawRegionOutcome::ready);
+        startup->finish();
+      }
+      return application->run(engine, log, settings, session);
+    }
     RawCommandInterrupt interrupt_owner{interrupted};
     auto &interrupt_wake = interrupt_owner.wake();
     RawWaitScope interrupt_wait{{{interrupt_wake.read_fd(), -1}, {}}};
@@ -1635,6 +1647,40 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
 int main(int argc, char **argv) {
   if (argc > 1 && std::string_view{argv[1]} == "auth")
     return provider_auth_cli(argc - 1, argv + 1);
+  if (argc > 1 && std::string_view{argv[1]} == "--application") {
+    ApplicationConnection application;
+    std::string id;
+    try {
+      if (argc != 2)
+        throw Error{ErrorCode::invalid_range};
+      const auto open = application.open();
+      id = string_field(open, "id");
+      std::vector<std::string> storage{argv[0], "--session",
+                                       string_field(open, "session")};
+      for (const auto name : {"model", "effort"})
+        if (const auto *value = open.find(name)) {
+          storage.push_back("--" + std::string{name});
+          storage.push_back(value->string());
+        }
+      std::vector<char *> arguments;
+      for (auto &argument : storage)
+        arguments.push_back(argument.data());
+      arguments.push_back(nullptr);
+      std::vector<std::string> next, fallback;
+      const auto status =
+          run_session(static_cast<int>(storage.size()), arguments.data(),
+                      {.next = next, .fallback = fallback}, nullptr, &application);
+      if (status)
+        application.fatal(id, "Session could not open or application transport failed");
+      return status;
+    } catch (const Error &failure) {
+      application.fatal(id, error_name(failure.code));
+      return 1;
+    } catch (const std::exception &failure) {
+      application.fatal(id, failure.what());
+      return 1;
+    }
+  }
   try {
     std::vector<std::string> current_arguments, return_session;
     std::vector<char *> arguments;

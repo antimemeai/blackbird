@@ -9997,3 +9997,73 @@ Finish relevant docs/links/data checks, supported Beads backup, text-only commit
 and branch push under the existing operator exception; product bugs remain open.
 The owned temporary Linux compiler-probe directory is explicitly removed after
 local raw results/source are saved; persistent campaigns and AFL are untouched.
+
+
+## 2026-10-16 — Oxcart native application away team
+
+The operator rejects owned browser pages and directs immediate live-site work, a
+simple Codex version bump in Oxcart, and a Blackbird interface delivered from an
+isolated away-team worktree. Created `blackbird-oxcart`, branch
+`work/oxcart-interface-2026-10-16`, from committed `84f5ea8`; the dirty TUI checkout
+and all its staged changes remain untouched. Issue `arconaut-ums`.
+
+The short [subplan](papers/2026-10-16-oxcart-interface-subplan.md) and
+[wire contract](docs/APPLICATION_INTERFACE.md) define one trusted native host over
+uint32 big-endian framed BBM2, capped at 4 MiB per packet. `--application` reuses
+normal session bootstrap, locking, recovery, raw instrumentation, provider and
+CodingEngine/workflow/tools. Host observations retain original BBM2 metadata and
+enter context as source-linked page evidence separately from the objective.
+Text/status/final events and steer/cancel/close/EOF support Oxcart's independent
+browser loop; no browser actuation or owned web page is added here.
+
+Root's one focused review found unbounded accumulated final text and transport
+failure cleanup/error-send holes. The implementation now retains at most a 2 MiB
+final prefix with a truthful truncation flag, streams all text in 64 KiB chunks,
+cleans command/participant owners on exceptions, suppresses SIGPIPE at the writer
+and refuses a second fatal-send exception when the reader is gone. Client review
+found Stop-after-Steer could strand a queued request ID; discarded replacements
+now receive cancelled finals after the active final. No review-of-review layer.
+
+A fresh local configure exposed a stale LLVM default SDK path:
+`/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk` does not exist. Apple ld
+hung linking compiler identification, and an explicit CLT linker probe hung too.
+No global tool configuration or pin changed. Setting this worktree's CMake
+`CMAKE_OSX_SYSROOT` to the installed Xcode `MacOSX.sdk` allowed compiler-ID, ABI
+and pthread executable links and the ordinary native debug build to proceed.
+Logs stay in ignored `context/application-*`. The selected Microsoft TUI test
+executable was installed from its pinned archive for the required source gate.
+
+Direct checks and publication results are recorded below when complete.
+
+Root exercised the preview executable against real current `https://www.python.org/`
+HTTP evidence: decoded gzip, extracted actual page text, sent the objective and
+observation separately over BBM2 to the real `gpt-6.1-sol` provider. The engine
+streamed a correct Python.org/Get Started answer, completed the turn, closed and
+exited zero. This checks live HTTP evidence through the provider/session/interface;
+it does not claim native browser capture. Root retained the original/final BBM2
+and stderr under its `context/oxcart-live-wire/` capture. Native browser work is
+separate and currently encountering the existing SafeStorage system prompt.
+
+The initial direct CLI test passes pure packet stdout, opening/invalid command/
+close, and reopening the actual retained session. The native fixture completed
+all six provider turns, including long streaming and cancellation, then its extra
+child-cleanup setup failed because a newly created test directory had default0755
+permissions. Native journal directories require0700. The fixture now applies the
+real directory rule before opening; this was a test setup error, no product bypass.
+Changed-unit lint's three findings (const-reference sends and named input/output
+descriptors) were fixed without suppressions; the changed-unit lint recheck passed.
+
+The disconnected-child fixture also exposed its own inherited socket peer: sockets
+without FD_CLOEXEC remained open in the actual sleep child, so closing the test's
+peer did not disconnect the application. The test now marks its private sockets
+close-on-exec and closes the peer to exercise EPIPE; no production CommandJobs
+change followed. The complete Mac direct suite now passes: six provider turns,
+fragmentation, uint64 metadata and separate evidence/objective,3MiB stream with
+truthful2MiB final prefix, active/replacement cancellation order, close, invalid
+frames, actual child cleanup on broken output, and EOF with no queued provider
+work. Real CLI opening/invalid-command/closing/reopening also passes.
+
+The required source commit hook now runs the ordinary full Debug/test/lint gate.
+A scoped Neuroses Debug/ASan run is in progress; its first source archive predates
+the fixture descriptor correction, so any stale-fixture failure will be followed
+only by the affected check against corrected source.
