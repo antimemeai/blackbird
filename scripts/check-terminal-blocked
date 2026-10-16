@@ -102,6 +102,7 @@ def check(pane, inspector=False, center=False):
             # Fill the physical output queue after terminal setup. The writer's
             # inherited nonblocking flag is shared by this retained slave descriptor.
             observations.clear()
+            blocked_begin = len(received)
             assert fill_output() > 0, "physical stdout queue was not filled"
             os.write(controls_write, b"P")
             wait(lambda: b"B" in observations, "actual UI write sees EAGAIN",
@@ -111,13 +112,28 @@ def check(pane, inspector=False, center=False):
             wait(lambda: b"C" in observations,
                  "worker observes Ctrl-C before any stdout is drained",
                  drain=False, keep_full=True)
-            fcntl.ioctl(output_slave, termios.TIOCSWINSZ,
-                        struct.pack("HHHH", 52 if pane else 36, 105 if pane else 80, 0, 0))
-            os.kill(child.pid, signal.SIGWINCH)
+            coalesced = not pane and not inspector and not center
+            if coalesced:
+                # The actual writer is pending. Stop only this owned child so
+                # both physical resizes precede its next ioctl/resize service.
+                os.kill(child.pid, signal.SIGSTOP)
+                stopped, status = os.waitpid(child.pid, os.WUNTRACED)
+                assert stopped == child.pid and os.WIFSTOPPED(status), 'owned child did not stop'
+                fcntl.ioctl(output_slave, termios.TIOCSWINSZ,
+                            struct.pack("HHHH", 12, 32, 0, 0))
+                fcntl.ioctl(output_slave, termios.TIOCSWINSZ,
+                            struct.pack("HHHH", 32, 80, 0, 0))
+                os.kill(child.pid, signal.SIGWINCH)
+                os.kill(child.pid, signal.SIGCONT)
+            else:
+                fcntl.ioctl(output_slave, termios.TIOCSWINSZ,
+                            struct.pack("HHHH", 52 if pane else 36, 105 if pane else 80, 0, 0))
+                os.kill(child.pid, signal.SIGWINCH)
             # The completed old packet is followed by one current-geometry frame.
             wait(lambda: "> typed 界 tail" in screen.text() and
                  (pane or "Up 16" in screen.text()) and
-                 (screen.row, screen.col) == (49 if pane else 33, 17)
+                 (screen.row, screen.col) == (49 if pane else 29 if coalesced else 33, 17)
+                 and (not coalesced or b"\x1b[2J" in received[blocked_begin:])
                  and not screen.synchronized_update,
                  "retained draft, cursor, scroll and resized frame")
             if pane:
@@ -128,7 +144,7 @@ def check(pane, inspector=False, center=False):
                 assert b"c=12,r=6;" in received, "corner graphics absent"
             else:
                 rows = [int(value) for value in re.findall(r"ROW_(\d{3})", screen.text())]
-                assert rows == list(range(34, 64)), ("wrong scrolled content", rows)
+                assert rows == list(range(38 if coalesced else 34, 64)), ("wrong scrolled content", rows)
             os.write(controls_write, b"F")
             wait(lambda: b"D" in observations, "draft state preserved on clean exit")
             assert child.wait(timeout=5) == 0, child.stderr.read().decode()
@@ -139,6 +155,12 @@ def check(pane, inspector=False, center=False):
             assert after == before, "terminal input mode not restored"
             print("Blocked stdout: " + ("105x52 plain-joiner pane/graphics" if pane else "command inspector navigation" if inspector else "command center navigation" if center else "native scroll") +
                   ", typing/paste/cancel/resize and draft retention pass")
+        except BaseException:
+            failure = Path(tempfile.mkdtemp(prefix="blackbird-blocked-failure-"))
+            (failure / 'terminal').write_bytes(received)
+            (failure / 'events').write_bytes(observations)
+            print(f'Blocked terminal originals retained at {failure}', file=sys.stderr)
+            raise
         finally:
             if child.poll() is None:
                 os.killpg(child.pid, signal.SIGKILL)

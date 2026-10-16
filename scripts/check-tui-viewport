@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""Observe actual Blackbird ownership of its complete physical viewport."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+
+ROOT = Path(__file__).resolve().parent.parent
+TOOL = ROOT / 'scripts/tui-test'
+BORDER = '#558e97'
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('executable', type=Path)
+    parser.add_argument('--artifacts', type=Path, required=True)
+    parser.add_argument('--backend', choices=('ghostty', 'alacritty'), default='ghostty')
+    args = parser.parse_args()
+    executable = args.executable.resolve()
+    directory = args.artifacts.resolve() / (args.backend + '-' + uuid.uuid4().hex[:10])
+    directory.mkdir(parents=True)
+    (directory / 'responses').mkdir()
+    subprocess.run([str(TOOL), '--check'], check=True, timeout=10)
+    session = 'blackbird-viewport-' + uuid.uuid4().hex
+    history, phases = [], []
+    failure = cleanup_error = None
+    opened = False
+
+    def call(*command, check=True):
+        record = {'command': list(command)}
+        history.append(record)
+        completed = subprocess.run(
+            [str(TOOL), '--session', session, '--json', '--failure-artifacts',
+             str(directory), *command], capture_output=True, text=True, timeout=12)
+        record.update(returncode=completed.returncode, stderr=completed.stderr)
+        if command[0] in ('state', 'cells'):
+            name = f'responses/{len(history):04d}-{command[0]}.json'
+            (directory / name).write_text(completed.stdout)
+            record['response'] = name
+        else:
+            record['stdout'] = completed.stdout
+        if check and completed.returncode:
+            raise AssertionError(f'{command}: {completed.stdout}\n{completed.stderr}')
+        return json.loads(completed.stdout) if completed.stdout.strip() else {}
+
+    def snapshot():
+        state = call('state')['data']
+        cells = call('cells', '0', '0', str(state['cols']), str(state['rows']))['data']['cells']
+        return state, {(cell['x'], cell['y']): cell for cell in cells}
+
+    def observe(label, predicate):
+        deadline = time.monotonic() + 4
+        while True:
+            state, cells = snapshot()
+            errors = predicate(state, cells)
+            if not errors or time.monotonic() >= deadline:
+                break
+        phases.append({'label': label, 'errors': errors,
+                       'state': history[-2]['response'], 'cells': history[-1]['response']})
+        if errors:
+            raise AssertionError(label + '\n' + '\n'.join(errors))
+        return state, cells
+
+    def base_errors(state, columns, rows, cursor=None):
+        errors = []
+        if (state['cols'], state['rows']) != (columns, rows):
+            errors.append(f'physical geometry {(state["cols"], state["rows"])} != {(columns, rows)}')
+        for name in ('alternate_screen', 'bracketed_paste', 'wraparound', 'cursor_visible'):
+            if state['modes'][name] is not True:
+                errors.append(f'{name} was not enabled')
+        if cursor and (state['cursor']['x'], state['cursor']['y']) != cursor:
+            errors.append(f'cursor {state["cursor"]} != {cursor}')
+        return errors
+
+    def cell_errors(cells, expected):
+        errors = []
+        for coordinate, fields in expected.items():
+            have = cells.get(coordinate)
+            if have is None:
+                errors.append(f'missing physical cell {coordinate}')
+                continue
+            for field, value in fields.items():
+                if have.get(field) != value:
+                    errors.append(f'{coordinate} {field}: {have.get(field)!r} != {value!r}')
+        return errors
+
+    def narrow_instrument(state, cells):
+        expected = {(31, row): {'char': ' ', 'fg': 'default', 'bg': 'default', 'bold': False}
+                    for row in range(2, 8)}
+        expected.update({
+            (31, 0): {'char': 'u', 'fg': '#72d7d3', 'bg': 'default', 'bold': True},
+            (31, 1): {'char': 't', 'fg': '#e8e3d9', 'bg': 'default', 'bold': True},
+            (31, 8): {'char': '╮', 'fg': BORDER, 'bg': 'default', 'bold': False},
+            (31, 9): {'char': '│', 'fg': BORDER, 'bg': 'default', 'bold': False},
+            (31, 10): {'char': '╯', 'fg': BORDER, 'bg': 'default', 'bold': False},
+            (31, 11): {'char': ' ', 'fg': 'default', 'bg': 'default', 'bold': False}})
+        return base_errors(state, 32, 12, (0, 2)) + cell_errors(cells, expected)
+
+    def composer(state, cells, columns, rows, draft, cursor):
+        expected = {}
+        for x in range(columns):
+            expected[x, rows - 2] = {
+                'char': '╰' if x == 0 else '╯' if x == columns - 1 else '─',
+                'fg': BORDER, 'bg': 'default', 'bold': False}
+            expected[x, rows - 1] = {
+                'char': ' ', 'fg': 'default', 'bg': 'default', 'bold': False}
+        expected[0, rows - 4] = {'char': '╭', 'fg': BORDER}
+        expected[columns - 1, rows - 4] = {'char': '╮', 'fg': BORDER}
+        for x in range(columns):
+            expected[x, rows - 3] = {'char': ' '}
+        expected[0, rows - 3] = {'char': '│', 'fg': BORDER}
+        expected[columns - 1, rows - 3] = {'char': '│', 'fg': BORDER}
+        expected[2, rows - 3] = {'char': '>', 'fg': 'default', 'bg': 'default'}
+        # Each supplied pair is a literal expected grapheme and display width.
+        # We do not import the application's Unicode parser to supply the oracle.
+        at = 4
+        for char, width in draft:
+            expected[at, rows - 3] = {'char': char, 'fg': 'default', 'bg': 'default'}
+            if width == 2:
+                expected[at + 1, rows - 3] = {'char': '', 'fg': 'default', 'bg': 'default'}
+            at += width
+        return base_errors(state, columns, rows, cursor) + cell_errors(cells, expected)
+
+    def ascii_draft(text):
+        return [(char, 1) for char in text]
+
+    def tiny(state, cells, columns, rows, text):
+        expected = {(x, y): {'char': text[x] if y == 0 and x < len(text) else ' ',
+                            'fg': 'default', 'bg': 'default', 'bold': False}
+                    for y in range(rows) for x in range(columns)}
+        return base_errors(state, columns, rows, (columns - 1, 0)) + cell_errors(cells, expected)
+
+    def interrupted(number, _frame):
+        raise InterruptedError(f'viewport fixture interrupted by signal {number}')
+
+    prior = {number: signal.signal(number, interrupted)
+             for number in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)}
+    signal.alarm(55)
+    identity = {'executable': str(executable),
+                'sha256': hashlib.sha256(executable.read_bytes()).hexdigest(),
+                'backend': args.backend, 'session': session}
+    (directory / 'identity.json').write_text(json.dumps(identity, indent=2) + '\n')
+    with tempfile.TemporaryDirectory(prefix='blackbird-viewport-') as temporary:
+        work = Path(temporary)
+        effects = work / 'unexpected-turn'
+        workflow = work / 'turn.lua'
+        workflow.write_text("blackbird.call('write_file',{path=" + json.dumps(str(effects)) +
+                            ",content='unexpected turn'})\n")
+        config = work / 'tui-test.toml'
+        config.write_text('[recording]\ndirectory = ' + json.dumps(str(directory / 'casts')) + '\n')
+        try:
+            opened = True
+            call('run', '--backend', args.backend, '--config', str(config),
+                 '--env', 'BLACKBIRD_GRAPHICS=off', '--env', 'BLACKBIRD_MASCOT=0',
+                 '--cols', '101', '--rows', '30', '--', str(executable),
+                 '--session', str(work / 'session'), '--workflow', str(workflow),
+                 '--model', 'gpt-6.1-sol', '--effort', 'medium')
+            call('expect', 'text', 'Workflow reloads', '--timeout', '4000')
+            call('write', 'VIEWPORT_DRAFT')
+            call('expect', 'text', 'VIEWPORT_DRAFT', '--timeout', '4000')
+            call('key', 'press', 'Left')
+            call('key', 'press', 'Left')
+            call('write', '\x1d')
+            call('expect', 'text', 'RETAINED RESULT LAB', '--timeout', '4000')
+            call('expect', 'text', 'Source active', '--timeout', '4000')
+            call('resize', '32', '12')
+            observe('physical last column after101x30 to32x12', narrow_instrument)
+            call('key', 'press', 'Escape')
+            observe('midcursor draft retained by instrument and resize',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  ascii_draft('VIEWPORT_DRAFT'), (16, 9)))
+            call('write', '\x15A界e\u0301Z')
+            unicode_draft = [('A', 1), ('界', 2), ('e\u0301', 1), ('Z', 1)]
+            observe('wide and combining draft',
+                    lambda state, cells: composer(state, cells, 32, 12, unicode_draft, (9, 9)))
+            call('key', 'press', 'Left')
+            observe('cursor left across final narrow grapheme',
+                    lambda state, cells: composer(state, cells, 32, 12, unicode_draft, (8, 9)))
+            call('key', 'press', 'Backspace')
+            observe('backspace removes combining scalar and retains base',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  [('A', 1), ('界', 2), ('e', 1), ('Z', 1)], (8, 9)))
+            call('key', 'press', 'Delete')
+            observe('delete removes following narrow scalar',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  [('A', 1), ('界', 2), ('e', 1)], (8, 9)))
+            call('key', 'press', 'Backspace')
+            observe('backspace removes retained base scalar',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  [('A', 1), ('界', 2)], (7, 9)))
+            call('key', 'press', 'Backspace')
+            call('write', 'X')
+            observe('wide footprint erased and next byte inserted',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  ascii_draft('AX'), (6, 9)))
+            call('resize', '101', '30')
+            observe('grow retains draft and fullwidth composer',
+                    lambda state, cells: composer(state, cells, 101, 30,
+                                                  ascii_draft('AX'), (6, 27)))
+            call('resize', '32', '12')
+            observe('shrink retains draft and fullwidth composer',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  ascii_draft('AX'), (6, 9)))
+            call('write', '\x15123456')
+            observe('six-byte draft before tiny fallback',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  ascii_draft('123456'), (10, 9)))
+            for columns, rows, text in ((8, 3, '> 123456'), (2, 2, '56'), (1, 1, '6')):
+                call('resize', str(columns), str(rows))
+                observe(f'tiny{columns}x{rows} owns physical edge',
+                        lambda state, cells: tiny(state, cells, columns, rows, text))
+            call('resize', '32', '12')
+            observe('return from tiny restores fullwidth composer and draft',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  ascii_draft('123456'), (10, 9)))
+            call('write', '\x1d')
+            observe('close instrument keeps sole draft and cursor',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  ascii_draft('123456'), (10, 9)) +
+                    (['instrument route remained open'] if 'RETAINED RESULT LAB' in state['text'] else []))
+            call('write', '\x1d')
+            observe('reopen instrument retains physical last column', narrow_instrument)
+            call('key', 'press', 'Escape')
+            observe('editor focus after reopening',
+                    lambda state, cells: composer(state, cells, 32, 12,
+                                                  ascii_draft('123456'), (10, 9)))
+            assert not effects.exists(), 'viewport episode invoked its local turn workflow'
+            call('write', '\x15/exit\r')
+            call('wait', 'exit', '--timeout', '4000')
+            exited = call('state')['data']
+            assert exited['exited'] == 0 and exited['exit_signal'] is None, exited
+            assert exited['modes']['wraparound'] is True, 'exit disabled wraparound'
+            assert exited['modes']['alternate_screen'] is False, 'exit retained alternate screen'
+            assert exited['modes']['bracketed_paste'] is False, 'exit retained bracketed paste'
+            assert exited['modes']['cursor_visible'] is True, 'exit hid cursor'
+            assert not effects.exists(), 'viewport exit invoked its local turn workflow'
+        except BaseException as error:
+            failure = error
+        finally:
+            signal.alarm(0)
+            if opened:
+                for command in (('close',), ('daemon', 'stop')):
+                    try:
+                        call(*command, check=command != ('daemon', 'stop'))
+                        if command == ('daemon', 'stop'):
+                            assert history[-1]['returncode'] in (0, 3), history[-1]
+                    except BaseException as error:
+                        cleanup_error = cleanup_error or error
+            for number, handler in prior.items():
+                signal.signal(number, handler)
+            if effects.exists() and failure is None:
+                failure = AssertionError('viewport cleanup invoked its local turn workflow')
+            (directory / 'history.json').write_text(json.dumps(history, indent=2) + '\n')
+            (directory / 'summary.json').write_text(json.dumps({
+                **identity, 'phases': phases, 'failure': repr(failure) if failure else None,
+                'cleanup_error': repr(cleanup_error) if cleanup_error else None,
+                'unexpected_turn': effects.exists()}, indent=2) + '\n')
+    if failure:
+        raise failure
+    if cleanup_error:
+        raise cleanup_error
+    print(f'{args.backend}: actual-main physical viewport passes', flush=True)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (AssertionError, OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f'check-tui-viewport: {error}', file=sys.stderr)
+        sys.exit(1)

@@ -231,6 +231,10 @@ add_test(NAME tui_microsoft COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_SOURCE_DIR}/scripts/check-tui-microsoft $<TARGET_FILE:blackbird>
   --artifacts ${CMAKE_BINARY_DIR}/tui-microsoft)
 set_tests_properties(tui_microsoft PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+add_test(NAME tui_viewport COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-tui-viewport $<TARGET_FILE:blackbird>
+  --artifacts ${CMAKE_BINARY_DIR}/tui-viewport)
+set_tests_properties(tui_viewport PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
 add_executable(terminal_test tests/terminal_test.cpp)
 target_link_libraries(terminal_test PRIVATE blackbird_coding)
 add_test(NAME terminal COMMAND terminal_test)

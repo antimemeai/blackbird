@@ -1871,7 +1871,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   bool live_provider = false;
   std::vector<bool> operations;
   bool busy = false, quitting = false, redraw = true, tool_active = false,
-       turn_failed = false;
+       turn_failed = false, viewport_invalidated = false;
   std::size_t scroll = 0, previous_lines = 0;
   std::uint64_t display_generation = 0;
   auto escape_deadline = std::chrono::steady_clock::time_point::max();
@@ -2591,7 +2591,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         old_rows = rows;
         old_columns = columns;
         redraw = false;
-        const auto width = static_cast<std::size_t>(columns > 1 ? columns - 1 : 1);
+        const auto width = static_cast<std::size_t>(columns);
+        const auto &committed = output.geometry();
+        const bool recover = viewport_invalidated || committed.tiny ||
+                             committed.rows != rows || committed.columns != width;
+        // A later resize wake must survive completion of this packet.
+        viewport_invalidated = false;
         if (rows < 8 || columns < 12) {
           const auto bound =
               raw_capture_ && raw_enabled()
@@ -2604,9 +2609,9 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                                                 display_width(draft.back()) + 1) -
                                        1;
             auto &small_frame = output.prepare_tiny(rows, columns, 0, cursor_column);
-            small_frame = "\x1b[?2026h\x1b[H\x1b[2J" + draft.back();
+            small_frame = "\x1b[?2026h\x1b[H\x1b[0m\x1b[2J" + draft.back();
             small_frame += "\x1b[1;" + std::to_string(cursor_column + 1) + "H";
-            pending_image_loaded = image_loaded;
+            pending_image_loaded = false; // ED2 also invalidates Kitty image data.
             pending_image_placement = image_placement;
             if (graphics_enabled && image_placement[2]) {
               small_frame += blackbird_graphics_erase();
@@ -2895,15 +2900,16 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                              std::min(display_cursor_cells, main_width) - 1},
                             bound};
         auto &packet = captured.run([&]() -> std::string & {
-          auto &result = output.prepare(display_cursor_line - 1,
-                                        std::min(display_cursor_cells, main_width) - 1);
+          auto &result = output.prepare(
+              display_cursor_line - 1, std::min(display_cursor_cells, main_width) - 1,
+              false, recover ? ChatPaintPolicy::full : ChatPaintPolicy::erase);
           captured.capture(result);
           return result;
         });
         if (!packet.empty()) {
-          pending_image_loaded = image_loaded;
+          pending_image_loaded = image_loaded && !recover;
           pending_image_placement = image_placement;
-          if (graphics_enabled && placement != image_placement) {
+          if (graphics_enabled && (recover || placement != image_placement)) {
             layout.stage(4);
             constexpr auto digits = std::numeric_limits<std::size_t>::digits10 + 1;
             const auto image_bound =
@@ -2916,7 +2922,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
               packet.resize(packet.size() - std::string_view{"\x1b[?2026l"}.size());
               packet += blackbird_graphics_erase();
               if (placement[2] && placement[3]) {
-                if (!image_loaded) {
+                if (!pending_image_loaded) {
                   packet += blackbird_graphics_load();
                   pending_image_loaded = true;
                 }
@@ -2963,6 +2969,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     }
     if (inputs[3].revents & (POLLIN | POLLHUP | POLLERR)) {
       resize_->observed();
+      viewport_invalidated = true;
       redraw = true;
     }
     if (inputs[1].revents & POLLIN)

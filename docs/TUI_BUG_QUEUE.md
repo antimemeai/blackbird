@@ -134,3 +134,10 @@ addressed deltas, eligible default-tail erasure and full clearing for recovery.
 `arconaut-arw` stays open: actual application width still excludes the physical
 last column. App integration and its actual-main regression/performance delta
 remain next; no AFL output was inspected.
+
+The full-viewport integration's extended graphics fixture exposed `arconaut-igs`:
+a Mac failed-assert launcher teardown wait stalled after kill. Primary failure and
+terminal originals are retained; group cleanup now waits at most5s. Its underlying
+OS/native cause remains unknown, while corrected complete-frame graphics checks
+exit normally on Debug/ASan. This is a collective fixture finding, not evidence
+of a production TUI hang. See the [integration record](../papers/tui-full-viewport-2026-10-16/README.md).

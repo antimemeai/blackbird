@@ -10821,3 +10821,81 @@ Two original unified patches each contain one context line consisting of the
 required single space. Preserve those original patch bytes; authored diff
 whitespace checks exclude only delivered-source-delta.patch and
 observer-exit-correction.patch. No other whitespace finding occurs.
+
+2026-10-16 operator accepts measured full-viewport integration and directs send it.
+Create work/tui-full-viewport-2026-10-16 at4b4113d. Written integration plan under
+papers/tui-full-viewport-2026-10-16 precedes source. Defect is arw's actual last
+physical column after resize; select addressed deltas with normal blank-tail EL
+and explicit full clear for committed-geometry recovery. Preserve raw packet,
+partial-write/input and editor lifecycle contracts. Independent actual-main oracle
+and matched Linux app measurement are separate owning lanes, followed by one
+concrete source review. No AFL/artwork/live activation or implied master merge.
+
+Initial integration direct Debug10/10 passes18.73s; ASan+UBSan6/6 passes without
+diagnostics. The single source review finds F1 (ED2 removes Kitty image/cache,
+unchanged placement skips restore) and F2 (coalesced shrink/return while pending
+loses physical damage if only final dimensions are compared). Declare direct
+regressions in the owning plan before fixes. Existing graphics PTY and actual
+blocked-output episodes will attack those two contracts; physical Microsoft cells
+remain the independent actual-screen oracle. No new source-review round.
+
+Both review findings receive direct actual-source REDs before their fixes:
+graphics row-only recovery emits ED2 without an image reload; confirmed-pending
+native output with stopped-child shrink/return emits no recovery clear. Fix F1
+by invalidating pending image cache after full/tiny ED2 and reloading/placing a
+visible image inside the final captured packet. Fix F2 with a UI-owner resize
+invalidation flag, consumed by a newly built recovery frame and preserved across
+completion of an older pending frame. No packet mutation or concurrency change.
+
+Final Microsoft episodes pass18 phases each on Ghostty/Alacritty, clean exit and
+mode restoration, no turn. Root's direct oracle source review closes. Retain both
+original REDs, caption typo and mistaken grapheme-deletion oracle expectations;
+the editor intentionally remains scalar-based. Debug and ASan blocked/raw checks
+pass after the native fixes. The graphics check first uses a bare APC-load needle
+that its helper interprets as visible text; add the ESC prefix. It then observes
+a correct older image packet followed by an incomplete newer recovery frame;
+raw bytes and a scoped Python stack expose the too-early cursor assertion and
+an unbounded finally child.wait. Require latest synchronized completion/cursor
+and one image load per full clear, not one load across independently observed
+resize events. The corrected graphics episode passes Debug and ASan; no native
+change or deadline widening for these observer corrections. Preserve all attempts.
+
+Record underlying Mac failed-assert teardown wait as ordinary arconaut-igs:
+process-group cleanup now has5s deadline and records primary failure/terminal
+bytes, but the OS/native cause of one timeout remains unknown. No product hang
+claim or unrelated process survey. The source review is closed after its two
+owning fixes; no review of reviews. Release final native tree to the separate
+Linux measurement lane; all future lane reports remain ignored during source gate.
+
+Before the first source gate completed, root notices an old Microsoft minimum-width
+assertion still expects the12-column composer border at x10. Root missed this
+specific old layout expectation in the initial direct selection. Stop only the
+identified Python rigor process holding this task's source-hook log; it terminates
+its CTest group and the hook exits1 interrupted, without commit or green claim.
+The unchanged old assertion then fails directly against the repaired app at the
+border cell. Update only its explanatory comment and expected physical x11;
+the exact existing Microsoft Ghostty episode passes. Native sources and build
+identity scopes do not change for this test-only correction. Retain RED/GREEN
+captures and interrupted source log. No deadline/assertion weakening or implicit
+baseline reinterpretation.
+
+Linux candidate build and seven selected native/PTY cases pass first attempt,
+including extended graphics; both actual-main physical backends pass18 phases.
+Release the single120-process historical before/after round only after all owned
+remote jobs finish. The candidate archive predates the legacy test-coordinate
+correction only; preserve that immutable archive and report the test-only delta,
+without rebuilding or repeating native timing. Restart the full source gate on
+the complete staged result; all measurement drafts stay ignored until it ends.
+
+The fresh full source gate ends257/258 in360.20s; only tasks_pty fails its older
+hardcoded120-column task origin at x83. With all120 columns owned, layout is
+82 main +2 gutter +36 task cells, so origin is x84. Update that script's pane
+read range and literal origin assertion, preserving the failed full log. Its
+complete direct task episode then passes: subtask/fold/blocker/bound activity,
+burst freshness, draft/cursor and narrow fallback. No product source change.
+The immutable measured Linux snapshot therefore differs from delivered source
+only in the two legacy test-coordinate helpers; no benchmark rebuild/repeat.
+Restart required full hook after these concrete owning expectation fixes; all
+other direct tests/source review remain settled. The historical paired round
+passes120/120 normal processes and960 endpoints; all mixed medians/tails stay
+retained, with source publication still awaiting the mandatory clean gate.
