@@ -1,0 +1,119 @@
+{
+  "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-release/blackbird",
+  "sha256": "4aa01a1143b6cab10aa513a4491d678f25373a2ed632b78adfa443a1b54e138e",
+  "backend": "ghostty",
+  "session": "blackbird-viewport-b7be8b9cc19d4771bf431ed85e9d32a0",
+  "phases": [
+    {
+      "label": "physical last column after101x30 to32x12",
+      "errors": [],
+      "state": "responses/0011-state.json",
+      "cells": "responses/0012-cells.json"
+    },
+    {
+      "label": "midcursor draft retained by instrument and resize",
+      "errors": [],
+      "state": "responses/0014-state.json",
+      "cells": "responses/0015-cells.json"
+    },
+    {
+      "label": "wide and combining draft",
+      "errors": [],
+      "state": "responses/0017-state.json",
+      "cells": "responses/0018-cells.json"
+    },
+    {
+      "label": "cursor left across final narrow grapheme",
+      "errors": [],
+      "state": "responses/0020-state.json",
+      "cells": "responses/0021-cells.json"
+    },
+    {
+      "label": "backspace removes combining scalar and retains base",
+      "errors": [],
+      "state": "responses/0023-state.json",
+      "cells": "responses/0024-cells.json"
+    },
+    {
+      "label": "delete removes following narrow scalar",
+      "errors": [],
+      "state": "responses/0026-state.json",
+      "cells": "responses/0027-cells.json"
+    },
+    {
+      "label": "backspace removes retained base scalar",
+      "errors": [],
+      "state": "responses/0029-state.json",
+      "cells": "responses/0030-cells.json"
+    },
+    {
+      "label": "wide footprint erased and next byte inserted",
+      "errors": [],
+      "state": "responses/0033-state.json",
+      "cells": "responses/0034-cells.json"
+    },
+    {
+      "label": "grow retains draft and fullwidth composer",
+      "errors": [],
+      "state": "responses/0036-state.json",
+      "cells": "responses/0037-cells.json"
+    },
+    {
+      "label": "shrink retains draft and fullwidth composer",
+      "errors": [],
+      "state": "responses/0039-state.json",
+      "cells": "responses/0040-cells.json"
+    },
+    {
+      "label": "six-byte draft before tiny fallback",
+      "errors": [],
+      "state": "responses/0042-state.json",
+      "cells": "responses/0043-cells.json"
+    },
+    {
+      "label": "tiny8x3 owns physical edge",
+      "errors": [],
+      "state": "responses/0045-state.json",
+      "cells": "responses/0046-cells.json"
+    },
+    {
+      "label": "tiny2x2 owns physical edge",
+      "errors": [],
+      "state": "responses/0048-state.json",
+      "cells": "responses/0049-cells.json"
+    },
+    {
+      "label": "tiny1x1 owns physical edge",
+      "errors": [],
+      "state": "responses/0051-state.json",
+      "cells": "responses/0052-cells.json"
+    },
+    {
+      "label": "return from tiny restores fullwidth composer and draft",
+      "errors": [],
+      "state": "responses/0054-state.json",
+      "cells": "responses/0055-cells.json"
+    },
+    {
+      "label": "close instrument keeps sole draft and cursor",
+      "errors": [],
+      "state": "responses/0057-state.json",
+      "cells": "responses/0058-cells.json"
+    },
+    {
+      "label": "reopen instrument retains physical last column",
+      "errors": [],
+      "state": "responses/0060-state.json",
+      "cells": "responses/0061-cells.json"
+    },
+    {
+      "label": "editor focus after reopening",
+      "errors": [],
+      "state": "responses/0063-state.json",
+      "cells": "responses/0064-cells.json"
+    }
+  ],
+  "failure": null,
+  "cleanup_error": null,
+  "unexpected_turn": false
+}

@@ -1,0 +1,26 @@
+Installed microsoft/tui-test 0.1.0 from SHA256 c7096f55a1cdb58c46bc4bdb27f8b5e246f07a5324a904c5ccd1b0351df0466b
+tui-test 0.1.0
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-release
+    Start  25: chat_view
+1/7 Test  #25: chat_view ........................   Passed    0.05 sec
+    Start  26: chat_render_oracle
+2/7 Test  #26: chat_render_oracle ...............   Passed    0.08 sec
+    Start  27: terminal_blocked
+3/7 Test  #27: terminal_blocked .................   Passed    1.54 sec
+    Start  36: terminal_pty_editor
+4/7 Test  #36: terminal_pty_editor ..............   Passed    0.41 sec
+    Start  41: terminal_pty_graphics
+5/7 Test  #41: terminal_pty_graphics ............   Passed    0.57 sec
+    Start 162: terminal_custody_raw
+6/7 Test #162: terminal_custody_raw .............   Passed    0.44 sec
+    Start 164: terminal_custody_native
+7/7 Test #164: terminal_custody_native ..........   Passed    0.57 sec
+
+100% tests passed, 0 tests failed out of 7
+
+Total Test time (real) =   3.67 sec
+tui-test 0.1.0
+ghostty: actual-main physical viewport passes
+tui-test 0.1.0
+alacritty: actual-main physical viewport passes

@@ -187,7 +187,9 @@ The renderer owns every physical viewport cell, including the final column and
 bottom-right corner. Content bounds may leave deliberate space; that space still
 belongs to painting and recovery. Resize and invalidation must clear stale cells
 throughout the physical extent. The [terminal-edge comparison](../papers/tui-terminal-edge-comparison-2026-10-16/README.md)
-grounds this rule; its selected application integration remains separate.
+grounds this rule. The [application integration](../papers/tui-full-viewport-2026-10-16/README.md)
+implements explicit resize invalidation and physical recovery while preserving
+pending packet ownership, input service and image restoration.
 
 The emitted text must occupy the cells that composition assigns it. Invisible
 format characters in ordinary fetched text belong to this contract. Use pinned

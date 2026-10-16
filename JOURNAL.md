@@ -10899,3 +10899,33 @@ Restart required full hook after these concrete owning expectation fixes; all
 other direct tests/source review remain settled. The historical paired round
 passes120/120 normal processes and960 endpoints; all mixed medians/tails stay
 retained, with source publication still awaiting the mandatory clean gate.
+
+
+2026-10-16 full-viewport source delivery7523da7: fresh installed hook passes all
+258/258 Debug365.33s plus253 actual C++ and owned Lua checks. Commit and push
+work/tui-full-viewport-2026-10-16, without master merge or live activation. The
+first interrupted hook and subsequent257/258 task-origin failure remain distinct
+from the final green source gate; both legacy test coordinate corrections are
+explicit. Native recovery fixes, physical cells and graphics/input/raw oracles
+are complete within one source review/fixes; no additional assurance campaign.
+
+Matched actual-app Linux Release round completes120/120 normal processes and
+960 endpoints on unchanged historical observer/report; seven selected candidate
+cases and18 phases on each physical backend pass. Publish all16 endpoint rows,
+raw samples and originals/source restoration. Source-to-measured delta is only
+check-tui-microsoft x10→11 and check-tasks-pty x83→84, outside native build ID
+inputs; no rebuild/re-time. Typing medians improve slightly; wide shrink/restore
+and narrow restore medians/tails rise. Paste and palette tails are mixed. No
+blanket source-causal speedup/nonregression claim. Retain those observations in
+f8f, close repaired arw, keep ordinary Mac failed-assert teardown igs queued.
+Documentation/data publication uses its checked text-only hook exception; the
+source gate is settled and is not repeated for publication. AFL and artwork stay
+untouched, as do live sessions/launchers and unrelated services.
+
+Final publication checks:23 result files,45 local Markdown links resolve,120 raw
+process samples parse, JSON and all10-field tranche rows are valid. Supported
+Beads backup retains174 issues/797 events. The original source-delta unified
+patch contains two required single-space context lines; preserve its bytes and
+exclude only that patch from authored whitespace checks. All other authored
+changes pass. Close arw, retain f8f/igs open, and publish/push this checked
+text/data result without repeating the settled source gate.

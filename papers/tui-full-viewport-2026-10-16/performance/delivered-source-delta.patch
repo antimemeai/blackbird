@@ -1,0 +1,38 @@
+--- measured/scripts/check-tasks-pty
++++ delivered/scripts/check-tasks-pty
+@@ -42,7 +42,8 @@
+ 
+     def pane():
+         # Current frame cells; conversation output cannot satisfy pane assertions.
+-        return "\n".join("".join(screen.cells.get((r, c), " ") for c in range(83, 120))
++        # 120 physical columns: 82 main + 2 gutter + 36 task columns.
++        return "\n".join("".join(screen.cells.get((r, c), " ") for c in range(84, 120))
+                          for r in range(7, 32))
+ 
+     def wait(predicate, label, seconds=8):
+@@ -65,7 +66,7 @@
+         wait(lambda: "Workflow reloads" in screen.text(), "initial terminal")
+         command("/tasks add Parent work")
+         wait(lambda: "t1 Parent work" in pane(), "task is below sprite at far right")
+-        assert screen.cells.get((7, 83)) == "T", "task pane origin moved"
++        assert screen.cells.get((7, 84)) == "T", "task pane origin moved"
+         command("/tasks sub t1 Child work")
+         wait(lambda: "t2 Child work" in pane(), "subtask missing")
+         command("/tasks add Independent work")
+--- measured/scripts/check-tui-microsoft
++++ delivered/scripts/check-tui-microsoft
+@@ -144,12 +144,12 @@
+                 assert (emoji["cursor"]["x"], emoji["cursor"]["y"]) == (9, 49)
+                 composer = call("cells", "0", "49", "70", "1")["data"]["cells"]
+                 assert composer[8]["char"] == "X" and composer[67]["char"] == "│"
+-                # 12 columns => 7 inner cells: the joined emoji fits intact.
++                # All 12 columns are owned: 8 inner cells, with border at x11.
+                 call("resize", "12", "24")
+                 expect("ab👩‍💻X")
+                 narrow = state()
+                 assert (narrow["cursor"]["x"], narrow["cursor"]["y"]) == (9, 21)
+-                border = call("cells", "10", "21", "1", "1")["data"]["cells"]
++                border = call("cells", "11", "21", "1", "1")["data"]["cells"]
+                 assert border[0]["char"] == "│"
+                 (artifacts / "emoji-composer-state.json").write_text(json.dumps(narrow, indent=2) + "\n")
+                 call("write", "\x15")

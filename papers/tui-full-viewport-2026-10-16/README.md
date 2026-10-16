@@ -42,7 +42,7 @@ Microsoft oracle independently observes actual physical cells.
 
 Initial affected Debug10/10 pass18.73s and ASan+UBSan6/6 pass28.55s. After owning
 fixes, blocked/ui_raw/custody_raw pass on Debug and ASan. The extended graphics
-case then passes both profiles after two concrete observer fixes: use an ESC
+case then passes Debug and ASan after two concrete observer fixes: use an ESC
 prefix for raw graphics matching, and await the latest synchronized frame/cursor
 rather than an older matching packet followed by a partial new frame. Every full
 clear must reload the image; multiple independent resize observations may produce
@@ -64,31 +64,37 @@ checks address the changed bounds and recovery paths.
 
 ## Delivery and measurement
 
-The full installed source hook and matched previous/current Linux Release app
-round are pending at this source checkpoint. [Measurement plan](MEASUREMENT_PLAN.md)
-uses the unchanged historical observer at both geometries with all30 trials and
-all failures/tails retained. This supplies the application delta that the earlier
-one-tree renderer competition intentionally did not claim. Source and results
-will be committed and pushed on `work/tui-full-viewport-2026-10-16`; no master
-merge, launcher replacement or live-user executable activation is implied.
+Source `7523da7ab8134e377cff1186e12fc71919d68ea5` passes the full installed hook:
+258/258 Debug tests in365.33s, all253 actual C++ translation units and owned Lua
+checks. No new lint suppression or source-gate bypass. Independent Linux Release
+qualification passes seven selected native/PTY cases and the18-phase actual-main
+oracle on both backends. The source checkpoint is pushed on
+`work/tui-full-viewport-2026-10-16`; master integration and running-user executable
+activation remain separate.
 
-arconaut-arw remains in progress until full source qualification. The ordinary
-teardown finding stays queued. AFL, user artwork, live sessions and unrelated
-services remain untouched.
+The [matched application report](performance/README.md) retains120/120 normal
+processes and960 endpoints,30 per variant/geometry, without failed, discarded or
+repeated trials. Typing medians are slightly lower. Wide resize median rises
+3.044→5.745ms and restore3.794→5.557ms; narrow restore rises1.792→3.575ms. Wide
+paste p95 improves while narrow paste p95 worsens. All16 p50/p95/max rows remain
+visible. The shared-host observation does not isolate source causation or establish
+a blanket speedup/nonregression. Keep recovery costs and tails in arconaut-f8f.
 
-The first source hook is deliberately interrupted before qualification/commit
-when root finds an older minimum-width Microsoft assertion still expecting the
-12-column border at x10. A direct run reproduces that assertion failure on the
-repaired app. The expected physical border moves to x11; the unchanged rest of
-that Microsoft episode then passes. This is a deliberate application-boundary
-expectation change, not a new native fix. The measured Linux archive predates
-only this test/comment correction; native algorithms and build identity inputs
-match the delivered candidate. The fresh full source hook remains required.
+The compiled Linux archive predates only two legacy test-coordinate corrections:
+12-column composer border x10→x11 in check-tui-microsoft;120-column task origin
+x83→x84 in check-tasks-pty. Native code, native build identity inputs and benchmark
+helpers are unchanged. Exact source mapping accompanies the report; no native
+rebuild or timing repeat is warranted for these test-only changes.
 
-The next full gate ends257/258 in360.20s: only the older120-column tasks fixture
-expects origin x83. Full width gives82 main +2 gutter +36 task cells; update its
-read range and literal expected origin to x84. The complete task episode then
-passes, including bound activity, burst updates and narrow fallback. No native
-source changes. The measured archive's exact final difference is now these two
-legacy test-coordinate helpers, not a renderer or benchmark change. A subsequent
-full clean gate remains required before source delivery.
+The first source hook is interrupted before qualification/commit when root notices
+the old minimum-width border assertion. A direct RED and corrected complete
+Microsoft episode are preserved. The next full gate ends257/258 in360.20s on the
+old task-origin assertion; its corrected complete task episode passes, followed
+by the full258/258 clean gate above. Do not relabel either earlier attempt as green.
+The deliberate layout expectation updates retain physical borders and task origin
+checks, without widening deadlines or changing the intended normal padding.
+
+arconaut-arw is repaired by this source-qualified application integration.
+arconaut-igs remains open for the ordinary failed-assert Mac teardown wait, and
+arconaut-f8f retains all mixed performance observations. AFL, user artwork, live
+sessions and unrelated services remain untouched.

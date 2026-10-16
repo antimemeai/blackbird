@@ -131,9 +131,9 @@ emulator profiles; corner is a rejected experimental policy because Ghostty2x2
 misplaces a bottom-right combining accent. Retain that counterexample rather
 than selecting it for production. The matched360-process competition supports
 addressed deltas, eligible default-tail erasure and full clearing for recovery.
-`arconaut-arw` stays open: actual application width still excludes the physical
-last column. App integration and its actual-main regression/performance delta
-remain next; no AFL output was inspected.
+At that comparison checkpoint, `arconaut-arw` remained open for actual application
+integration. The following integration now repairs it; the old captures retain
+their original residue. No AFL output was inspected.
 
 The full-viewport integration's extended graphics fixture exposed `arconaut-igs`:
 a Mac failed-assert launcher teardown wait stalled after kill. Primary failure and
@@ -141,3 +141,13 @@ terminal originals are retained; group cleanup now waits at most5s. Its underlyi
 OS/native cause remains unknown, while corrected complete-frame graphics checks
 exit normally on Debug/ASan. This is a collective fixture finding, not evidence
 of a production TUI hang. See the [integration record](../papers/tui-full-viewport-2026-10-16/README.md).
+
+Source `7523da7` repairs `arconaut-arw`: actual full physical width, ordinary-tail
+EL, full recovery after resize/tiny/editor changes, retained resize invalidation
+across pending output, and Kitty cache reload after full clear. Full258/258
+Debug plus253 C++/owned Lua, affected ASan/UBSan, both actual-main Microsoft
+backends and seven selected Linux cases pass. The [120-process matched app round](../papers/tui-full-viewport-2026-10-16/performance/README.md)
+retains all16 endpoint rows and960 observations. Wide resize/restore and narrow
+restore costs rise, while typing and other tails are mixed; retain these in
+`arconaut-f8f` without a source-causal claim. Source is on the work branch; no
+master merge or running-user activation follows from qualification.

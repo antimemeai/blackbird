@@ -112,3 +112,24 @@ private-PTY original controls. Native VM8, adapter6, bridge5, delivery5 and insp
 cases attack separate phase/lifetime/identity/pressure mechanisms. Known physical
 reserved-column resize residue stays visible in the recorded Microsoft captures
 under arconaut-arw. See the [instrument contract/results](../papers/tui-lua-composition-2026-10-16/README.md).
+
+The full-viewport integration adds registered `tui_viewport` against actual main:
+
+```sh
+scripts/check-tui-viewport build/debug/blackbird --artifacts context/viewport-check
+scripts/check-tui-viewport build/debug/blackbird --backend alacritty --artifacts context/viewport-check
+```
+
+Each adopted backend checks18 semantic phases, including the complete physical
+last column, full-width composer borders and intentional bottom padding,
+Unicode scalar editing/overwrites, growth/shrink, tiny1x1/2x2/8x3 and normal return,
+cursor/modes and clean exit without a turn. Original cropped-app failures and
+corrected oracle assumptions remain in the [integration report](../papers/tui-full-viewport-2026-10-16/ORACLE_RESULTS.md).
+The blocked-output fixture now stops only its own confirmed-pending child and
+shrinks/restores before resume, requiring a recovery clear after drain. The
+extended graphics episode checks an image reload/place after each physical clear,
+including unchanged placement, and awaits the latest synchronized frame's cursor.
+Two old layout coordinates intentionally move with physical width:12-column box
+border x10→x11;120-column task origin x83→x84. Existing readable component
+expectations remain unchanged. arconaut-arw is repaired by source7523da7; original
+instrument captures are not rewritten to remove their historical residue.
