@@ -10576,3 +10576,12 @@ unique artifacts. Corrected actual fixture passes12.906s,316798written/2EAGAIN,
 all lifecycle and closed-original assertions. One independent diff challenge
 finds no defect. Historical timeout cause remains unknown; queued arconaut-8j8.
 Prepare stable index/backup for second required source gate, not an assurance panel.
+
+Final combined source052e4cf passes installed full gate227/227 Debug312.89s,
+244actualC++translations and ownedLua analysis, no bypass/new suppression.
+Linux combined-interface13/13 passes23.15s; corrected command-PTY1/1 passes7.87s.
+Preserve original gate failure and open8j8. Push integration checkpoint, publish
+checked results/issue snapshot with explicit text-only exception, then fast-forward
+master to that identical qualified source and push per operator request. No source
+requalification for the fast-forward or change to any running executable. Next
+branch resumes separately owned Lua composition/action work from integrated master.

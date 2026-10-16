@@ -38,7 +38,12 @@ Release changed-interface counterpart also passes13/13 in23.15s. The first
 installed full gate stops226/227 before lint on command-PTY pressure. Its
 [bounded fixture correction](PTY_PRESSURE.md) passes the actual Mac episode and
 one independent diff challenge; historical throughput remains queued8j8.
-The corrected full source gate and Linux fixture counterpart remain pending. Raw outputs are retained under
+Final installed source gate succeeds:227/227 Debug in312.89s,244 actual C++
+translations and owned Lua checks; no bypass or new suppression. Source merge
+`052e4cf` has both original branch tips as parents. Linux corrected command-PTY
+counterpart passes1/1 in7.87s; combined-interface selection passes13/13 in23.15s.
+Both Linux captures are retained under `context/linux/run-bp6efn07/` and
+`context/linux/run-x1upjpv_/`. No additional source review or test layer follows. Raw outputs are retained under
 `context/tui-mainline-integration-2026-10-16/`; Linux capture path is recorded there.
 No new performance claim: this integrates already measured TUI work with later
 mainline provider/application source. The next TUI tranche must identify its
