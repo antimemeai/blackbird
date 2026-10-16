@@ -96,3 +96,12 @@ Linux43/43 and affected sanitizers. Close those eight issues; broader process
 group cleanup arconaut-ruj and aggregate TSan timing headroom arconaut-ldt remain
 queued. The120/120 paired performance round has mixed deltas and worse startup
 p95/max in both sizes; append to arconaut-f8f without a source-causation claim.
+
+Command-center source d0e3b2e has one ordinary static presentation follow-up,
+`arconaut-5z4`: selected participant provider/model/request labels currently show
+finite256-byte prefixes without a visible clipping marker. Native total/truncated
+flags, full originals and typed run targets remain correct. Later collective work
+will reproduce a long accepted request ID and add an explicit marker; it does not
+block this qualified read-only tranche. The same tranche's120-process paired round
+retains narrow startup/paste and wide palette tail observations under `arconaut-f8f`
+with mixed shared-host deltas and no source-causation claim.

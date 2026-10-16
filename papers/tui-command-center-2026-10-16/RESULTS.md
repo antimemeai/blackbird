@@ -60,9 +60,29 @@ stop and capture metadata complete the finite presentation contract.
 
 ## Whole-source delivery and performance
 
-Normal installed full Debug/C++/Lua hook, final Linux Release selection and one
-matched before/after Release round are pending. Linux snapshot identifies native
-tree a019f4e4d6e1206b06c068903c3313c9d526bbe24c2eb9e36ee17b639ed3a0cb.
-Common observer scenarios do not measure center interaction latency. All owned
-build/check work must stop before timing; shared-host unrelated activity remains
-uncontrolled. Commit/push and issue closure follow actual successful delivery.
+Source **d0e3b2efa68d1dc3b4310ee06f483a11d6d44786** is committed and pushed on
+work/tui-reference-2026-10-15. The normal installed hook passes **222/222 Debug
+in259.53s**, full **240 actual C++ translations** and owned Lua checks. No source
+bypass, new suppression, relaxed oracle or timeout is involved. The exact final
+source passes **75/75 Linux Release checks in51.48s** with binary
+4af92b452b5bd6a19345d2a402f6d7227d84f546126ab6914873748629db0b8e and native tree
+a019f4e4d6e1206b06c068903c3313c9d526bbe24c2eb9e36ee17b639ed3a0cb.
+
+After all owned builds/checks stop, one matched round completes **120/120 processes
+and960 endpoints**,30 trials/source/geometry, without failure or repeat. Wide
+startup p95 falls111.492→29.310ms; narrow startup rises26.978→82.450ms. Paste p95
+falls in both sizes. All samples/tails and exact source/profile conditions are
+[published with the full comparison](performance/README.md). Shared-host noise
+is uncontrolled; common scenarios do not open the center. No source-causal,
+physical-display or center-latency claim follows. arconaut-f8f remains open.
+
+An ordinary static presentation finding is saved as arconaut-5z4: the native
+participant metadata safely reports256-byte clipping, but detail labels currently
+omit a visible clipping marker for long provider/model/request fields. Full
+originals, recorded total/truncated flags and typed run identity remain correct;
+there is no effect or lost-data finding. It is queued for later direct reproduction
+and collective repair, as requested, without reopening qualified source.
+
+Parent rhi.3 remains in progress for the independent Lua composition/action bridge
+and useful authored instrument. Future team/mods/action-fabric/metrics views still
+need their actual owners and adapters. No main merge or running-process activation.

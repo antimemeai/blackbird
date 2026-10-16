@@ -69,8 +69,11 @@ actual command and source extents. Owner/recording pressure retains the last goo
 page visibly stale. The current-session center reuse tranche is now under
 [its owning plan](../papers/tui-command-center-2026-10-16/PLAN.md): pure bounded task
 and participant observation, the same controls, actual session scope and separate
-source coverage. Its results will record qualification and delivery. The independent
-Lua bridge remains open; this does not complete Units1–2.
+source coverage. Source `d0e3b2e` delivers it after222/222 Debug plus complete
+C++/Lua checks, affected sanitizers and75 Linux Release cases. Its
+[results](../papers/tui-command-center-2026-10-16/RESULTS.md) retain behavioral REDs,
+review fixes, real source/pressure/screen checks and mixed matched performance.
+The independent Lua bridge remains open; this does not complete Units1–2.
 
 Source `52f9103` delivers that inspector after206/206 Debug tests, full C++/Lua
 analysis, affected sanitizers and58 scoped Linux Release checks. The same tranche

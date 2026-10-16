@@ -1,0 +1,28 @@
+{
+  "baseline_commit": "f2ab70b483f2e2f87efb90229c17d0e947fb9de4",
+  "baseline_tree_sha256": "a23d707da144aa47a797837a2500b802cb213d789880ccb53645e35f4a6ee48f",
+  "baseline_native_sha256": "0e8e1b513bfc95ab1da7ee3b45e3735011bcc1f204bd75d11b7c3209034a8ac6",
+  "baseline_executable": "/home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz/after-release/blackbird",
+  "baseline_companions": {
+    "/home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz/after-release/blackbird": "0e8e1b513bfc95ab1da7ee3b45e3735011bcc1f204bd75d11b7c3209034a8ac6",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz/after-release/blackbird-archive": "e2297ddad70f16711dd437b3f696f87449b2b6eef465a3d9df3e1a735f9318b6",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz/after-release/blackbird-job-runner": "0bb31a557fe14a7394db0c97fb78491cd95250231bccf5f03df7e0c9ff767488"
+  },
+  "prior_campaign": "/home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz",
+  "profile": "release",
+  "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF",
+  "lua_archive_sha256": "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae",
+  "lua_library_sha256": "95fa79336051315a656c56e0271a2990ffb598adf6e8b1987ae0e239efff7fc2",
+  "observer_sha256": "f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377",
+  "report_sha256": "dd4227cf1b29825ccc758f3aeb6da39fab23670310149b1d1935f585eb73650c",
+  "native_scopes": [
+    "CMakeLists.txt",
+    "include",
+    "src",
+    "tests",
+    "programs",
+    "assets",
+    "scripts",
+    "tooling/probes"
+  ]
+}

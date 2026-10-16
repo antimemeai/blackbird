@@ -10248,3 +10248,25 @@ link sets resolve; all432 native inputs plus driver adjunct match Linux snapshot
 a019f4e4. All source owners are stable and explicitly instructed not to write
 tracked files/index/Beads during installed hook. Source issue remains in progress
 for whole-source gate, Linux qualification and matched performance.
+
+Normal installed source hook succeeds:222/222 Debug259.53s, complete240 actual
+C++ translations and owned Lua analysis. Source d0e3b2efa68d1dc3b4310ee06f483a11d6d44786
+committed/pushed on work/tui-reference-2026-10-15 without bypass. Linux exact final
+native treea019f4e4 passes75/75 in51.48s, binary4af92b452b5bd6a19345d2a402f6d7227d84f546126ab6914873748629db0b8e.
+All owned commands stop before one matched round08:34:16–08:34:29UTC:120/120
+processes and960 endpoints normal, no exclusion/repeat. Wide startup p95 falls
+111.492→29.310ms; narrow rises26.978→82.450ms; paste p95 falls both geometries.
+Publish all samples/profile/deltas/terminal originals and actual10-field TAB row.
+Shared-host conditions remain uncontrolled; common scenarios do not open center.
+Append f8f tails and keep open. Ordinary static long-metadata clipping-marker
+finding queued as5z4, no authority/data-loss issue and no reopened source layer.
+Close bounded center rhi.3.5; parent stays in progress for Lua bridge/instrument.
+Supported Beads backup and checked docs/data publication follow, with native
+source identical to d0e3b2e. No main merge, live activation or AFL interaction.
+
+Final publication checks20 document link sets,10 JSON files and120 JSONL sample
+records; ledger keeps10 actual TAB fields and one center row. Measured observer/
+report hashes match their actual run; tracked native source remains identical to
+d0e3b2e. Supported backup preserves167 issues/769 events/123 dependencies; rhi.3.5
+is closed, parent in progress. Use the explicit docs/data-only hook exception for
+this publication, with no repeat of settled source qualification.
