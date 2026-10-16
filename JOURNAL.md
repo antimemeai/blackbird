@@ -10585,3 +10585,25 @@ checked results/issue snapshot with explicit text-only exception, then fast-forw
 master to that identical qualified source and push per operator request. No source
 requalification for the fast-forward or change to any running executable. Next
 branch resumes separately owned Lua composition/action work from integrated master.
+
+Master fast-forward/push completes0bf6712; remote and local master agree.
+Begin work/tui-lua-composition-2026-10-16 and arconaut-rhi.3.6. Three targeted staff
+studies plus realLua5.4.8 nested-pcall yield experiment produce written PLAN,
+OWNER_PLAN and VM/native/delivery studies. One bounded design challenge adopts
+separate inputrevision, frozen targets, truthful delivery statuses and async source
+preparation. Root read-only Rhizome rigor watch reinforces explicit publication/
+reclamation; no imported project rules. Staff now own VM/inbox, pure delivery and
+actual-main oracle units; root owns adapter/actionintegration/raw/performance.
+Tests precede each source implementation. First unit alone does not deliver the
+instrument or domain receipt bridge; one review/fixes per conceptual unit.
+
+Actual qualified old-main Microsoft Ghostty RED captures missing Ctrl-] instrument
+with nonempty midcursor draft, native launch/cleanup and no submitted workflow.
+Native new-contract compiled scaffold REDs precede VM and delivery implementation;
+setup compile errors remain separate from behavioral results. Pure delivery owner
+first private checks pass15 new/owning cases; root single challenge requests truthful
+lookup-count naming/process-local lifetime and examines guarded launch publication.
+VM implementation proceeds against its permanent8-mode contract. Preserve default
+qualified native libraries via APFS clones for private links before the focused
+shared Debug lease; no executable activation. Research checkpoint is text/data
+plus unchanged probe study artifacts; active native/script changes remain unstaged.

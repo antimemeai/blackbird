@@ -1,0 +1,14 @@
+{
+  "compiler": "Homebrew LLVM23.1.2 arm64-apple-darwin25.6.0",
+  "runtime": "Lua5.4.8",
+  "compile_command": "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++ -std=c++20 -O0 -g -Wall -Wextra -Wpedantic -Werror -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/opt/homebrew/opt/lua/include/lua context/tui-lua-composition-2026-10-16/research/hook_probe.cpp /opt/homebrew/opt/lua/lib/liblua.a -o context/tui-lua-composition-2026-10-16/research/hook_probe",
+  "run_command": "context/tui-lua-composition-2026-10-16/research/hook_probe",
+  "compile_exit": 0,
+  "run_exit": 0,
+  "sha256": {
+    "context/tui-lua-composition-2026-10-16/research/hook_probe.cpp": "2313f1ebb1cfd7d73d80b8b9a48d18133a32bac3b910b0d0e62c9a48a59776d5",
+    "context/tui-lua-composition-2026-10-16/research/hook_probe": "b1171bf4139f74d6a091fbb68b433b47172985fadcf089ce9448b970a0093408",
+    "/opt/homebrew/opt/lua/lib/liblua.a": "b8c993a98a7bb711501172b9816cc631b441e252e72e7b9715ea72bd0c31560e",
+    "../quarantine_proj/archives/lua-5.4.8.tar.gz": "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae"
+  }
+}

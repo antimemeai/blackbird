@@ -1,0 +1,13 @@
+runtime=Lua 5.4.8 sizeof(lua_Integer)=8
+case=plain-loop load=0 status=1 resumes=1 hooks=10 budget=1 results=0
+case=plain-loop reset=0
+case=nested-pcall-loop load=0 status=1 resumes=1 hooks=10 budget=1 results=0
+case=nested-pcall-loop reset=0
+case=nested-pcall-loop-in-pcall load=0 status=1 resumes=1 hooks=10 budget=1 results=0
+case=nested-pcall-loop-in-pcall reset=0
+case=finite-pcall load=0 status=0 resumes=1 hooks=0 budget=0 results=1
+case=finite-pcall reset=0
+case=source-error load=0 status=2 resumes=1 hooks=0 budget=0 results=3
+case=source-error reset=2
+case=no-finalizer-path load=0 status=0 resumes=1 hooks=0 budget=0 results=1
+case=no-finalizer-path reset=0
