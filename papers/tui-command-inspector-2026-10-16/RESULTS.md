@@ -1,92 +1,92 @@
-# Command-results inspector
+# Command-results inspector: delivered source and checks
 
-Work branch `work/tui-reference-2026-10-15`, previous delivered checkpoint
-`45b14541749119399ce2f6e4f07aee9c082c8e41`. This tranche implements the conversation
-command-results instrument and the shared native collection/inspector it uses.
-The current-session center and separately owned Lua composition remain subsequent
-units of `arconaut-rhi.3`.
+Source checkpoint `52f910372cd47bf4e95ed9de16dccfa3d87bc888`, work branch `work/tui-reference-2026-10-15`.
+Ctrl-O opens/closes command inspection without moving the existing Composer's
+draft or byte cursor; `/jobs` opens its first catalog page. The shared native
+collection/inspector is implemented. Current-session center reuse and the separate
+Lua composition owner remain subsequent units of `arconaut-rhi.3`.
 
-## Behavior and ownership
+Arrows, Home/End and PageUp/Down navigate the focused collection or result. Tab
+changes focus, Escape or committed text returns to editing, and Ctrl-Left/Right
+pages the catalog or retained output. Bracketed paste keeps controls literal.
+Foreground PTY routing and global stop/quit retain their priority. Selection does
+not start, foreground, signal or stop work.
 
-Ctrl-O opens or closes inspection without moving the existing Composer's draft or
-byte cursor. `/jobs` opens the first catalog page. Arrows, Home/End and PageUp/Down
-navigate the focused collection or result; Tab changes focus, Escape or committed
-text returns to editing, and Ctrl-Left/Right pages the catalog or retained output.
-Bracketed paste keeps embedded controls literal. Existing foreground PTY routing
-and global stop/quit retain their priority. Selection never runs a command.
+## Bounded observation and presentation
 
-The immutable scene uses the actual command ID and bounded retained source ranges.
-Its result distinguishes lifecycle, custody, terminal retention, sealing and
-retained/received frontiers. The native owner query does no allocation, raw work,
-wait, drain or journal scan: at most eight catalog rows plus independently selected
-detail,4096 retained bytes and16 source chunks, with bounded logarithmic seek.
-Missing resident data does not imply missing archived history. The generic control
-has no command/runtime dependency and paints only inside checked cell rectangles.
+The owner supplies actual command IDs, retained source ranges and native
+lifecycle/custody state. Its pure try-lock query performs no allocation, raw work,
+wait, drain or journal scan: at most eight catalog rows plus selected detail,
+4096 retained bytes and16 source chunks, with bounded logarithmic seek. Received
+and retained extents differ; missing resident data does not imply missing history.
+The [owner study and checks](OWNER_REPORT.md) explain these bounds.
 
-The conversation adapter refreshes outside input and painting. A changed
-observation requires nonblocking exact raw CONTROL admission before publication;
-recording pressure preserves the accepted scene and successful apply reference,
-with visible stale feedback. Site4087 names real native2008 source ranges rather
-than duplicating output. Native4041 frames retain the displayed bytes. See the
-[raw schema and failure contract](RAW_OBSERVATION.md). The component preserves
-stable keyed selection, independent detail reading anchors and wide/narrow return.
-There is one Composer and no new production dependency.
+The domain-independent control uses immutable scene properties, safe text and
+checked cell rectangles, keyed selection and independent detail reading anchors
+through resize. Wide geometry shows collection/detail together; narrow geometry
+preserves explicit focus/return. The adapter is immovable with a required control
+member and one existing Composer. No production library or runtime was adopted.
+See the [component report](COMPONENT_REPORT.md) and [plan](PLAN.md).
 
-## Direct checks completed before the full source gate
+The conversation adapter observes outside input and painting. Changed observation
+adoption requires exact nonblocking raw CONTROL admission before publication;
+pressure preserves the last accepted scene and successful apply reference, with
+visible stale feedback. Native4087 records real2008 source extents rather than
+copying output again;4041 retains displayed bytes. Missing provenance is explicit.
+The [raw schema](RAW_OBSERVATION.md), four native adapter oracles and
+[independent integration review](REVIEW.md) cover this path.
 
-| Mechanism | Observed result |
+## Direct qualification
+
+| Mechanism | Final observed result |
 | --- | --- |
-| Permanent actual-main old-source oracle | Ctrl-O header absent with a nonempty draft: behavioral RED, real terminal artifacts retained. |
-| Pure owner oracle | Actual old allocating read fails under refused allocation; five current Mac Debug and Linux Release modes pass. [Owner report](OWNER_REPORT.md). |
-| Generic component oracle | Actual Mac/Linux stub behavior fails the specification groups; current native component and prior host tests pass2/2. [Component report](COMPONENT_REPORT.md). |
-| Adapter semantics and actual raw originals | Four Debug modes pass: semantic, raw decode/reconstruction, standalone physical pressure and separate-producer runtime pressure. |
-| Microsoft actual native main | Ghostty and Alacritty pass exact draft/cursor continuity, two real IDs/results, narrow resize, literal paste and exactly two original command effects. |
-| Blocked physical stdout | Three episodes pass: existing conversation, pane/graphics and new inspector navigation, all preserving typing/paste/cancel/resize and drafts. Cancellation is observed before stdout drain. |
-| Readable styled expectations | Sixteen compare successfully: two explicitly generated/reviewed inspector fixtures; all fourteen earlier expectations unchanged. |
-| Existing command ownership integration | Terminal, blocked stdout, command-job PTY/station and Microsoft inspector pass5/5 in31.03s. |
+| Installed source hook |206/206 Debug in249.87s, followed by complete C++/Lua analysis through the installed hook. |
+| Linux Release |58/58 scoped cases in35.04s; exact final source/profile in [performance provenance](performance/README.md). |
+| ASan+UBSan / TSan |Initial12/12 and6/6; affected type/renderer/fixture rechecks6/6 and4/4, no diagnostics. [Scoped results](SANITIZERS.md), [affected recheck](ORACLE_LINT_REMEDIATION.md). |
+| Microsoft actual native main |Ghostty and Alacritty pass exact draft/cursor continuity, two real IDs/results, resize, literal paste and exact original AB effects. Rechecked after type fixes. |
+| Physical blocked stdout |Three episodes pass conversation, pane/graphics and inspector controls; cancellation is observed before stdout drain, with typing/paste/resize/draft assertions retained. |
+| Readable styled expectations |Sixteen match: two deliberately reviewed inspector cases; fourteen earlier baselines unchanged. |
 
-The old `/jobs` JSON test scrape was deliberately replaced by an explicit Lua
-native process read matching exactly the fixture's actual PID to one canonical
-job ID. All effect/custody/task assertions remain. The first adapter test compile
-missed declarations from context.hpp; it is a preserved setup failure, not RED.
-The original Mac reference link eventually completed normally without signals or
-restart; its old-path oracle then failed the actual allocation contract. No new
-link cause is claimed. Source, logs and real terminal artifacts are under ignored
-`context/tui-command-inspector-2026-10-16/`; test failures retain fixture paths.
+Permanent behavioral REDs precede implementation: the actual old main lacks the
+Ctrl-O view, the old allocating owner read fails refused allocation, and generic
+stub behavior fails specification groups on Mac/Linux. Independent owner and
+component challenges plus the integrated input/raw review found no concrete
+product defect. A missing context.hpp declaration was a setup failure, never RED.
+All owning native translations pass focused tidy after the gate findings below.
 
-Root completed one independent implementation/oracle review each for the command
-owner and generic component, with no concrete defect. The independent integrated input/raw/adapter review also found no concrete
-defect; its [scope and disposition](REVIEW.md) are recorded. [Affected sanitizers](SANITIZERS.md) pass12/12 ASan+UBSan and6/6 TSan.
-Final Linux checks, full installed source gate and matched performance are pending. This document will be updated with their actual
-outcomes; the table above does not imply those qualifications have completed.
+## Gate findings and repairs
 
-The first installed source gate fails205/206 Debug in286.42s: existing
-raw_recorder_cuts hits its unchanged60s watchdog at the explicit-recovery episode.
-The full output is preserved as full-debug-attempt-01.log in the declared context
-directory. This repeats queued arconaut-3wt; the hook blocks the commit and does
-not reach lint. A bounded isolated stage diagnostic reproduces a test-interposer
-deadlock before recover(): handle retirement waits while the recorder seam waits
-for a later stop signal that the parent cannot issue until retirement returns.
-The fixture-only [synchronization repair](RECORDER_FIX.md) passes a
-deterministic old-selector RED, current full Mac and Linux fixture checks,
-owning-file lint and one independent root review without changing any original
-assertion or watchdog. No raw data
-loss or command-inspector source cause is inferred from this failure.
+The first hook fails205/206 because raw_recorder_cuts reaches its60s watchdog,
+repeating arconaut-3wt. A bounded staged diagnostic reproduces an actual wait cycle:
+the parent awaits handle retirement while its recorder is parked in a test seam
+waiting for the later stop signal. The fixture mistook a producer STREAM notice
+for a lifecycle DGRAM reply because both contain one byte1. Its strengthened real
+space-notice oracle deterministically rejects the old selector; the corrected
+selector preserves every original wake/literal/recovery assertion and watchdog.
+[Repair and finite samples](RECORDER_FIX.md) identify a fixture bug, not runtime
+loss or command-inspector source causation. The repaired fixture passes inside
+both subsequent full Debug suites and the final Linux scope.
 
-The final Linux candidate passes57 scoped Release checks in34.99s, then the
-fixture-only overlay passes raw_recorder_cuts1/1 in0.17s. Its native input tree is
-991b8fb77519afebefdcfb8a5b30a98916d97eb81616ab71c467dcc770c15820; the
-product binary remains451271fc403b49a9b1577fe9f17366a22838a2f30320c983969c395525a4c0ca.
-The earlier candidate and qualification remain separately recorded. The installed
-full Debug/source-analysis hook is being retried; matched timing still waits.
+The second hook passes206/206, then rejects15 native diagnostics across four new
+translations. [The fixes](LINT_FIX_PLAN.md) remove the empty-control representation,
+interchangeable numeric/path helper arguments and unproven optional accesses.
+The invalid Ink oracle retains byte255 through its fixed-byte representation.
+No rule suppression, weakened assertion or changed deadline follows. Both failed
+full outputs, original diagnostic samples and intermediate failures remain under
+ignored `context/tui-command-inspector-2026-10-16/`.
 
-The second installed hook passes206/206 Debug in226.78s, including recorder0.79s,
-then rejects15 native diagnostics across four new translations. The
-[owning fix plan](LINT_FIX_PLAN.md) removes the empty-control adapter state,
-interchangeable renderer scalar parameters and unproven optional accesses;
-[test-helper fixes](ORACLE_LINT_REMEDIATION.md) retain all exact assertions, including
-the same invalid Ink byte255. All four actual owning translations now pass tidy.
-The component2 cases and adapter4 cases remain green; actual-main Ghostty, blocked
-stdout and16 unchanged expectations pass3/3 in9.91s after relinking. Affected
-ASan+UBSan6/6 and TSan4/4 rechecks pass without diagnostics. The final full
-source hook and final matched Linux overlay/checks follow these changes.
+## Matched performance and delivery limits
+
+[The matched round](performance/README.md) compares the final qualified source
+with45b1454 using unchanged observer/report, profile, scenarios and30 trials per
+source/geometry. Raw endpoints, all tails and exact source/binary identities are
+retained. The observer covers startup/text/paste/palette/resize and never opens
+the inspector: its deltas do not measure selection/refresh latency or establish
+blanket responsiveness. Functional inspector and backpressure checks are separate.
+Shared-host scheduling is unisolated, and observer endpoints are not physical
+presentation latency. Existing arconaut-f8f retains startup-tail observations.
+
+The committed work is the conversation instrument and reusable native controls.
+It does not complete the command center or Lua bridge, select controller/haptic
+hardware, or activate a running process. Next work reuses these components over
+actual current-session owners, with the same bounded-observation requirements.

@@ -4,6 +4,14 @@ Operator2026-10-15: save ordinary findings for collective action; interrupt for
 egregious faults. Performance measurement and input generation do not authorize
 chasing every newly observed defect. Preserve originals and continue the tranche.
 
+Source `52f9103` repairs the reproduced `arconaut-3wt` recorder-test hang: its send
+interposer mistook a producer STREAM notice for a DGRAM lifecycle reply, parking
+before retirement could complete. A permanent real-notification oracle rejects
+the old selector; the corrected fixture passes inside the full206-case Debug
+gate and final Linux scope, with its original wake/literal assertions and60s
+watchdog. [Diagnosis and samples](../papers/tui-command-inspector-2026-10-16/RECORDER_FIX.md)
+bound this to the fixture; they do not assert a runtime data-loss repair.
+
 Beads is the issue queue. Use label `tui-campaign-bug` for TUI product/tooling
 findings and the retained AFL inbox. A bug entry includes exact source/run/tool
 identity, actual result versus expectation, original reproducer/output location,

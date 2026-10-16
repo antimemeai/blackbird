@@ -96,3 +96,6 @@ finding: canonical fixed identities, separate catalog/detail budget, transparent
 lookup, positive ordered tail chunks/random-access seek, retained frontier,
 eviction/partial-source arithmetic, genuine contention and custody/nonzero-exit
 interpretation were specifically checked. No additional review panel is needed.
+
+Final integrated qualification and delivery are in [RESULTS](RESULTS.md); the
+unit-local pending statements above describe their earlier report stage.

@@ -1,0 +1,122 @@
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz/after-release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-command-inspector-20261016-wcm_b0zz/after-release
+      Start   9: command_jobs
+ 1/58 Test   #9: command_jobs .........................   Passed    2.05 sec
+      Start  16: chat_view
+ 2/58 Test  #16: chat_view ............................   Passed    0.04 sec
+      Start  18: terminal_blocked
+ 3/58 Test  #18: terminal_blocked .....................   Passed    1.70 sec
+      Start  19: tui_components
+ 4/58 Test  #19: tui_components .......................   Passed    0.01 sec
+      Start  20: tui_snapshots
+ 5/58 Test  #20: tui_snapshots ........................   Passed    0.07 sec
+      Start  21: tui_microsoft
+ 6/58 Test  #21: tui_microsoft ........................   Passed    7.58 sec
+      Start  22: terminal
+ 7/58 Test  #22: terminal .............................   Passed    0.05 sec
+      Start  90: raw_recorder_cuts
+ 8/58 Test  #90: raw_recorder_cuts ....................   Passed    0.17 sec
+      Start  95: workflows
+ 9/58 Test  #95: workflows ............................   Passed    0.58 sec
+      Start 103: participants_raw
+10/58 Test #103: participants_raw .....................   Passed    1.34 sec
+      Start 124: command_raw
+11/58 Test #124: command_raw ..........................   Passed    1.34 sec
+      Start 133: provider_raw
+12/58 Test #133: provider_raw .........................   Passed    0.32 sec
+      Start 134: operation_raw
+13/58 Test #134: operation_raw ........................   Passed    4.68 sec
+      Start 144: program_workflow_raw
+14/58 Test #144: program_workflow_raw .................   Passed    2.05 sec
+      Start 161: participants_custody_exact
+15/58 Test #161: participants_custody_exact ...........   Passed    0.02 sec
+      Start 162: participants_custody_throwing
+16/58 Test #162: participants_custody_throwing ........   Passed    0.02 sec
+      Start 163: participants_custody_unknown
+17/58 Test #163: participants_custody_unknown .........   Passed    0.02 sec
+      Start 164: child_custody_default
+18/58 Test #164: child_custody_default ................   Passed    0.01 sec
+      Start 165: child_custody_ignored
+19/58 Test #165: child_custody_ignored ................   Passed    0.00 sec
+      Start 166: child_custody_no-cldwait
+20/58 Test #166: child_custody_no-cldwait .............   Passed    0.00 sec
+      Start 167: child_custody_lost-collect
+21/58 Test #167: child_custody_lost-collect ...........   Passed    0.00 sec
+      Start 168: child_custody_lost-destructor
+22/58 Test #168: child_custody_lost-destructor ........   Passed    0.00 sec
+      Start 169: child_custody_cleanup-error
+23/58 Test #169: child_custody_cleanup-error ..........   Passed    0.00 sec
+      Start 170: child_custody_raw-cleanup
+24/58 Test #170: child_custody_raw-cleanup ............   Passed    0.00 sec
+      Start 171: display_text
+25/58 Test #171: display_text .........................   Passed    0.00 sec
+      Start 172: domain_admission_participant
+26/58 Test #172: domain_admission_participant .........   Passed    0.04 sec
+      Start 173: domain_admission_inbox
+27/58 Test #173: domain_admission_inbox ...............   Passed    0.08 sec
+      Start 174: domain_admission_config
+28/58 Test #174: domain_admission_config ..............   Passed    0.03 sec
+      Start 175: domain_admission_encoding
+29/58 Test #175: domain_admission_encoding ............   Passed    0.04 sec
+      Start 176: domain_admission_tasks
+30/58 Test #176: domain_admission_tasks ...............   Passed    0.14 sec
+      Start 177: domain_admission_capture
+31/58 Test #177: domain_admission_capture .............   Passed    0.02 sec
+      Start 178: command_mailbox_identity
+32/58 Test #178: command_mailbox_identity .............   Passed    0.04 sec
+      Start 179: command_mailbox_history
+33/58 Test #179: command_mailbox_history ..............   Passed    2.70 sec
+      Start 180: command_mailbox_reserved_ids
+34/58 Test #180: command_mailbox_reserved_ids .........   Passed    0.06 sec
+      Start 181: command_mailbox_reserved_bytes
+35/58 Test #181: command_mailbox_reserved_bytes .......   Passed    2.70 sec
+      Start 182: command_mailbox_transient
+36/58 Test #182: command_mailbox_transient ............   Passed    0.06 sec
+      Start 185: file_effect_write-plain
+37/58 Test #185: file_effect_write-plain ..............   Passed    0.01 sec
+      Start 186: file_effect_edit-plain
+38/58 Test #186: file_effect_edit-plain ...............   Passed    0.01 sec
+      Start 187: file_effect_write-raw
+39/58 Test #187: file_effect_write-raw ................   Passed    0.03 sec
+      Start 188: file_effect_edit-raw
+40/58 Test #188: file_effect_edit-raw .................   Passed    0.03 sec
+      Start 189: file_effect_persistent-plain
+41/58 Test #189: file_effect_persistent-plain .........   Passed    0.01 sec
+      Start 190: file_effect_persistent-raw
+42/58 Test #190: file_effect_persistent-raw ...........   Passed    0.02 sec
+      Start 191: file_effect_native-plain
+43/58 Test #191: file_effect_native-plain .............   Passed    0.01 sec
+      Start 192: file_effect_native-raw
+44/58 Test #192: file_effect_native-raw ...............   Passed    0.02 sec
+      Start 193: command_wait_custody_filtered
+45/58 Test #193: command_wait_custody_filtered ........   Passed    0.01 sec
+      Start 194: command_wait_custody_filtered-raw
+46/58 Test #194: command_wait_custody_filtered-raw ....   Passed    0.05 sec
+      Start 195: command_wait_custody_lost
+47/58 Test #195: command_wait_custody_lost ............   Passed    0.01 sec
+      Start 196: tui_inspector
+48/58 Test #196: tui_inspector ........................   Passed    0.00 sec
+      Start 197: command_observation_allocation
+49/58 Test #197: command_observation_allocation .......   Passed    0.00 sec
+      Start 198: command_observation_ranges
+50/58 Test #198: command_observation_ranges ...........   Passed    0.02 sec
+      Start 199: command_observation_ranges-raw
+51/58 Test #199: command_observation_ranges-raw .......   Passed    0.08 sec
+      Start 200: command_observation_busy
+52/58 Test #200: command_observation_busy .............   Passed    0.00 sec
+      Start 201: command_observation_lifecycle
+53/58 Test #201: command_observation_lifecycle ........   Passed    0.03 sec
+      Start 202: tui_command_inspector
+54/58 Test #202: tui_command_inspector ................   Passed    6.59 sec
+      Start 203: command_inspector_semantic
+55/58 Test #203: command_inspector_semantic ...........   Passed    0.03 sec
+      Start 204: command_inspector_raw
+56/58 Test #204: command_inspector_raw ................   Passed    0.04 sec
+      Start 205: command_inspector_pressure
+57/58 Test #205: command_inspector_pressure ...........   Passed    0.00 sec
+      Start 206: command_inspector_runtime-pressure
+58/58 Test #206: command_inspector_runtime-pressure ...   Passed    0.05 sec
+
+100% tests passed, 0 tests failed out of 58
+
+Total Test time (real) =  35.04 sec

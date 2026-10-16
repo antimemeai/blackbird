@@ -10164,3 +10164,33 @@ Component2/2, adapter4/4, relinked actual-main Ghostty/blocked/snapshots3/3 in9.
 and affected ASan6/6 plusTSan4/4 remain green with unchanged oracles. Final Linux
 overlay native treea23d707 is being qualified under same profile; no timing yet.
 Stage intended source/docs/Beads only, then retry full installed source hook.
+
+Final installed hook passes206/206 Debug in249.87s plus complete235-translation
+C++ analysis and owned Lua checks. Source52f910372cd47bf4e95ed9de16dccfa3d87bc888
+committed/pushed on work/tui-reference-2026-10-15; no bypass. Final Linux58/58
+in35.04s uses exact native treea23d707 and Release binary0e8e1b513bfc95ab1da7ee3b45e3735011bcc1f204bd75d11b7c3209034a8ac6.
+All421 native files and one driver adjunct match delivered Git contents/executable
+bits. All owned builds/checks stop before the single matched120-process round.
+Observer completes120/120, no failure/rerun; deltas mixed. Actual reports and
+raw endpoints follow. Fetch-only local tarfile compatibility error occurs after
+remote completion; retain original error and retrieve the existing round only.
+No main merge or running-process activation.
+
+Matched timing window06:53:35–06:53:48UTC completes120/120 processes and960
+endpoints,30 trials/source/geometry. Preserve all120 terminal originals and every
+tail. Wide startup p95 103.086→26.076ms; narrow paste44.887→56.199ms,
+medians39.254→40.222ms. Mixed deltas (p95down9/up7), shared host load unisolated;
+no source-causal or inspector-latency claim. Publish exact inputs/profiles/raw
+timestamps/deltas and10-field tab ledger. Append f8f and keep open. Close3wt
+and bounded inspector issue rhi.3.4; parent rhi.3 remains in_progress for center
+reuse and separate Lua bridge. Supported Beads backup follows. Final publication
+is docs/data plus unchanged measured observer/report study artifacts, with native
+source identical to52f9103. Use operator's checked text-only hook exception, no
+repeat of the settled source gate.
+
+Final text/data publication checks:19 document link sets resolve,12 JSON files
+and1210 JSONL records parse, tranche ledger retains10 actual TAB fields with one
+new row, and native tracked source remains identical to52f9103. Supported backup
+contains165 issues/761 events/121 dependencies. Publish via the explicit docs/data
+exception; unchanged observer/report are measured study artifacts under papers,
+not active tool/source additions.

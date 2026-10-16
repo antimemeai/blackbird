@@ -69,6 +69,12 @@ actual command and source extents. Owner/recording pressure retains the last goo
 page visibly stale. Current-session center reuse and the independent Lua bridge
 remain the next units; this does not complete Units1–2.
 
+Source `52f9103` delivers that inspector after206/206 Debug tests, full C++/Lua
+analysis, affected sanitizers and58 scoped Linux Release checks. The same tranche
+fixes a diagnosed recorder-test synchronization bug while retaining its original
+assertions/watchdog. [Results and matched performance](../papers/tui-command-inspector-2026-10-16/RESULTS.md)
+preserve both failed gates and the final qualification; no live activation follows.
+
 Separate terminal decoding from native editor/palette behavior while retaining
 present draft/history/paste/editor controls, including literal insertion followed
 by existing deliberate bare/POWERWORD workflow selection on submission. Resolve the known lone/incomplete

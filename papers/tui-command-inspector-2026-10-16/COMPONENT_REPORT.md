@@ -74,3 +74,6 @@ The owning two targets rebuilt successfully. The same two component cases passed
 tests/tui_inspector_test.cpp both exited0 with no diagnostics. Exact logs remain
 under `context/tui-command-inspector-2026-10-16/component/tidy-fix/`. Root owns the
 subsequent full gate, sanitizer and final Linux/performance source qualification.
+
+Final integrated qualification and delivery are in [RESULTS](RESULTS.md); the
+unit-local pending statements above describe their earlier report stage.
