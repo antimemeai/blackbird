@@ -70,7 +70,7 @@ if test_regex is None or any(re.search(test_regex, name) for name in
 print(platform.platform(), flush=True)
 for tool in ('/usr/bin/clang++-23', '/usr/bin/cmake', '/usr/bin/ninja'):
     subprocess.run([tool, '--version'], check=True)
-macros = subprocess.check_output(['/usr/bin/clang++-23', '-stdlib=libc++', '-std=c++23', '-dM', '-E', '-x', 'c++', '-include', 'version', '/dev/null'], text=True)
+macros = subprocess.check_output(['/usr/bin/clang++-23', '-stdlib=libc++', '-std=c++26', '-dM', '-E', '-x', 'c++', '-include', 'version', '/dev/null'], text=True)
 if '#define _LIBCPP_VERSION 230104\\n' not in macros:
     raise RuntimeError('Linux profile requires installed libc++ 23.1.4')
 print('Linux standard library: libc++ 23.1.4', flush=True)

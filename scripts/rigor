@@ -221,11 +221,11 @@ def qualify():
         source.write_text("#include <optional>\nint get(std::optional<int> v) { return v.value(); }\n")
         sdk = run(["xcrun", "--show-sdk-path"]).stdout.strip()
         expect_fault([LLVM / "clang-tidy", "--config-file=" + str(ROOT / ".clang-tidy"),
-                      source, "--", "-std=c++23", "-isysroot", sdk], "bugprone-unchecked-optional-access")
+                      source, "--", "-std=c++26", "-isysroot", sdk], "bugprone-unchecked-optional-access")
         source = folder / "analyzer.cpp"
         source.write_text("int defect() { int* p = nullptr; return *p; }\n")
         expect_fault([LLVM / "clang-tidy", "--config-file=" + str(ROOT / ".clang-tidy"),
-                      source, "--", "-std=c++23", "-isysroot", sdk], "clang-analyzer-core.NullDereference")
+                      source, "--", "-std=c++26", "-isysroot", sdk], "clang-analyzer-core.NullDereference")
         bad_lua = folder / "lua"
         bad_lua.mkdir()
         (bad_lua / "type_error.lua").write_text('---@type integer\nlocal n = "wrong"\nprint(n)\n')
