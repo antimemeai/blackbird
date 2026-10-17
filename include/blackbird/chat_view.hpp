@@ -83,11 +83,14 @@ struct ChatGrid {
 // Bound only for a grid owned by reset/line: each live tail has a distinct arena
 // extent.
 std::uint64_t raw_ui_owned_grid_bound(const ChatGrid &grid);
+// All policies own every grid cell. corner assumes a wrap-on terminal profile.
+enum class ChatPaintPolicy { addressed, erase, corner, full };
 // The returned packet is a complete frame delta. Commit only after successful I/O.
 class ChatPainter {
 public:
   const std::string &prepare(const ChatGrid &next, std::size_t cursor_row,
-                             std::size_t cursor_column, bool full = false);
+                             std::size_t cursor_column, bool full = false,
+                             ChatPaintPolicy policy = ChatPaintPolicy::addressed);
   void commit(const ChatGrid &next);
   void invalidate() noexcept { valid_ = false; }
   std::size_t touched() const noexcept { return touched_; }
@@ -145,7 +148,8 @@ public:
   void detach();
   ChatGrid &grid();
   std::string &prepare(std::size_t cursor_row, std::size_t cursor_column,
-                       bool full = false);
+                       bool full = false,
+                       ChatPaintPolicy policy = ChatPaintPolicy::addressed);
   std::string &prepare_tiny(std::size_t rows, std::size_t columns,
                             std::size_t cursor_row, std::size_t cursor_column);
   void start(RawUiPacket raw = {});

@@ -102,3 +102,45 @@ center episode with actual EAGAIN and cancellation acknowledged before draining.
 The private-PTY fixture requires Ctrl-X to reach the child as literal input.
 See the [center plan/results](../papers/tui-command-center-2026-10-16/PLAN.md)
 for exact qualification status; a screenshot does not establish responsiveness.
+
+The authored result lab adds `tui_retained_result` against actual main and two
+Lua-composed `instrument-lua-{wide,narrow}` styled expectations (20 total).
+Actual Ghostty/Alacritty episodes use independently returned native job IDs,
+child launch/SIGINT/input ledgers, immutable-vs-later source bytes, named interrupt
+receipts, failed/looping/preview source, reload, draft/routes/resize/paste and
+private-PTY original controls. Native VM8, adapter6, bridge5, delivery5 and inspector
+cases attack separate phase/lifetime/identity/pressure mechanisms. Known physical
+reserved-column resize residue stays visible in the recorded Microsoft captures
+under arconaut-arw. See the [instrument contract/results](../papers/tui-lua-composition-2026-10-16/README.md).
+
+The full-viewport integration adds registered `tui_viewport` against actual main:
+
+```sh
+scripts/check-tui-viewport build/debug/blackbird --artifacts context/viewport-check
+scripts/check-tui-viewport build/debug/blackbird --backend alacritty --artifacts context/viewport-check
+```
+
+Each adopted backend checks18 semantic phases, including the complete physical
+last column, full-width composer borders and intentional bottom padding,
+Unicode scalar editing/overwrites, growth/shrink, tiny1x1/2x2/8x3 and normal return,
+cursor/modes and clean exit without a turn. Original cropped-app failures and
+corrected oracle assumptions remain in the [integration report](../papers/tui-full-viewport-2026-10-16/ORACLE_RESULTS.md).
+The blocked-output fixture now stops only its own confirmed-pending child and
+shrinks/restores before resume, requiring a recovery clear after drain. The
+extended graphics episode checks an image reload/place after each physical clear,
+including unchanged placement, and awaits the latest synchronized frame's cursor.
+Two old layout coordinates intentionally move with physical width:12-column box
+border x10→x11;120-column task origin x83→x84. Existing readable component
+expectations remain unchanged. arconaut-arw is repaired by source7523da7; original
+instrument captures are not rewritten to remove their historical residue.
+
+
+The 2026-10-17 navigation slice extends `tui_retained_result` with the typed
+Ctrl-\ view picker, draft/cursor and comparison-anchor continuity, modal
+arrow/F8 isolation, Escape focus restoration, nine extra native command runs,
+second-list-page selection and exact output pinning, backward navigation and
+literal Ctrl-\ under private PTY ownership. `tui_instrument_paging` independently
+checks17 actual native runs across three pages and stale-page action refusal.
+`ui_raw` reads all four view action originals and input links from disk and
+checks an unavailable center while the actual inspector remains open. The
+readable fixture `view-picker` brings the styled expectations to21.

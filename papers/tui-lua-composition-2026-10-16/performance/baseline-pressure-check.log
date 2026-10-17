@@ -1,0 +1,8 @@
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/baseline-release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/baseline-release
+    Start 135: command_jobs_pty
+1/1 Test #135: command_jobs_pty .................   Passed    8.84 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   8.85 sec

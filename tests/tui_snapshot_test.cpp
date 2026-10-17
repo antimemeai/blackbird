@@ -5,14 +5,18 @@
 #include "blackbird/task_view.hpp"
 #include "blackbird/terminal.hpp"
 #include "blackbird/tui_inspector.hpp"
+#include "blackbird/tui_lua.hpp"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <clocale>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <optional>
 #include <stdexcept>
+#include <thread>
 
 using namespace blackbird;
 namespace {
@@ -168,6 +172,126 @@ Value task(std::string id, std::string title, std::string status,
                         {"blocker", Value{std::move(blocker)}},
                         {"owner", Value{std::move(owner)}}});
 }
+template <std::size_t N> tui::lua::Text<N> instrument_text(std::string_view value) {
+  require(value.size() <= N, "instrument fixture fits native text capacity");
+  tui::lua::Text<N> result;
+  result.size = value.size();
+  std::copy(value.begin(), value.end(), result.bytes.begin());
+  return result;
+}
+void instrument_snapshots(std::vector<Snapshot> &output) {
+  namespace lua = tui::lua;
+  std::ifstream source_file{BLACKBIRD_INSTRUMENT_SOURCE, std::ios::binary};
+  require(static_cast<bool>(source_file), "open actual authored instrument source");
+  const std::string source{std::istreambuf_iterator<char>{source_file}, {}};
+  auto script = unwrap(lua::Script::create(source));
+  IdentityBytes environment{}, conversation{}, inbox_identity{};
+  environment.fill(std::byte{0x61});
+  conversation.fill(std::byte{0x62});
+  inbox_identity.fill(std::byte{0x63});
+  lua::PresentationInput input{{unwrap(EnvironmentId::from_bytes(environment)),
+                                unwrap(ConversationId::from_bytes(conversation)),
+                                {81, 1},
+                                1,
+                                1,
+                                0,
+                                0,
+                                1}};
+  constexpr std::array<std::string_view, 2> ids{"11111111111111111111111111111111",
+                                                "22222222222222222222222222222222"};
+  static constexpr char original_a[] = "A\x1b[31m\0END";
+  constexpr std::array<std::string_view, 2> windows{
+      std::string_view{original_a, sizeof(original_a) - 1}, "B\tPRESERVED\nB_END"};
+  input.row_count = 2;
+  for (std::size_t index = 0; index < ids.size(); ++index) {
+    input.rows[index] = {
+        instrument_text<128>(ids[index]),
+        instrument_text<512>(index == 0 ? "A settled exit7" : "B running"),
+        {instrument_text<256>("snapshot-fixture"), instrument_text<32>("command"),
+         instrument_text<128>(ids[index]), 1}};
+    input.detail_size[index] = windows[index].size();
+    std::copy(windows[index].begin(), windows[index].end(),
+              reinterpret_cast<char *>(input.detail[index].data()));
+    input.detail_titles[index] =
+        instrument_text<512>("Command run " + std::string{ids[index]} + " bytes 0.." +
+                             std::to_string(windows[index].size()) + " of observed " +
+                             std::to_string(windows[index].size()));
+  }
+  auto inbox = unwrap(lua::ActionInbox::create(inbox_identity));
+  auto worker = unwrap(lua::PresentationOwner::create(inbox));
+  const auto until = [](auto predicate) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    while (!predicate()) {
+      require(std::chrono::steady_clock::now() < deadline,
+              "finite authored instrument snapshot completion");
+      std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+  };
+  until([&] {
+    return worker->try_compose({script, input, false}) == lua::SubmitStatus::accepted;
+  });
+  lua::Outcome outcome{input.stamp};
+  until([&] { return worker->try_take(outcome) == lua::PollStatus::ready; });
+  require(outcome.status == lua::Completion::candidate && outcome.candidate &&
+              outcome.accepted_requests == 0,
+          "actual authored compose returns a candidate without action admission");
+  std::optional<lua::ActionPage> page;
+  until([&] {
+    const auto result = inbox->try_read();
+    if (result.has_value())
+      page = result.value();
+    return page.has_value();
+  });
+  if (!page)
+    throw std::runtime_error{"actual authored inbox observation missing"};
+  require(page->size == 0, "pure authored composition leaves native inbox empty");
+  auto host = unwrap(tui::SceneHost::create(input.stamp.view, lua::scene_limits));
+  unwrap(lua::publish(outcome, input.stamp, host));
+  auto control = unwrap(tui::CollectionInspector::create(
+      host, "results", "comparison", tui::InspectorBinding::independent));
+  unwrap(host.position(unwrap(host.handle("results")), ids[1], ids[0]));
+  const auto selection = unwrap(control.state());
+  require(selection.selected && *selection.selected == ids[1],
+          "independent comparison keeps selected native row B identity");
+  const auto check_grid = [&](const ChatGrid &grid) {
+    std::string shown, compact;
+    for (const auto &cell : grid.cells) {
+      utf8(shown, cell.scalar);
+      if (cell.scalar != U' ')
+        utf8(compact, cell.scalar);
+    }
+    require(shown.find("A\\x1b[31m\\x00END") != std::string::npos &&
+                shown.find("B  PRESERVED") != std::string::npos &&
+                shown.find("B_END") != std::string::npos,
+            "rendered authored comparison retains literal escaped source suffixes");
+    require(compact.find(ids[0]) != std::string::npos &&
+                compact.find(ids[1]) != std::string::npos,
+            "rendered comparison identifies both original synthetic pinned windows");
+    require(shown.find("Detail target differs") == std::string::npos,
+            "independent comparison does not claim selected-detail mismatch");
+  };
+  Snapshot wide{
+      "instrument-lua-wide",
+      {},
+      {},
+      "synthetic-inputs=2;source=results.lua;selected=B;anchor=A;focus=collection;"
+      "binding=independent;intents=0;editor=external"};
+  wide.grid.reset(100, 16);
+  unwrap(control.render(wide.grid, {0, 0, 100, 16}));
+  check_grid(wide.grid);
+  output.push_back(std::move(wide));
+  unwrap(control.act(tui::InspectorAction::focus_detail));
+  Snapshot narrow{
+      "instrument-lua-narrow",
+      {},
+      {},
+      "synthetic-inputs=2;source=results.lua;selected=B;anchor=A;focus=detail;"
+      "binding=independent;intents=0;editor=external"};
+  narrow.grid.reset(32, 16);
+  unwrap(control.render(narrow.grid, {0, 0, 32, 16}));
+  check_grid(narrow.grid);
+  output.push_back(std::move(narrow));
+}
 std::vector<Snapshot> scenarios() {
   std::vector<Snapshot> output;
   ChatView joiners;
@@ -226,6 +350,19 @@ std::vector<Snapshot> scenarios() {
   output.push_back(rows("tasks-ordinary", task_pane_rows(page, 36, activity), 36, 18));
   output.push_back(rows("tasks-narrow", task_pane_rows(page, 18, activity), 18, 24));
   output.push_back(rows("tasks-tiny", task_pane_rows(page, 7, activity), 7, 3));
+
+  Composer views;
+  views.draft("preserve this draft");
+  feed(views, "\x1b[D\x1b[D");
+  views.views(tui::ViewRoute::command_center);
+  feed(views, "command runs");
+  output.push_back(palette_frame("view-picker", views));
+  const auto route = feed(views, "\r");
+  require(route.action == InputAction::select_view &&
+              route.view == tui::ViewRoute::command_runs &&
+              route.text == "view.command-runs" &&
+              views.text() == "preserve this draft" && views.cursor() == 17,
+          "view picker must emit a local route and preserve draft/cursor");
 
   Composer palette;
   palette.draft("unsent operator draft");
@@ -339,6 +476,7 @@ std::vector<Snapshot> scenarios() {
       1, {{"COMMAND CENTER | " + std::string{center.notice()}, Ink::heading}});
   unwrap(center.render(narrow_center.grid, {0, 2, 32, 10}));
   output.push_back(std::move(narrow_center));
+  instrument_snapshots(output);
   return output;
 }
 } // namespace

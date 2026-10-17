@@ -4,7 +4,9 @@
 by the [interaction theory](INTERACTION_THEORY.md) and
 [harness/component research](../papers/tui-program-2026-10-15/README.md).
 These are proposed compositions and domain contracts, including future capability.
-Current implemented behavior is recorded in [project stock](CURRENT_STATE.md).
+Current delivered TUI scope and branch boundaries are recorded in the
+[delivery status](TUI_IMPLEMENTATION_PLAN.md#present-state-relative-to-the-original-program);
+[project stock](CURRENT_STATE.md) describes the underlying harness capabilities.
 
 ## The design stack
 

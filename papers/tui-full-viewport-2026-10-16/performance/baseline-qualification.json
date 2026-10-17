@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/usr/bin/ctest",
+    "--test-dir",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/baseline-release",
+    "--output-on-failure",
+    "--no-tests=error",
+    "--parallel",
+    "1",
+    "-R",
+    "^(chat_view|chat_render_oracle|terminal_custody_raw|terminal_custody_native|terminal_blocked|terminal_pty_editor)$"
+  ],
+  "started_utc": "2026-10-16T21:53:33Z",
+  "completed": true,
+  "finished_utc": "2026-10-16T21:53:36Z"
+}

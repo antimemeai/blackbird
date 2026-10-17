@@ -1,0 +1,40 @@
+{
+  "identity": {
+    "executable": "/Users/patrickbeam/projects/blackbird/build/debug/blackbird",
+    "sha256": "38738cbb3c1c467272e6af521039ac84f4749014a5d1d51830de93ecacfaba33",
+    "declared_source_checkpoint": "659f62bc9435ae0931da578574ddb805fac77e94+working-instrument-independent-binding",
+    "backend": "alacritty",
+    "session": "blackbird-instrument-3029b4cfc78444b7889d37659f2f6e2f"
+  },
+  "note": "Final source presentation binding, same full actual-main episode. Earlier captures remain historical and unchanged.",
+  "fixtures": [
+    {
+      "file": "final-binding-alacritty-wide.txt",
+      "sha256": "f0b454095152e9c8fdb3b6bfb4273022db5a9d94de0bb1f3e5ba5769d67c462e",
+      "columns": 101,
+      "rows": 30,
+      "cursor": {
+        "color": "#c0c0c0",
+        "shape": "block",
+        "visible": true,
+        "x": 0,
+        "y": 2
+      },
+      "actual_artifact": "context/tui-lua-composition-2026-10-16/oracle/final-binding/alacritty-f67294070e/pinned-state.json"
+    },
+    {
+      "file": "final-binding-alacritty-narrow.txt",
+      "sha256": "c693c1b3f79b8c0421690281c72e579d7d57e027ef78cd0602b95e6bfe1ff75b",
+      "columns": 32,
+      "rows": 12,
+      "cursor": {
+        "color": "#c0c0c0",
+        "shape": "block",
+        "visible": true,
+        "x": 0,
+        "y": 2
+      },
+      "actual_artifact": "context/tui-lua-composition-2026-10-16/oracle/final-binding/alacritty-f67294070e/narrow-state.json"
+    }
+  ]
+}

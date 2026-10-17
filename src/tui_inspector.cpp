@@ -169,6 +169,15 @@ std::size_t after_header(ChatGrid &grid, Rect bounds, std::string_view title,
 Result<CollectionInspector> CollectionInspector::create(SceneHost &host,
                                                         std::string_view left_key,
                                                         std::string_view right_key) {
+  return create(host, left_key, right_key, InspectorBinding::selected_detail);
+}
+Result<CollectionInspector> CollectionInspector::create(SceneHost &host,
+                                                        std::string_view left_key,
+                                                        std::string_view right_key,
+                                                        InspectorBinding binding) {
+  if (binding != InspectorBinding::selected_detail &&
+      binding != InspectorBinding::independent)
+    return Result<CollectionInspector>::failure({ErrorCode::invalid_range});
   auto left = host.handle(left_key);
   if (!left.has_value())
     return Result<CollectionInspector>::failure(left.error());
@@ -183,8 +192,8 @@ Result<CollectionInspector> CollectionInspector::create(SceneHost &host,
     return Result<CollectionInspector>::failure({ErrorCode::invalid_range});
   if (!collection(*scene, left_key) || !inspector(*scene, right_key))
     return Result<CollectionInspector>::failure({ErrorCode::incomplete});
-  return Result<CollectionInspector>::success(
-      CollectionInspector{host, std::move(left).value(), std::move(right).value()});
+  return Result<CollectionInspector>::success(CollectionInspector{
+      host, std::move(left).value(), std::move(right).value(), binding});
 }
 Result<std::shared_ptr<const Scene>> CollectionInspector::checked() const {
   for (const auto *node : {&collection_, &inspector_}) {
@@ -345,9 +354,10 @@ Result<InspectorLayout> CollectionInspector::render(ChatGrid &grid, Rect bounds)
     const auto selected = selection
                               ? std::ranges::find(rows.items, *selection, &Item::key)
                               : rows.items.end();
-    const bool mismatch = selected == rows.items.end()
-                              ? detail.target.has_value()
-                              : selected->target != detail.target;
+    const bool mismatch =
+        binding_ == InspectorBinding::selected_detail &&
+        (selected == rows.items.end() ? detail.target.has_value()
+                                      : selected->target != detail.target);
     if (layout.collection.height) {
       const auto consumed = std::min(layout.collection.height,
                                      std::size_t{1} + (present(rows.notice) ? 1U : 0U));

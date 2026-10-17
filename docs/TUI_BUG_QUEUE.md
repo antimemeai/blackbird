@@ -112,3 +112,58 @@ preserves30s/512KiB and actual EAGAIN plus refusal; the original failure lacked
 terminal artifacts, so throughput causality remains unknown. CTest now retains
 unique terminal/keyboard/pressure artifacts. Passing direct checks do not resolve
 the historical timeout.
+
+The authored-instrument tranche retains two ordinary findings: `arconaut-arw`,
+physical x31 stale residue on101×30→32×12 in both Microsoft backends, and
+`arconaut-14o`, one private bridge ASan native Error abort with no sanitizer report
+and a passing diagnostic rerun whose original native code remains unknown.
+[Actual captures](../papers/tui-lua-composition-2026-10-16/ORACLE_RESULTS.md) and
+[bridge results](../papers/tui-lua-composition-2026-10-16/BRIDGE_RESULTS.md) retain
+both observations; neither is silently called repaired. The adapter's false
+selected-detail warning was an actual integration fault and was fixed by an
+explicit independent-comparison component relation. A TSan pressure-oracle setup
+failure was corrected with sustained physical capacity control, not a product
+change or relaxed assertion. AFL output remains untouched.
+
+The [full-viewport policy comparison](../papers/tui-terminal-edge-comparison-2026-10-16/README.md)
+completes under `arconaut-rhi.3.7`, source0c62e964. Addressed/erase/full pass both
+emulator profiles; corner is a rejected experimental policy because Ghostty2x2
+misplaces a bottom-right combining accent. Retain that counterexample rather
+than selecting it for production. The matched360-process competition supports
+addressed deltas, eligible default-tail erasure and full clearing for recovery.
+At that comparison checkpoint, `arconaut-arw` remained open for actual application
+integration. The following integration now repairs it; the old captures retain
+their original residue. No AFL output was inspected.
+
+The full-viewport integration's extended graphics fixture exposed `arconaut-igs`:
+a Mac failed-assert launcher teardown wait stalled after kill. Primary failure and
+terminal originals are retained; group cleanup now waits at most5s. Its underlying
+OS/native cause remains unknown, while corrected complete-frame graphics checks
+exit normally on Debug/ASan. This is a collective fixture finding, not evidence
+of a production TUI hang. See the [integration record](../papers/tui-full-viewport-2026-10-16/README.md).
+
+Source `7523da7` repairs `arconaut-arw`: actual full physical width, ordinary-tail
+EL, full recovery after resize/tiny/editor changes, retained resize invalidation
+across pending output, and Kitty cache reload after full clear. Full258/258
+Debug plus253 C++/owned Lua, affected ASan/UBSan, both actual-main Microsoft
+backends and seven selected Linux cases pass. The [120-process matched app round](../papers/tui-full-viewport-2026-10-16/performance/README.md)
+retains all16 endpoint rows and960 observations. Wide resize/restore and narrow
+restore costs rise, while typing and other tails are mixed; retain these in
+`arconaut-f8f` without a source-causal claim. Source is on the work branch; no
+master merge or running-user activation follows from qualification.
+
+`arconaut-8zx` parks the requested deeper resize-latency investigation, related
+to `arconaut-f8f`. It must separate parent request/observer parsing time from
+native layout/paint/output and wakeup costs;5.745ms is the observed wide-shrink
+median, not measured painter CPU. It does not block the original TUI redesign.
+
+
+2026-10-17 paging/shared-navigation source064e794 is qualified and pushed:
+259/259 Debug plus full C++/Lua checks, selected sanitizer/Linux cases, both
+Microsoft backends and21 readable expectations. The first-eight comparison-list
+limitation is repaired in arconaut-rhi.3.8. All120 matched Release processes and
+960 endpoints complete. Mixed deltas and wide startup maximum40.963→388.296ms
+remain ordinary arconaut-f8f observations, without source-causal attribution or
+retiming. [All results](../papers/tui-navigation-2026-10-17/RESULTS.md) preserve
+invalid fixture attempts and the final valid round. Resize decomposition8zx
+and the original AFL inbox remain separate; no fuzz findings were inspected.

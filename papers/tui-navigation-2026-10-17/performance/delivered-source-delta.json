@@ -1,0 +1,28 @@
+{
+  "captured_candidate_tree": "c4966e284ce086f9c09d2edb770cf30628d65b581b2e6b10c65c28a77ca65c82",
+  "qualified_native_scope_tree": "66dee5a207bff34b4806a463b3c5fd684b9ddc23ec6fb105852c8f2fe03356f2",
+  "head_at_comparison": "cbb206b629d936c13c9636b0a7bac999fa68e3e9",
+  "delivered_source_commit": "064e794ea1665f241c82e92b431c689290deb205",
+  "changes": [
+    {
+      "path": "scripts/check-tui-instrument",
+      "measured": {
+        "path": "scripts/check-tui-instrument",
+        "sha256": "0336d4422faecf32a6cab1d229bedffb1349a3178a0c3b92374a80ee9644c10f",
+        "bytes": 25977,
+        "executable": true
+      },
+      "delivered": {
+        "path": "scripts/check-tui-instrument",
+        "sha256": "8788d7c9850d2ab5787b1f2f68d95dbf06f48b0d3e1da22e7508630bd118891f",
+        "bytes": 26122,
+        "executable": true
+      }
+    }
+  ],
+  "compiled_production_sources_unchanged": true,
+  "scope": "One test-driver-only overlay supplies child VQUIT handling for literal Ctrl-backslash input; compiled native code, build-hash scopes, Lua program, observer and report unchanged. Original source archive and driver patch retained.",
+  "driver_patch": "qualification-driver-delta.patch",
+  "delivered_native_scope_tree": "66dee5a207bff34b4806a463b3c5fd684b9ddc23ec6fb105852c8f2fe03356f2",
+  "delivered_archive_sha256": "37e188005616f1de3357191401539393f3866650eb735f77324756163422d41a"
+}

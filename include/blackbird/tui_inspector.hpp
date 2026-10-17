@@ -17,6 +17,7 @@ enum class InspectorAction : std::uint8_t {
   focus_detail,
   toggle_focus
 };
+enum class InspectorBinding : std::uint8_t { selected_detail, independent };
 struct InspectorLayout {
   Rect bounds, collection, detail;
   std::optional<std::size_t> divider;
@@ -32,17 +33,23 @@ public:
   CollectionInspector &operator=(CollectionInspector &&) noexcept = default;
   static Result<CollectionInspector>
   create(SceneHost &host, std::string_view collection, std::string_view inspector);
+  static Result<CollectionInspector> create(SceneHost &host,
+                                            std::string_view collection,
+                                            std::string_view inspector,
+                                            InspectorBinding binding);
   Result<void> act(InspectorAction action);
   Result<InspectorLayout> render(ChatGrid &grid, Rect bounds);
   Result<CollectionState> state() const;
   std::size_t detail_scroll() const noexcept { return detail_offset_; }
 
 private:
-  CollectionInspector(SceneHost &host, NodeHandle collection, NodeHandle inspector)
+  CollectionInspector(SceneHost &host, NodeHandle collection, NodeHandle inspector,
+                      InspectorBinding binding)
       : host_(&host), collection_(std::move(collection)),
-        inspector_(std::move(inspector)) {}
+        inspector_(std::move(inspector)), binding_(binding) {}
   SceneHost *host_;
   NodeHandle collection_, inspector_;
+  InspectorBinding binding_;
   Result<std::shared_ptr<const Scene>> checked() const;
   Result<void> measure(std::shared_ptr<const Scene> scene, std::size_t width);
   std::shared_ptr<const Scene> measured_;

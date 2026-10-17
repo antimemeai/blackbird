@@ -22,6 +22,58 @@ question; new cases establish their own baseline. Retain ordinary findings for
 [collective bug action](TUI_BUG_QUEUE.md). AFL runs through the Python launcher on
 Neuroses and is then left alone, following the operator's explicit instruction.
 
+## Present state relative to the original program
+
+2026-10-17 status, after full-viewport delivery7523da7 and results
+f0a2bed, with bounded paging/shared-navigation delivered in064e794.
+[Qualification and scope](../papers/tui-navigation-2026-10-17/RESULTS.md) record
+259/259 Debug, full C++/Lua checks, affected sanitizer/Linux/terminal episodes
+and the matched120-process performance round. The explicit theory, enduring doctrine, component contracts and view
+research/designs are published. Implementation has reached working foundation
+and first applications in Units1–2; the broader visual/interaction redesign and
+Units3–6 remain real work. Test counts are qualification of delivered slices,
+not a fraction of the product design completed.
+
+| Original work | Delivered scope | Remaining scope |
+| --- | --- | --- |
+| Unit1: native host and components | Owned frame presenter, checked scenes/local state, reusable keyed collection/inspector, native controls under output pressure, ESC repair, full physical viewport/recovery; shared local view coordinator/picker and four named view actions | General layout/overlays, reusable forms/editor/palette/status families, configurable named actions/bindings and a broader theme/composition vocabulary |
+| Unit2: Lua and useful applications | Isolated bounded composition/handlers; native exact-target action bridge; conversation result inspector; current-session task/participant/job center; authored retained-result A/B lab with reload/preview and command-run list continuation | Retained semantic operation reference shared across human/model/Lua paths; wider reusable composition contract and consistent shell adoption |
+| Unit3: current settings, Context and team | Existing harness APIs and earlier CLI/TUI surfaces are available | Shared settings/session/task forms, Context/request/original-repair workbench, actual team roster/answers/directions views |
+| Unit4: start-turn/action fabric | Reviewed domain/view design | Owning event/binding execution contract, live configuration/activation, authoring/history/explanation surfaces |
+| Unit5: capabilities/skills/recipes/adapters | Native tool/module/workflow/package machinery exists; workbench/adapters researched | Unified qualified catalog and execution bench; reusable prompt/skill/API-recipe management; MCP/integration/infrastructure views and their missing owners |
+| Unit6: metrics instruments | Existing trace/variables/correlation and usage-reader capability | Shared tertiary timeline/plot/range/compare components and the planned operations/execution/cost/context/interaction views |
+| Later expressive devices/mods | Research and design | Effective-binding inspector/common input adapters, general mod lifecycle/contributions, MIDI/device selection and implementation, haptic hardware/protocol decisions |
+
+The inspector/center exercise genuine reusable components; they do not yet supply
+the whole proposed workbench. Most of the existing conversation still uses its
+native layout/composer and fixed control dispatch. The independently owned Lua
+instrument is a real authored extension, not general migration of every surface.
+The exact bridge can address a native command run, but command delivery explicitly reports
+`semantic_link_available=false`: the retained CodingEngine operation locator is
+not supplied to that owner. The comparison now follows the command-run observer's continuation cursor;
+list focus pages entries, while detail focus pages selected output. Eight is a
+read/display page size, independent of command execution limits.
+
+At this checkpoint, local master74a42f4 contains presenter, inspector and center
+integration. The Lua instrument3e3a561 and full-viewport7523da7 are qualified and
+pushed in the current work-branch lineage, not merged into that master. Running
+user executable activation is a separate state; source qualification does not
+assert a live process changed.
+
+Source064e794 adds the shared native route coordinator, draft-preserving view
+picker and four typed named view actions. This is local navigation, not the full
+configurable binding system. Bring qualified branch work into the next
+integration, then grow shared controls through visible existing surfaces. Close the operation-reference and
+remaining shared-control gaps in coherent owning slices as those surfaces use them, and carry the
+shared components into Unit3 settings, Context and team. Preserve the original
+sequence into live action fabric, capability/reuse workbenches and metrics;
+add device adapters after the common binding contract and actual hardware selection.
+
+Resize-to-observed-frame decomposition is parked in `arconaut-8zx`, related to
+ordinary performance observations `arconaut-f8f`. It does not block redesign.
+No new profiling, benchmark repeat or renderer optimization is part of this
+status reconciliation.
+
 ## Why this order
 
 The operator asks for enduring doctrine, reusable machinery and forthcoming
@@ -73,7 +125,8 @@ source coverage. Source `d0e3b2e` delivers it after222/222 Debug plus complete
 C++/Lua checks, affected sanitizers and75 Linux Release cases. Its
 [results](../papers/tui-command-center-2026-10-16/RESULTS.md) retain behavioral REDs,
 review fixes, real source/pressure/screen checks and mixed matched performance.
-The independent Lua bridge remains open; this does not complete Units1–2.
+The independent Lua bridge is now delivered by3e3a561 below; remaining semantic
+reference and broader component gaps still prevent whole Units1–2 closure.
 
 Source `52f9103` delivers that inspector after206/206 Debug tests, full C++/Lua
 analysis, affected sanitizers and58 scoped Linux Release checks. The same tranche
@@ -140,6 +193,11 @@ an acknowledgment after owner admission and reload without repeating the effect.
 Compare actual operation references across human, model and Lua paths. This proves semantics, not just matching screenshots.
 
 ## Unit 3: shared settings, definitions and initial team surface
+
+The [first reusable form proposal](../papers/tui-settings-form-2026-10-17/PLAN.md)
+is source-grounded in current session defaults, serialized work and distinct
+program overrides. Its guarded observation/patch owner and model/effort form
+remain implementation work; saving a default must not imply an override changed.
 
 Migrate sessions/drafts, tasks/forms, model/account settings and native callable
 registries onto the collection/editor/inspector pattern. Deliver the Context/
@@ -276,5 +334,20 @@ retain their separate scope.
 - `arconaut-rhi.7` — Deliver tertiary metrics consumer views with source and coverage inspection.
 
 The design unit is `arconaut-rhi.2`; these implementation issues remain open.
-Known ESC recovery stays `arconaut-600`. Existing workflow/peer delivery issues
+The original ESC recovery prerequisite `arconaut-600` is closed in a68fec4. Existing workflow/peer delivery issues
 retain their owning contracts rather than being duplicated as a UI scheduler.
+
+2026-10-16 authored-instrument source `3e3a561`: isolated bounded Lua composition and
+named handlers, exact-key native process mailbox bridge/delivery observations,
+Ctrl-] /instrument, immutable A/B pins, async source reload/preview, native source
+pages/selection and explicit independent comparison relation are implemented on
+work/tui-lua-composition-2026-10-16. [Contract/results](../papers/tui-lua-composition-2026-10-16/README.md)
+record 252/252 Debug tests, analysis of all 251 actual C++ translation units,
+owned Lua checks, scoped sanitizer/Linux results and the 120-run matched Release round. The source is pushed in the work-branch lineage; local master74a42f4 includes
+the earlier0bf6712 TUI integration and a later independent exec fix, but not
+this Lua tranche or the full-viewport delivery.
+The current receipt deliberately lacks a retained CodingEngine operation locator;
+Unit2's explicit cross-human/model/Lua semantic locator comparison remains open.
+At that earlier checkpoint the comparison exposed only the first eight command
+runs; the 2026-10-17 paging slice repairs list continuation. No claim that every
+Unit1–2 component, configurable binding system or future view is complete.

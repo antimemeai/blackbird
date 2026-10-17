@@ -1,0 +1,1322 @@
+--- baseline/CMakeLists.txt
++++ candidate/CMakeLists.txt
+@@ -950,7 +950,7 @@
+ target_sources(blackbird_coding PRIVATE src/tui_instrument.cpp)
+ add_executable(tui_instrument_test tests/tui_instrument_test.cpp)
+ target_link_libraries(tui_instrument_test PRIVATE blackbird_coding)
+-foreach(mode semantic source stale mapping recovery raw)
++foreach(mode semantic source stale mapping recovery raw paging)
+   add_test(NAME tui_instrument_${mode} COMMAND tui_instrument_test ${mode})
+   set_tests_properties(tui_instrument_${mode} PROPERTIES TIMEOUT 20)
+ endforeach()
+--- baseline/include/blackbird/command_center.hpp
++++ candidate/include/blackbird/command_center.hpp
+@@ -40,6 +40,7 @@
+   bool open() const noexcept { return open_; }
+   bool focused() const noexcept { return focused_; }
+   void focus_editor() noexcept { focused_ = false; }
++  void focus_view() noexcept { focused_ = open_; }
+   bool needs_refresh() const noexcept { return refresh_; }
+   bool refresh(const CommandCenterSources &sources, bool capture);
+   Result<void> act(tui::InspectorAction action, RawEventRef origin = {});
+--- baseline/include/blackbird/command_inspector.hpp
++++ candidate/include/blackbird/command_inspector.hpp
+@@ -14,6 +14,7 @@
+   bool open() const noexcept { return open_; }
+   bool focused() const noexcept { return focused_; }
+   void focus_editor() noexcept { focused_ = false; }
++  void focus_view() noexcept { focused_ = open_; }
+   void first_page(RawEventRef origin = {});
+   bool needs_refresh() const noexcept { return refresh_; }
+   bool refresh(CommandJobs *commands, bool capture);
+--- baseline/include/blackbird/terminal.hpp
++++ candidate/include/blackbird/terminal.hpp
+@@ -6,6 +6,7 @@
+ #include "blackbird/raw_ui.hpp"
+ #include "blackbird/tasks.hpp"
+ #include "blackbird/tui_instrument.hpp"
++#include "blackbird/tui_navigation.hpp"
+ #include <atomic>
+ #include <chrono>
+ #include <filesystem>
+@@ -41,12 +42,14 @@
+   inspect_next_output,
+   center_toggle,
+   instrument_toggle,
+-  instrument_action
++  instrument_action,
++  select_view
+ };
+ struct InputResult {
+   InputAction action = InputAction::none;
+   std::string text;
+   RawUiSource source{};
++  std::optional<tui::ViewRoute> view{};
+ };
+ struct TerminalState {
+   std::string draft;
+@@ -73,7 +76,9 @@
+ struct ComposerChoice {
+   std::string name, arguments, description, group;
+   std::string label{};
+-};
++  std::optional<tui::ViewRoute> view{};
++};
++std::vector<ComposerChoice> terminal_view_choices(tui::ViewRoute current);
+ class Composer {
+ public:
+   InputResult feed(char byte, RawUiInput *raw = nullptr, bool inspecting = false);
+@@ -82,6 +87,7 @@
+   TerminalState state() const;
+   void draft(std::string text);
+   void choices(std::vector<ComposerChoice> entries, std::string heading);
++  void views(tui::ViewRoute current = tui::ViewRoute::conversation);
+   bool palette_open() const noexcept { return palette_open_; }
+   bool slash_open() const noexcept { return slash_open_; }
+   bool escape_pending() const noexcept { return !escape_.empty(); }
+@@ -115,7 +121,7 @@
+ };
+ // One poll-turn decision: expiry is serviced for ready and idle input alike.
+ struct TerminalInputDispatch {
+-  bool read_input = false, redraw = false;
++  bool read_input = false, redraw = false, focus_editor = false;
+ };
+ TerminalInputDispatch
+ terminal_input_dispatch(Composer &composer, std::chrono::steady_clock::time_point now,
+--- baseline/include/blackbird/tui_instrument.hpp
++++ candidate/include/blackbird/tui_instrument.hpp
+@@ -22,6 +22,7 @@
+   bool open() const noexcept;
+   bool focused() const noexcept;
+   void focus_editor() noexcept;
++  void focus_view() noexcept;
+   Result<void> source(InstrumentSource proposal, bool capture);
+   bool refresh(bool capture);
+   Result<void> act(tui::InspectorAction action, RawEventRef origin = {});
+--- baseline/include/blackbird/tui_navigation.hpp
++++ candidate/include/blackbird/tui_navigation.hpp
+@@ -0,0 +1,28 @@
++#pragma once
++#include <array>
++#include <cstdint>
++#include <string_view>
++
++namespace blackbird::tui {
++enum class ViewRoute : std::uint8_t {
++  conversation,
++  command_runs,
++  command_center,
++  result_comparison
++};
++struct ViewDescription {
++  ViewRoute route;
++  std::string_view action, label, description, command, binding;
++};
++inline constexpr std::array view_descriptions{
++    ViewDescription{ViewRoute::conversation, "view.conversation", "Conversation",
++                    "Return to the conversation and draft", "", ""},
++    ViewDescription{ViewRoute::command_runs, "view.command-runs", "Command runs",
++                    "Inspect command state and retained output", "/jobs", "Ctrl-O"},
++    ViewDescription{ViewRoute::command_center, "view.command-center", "Command center",
++                    "Inspect current-session tasks, participants and command runs",
++                    "/center", "Ctrl-X"},
++    ViewDescription{ViewRoute::result_comparison, "view.result-comparison",
++                    "Result comparison", "Compare pinned output from command runs",
++                    "/instrument", "Ctrl-]"}};
++} // namespace blackbird::tui
+--- baseline/programs/instruments/results.lua
++++ candidate/programs/instruments/results.lua
+@@ -1,7 +1,7 @@
+ -- Composition is pure; only the named handler can request a native intent.
+ return {
+   compose = function()
+-    local results = ui.collection("results", "RESULTS")
++    local results = ui.collection("results", "COMMAND RUNS")
+     for i = 1, ui.rows() do
+       ui.item(results, ui.key(i), ui.label(i), i)
+     end
+--- baseline/scripts/check-tui-instrument
++++ candidate/scripts/check-tui-instrument
+@@ -178,6 +178,16 @@
+             expect('Workflow reloads')
+             before = midcursor_draft('INSTRUMENT_DRAFT_SENTRY')
+             (artifacts / 'before-open.json').write_text(json.dumps(before, indent=2) + '\n')
++            call('write', '\x1c')
++            expect('Views')
++            call('write', 'command runs\r')
++            expect('COMMAND RESULTS')
++            call('write', '\x0f')
++            restored_view = wait_state(lambda s: 'COMMAND RESULTS' not in s['text'],
++                                       'view action returned to conversation')
++            assert restored_view['cursor'] == before['cursor'], 'view action moved draft cursor'
++            assert 'INSTRUMENT_DRAFT_SENTRY' in restored_view['text'], 'view action replaced draft'
++            assert not effects.exists(), 'view action executed fixture work'
+             call('write', '\x1d')
+             # Permanent actual-old-main RED, before any submitted workflow.
+             expect('RETAINED RESULT LAB')
+@@ -209,9 +219,11 @@
+             expect('RETAINED RESULT LAB')
+ 
+             def comparison(snapshot):
+-                # Settled logical100 split: collection33, divider33, detail34.
+-                return '\n'.join(row[34:100].rstrip()
+-                                 for row in snapshot['text'].splitlines()[2:25])
++                # Physical101: collection33, divider33, detail34..100.
++                lines = snapshot['text'].splitlines()
++                end = next((i for i, row in enumerate(lines)
++                            if row.startswith('Command runs · page ')), 25)
++                return '\n'.join(row[34:101].rstrip() for row in lines[2:end])
+ 
+             def compact(value):
+                 return re.sub(r'\s+', '', value)
+@@ -231,8 +243,8 @@
+                        ''.join('A_ROW_%02d\n' % row for row in range(24)) +
+                        'A_SETTLED_EXIT_7\n').encode()
+             b_bytes = b'B_PINNED_ORIGINAL\n'
+-            a_label = 'Job %s bytes 0..%d of observed %d' % (job_a, len(a_bytes), len(a_bytes))
+-            b_label = 'Job %s bytes 0..%d of observed %d' % (job_b, len(b_bytes), len(b_bytes))
++            a_label = 'Command run %s bytes 0..%d of observed %d' % (job_a, len(a_bytes), len(a_bytes))
++            b_label = 'Command run %s bytes 0..%d of observed %d' % (job_b, len(b_bytes), len(b_bytes))
+             choose(job_a)
+             wait_state(lambda s: 'Selected ' + job_a + ' settled' in s['text'],
+                        'fixture A actually settled')
+@@ -243,6 +255,20 @@
+             expect('Interrupt unavailable')
+             assert not any(line.startswith('INT_') for line in effects.read_text().splitlines())
+             choose(job_b)
++            call('write', '\x1c')
++            expect('Views')
++            call('write', '\x1b[19~')
++            call('key', 'press', 'Down')
++            expect('> Command runs')
++            call('write', '\x1b')
++            wait_state(lambda s: 'Views /' not in s['text'], 'picker dismissal restores inspector')
++            selected(job_b)
++            call('key', 'press', 'Home')
++            selected(ordered[0])
++            call('key', 'press', 'Down')
++            selected(ordered[1])
++            choose(job_b)
++            assert not any(line.startswith('INT_') for line in effects.read_text().splitlines()), 'picker leaked F8 interrupt'
+             call('write', '\x1b[18~')
+             call('key', 'press', 'Right')
+             call('key', 'press', 'End')
+@@ -291,6 +317,15 @@
+             restored = wait_state(lambda s: 'B_PINNED_ORIGINAL' in comparison(s),
+                                   'instrument route returns its pinned reading anchor')
+             assert comparison(restored) == retained_reading, 'instrument reading position changed'
++            call('write', '\x1c')
++            expect('Views')
++            call('write', 'conversation\r')
++            wait_state(lambda s: 'RETAINED RESULT LAB' not in s['text'], 'picker conversation route')
++            call('write', '\x1c')
++            call('write', 'result comparison\r')
++            restored = wait_state(lambda s: 'RETAINED RESULT LAB' in s['text'] and
++                                  'B_PINNED_ORIGINAL' in comparison(s), 'picker resumes comparison')
++            assert comparison(restored) == retained_reading, 'view picker reset comparison anchor'
+             call('resize', '32', '12')
+             expect('RETAINED RESULT LAB')
+             call('key', 'press', 'Right')
+@@ -359,10 +394,55 @@
+ 
+             # Private PTY ownership precedes every instrument/global route control.
+             editor()
++            call('write', '\x1d')
++            # Nine additional actual command runs make a second list page.
++            paging_ids = work / 'paging-identities'
++            paging_code = ("local ids={} for i=1,9 do local r=blackbird.call('exec',"
++                           "{argv={'/usr/bin/printf','PAGED_OUTPUT_'..i},yield_ms=0}) "
++                           "ids[i]=r.job_id end blackbird.call('write_file',{path=" +
++                           json.dumps(str(paging_ids)) + ",content=table.concat(ids,'\\n')})")
++            call('write', '\x15/lua ' + paging_code + '\r')
++            wait_state(lambda s: paging_ids.exists() and 'Turn complete' in s['text'],
++                       'nine finite native command runs available')
++            extra_ids = paging_ids.read_text().splitlines()
++            assert len(extra_ids) == 9 and len(set(extra_ids + ordered)) == 11
++            all_ids = sorted(extra_ids + ordered)
++            (artifacts / 'paging-identities.json').write_text(json.dumps({
++                'ordered': all_ids, 'extra': extra_ids}, indent=2) + '\n')
++            call('write', '\x15/instrument\r')
++            expect('Command runs · page 1')
++            call('key', 'press', 'Left')
++            call('key', 'press', 'Home')
++            selected(all_ids[0])
++            call('write', '\x1b[1;5C')
++            expect('Command runs · page 2')
++            call('key', 'press', 'Home')
++            selected(all_ids[8])
++            call('write', '\x1b[1;5C')
++            call('key', 'press', 'End')
++            selected(all_ids[-1])
++            chosen_extra = next(identifier for identifier in all_ids[8:] if identifier in extra_ids)
++            call('key', 'press', 'Home')
++            for _ in range(all_ids.index(chosen_extra) - 8):
++                call('key', 'press', 'Down')
++            wait_state(lambda s: 'Selected ' + chosen_extra + ' settled' in s['text'],
++                       'selected later-page command actually settled')
++            call('write', '\x1b[17~')
++            call('key', 'press', 'Right')
++            call('key', 'press', 'Home')
++            wait_state(lambda s: chosen_extra in comparison(s) and
++                       'PAGED_OUTPUT_' + str(extra_ids.index(chosen_extra) + 1) in comparison(s),
++                       'second list page pins exact native command output')
++            call('key', 'press', 'Left')
++            call('write', '\x1b[1;5D')
++            expect('Command runs · page 1')
++            call('key', 'press', 'Home')
++            selected(all_ids[0])
++            assert 'B_PINNED_ORIGINAL' in comparison(state()), 'list navigation replaced immutable B pin'
+             call('write', '\x15/fg ' + job_b + '\r')
+             wait_state(lambda s: any('PTY input' in row and job_b in row
+                                     for row in s['text'].splitlines()), 'actual private PTY lease')
+-            private = b'private_\x1d\x18\x0f\x1b[19~\n'
++            private = b'private_\x1c\x1d\x18\x0f\x1b[19~\n'
+             call('write', private[:-1].decode() + '\r')
+             input_effect = 'INPUT_' + private.hex()
+             wait_state(lambda _s: input_effect in effects.read_text().splitlines(),
+--- baseline/src/raw_ui.cpp
++++ candidate/src/raw_ui.cpp
+@@ -498,7 +498,7 @@
+          "branch,u8 stage,size_t actually applied,[ErrorCode,i64 detail only Error];"
+          "4006:batchR,enqueueR,lastR,Kind,Ink,size_t text;4007:generic outcome;"
+          "4010:actual_feedR,size_t index,InputAction,size_t cursor,size_t "
+-         "draft,[size_t text,bytes for submit/choose];4011:actionR,u8 "
++         "draft,[size_t text,bytes for submit/choose/select_view];4011:actionR,u8 "
+          "branch,targetR;4012:generic outcome;"
+          "4013:actionR,u8 queue,sourceR,size_t offset,size_t bytes;4014:queueR,u8 "
+          "branch,size_t index;4015:queueR,u8 branch,size_t index,targetR;4016:generic "
+--- baseline/src/terminal.cpp
++++ candidate/src/terminal.cpp
+@@ -45,6 +45,8 @@
+     ChatCommand{"/keys", "", "Keyboard guide (TUI only)", "Chat"},
+     ChatCommand{"/commands", "",
+                 "Search command palette; Ctrl-Space or Ctrl-T (TUI only)", "Chat"},
++    ChatCommand{"/views", "", "Switch local views; Ctrl-\\ preserves the draft",
++                "View"},
+     ChatCommand{
+         "/edit", "",
+         "Open a blank draft in $VISUAL/$EDITOR; Ctrl-G edits current draft (idle TUI)",
+@@ -193,11 +195,11 @@
+       matches.push_back(n);
+   }
+   auto rank = [&](std::size_t n) {
+-    auto name = search_text(commands[n].name);
++    auto name = search_text(commands[n].view ? commands[n].label : commands[n].name);
+     auto exact = needle;
+     if (exact.starts_with("/"))
+       exact.erase(0, 1);
+-    if (name.substr(1) == exact)
++    if (commands[n].view ? name == needle : name.substr(1) == exact)
+       return 0;
+     if (name.find(needle) != std::string::npos)
+       return 1;
+@@ -312,11 +314,12 @@
+          "  Ctrl-C       Request stop and clear pending queue; keep unsent draft\n"
+          "  Ctrl-B       Background foreground command; preserve composer\n"
+          "  Ctrl-O       Inspect command results; preserve draft/cursor\n"
++         "  Ctrl-\\      View picker; switch views without replacing the draft\n"
+          "  Ctrl-X       Current-session command center; preserve draft/cursor\n"
+          "  Ctrl-]       Authored result lab; F6/F7 pin A/B; F8 request interrupt\n"
+          "  Inspector    Arrows/Home/End/Page navigate; Tab focus; Esc draft\n"
+-         "  Center       T tasks, P participants, J jobs; + means more rows\n"
+-         "               Ctrl-Left/Right source pages; typing returns to draft\n"
++         "  Center       T tasks, P participants, J command runs; + means more\n"
++         "               Ctrl-Left/Right: list pages or output pages by focus\n"
+          "  PTY input    Keys and Ctrl-C reach selected command; Ctrl-B returns\n"
+          "  Ctrl-Q       Stop and exit; preserve unsent draft\n"
+          "  PgUp / PgDn  Scroll transcript\n"
+@@ -663,6 +666,21 @@
+   draft_cursor_ = 0;
+   goal_column_.reset();
+ }
++std::vector<ComposerChoice> terminal_view_choices(tui::ViewRoute current) {
++  std::vector<ComposerChoice> choices;
++  choices.reserve(tui::view_descriptions.size());
++  for (const auto &view : tui::view_descriptions)
++    choices.push_back(
++        {std::string{view.action}, "",
++         std::string{view.description} +
++             (view.route == current ? " (current view)" : "") +
++             (view.binding.empty() ? "" : " · " + std::string{view.binding}),
++         "Views", std::string{view.label}, view.route});
++  return choices;
++}
++void Composer::views(tui::ViewRoute current) {
++  choices(terminal_view_choices(current), "Views");
++}
+ void Composer::choices(std::vector<ComposerChoice> entries, std::string heading) {
+   std::size_t bound = 0;
+   for (const auto &entry : entries)
+@@ -704,8 +722,9 @@
+ terminal_input_dispatch(Composer &composer, std::chrono::steady_clock::time_point now,
+                         std::chrono::steady_clock::time_point escape_deadline,
+                         short events) {
++  const bool palette = composer.palette_open();
+   const bool redraw = now >= escape_deadline && composer.flush_escape();
+-  return {(events & (POLLIN | POLLHUP | POLLERR)) != 0, redraw};
++  return {(events & (POLLIN | POLLHUP | POLLERR)) != 0, redraw, redraw && !palette};
+ }
+ std::vector<std::string> Composer::palette_lines(std::size_t rows) const {
+   const auto catalog = choices_ && palette_open_ ? choices_ : command_catalog();
+@@ -735,9 +754,12 @@
+     }
+   }
+   if (rows > 2)
+-    out.emplace_back(slash_open_
+-                         ? "↑↓ select · Tab fill · Enter run/fill · Esc dismiss"
+-                         : "Type search · Up/Down select · Enter loads · Esc back");
++    out.emplace_back(
++        slash_open_ ? "↑↓ select · Tab fill · Enter run/fill · Esc dismiss"
++        : choices_ && std::any_of(choices_->begin(), choices_->end(),
++                                  [](const auto &c) { return c.view.has_value(); })
++            ? "Type search · Up/Down select · Enter opens · Esc back"
++            : "Type search · Up/Down select · Enter loads · Esc back");
+   out.resize(rows);
+   return out;
+ }
+@@ -826,7 +848,8 @@
+     if (!result.source.record.ordinal) {
+       const auto action = result.action;
+       const auto length = result.text.size();
+-      if (action == InputAction::choose_command || action == InputAction::submit) {
++      if (action == InputAction::choose_command || action == InputAction::submit ||
++          action == InputAction::select_view) {
+         const auto ref =
+             raw_ui_emit(4010,
+                         std::array{ByteView{raw->feed.lane},
+@@ -861,6 +884,7 @@
+   });
+ }
+ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
++  inspecting = inspecting && !palette_open_;
+   const auto catalog = choices_ && palette_open_ ? choices_
+                        : raw && capture_catalog_ ? capture_catalog_
+                                                  : command_catalog();
+@@ -997,6 +1021,10 @@
+     insert(byte == '\r' ? '\n' : byte);
+     return {};
+   }
++  if (c == 28) {
++    palette_open_ = slash_open_ = false;
++    return {InputAction::select_view, "view.picker"};
++  }
+   if (c == 15) {
+     palette_open_ = slash_open_ = false;
+     return {InputAction::inspect_toggle, {}};
+@@ -1040,8 +1068,10 @@
+         const auto &command =
+             commands[matches[std::min(palette_selected_, matches.size() - 1)]];
+         palette_open_ = false;
+-        return {InputAction::choose_command,
+-                std::string{command.name} + (command.arguments.empty() ? "" : " ")};
++        return {command.view ? InputAction::select_view : InputAction::choose_command,
++                std::string{command.name} + (command.arguments.empty() ? "" : " "),
++                {},
++                command.view};
+       }
+     } else if (c == 16 || c == 14 || c == 9)
+       palette_move(c == 16);
+@@ -1838,10 +1868,55 @@
+     if (inspector && inspector->open())
+       inspector->toggle();
+   };
+-  auto inspection_open = [&] {
+-    return (instrument && instrument->open()) || (center && center->open()) ||
+-           (inspector && inspector->open());
++  auto route = tui::ViewRoute::conversation;
++  std::string_view route_notice;
++  const auto select_view = [&](tui::ViewRoute requested, RawEventRef origin,
++                               bool toggle, bool reset) {
++    const auto next =
++        toggle && route == requested ? tui::ViewRoute::conversation : requested;
++    if (next == tui::ViewRoute::command_runs && !ensure_inspector()) {
++      route_notice = "Command runs unavailable; native view could not be created";
++      return false;
++    }
++    if (next == tui::ViewRoute::command_center && !ensure_center()) {
++      route_notice =
++          center_context
++              ? "Command center unavailable; native view could not be created"
++              : "Command center unavailable; no current-session owner";
++      return false;
++    }
++    if (next == tui::ViewRoute::result_comparison && !instrument) {
++      instrument_refused = true;
++      route_notice =
++          "Result comparison unavailable; no composition owner in this session";
++      return false;
++    }
++    if (next != tui::ViewRoute::command_runs)
++      close_inspector();
++    if (next != tui::ViewRoute::command_center)
++      close_center();
++    if (next != tui::ViewRoute::result_comparison)
++      close_instrument();
++    const auto activate = [&](auto &view) {
++      if (reset)
++        view.first_page(origin);
++      else {
++        if (!view.open())
++          view.toggle(origin);
++        view.focus_view();
++      }
++    };
++    if (next == tui::ViewRoute::command_runs)
++      activate(*inspector);
++    else if (next == tui::ViewRoute::command_center)
++      activate(*center);
++    else if (next == tui::ViewRoute::result_comparison)
++      activate(*instrument);
++    route = next;
++    route_notice = {};
++    return true;
+   };
++  auto inspection_open = [&] { return route != tui::ViewRoute::conversation; };
+   auto inspection_focused = [&] {
+     return (instrument && instrument->open() && instrument->focused()) ||
+            (center && center->open() && center->focused()) ||
+@@ -2798,6 +2873,8 @@
+           auto caption = std::string{authored   ? "RETAINED RESULT LAB"
+                                      : centered ? "COMMAND CENTER"
+                                                 : "COMMAND RESULTS"};
++          if (!route_notice.empty())
++            caption = std::string{route_notice} + " · " + caption;
+           visit_inspection([&](auto &view) {
+             inspection_layout = unwrap(view.render(grid, {0, 2, main_width, height}));
+             if (!view.notice().empty())
+@@ -2808,6 +2885,9 @@
+                                 : " · Ctrl-O close · Tab focus · Esc draft";
+           grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
+           grid.line(1, {{terminal_lines(caption, main_width).front(), Ink::heading}});
++        } else if (!route_notice.empty()) {
++          grid.line(1,
++                    {{terminal_lines(route_notice, main_width).front(), Ink::failure}});
+         } else if (instrument_refused) {
+           grid.line(1, {{"Instrument unavailable; draft retained", Ink::failure}});
+         } else if (center_refused) {
+@@ -2979,7 +3059,7 @@
+     const auto dispatch = terminal_input_dispatch(
+         composer, std::chrono::steady_clock::now(), escape_deadline, inputs[0].revents);
+     redraw = redraw || dispatch.redraw;
+-    if (dispatch.redraw)
++    if (dispatch.focus_editor)
+       visit_inspection([](auto &view) { view.focus_editor(); });
+     if (!dispatch.read_input)
+       continue;
+@@ -3120,14 +3200,17 @@
+           escape_deadline =
+               std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
+         redraw = true;
+-        if (result.action == InputAction::instrument_toggle) {
+-          if (instrument) {
+-            close_center();
+-            close_inspector();
+-            instrument->toggle(result.source.record);
+-          } else
+-            instrument_refused = true;
++        if (result.action == InputAction::select_view) {
++          if (result.view) {
++            if (!select_view(*result.view, result.source.record, false, false))
++              transcript.append(ChatKind::notice,
++                                "View unavailable; current view retained");
++          } else if (result.text == "view.picker")
++            composer.views(route);
+         }
++        if (result.action == InputAction::instrument_toggle)
++          (void)select_view(tui::ViewRoute::result_comparison, result.source.record,
++                            true, false);
+         if (result.action == InputAction::instrument_action && instrument &&
+             instrument->open() && instrument->focused()) {
+           const auto acted =
+@@ -3141,20 +3224,12 @@
+                               std::string{"Instrument action unavailable: "} +
+                                   error_name(acted.error().code));
+         }
+-        if (result.action == InputAction::center_toggle) {
+-          if (ensure_center()) {
+-            close_inspector();
+-            close_instrument();
+-            center->toggle(result.source.record);
+-          }
+-        }
+-        if (result.action == InputAction::inspect_toggle) {
+-          if (ensure_inspector()) {
+-            close_center();
+-            close_instrument();
+-            inspector->toggle(result.source.record);
+-          }
+-        }
++        if (result.action == InputAction::center_toggle)
++          (void)select_view(tui::ViewRoute::command_center, result.source.record, true,
++                            false);
++        if (result.action == InputAction::inspect_toggle)
++          (void)select_view(tui::ViewRoute::command_runs, result.source.record, true,
++                            false);
+         if (inspection_open()) {
+           std::optional<tui::InspectorAction> navigation;
+           switch (result.action) {
+@@ -3287,25 +3362,17 @@
+           cancel_turn();
+         }
+         if (result.action == InputAction::submit && !result.text.empty() && !quitting) {
+-          if (result.text == "/instrument") {
+-            if (instrument) {
+-              close_center();
+-              close_inspector();
+-              instrument->first_page(result.source.record);
+-            } else
+-              instrument_refused = true;
+-          } else if (result.text == "/center") {
+-            if (ensure_center()) {
+-              close_inspector();
+-              close_instrument();
+-              center->first_page(result.source.record);
+-            }
+-          } else if (result.text == "/jobs") {
+-            if (ensure_inspector()) {
+-              close_center();
+-              close_instrument();
+-              inspector->first_page(result.source.record);
+-            }
++          const auto requested_view = std::find_if(
++              tui::view_descriptions.begin(), tui::view_descriptions.end(),
++              [&](const auto &view) {
++                return !view.command.empty() && result.text == view.command;
++              });
++          if (result.text == "/views") {
++            composer.views(route);
++          } else if (requested_view != tui::view_descriptions.end()) {
++            if (!select_view(requested_view->route, result.source.record, false, true))
++              transcript.append(ChatKind::notice,
++                                "View unavailable; current view retained");
+           } else if (commands &&
+                      (result.text == "/bg" || result.text.starts_with("/bg "))) {
+             release_command(result.text == "/bg"
+--- baseline/src/tui_instrument.cpp
++++ candidate/src/tui_instrument.cpp
+@@ -96,7 +96,7 @@
+   seed.view = view;
+   seed.nodes = {{std::string{list_key}, {}, tui::NodeKind::collection, true},
+                 {std::string{detail_key}, {}, tui::NodeKind::inspector, true}};
+-  seed.collections = {{std::string{list_key}, {}, "RESULTS", {}}};
++  seed.collections = {{std::string{list_key}, {}, "COMMAND RUNS", {}}};
+   seed.inspectors = {{std::string{detail_key}, "A / B comparison", {}, {}, {}, 0}};
+   unwrap(host.publish(seed));
+   return host;
+@@ -241,6 +241,8 @@
+     InstrumentSource source;
+     RawEventRef input, source_ref;
+     bool compose = false;
++    std::optional<CommandObservationId> after;
++    std::size_t page = 0;
+   };
+   State(CommandCenterScope selected_scope, std::shared_ptr<CommandJobs> selected_jobs)
+       : scope(selected_scope), jobs(std::move(selected_jobs)), host(initial_host()),
+@@ -267,7 +269,12 @@
+   std::array<std::optional<Pin>, 2> pins{};
+   CommandObservation observed;
+   CommandObservationQuery observation_query;
+-  std::string owner, receipt = "No action receipt", selected_status = "No selected job";
++  std::array<std::optional<CommandObservationId>, 33> pages{};
++  std::optional<CommandObservationId> observed_after, input_after, displayed_after;
++  std::size_t page = 0, input_page = 0, displayed_page = 0;
++  bool observed_ready = false, scene_ready = false;
++  std::string owner, receipt = "No action receipt",
++                     selected_status = "No selected command run";
+   std::string_view notice = "Source pending";
+   RawEventRef proposal_ref{}, effective_ref{}, origin{};
+   RawUiOwner shutdown_owner;
+@@ -275,6 +282,10 @@
+   Wire shutdown_wire;
+   bool open = false, focused = false, dirty = true, input_ready = false,
+        source_recorded = false;
++  bool current_page() const {
++    return observed_ready && scene_ready && observed_after == observation_query.after &&
++           displayed_after == observation_query.after;
++  }
+   bool compose_active() const {
+     return std::any_of(invocations.begin(), invocations.end(),
+                        [](const auto &i) { return i && i->compose; });
+@@ -430,6 +441,9 @@
+       next_notice = "Source active";
+       accepted = lua::publish(outcome, now, host);
+       if (accepted.has_value()) {
++        displayed_after = invocation.after;
++        displayed_page = invocation.page;
++        scene_ready = true;
+         effective = std::move(prepared_source);
+         effective_generation = outcome.stamp.source_generation;
+         handlers = outcome.handlers;
+@@ -500,6 +514,9 @@
+   state_->changed(origin);
+ }
+ void TuiInstrument::first_page(RawEventRef origin) {
++  state_->pages.fill({});
++  state_->page = 0;
++  state_->observation_query.after.reset();
+   state_->observation_query.offset = 0;
+   state_->open = state_->focused = true;
+   state_->changed(origin);
+@@ -507,6 +524,7 @@
+ bool TuiInstrument::open() const noexcept { return state_->open; }
+ bool TuiInstrument::focused() const noexcept { return state_->focused; }
+ void TuiInstrument::focus_editor() noexcept { state_->focused = false; }
++void TuiInstrument::focus_view() noexcept { state_->focused = state_->open; }
+ Result<void> TuiInstrument::source(InstrumentSource proposal, bool capture) {
+   try {
+     if (!proposal.script || proposal.path.size() > 4096)
+@@ -569,7 +587,7 @@
+           const auto &d = latest->delivery;
+           switch (d.stage) {
+           case CommandDeliveryStage::job_not_resident:
+-            receipt += " · job not resident; unknown";
++            receipt += " · command run not resident; unknown";
+             break;
+           case CommandDeliveryStage::key_not_resident:
+             receipt += " · key not resident; unknown";
+@@ -615,20 +633,24 @@
+     }
+     if (s.open) {
+       auto query = s.observation_query;
+-      query.selected = selected(s.host, s.controls, s.owner, s.incarnation);
++      query.selected = s.scene_ready && s.displayed_after == query.after
++                           ? selected(s.host, s.controls, s.owner, s.incarnation)
++                           : std::nullopt;
+       const auto observed = s.jobs->try_observe(query);
+-      if (observed.status == CommandObservationStatus::ready) {
++      s.observed_ready = observed.status == CommandObservationStatus::ready;
++      if (s.observed_ready) {
++        s.observed_after = query.after;
+         s.observed = observed;
+         s.observation_query = query;
+         auto status = observed.selection == CommandObservationSelection::resident
+                           ? "Selected " + std::string{observed.detail.id.view()} + " " +
+                                 std::string{phase(observed.detail.phase)}
+-                          : std::string{"No selected job"};
++                          : std::string{"No selected command run"};
+         if (observed.selection != CommandObservationSelection::resident ||
+             observed.detail.leader_exited || observed.detail.worker_finished)
+           status += " · interrupt unavailable";
+         if (observed.more_rows)
+-          status += " · more jobs outside this cut";
++          status += " · more command runs available";
+         if (s.selected_status != status) {
+           s.selected_status = std::move(status);
+           changed = true;
+@@ -655,7 +677,7 @@
+             input.detail_size[n] = pin.window.size;
+             text(
+                 input.detail_titles[n],
+-                "Job " + std::string{pin.job.view()} + " bytes " +
++                "Command run " + std::string{pin.job.view()} + " bytes " +
+                     std::to_string(pin.window.begin) + ".." +
+                     std::to_string(pin.window.next) + " of observed " +
+                     std::to_string(pin.window.received_end) +
+@@ -664,9 +686,12 @@
+           } else
+             text(input.detail_titles[n], "Unpinned");
+         }
+-        if (!s.input_ready || !same_content(input, s.input)) {
++        if (!s.input_ready || s.input_after != query.after ||
++            !same_content(input, s.input)) {
+           advance(s.query);
+           s.input = std::move(input);
++          s.input_after = query.after;
++          s.input_page = s.page;
+           s.input_ready = true;
+           s.dirty = true;
+         }
+@@ -705,7 +730,8 @@
+       Wire wire;
+       wire.stamp(input.stamp);
+       const auto source_ref = s.proposal ? s.proposal_ref : s.effective_ref;
+-      State::Invocation invocation{input.stamp, source, {}, source_ref, true};
++      State::Invocation invocation{input.stamp, source,        {},          source_ref,
++                                   true,        s.input_after, s.input_page};
+       static_assert(std::is_nothrow_move_constructible_v<State::Invocation>);
+       wire.reference(source_ref);
+       wire.reference(source.original);
+@@ -761,11 +787,36 @@
+ }
+ void TuiInstrument::page(bool forward, RawEventRef origin) {
+   auto &s = *state_;
+-  if (forward && s.observed.window.next > s.observation_query.offset)
+-    s.observation_query.offset = s.observed.window.next;
+-  else if (!forward)
+-    s.observation_query.offset -=
+-        std::min(s.observation_query.offset, std::size_t{4096});
++  const auto &focus = s.host.focused();
++  if (focus && focus->key == list_key) {
++    if (forward) {
++      if (!s.current_page() || !s.observed.more_rows || !s.observed.next ||
++          s.page + 1 >= s.pages.size())
++        return;
++      s.pages[++s.page] = s.observed.next;
++    } else if (s.page)
++      --s.page;
++    else
++      return;
++    s.observation_query.after = s.pages[s.page];
++    s.observation_query.offset = 0;
++  } else {
++    const auto id = selected(s.host, s.controls, s.owner, s.incarnation);
++    if (!s.current_page() || !id || s.observation_query.selected != id ||
++        s.observed.selection != CommandObservationSelection::resident ||
++        s.observed.detail.id != *id ||
++        s.observed.window.requested != s.observation_query.offset)
++      return;
++    const auto &window = s.observed.window;
++    if (forward && window.next < window.retained_end)
++      s.observation_query.offset = window.next;
++    else if (!forward && window.begin > window.cached_begin)
++      s.observation_query.offset =
++          std::max(window.cached_begin,
++                   window.begin - std::min(window.begin, std::size_t{4096}));
++    else
++      return;
++  }
+   s.changed(origin);
+ }
+ Result<void> TuiInstrument::pin(std::size_t slot, RawEventRef origin, bool capture) {
+@@ -773,7 +824,8 @@
+   s.notice = "Pin unavailable; refresh selection";
+   try {
+     const auto id = selected(s.host, s.controls, s.owner, s.incarnation);
+-    if (slot >= s.pins.size() || !id || s.observation_query.selected != id ||
++    if (!s.current_page() || slot >= s.pins.size() || !id ||
++        s.observation_query.selected != id ||
+         s.observed.selection != CommandObservationSelection::resident ||
+         s.observed.detail.id != *id ||
+         s.observed.window.requested != s.observation_query.offset)
+@@ -821,8 +873,8 @@
+   s.notice = "Interrupt unavailable";
+   try {
+     const auto id = selected(s.host, s.controls, s.owner, s.incarnation);
+-    if (!s.open || !s.focused || !id || !s.effective.script || s.bridge->quiescent() ||
+-        s.observation_query.selected != id ||
++    if (!s.current_page() || !s.open || !s.focused || !id || !s.effective.script ||
++        s.bridge->quiescent() || s.observation_query.selected != id ||
+         s.observed.selection != CommandObservationSelection::resident ||
+         s.observed.detail.id != *id || s.observed.detail.leader_exited ||
+         s.observed.detail.worker_finished ||
+@@ -849,7 +901,7 @@
+     target.incarnation = s.incarnation;
+     lua::Text<64> handler;
+     text(handler, "interrupt");
+-    State::Invocation invocation{stamp, s.effective, {}, s.effective_ref, false};
++    State::Invocation invocation{stamp, s.effective, {}, s.effective_ref, false, {}, 0};
+     constexpr std::string_view pending_notice = "Handler pending";
+     const auto key = trigger.value().key();
+     Wire wire;
+@@ -885,7 +937,13 @@
+ }
+ Result<tui::InspectorLayout> TuiInstrument::render(ChatGrid &grid, tui::Rect bounds) {
+   auto &s = *state_;
+-  const auto foot = terminal_lines(s.selected_status + "\n" + s.receipt, bounds.width);
++  auto page_status = "Command runs · page " + std::to_string(s.displayed_page + 1);
++  if (!s.scene_ready || s.displayed_after != s.observation_query.after)
++    page_status += " · loading page " + std::to_string(s.page + 1);
++  else if (!s.observed_ready)
++    page_status += " · observation unavailable; last good retained";
++  const auto foot = terminal_lines(
++      page_status + "\n" + s.selected_status + "\n" + s.receipt, bounds.width);
+   const auto reserve =
+       bounds.height >= 10 ? std::min(foot.size(), bounds.height / 2) : std::size_t{0};
+   auto body = bounds;
+--- baseline/tests/snapshots/tui/README.md
++++ candidate/tests/snapshots/tui/README.md
+@@ -98,3 +98,10 @@
+ unchanged. Physical terminal gutter residue after resize is preserved separately
+ in the instrument episode's paper fixtures; a freshly reset native grid cannot
+ establish that a real terminal erased its previous cells.
++
++
++`view-picker` uses the native typed view choices, searches the human command-run
++label, and preserves a draft with its cursor before the end. Enter emits a local
++route action, not command insertion or submission. This brings the total to21
++styled expectations. The two instrument baselines deliberately adopt COMMAND RUNS
++and Command run labels; the extra title wrapping is retained explicitly.
+--- baseline/tests/snapshots/tui/expected/instrument-lua-narrow.snap
++++ candidate/tests/snapshots/tui/expected/instrument-lua-narrow.snap
+@@ -4,18 +4,18 @@
+ state synthetic-inputs=2;source=results.lua;selected=B;anchor=A;focus=detail;binding=independent;intents=0;editor=external
+ |{selected:> A / B comparison}{normal:              }|
+ |{normal:A                               }|
+-|{normal:Job 1111111111111111111111111111}|
+-|{normal:1111 bytes 0..10 of observed 10 }|
++|{normal:Command run 11111111111111111111}|
++|{normal:111111111111 bytes 0..10 of obse}|
++|{normal:rved 10                         }|
+ |{normal:A\\x1b[31m\\x00END                }|
+ |{normal:                                }|
+ |{normal:B                               }|
+-|{normal:Job 2222222222222222222222222222}|
+-|{normal:2222 bytes 0..17 of observed 17 }|
++|{normal:Command run 22222222222222222222}|
++|{normal:222222222222 bytes 0..17 of obse}|
++|{normal:rved 17                         }|
+ |{normal:B  PRESERVED                    }|
+ |{normal:B_END                           }|
+ |{normal:                                }|
+ |{normal:                                }|
+ |{normal:                                }|
+-|{normal:                                }|
+-|{normal:                                }|
+ cell-widths
+--- baseline/tests/snapshots/tui/expected/instrument-lua-wide.snap
++++ candidate/tests/snapshots/tui/expected/instrument-lua-wide.snap
+@@ -2,13 +2,15 @@
+ size 100 16
+ cursor none
+ state synthetic-inputs=2;source=results.lua;selected=B;anchor=A;focus=collection;binding=independent;intents=0;editor=external
+-|{selected:> RESULTS}{normal:                        }{border:│}{heading:  A / B comparison}{normal:                                                }|
++|{selected:> COMMAND RUNS}{normal:                   }{border:│}{heading:  A / B comparison}{normal:                                                }|
+ |{normal:  A settled exit7                }{border:│}{normal:A                                                                 }|
+-|{selected:> B running}{normal:                      }{border:│}{normal:Job 11111111111111111111111111111111 bytes 0..10 of observed 10   }|
++|{selected:> B running}{normal:                      }{border:│}{normal:Command run 11111111111111111111111111111111 bytes 0..10 of observ}|
++|{normal:                                 }{border:│}{normal:ed 10                                                             }|
+ |{normal:                                 }{border:│}{normal:A\\x1b[31m\\x00END                                                  }|
+ |{normal:                                 }{border:│}{normal:                                                                  }|
+ |{normal:                                 }{border:│}{normal:B                                                                 }|
+-|{normal:                                 }{border:│}{normal:Job 22222222222222222222222222222222 bytes 0..17 of observed 17   }|
++|{normal:                                 }{border:│}{normal:Command run 22222222222222222222222222222222 bytes 0..17 of observ}|
++|{normal:                                 }{border:│}{normal:ed 17                                                             }|
+ |{normal:                                 }{border:│}{normal:B  PRESERVED                                                      }|
+ |{normal:                                 }{border:│}{normal:B_END                                                             }|
+ |{normal:                                 }{border:│}{normal:                                                                  }|
+@@ -16,6 +18,4 @@
+ |{normal:                                 }{border:│}{normal:                                                                  }|
+ |{normal:                                 }{border:│}{normal:                                                                  }|
+ |{normal:                                 }{border:│}{normal:                                                                  }|
+-|{normal:                                 }{border:│}{normal:                                                                  }|
+-|{normal:                                 }{border:│}{normal:                                                                  }|
+ cell-widths
+--- baseline/tests/snapshots/tui/expected/view-picker.snap
++++ candidate/tests/snapshots/tui/expected/view-picker.snap
+@@ -0,0 +1,11 @@
++styled-grid-v1
++size 44 6
++cursor none
++state palette=open hidden_draft=preserve this draft cursor_bytes=17
++|{muted:Views / command runs_}{normal:                       }|
++|{selected:> Command}{muted: runs — Inspect command state and r}|
++|{muted:  Command center — Inspect current-session t}|
++|{muted:  Result comparison — Compare pinned output }|
++|{muted:Type search · Up/Down select · Enter opens ·}|
++|{normal:                                            }|
++cell-widths
+--- baseline/tests/terminal_test.cpp
++++ candidate/tests/terminal_test.cpp
+@@ -37,6 +37,49 @@
+     picker.choices({{"/resume /tmp/a", "", "/tmp/a", "Session", "Alpha"}}, "Sessions");
+     feed(picker, "\x1b");
+     check(picker.flush_escape() && picker.text() == "unsent draft");
++    Composer views;
++    views.draft("VIEW_DRAFT_SENTRY");
++    feed(views, "\x1b[D\x1b[D");
++    const auto view_cursor = views.cursor();
++    const auto open_views = feed(views, "\x1c");
++    check(open_views.action == InputAction::select_view &&
++          open_views.text == "view.picker");
++    views.views(tui::ViewRoute::conversation);
++    check(views.palette_open());
++    check(views.palette_lines(8)[0].starts_with("Views"));
++    feed(views, "command runs");
++    const auto view_choice = feed(views, "\r");
++    check(view_choice.view == tui::ViewRoute::command_runs);
++    check(view_choice.text == "view.command-runs" &&
++          view_choice.action != InputAction::choose_command &&
++          view_choice.action != InputAction::submit);
++    check(views.text() == "VIEW_DRAFT_SENTRY" && views.cursor() == view_cursor);
++    views.views(tui::ViewRoute::command_center);
++    const auto inspecting_feed = [&](std::string_view bytes) {
++      InputResult result;
++      for (const auto byte : bytes) {
++        auto next = views.feed(byte, nullptr, true);
++        check(next.action != InputAction::instrument_action &&
++              next.action != InputAction::inspect_next);
++        if (next.action != InputAction::none)
++          result = std::move(next);
++      }
++      return result;
++    };
++    inspecting_feed("\x1b[19~\x1b[B");
++    const auto modal_choice = inspecting_feed("\r");
++    check(modal_choice.view == tui::ViewRoute::command_runs);
++    check(views.text() == "VIEW_DRAFT_SENTRY" && views.cursor() == view_cursor);
++    views.views(tui::ViewRoute::result_comparison);
++    inspecting_feed("\x1b");
++    const auto dismissal =
++        terminal_input_dispatch(views, std::chrono::steady_clock::time_point::max(),
++                                std::chrono::steady_clock::time_point::min(), 0);
++    check(dismissal.redraw && !dismissal.focus_editor && !views.palette_open());
++    check(views.text() == "VIEW_DRAFT_SENTRY" && views.cursor() == view_cursor);
++    Composer literal_view_key;
++    feed(literal_view_key, "\x1b[200~\x1c\x1b[201~");
++    check(literal_view_key.text() == "\x1c" && !literal_view_key.palette_open());
+     Composer optional;
+     check(feed(optional, "/runs\r").text == "/runs");
+     Composer slash;
+--- baseline/tests/tui_instrument_test.cpp
++++ candidate/tests/tui_instrument_test.cpp
+@@ -1,6 +1,7 @@
+ #include "blackbird/raw_reader.hpp"
+ #include "blackbird/tools.hpp"
+ #include "blackbird/tui_instrument.hpp"
++#include <algorithm>
+ #include <chrono>
+ #include <cstring>
+ #include <filesystem>
+@@ -158,7 +159,7 @@
+             f.jobs->retained(event.job_id, event.offset + event.bytes->size());
+         const auto cut = f.jobs->try_observe({});
+         return cut.status == CommandObservationStatus::ready && cut.row_count == 2 &&
+-               cut.rows[0].received && cut.rows[1].received;
++               cut.rows[0].retained == 5005 && cut.rows[1].retained == 5005;
+       },
+       "two independent live native targets");
+   f.ready();
+@@ -182,6 +183,7 @@
+   require(pinned.has_value(), "presentation key must resolve actual B target for pin");
+   f.until([&] { return f.shown().find(f.b) != std::string::npos; },
+           "pin title names B actual target");
++  unwrap(f.view->act(tui::InspectorAction::focus_detail));
+   f.view->page(true);
+   const auto stale_pin = f.view->pin(1, {}, false);
+   require(!stale_pin.has_value(), "page change cannot pin previous observed window");
+@@ -201,6 +203,130 @@
+               string_field(requests.front(), "signal") == "interrupt",
+           "selection change after F8 cannot substitute A for frozen B target");
+   (void)f.jobs->control(requests.front());
++}
++std::string run_id(std::size_t index) {
++  const auto suffix = std::to_string(index);
++  return std::string(32 - suffix.size(), '0') + suffix;
++}
++void paging(const std::filesystem::path &executable) {
++  Fixture f;
++  for (std::size_t n = 0; n < 16; ++n)
++    f.start(run_id(n), "RUN" + std::to_string(n) + ":" + std::string(5000, 'x'));
++  f.jobs->start(run_id(16),
++                Value::object({{"argv", Value{Value::Array{Value{executable.string()},
++                                                           Value{"--paging-child"}}}},
++                               {"timeout_seconds", Value{Number{15}}}}));
++  f.until(
++      [&] {
++        for (const auto &event : f.jobs->drain())
++          if (event.bytes)
++            f.jobs->retained(event.job_id, event.offset + event.bytes->size());
++        CommandObservationQuery query;
++        CommandObservationId selected_run;
++        const auto key = run_id(16);
++        std::copy(key.begin(), key.end(), selected_run.bytes.begin());
++        query.selected = selected_run;
++        const auto observation = f.jobs->try_observe(query);
++        return observation.status == CommandObservationStatus::ready &&
++               observation.detail.retained == 5006;
++      },
++      "live last-page command emits its complete test payload");
++  auto mapped = script(
++      "return {compose=function() local c=ui.collection('results','COMMAND RUNS') "
++      "for i=1,ui.rows() do ui.item(c,'row-'..ui.key(i),ui.label(i),i) end "
++      "ui.inspector('comparison','A / B',ui.detail_title(1)..'\\n'..ui.detail(1).."
++      "'\\n'..ui.detail_title(2)..'\\n'..ui.detail(2)) end, "
++      "interrupt=function() ui.request('interrupt') end}");
++  unwrap(f.view->source({mapped, "mapped-paging.lua", {}, {}, false}, false));
++  f.ready();
++  const auto exact_page = [&](std::size_t begin, std::size_t count) {
++    const auto &items = f.view->host().snapshot()->collections.front().items;
++    if (items.size() != count)
++      return false;
++    for (std::size_t n = 0; n < count; ++n)
++      if (items[n].key != "row-" + run_id(begin + n) || !items[n].target ||
++          items[n].target->key != run_id(begin + n))
++        return false;
++    return true;
++  };
++  f.until([&] { return exact_page(0, 8); }, "first eight exact command runs");
++  f.view->page(true);
++  f.until([&] { return exact_page(8, 8); },
++          "forward list paging must expose command runs nine through sixteen");
++  f.view->refresh(false);
++  unwrap(f.view->act(tui::InspectorAction::first));
++  f.view->refresh(false);
++  unwrap(f.view->pin(0, {}, false));
++  f.until([&] { return f.shown().find("RUN8:") != std::string::npos; },
++          "mapped second-page selection pins actual run eight bytes");
++  f.view->page(true);
++  require(!f.view->pin(1, {}, false).has_value(),
++          "pending list page cannot pin old selected output");
++  f.view->refresh(false);
++  require(!f.view->pin(1, {}, false).has_value(),
++          "observed but undisplayed page cannot pin old selected output");
++  f.view->page(true);
++  f.until([&] { return exact_page(16, 1); },
++          "repeated forward keys must not consume prior page continuation");
++  f.view->refresh(false);
++  unwrap(f.view->act(tui::InspectorAction::first));
++  f.view->refresh(false);
++  unwrap(f.view->pin(1, {}, false));
++  f.until([&] { return f.shown().find("RUN16:") != std::string::npos; },
++          "last page pins exact run sixteen");
++  const auto both_pins = f.shown();
++  f.view->page(true);
++  for (unsigned n = 0; n < 5; ++n)
++    f.view->refresh(false);
++  require(exact_page(16, 1), "last run-list page forward is a no-op");
++  f.view->page(false);
++  require(!f.view->request_interrupt({}, false).has_value(),
++          "pending list page cannot interrupt previously displayed live run");
++  require(f.jobs->requests().empty(), "stale page action emits no native request");
++  f.until([&] { return exact_page(8, 8); }, "backward list page");
++  f.view->page(false);
++  f.view->refresh(false);
++  f.view->page(true);
++  f.view->first_page();
++  f.until([&] { return exact_page(0, 8); }, "reset rejects obsolete page composition");
++  for (unsigned n = 0; n < 5; ++n)
++    f.view->refresh(false);
++  f.view->page(false);
++  require(exact_page(0, 8), "first run-list page backward is a no-op");
++  require(f.shown() == both_pins, "list paging retains both immutable pins");
++  unwrap(f.view->act(tui::InspectorAction::first));
++  f.view->refresh(false);
++  unwrap(f.view->act(tui::InspectorAction::focus_detail));
++  f.view->refresh(false);
++  f.view->page(true);
++  require(!f.view->pin(0, {}, false).has_value(),
++          "output page change cannot pin preceding observed bytes");
++  f.view->refresh(false);
++  unwrap(f.view->pin(0, {}, false));
++  f.until([&] { return f.shown().find("bytes 4096..5005") != std::string::npos; },
++          "detail paging changes selected output window without changing run list");
++  require(exact_page(0, 8) && f.shown().find("RUN16:") != std::string::npos,
++          "output paging preserves run list and independent B pin");
++  const auto last_good = f.view->host().snapshot();
++  unwrap(f.view->source({script("return {compose=function() error('bad paging') end}"),
++                         "bad-paging.lua",
++                         {},
++                         {},
++                         false},
++                        false));
++  unwrap(f.view->act(tui::InspectorAction::focus_collection));
++  f.view->page(true);
++  f.until(
++      [&] { return f.view->notice().find("source failed") != std::string_view::npos; },
++      "failed page composition is visible");
++  require(f.view->host().snapshot() == last_good,
++          "failed page composition preserves exact last-good scene");
++  unwrap(f.view->act(tui::InspectorAction::focus_detail));
++  unwrap(f.view->act(tui::InspectorAction::focus_collection));
++  f.view->page(false);
++  f.until([&] { return f.view->host().snapshot() != last_good; },
++          "backward recovery recomposes effective source after failed page");
++  require(exact_page(0, 8), "failed page cannot strand native navigation");
+ }
+ void source_failures() {
+   Fixture f;
+@@ -341,6 +467,10 @@
+         std::this_thread::sleep_for(std::chrono::milliseconds{1});
+       }
+       const auto recorded = unwrap(channel.cursors(RawPartition::data)).published;
++      unwrap(f.view->act(tui::InspectorAction::focus_detail));
++      unwrap(f.view->act(tui::InspectorAction::focus_collection));
++      require(f.view->focused(),
++              "native focus remains available under recording pressure");
+       for (unsigned n = 0; n < 5; ++n) {
+         f.view->refresh(true);
+         require(exhausted() && f.view->host().snapshot() == before &&
+@@ -507,9 +637,14 @@
+ } // namespace
+ int main(int argc, char **argv) {
+   try {
+-    if (argc == 2 && std::string_view{argv[1]} == "--child") {
++    if (argc == 2 && (std::string_view{argv[1]} == "--child" ||
++                      std::string_view{argv[1]} == "--paging-child")) {
+       (void)::signal(SIGINT, SIG_IGN);
+-      if (::write(STDOUT_FILENO, "LIVE\n", 5) != 5)
++      const std::string output =
++          (std::string_view{argv[1]} == "--paging-child" ? "RUN16:" : "LIVE\n") +
++          std::string(5000, 'x');
++      if (::write(STDOUT_FILENO, output.data(), output.size()) !=
++          static_cast<ssize_t>(output.size()))
+         return 91;
+       for (;;)
+         (void)::pause();
+@@ -520,6 +655,8 @@
+       semantic();
+     else if (mode == "mapping")
+       mapped_action(std::filesystem::absolute(argv[0]));
++    else if (mode == "paging")
++      paging(std::filesystem::absolute(argv[0]));
+     else if (mode == "source")
+       source_failures();
+     else if (mode == "recovery")
+--- baseline/tests/tui_snapshot_test.cpp
++++ candidate/tests/tui_snapshot_test.cpp
+@@ -213,7 +213,7 @@
+     std::copy(windows[index].begin(), windows[index].end(),
+               reinterpret_cast<char *>(input.detail[index].data()));
+     input.detail_titles[index] =
+-        instrument_text<512>("Job " + std::string{ids[index]} + " bytes 0.." +
++        instrument_text<512>("Command run " + std::string{ids[index]} + " bytes 0.." +
+                              std::to_string(windows[index].size()) + " of observed " +
+                              std::to_string(windows[index].size()));
+   }
+@@ -351,6 +351,19 @@
+   output.push_back(rows("tasks-narrow", task_pane_rows(page, 18, activity), 18, 24));
+   output.push_back(rows("tasks-tiny", task_pane_rows(page, 7, activity), 7, 3));
+ 
++  Composer views;
++  views.draft("preserve this draft");
++  feed(views, "\x1b[D\x1b[D");
++  views.views(tui::ViewRoute::command_center);
++  feed(views, "command runs");
++  output.push_back(palette_frame("view-picker", views));
++  const auto route = feed(views, "\r");
++  require(route.action == InputAction::select_view &&
++              route.view == tui::ViewRoute::command_runs &&
++              route.text == "view.command-runs" &&
++              views.text() == "preserve this draft" && views.cursor() == 17,
++          "view picker must emit a local route and preserve draft/cursor");
++
+   Composer palette;
+   palette.draft("unsent operator draft");
+   palette.choices(
+--- baseline/tests/ui_raw_test.cpp
++++ candidate/tests/ui_raw_test.cpp
+@@ -895,6 +895,8 @@
+   IdentityBytes identity{};
+   identity[0] = std::byte{77};
+   RawEventRef captured{}, unused{}, missing{};
++  const std::string retained_draft = "retained draft";
++  std::map<Key, std::string> view_actions;
+   {
+     auto runtime = unwrap(
+         RawRuntime::open(directory, unwrap(EnvironmentId::from_bytes(identity)),
+@@ -926,6 +928,40 @@
+       const auto result = feed(longest, '\r');
+       require(result.action == InputAction::choose_command && result.text == chosen,
+               "maximum validated native workflow alias is fully acquired");
++      Composer views;
++      views.draft(retained_draft);
++      for (const char byte : std::string_view{"\x1b[D"})
++        (void)feed(views, byte);
++      const auto retain_action = [&](const InputResult &selected,
++                                     std::string_view expected,
++                                     std::optional<tui::ViewRoute> route) {
++        require(selected.action == InputAction::select_view &&
++                    selected.text == expected && selected.view == route &&
++                    selected.source.record.ordinal && selected.source.offset == 0 &&
++                    selected.source.length == expected.size(),
++                "native picker returns exact typed view action and original range");
++        require(views.text() == retained_draft &&
++                    views.cursor() == retained_draft.size() - 1,
++                "native view picker preserves exact draft and cursor");
++        require(view_actions
++                    .emplace(Key{selected.source.record.lane,
++                                 selected.source.record.ordinal},
++                             expected)
++                    .second,
++                "each view action has its own preserved native original");
++      };
++      retain_action(feed(views, '\x1c'), "view.picker", {});
++      const std::array expected_views{
++          std::pair{"view.conversation", tui::ViewRoute::conversation},
++          std::pair{"view.command-runs", tui::ViewRoute::command_runs},
++          std::pair{"view.command-center", tui::ViewRoute::command_center},
++          std::pair{"view.result-comparison", tui::ViewRoute::result_comparison}};
++      for (const auto &[action, route] : expected_views) {
++        views.views();
++        for (const char byte : std::string_view{action})
++          (void)feed(views, byte);
++        retain_action(feed(views, '\r'), action, route);
++      }
+       output->raw_capture(true);
+       output->attach(pipe[1]);
+       RawUiFrame frame{true, 4};
+@@ -983,20 +1019,38 @@
+   }
+   publish_workflows({});
+   const auto all = records(directory);
+-  unsigned help = 0, long_command = 0, retired = 0, restoration = 0;
++  unsigned help = 0, long_command = 0, retired = 0, restoration = 0, routed = 0;
+   bool absent_refused = false;
+   for (const auto &[key, record] : all) {
+     ByteView body = record.bytes;
+     if (record.site == 4010) {
+-      (void)reference(body);
+-      (void)native<std::size_t>(body);
++      const auto feed = reference(body);
++      const auto index = native<std::size_t>(body);
+       const auto action = native<int>(body);
+-      (void)native<std::size_t>(body);
+-      (void)native<std::size_t>(body);
++      const auto cursor = native<std::size_t>(body);
++      const auto size = native<std::size_t>(body);
+       if (action == static_cast<int>(InputAction::choose_command)) {
+         const auto text = literal(body);
+         help += static_cast<unsigned>(text == "/help");
+         long_command += static_cast<unsigned>(text == chosen);
++      } else if (action == static_cast<int>(InputAction::select_view)) {
++        require(view_actions.contains(key),
++                "raw view original is actual returned action");
++        const auto &expected = view_actions.at(key);
++        require(
++            literal(body) == expected && body.empty() && index == 0 &&
++                cursor == retained_draft.size() - 1 && size == retained_draft.size(),
++            "raw4010 preserves exact stable view bytes and unchanged draft position");
++        const auto source = all.find(feed);
++        require(source != all.end() && source->second.site == 4080,
++                "raw view selection links actual native feed request");
++        auto input = ByteView{source->second.bytes};
++        require(!native<bool>(input) && native<std::size_t>(input) == 0 &&
++                    native<char>(input) ==
++                        (expected == "view.picker" ? '\x1c' : '\r') &&
++                    input.empty(),
++                "view action source is exact picker key or typed-choice Enter");
++        ++routed;
+       }
+     }
+     if (record.site == 4042) {
+@@ -1025,8 +1079,8 @@
+     }
+   }
+   require(help == 1 && long_command == 1 && retired == 2 && restoration == 1 &&
+-              absent_refused,
+-          "exact native palette/holder/missing-capture source-to-disk outcomes");
++              absent_refused && routed == 5,
++          "exact native palette/view/holder/missing-capture source-to-disk outcomes");
+   std::filesystem::remove_all(directory);
+ }
+ 
+@@ -1300,6 +1354,29 @@
+     verify_state_failure(false);
+     return;
+   }
++  if (cut == UiCut::none) {
++    const auto inspector_start = observed.size();
++    require(::write(master, "\x0f", 1) == 1, "open actual native command inspector");
++    phase = "native inspector before unavailable route";
++    while (observed.find("COMMAND RESULTS", inspector_start) == std::string::npos ||
++           observed.find("\x1b[?2026l",
++                         observed.find("COMMAND RESULTS", inspector_start)) ==
++               std::string::npos)
++      drain();
++    const auto refusal_start = observed.size();
++    require(::write(master, "\x18", 1) == 1, "request actual unavailable center route");
++    phase = "unavailable center retains current inspector";
++    const std::string_view refusal = "center unavailable; no current-session owner";
++    while (observed.find(refusal, refusal_start) == std::string::npos ||
++           observed.find("\x1b[?2026l", observed.find(refusal, refusal_start)) ==
++               std::string::npos)
++      drain();
++    const auto at = observed.find(refusal, refusal_start);
++    const auto end = observed.find("\x1b[?2026l", at);
++    require(observed.substr(at, end - at).find("COMMAND RESULTS") != std::string::npos,
++            "actual unavailable-route frame shows refusal and retained inspector");
++    require(::write(master, "\x0f", 1) == 1, "close retained native inspector");
++  }
+   require(::write(master, "first\r", 6) == 6, "actualnativefirstsubmit");
+   if (save_refusal) {
+     verify_state_failure(true);

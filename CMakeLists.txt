@@ -190,6 +190,19 @@ set_tests_properties(registered_responses_native PROPERTIES TIMEOUT 120 RUN_SERI
 target_link_libraries(blackbird PRIVATE blackbird_coding)
 target_compile_definitions(blackbird PRIVATE BLACKBIRD_WORKFLOW="${CMAKE_SOURCE_DIR}/programs/turn.lua")
 target_compile_definitions(blackbird_coding PRIVATE BLACKBIRD_SPRITE_ASSET="${CMAKE_SOURCE_DIR}/assets/sr71.png")
+add_executable(terminal_edge_fixture tests/terminal_edge_fixture.cpp)
+target_link_libraries(terminal_edge_fixture PRIVATE blackbird_coding)
+add_test(NAME terminal_edge_physical COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-terminal-edge $<TARGET_FILE:terminal_edge_fixture>
+  --artifacts ${CMAKE_BINARY_DIR}/terminal-edge --backend ghostty
+  --strategy addressed --strategy erase --strategy full)
+set_tests_properties(terminal_edge_physical PROPERTIES TIMEOUT 260 RUN_SERIAL TRUE)
+add_executable(terminal_edge_test tests/terminal_edge_test.cpp)
+target_link_libraries(terminal_edge_test PRIVATE blackbird_coding)
+foreach(edge_case addressed erase corner full)
+  add_test(NAME terminal_edge_${edge_case} COMMAND terminal_edge_test ${edge_case})
+  set_tests_properties(terminal_edge_${edge_case} PROPERTIES TIMEOUT 20)
+endforeach()
 add_executable(chat_view_test tests/chat_view_test.cpp)
 add_executable(tasks_test tests/tasks_test.cpp)
 target_link_libraries(tasks_test PRIVATE blackbird_coding)
@@ -222,6 +235,10 @@ add_test(NAME tui_microsoft COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_SOURCE_DIR}/scripts/check-tui-microsoft $<TARGET_FILE:blackbird>
   --artifacts ${CMAKE_BINARY_DIR}/tui-microsoft)
 set_tests_properties(tui_microsoft PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+add_test(NAME tui_viewport COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-tui-viewport $<TARGET_FILE:blackbird>
+  --artifacts ${CMAKE_BINARY_DIR}/tui-viewport)
+set_tests_properties(tui_viewport PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
 add_executable(terminal_test tests/terminal_test.cpp)
 target_link_libraries(terminal_test PRIVATE blackbird_coding)
 add_test(NAME terminal COMMAND terminal_test)
@@ -931,3 +948,41 @@ add_executable(task_publication_test tests/task_publication_test.cpp)
 target_link_libraries(task_publication_test PRIVATE blackbird_coding Threads::Threads)
 add_test(NAME task_publication_busy COMMAND task_publication_test)
 set_tests_properties(task_publication_busy PROPERTIES TIMEOUT 20)
+
+# Independently owned Lua presentation and exact native delivery observation.
+target_sources(blackbird_coding PRIVATE src/tui_lua.cpp)
+target_sources(blackbird_coding PRIVATE src/tui_instrument.cpp)
+add_executable(tui_instrument_test tests/tui_instrument_test.cpp)
+target_link_libraries(tui_instrument_test PRIVATE blackbird_coding)
+foreach(mode semantic source stale mapping recovery raw paging)
+  add_test(NAME tui_instrument_${mode} COMMAND tui_instrument_test ${mode})
+  set_tests_properties(tui_instrument_${mode} PROPERTIES TIMEOUT 20)
+endforeach()
+add_executable(tui_lua_test tests/tui_lua_test.cpp)
+target_link_libraries(tui_lua_test PRIVATE blackbird_coding)
+foreach(lua_case semantic phases actions budgets profile capacity allocations lifecycle)
+  add_test(NAME tui_lua_${lua_case} COMMAND tui_lua_test ${lua_case})
+  set_tests_properties(tui_lua_${lua_case} PROPERTIES TIMEOUT 20)
+endforeach()
+add_executable(command_delivery_test tests/command_delivery_test.cpp)
+target_link_libraries(command_delivery_test PRIVATE blackbird_foundation ${CMAKE_DL_LIBS})
+set_target_properties(command_delivery_test PROPERTIES ENABLE_EXPORTS ON)
+foreach(delivery_case semantic raw errors busy lifecycle)
+  add_test(NAME command_delivery_${delivery_case} COMMAND command_delivery_test ${delivery_case})
+  set_tests_properties(command_delivery_${delivery_case} PROPERTIES TIMEOUT 20)
+endforeach()
+
+target_sources(blackbird_coding PRIVATE src/tui_action_bridge.cpp)
+add_executable(tui_action_bridge_test tests/tui_action_bridge_test.cpp)
+target_link_libraries(tui_action_bridge_test PRIVATE blackbird_coding ${CMAKE_DL_LIBS})
+set_target_properties(tui_action_bridge_test PROPERTIES ENABLE_EXPORTS ON)
+foreach(bridge_case handoff reject recent stop raw)
+  add_test(NAME tui_action_bridge_${bridge_case} COMMAND tui_action_bridge_test ${bridge_case})
+  set_tests_properties(tui_action_bridge_${bridge_case} PROPERTIES TIMEOUT 20)
+endforeach()
+
+target_compile_definitions(tui_snapshot_test PRIVATE BLACKBIRD_INSTRUMENT_SOURCE="${CMAKE_SOURCE_DIR}/programs/instruments/results.lua")
+add_test(NAME tui_retained_result COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/scripts/check-tui-instrument $<TARGET_FILE:blackbird>
+  --artifacts ${CMAKE_BINARY_DIR}/tui-retained-result)
+set_tests_properties(tui_retained_result PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)

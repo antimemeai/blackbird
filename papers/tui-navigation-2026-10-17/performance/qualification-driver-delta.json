@@ -1,0 +1,10 @@
+{
+  "path": "scripts/check-tui-instrument",
+  "captured_sha256": "0336d4422faecf32a6cab1d229bedffb1349a3178a0c3b92374a80ee9644c10f",
+  "qualified_sha256": "8788d7c9850d2ab5787b1f2f68d95dbf06f48b0d3e1da22e7508630bd118891f",
+  "captured_bytes": 25977,
+  "qualified_bytes": 26122,
+  "executable": true,
+  "mode": 493,
+  "reason": "Root supplied test-driver correction: child fixture disables only VQUIT to permit literal Ctrl-backslash input while preserving ISIG/VINTR. No production source or build-hash scope change."
+}

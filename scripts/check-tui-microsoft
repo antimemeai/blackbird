@@ -144,12 +144,12 @@ def main():
                 assert (emoji["cursor"]["x"], emoji["cursor"]["y"]) == (9, 49)
                 composer = call("cells", "0", "49", "70", "1")["data"]["cells"]
                 assert composer[8]["char"] == "X" and composer[67]["char"] == "│"
-                # 12 columns => 7 inner cells: the joined emoji fits intact.
+                # All 12 columns are owned: 8 inner cells, with border at x11.
                 call("resize", "12", "24")
                 expect("ab👩‍💻X")
                 narrow = state()
                 assert (narrow["cursor"]["x"], narrow["cursor"]["y"]) == (9, 21)
-                border = call("cells", "10", "21", "1", "1")["data"]["cells"]
+                border = call("cells", "11", "21", "1", "1")["data"]["cells"]
                 assert border[0]["char"] == "│"
                 (artifacts / "emoji-composer-state.json").write_text(json.dumps(narrow, indent=2) + "\n")
                 call("write", "\x15")

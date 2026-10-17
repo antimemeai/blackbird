@@ -1,0 +1,221 @@
+{
+  "status": "completed one matched round; delivered source separately qualified",
+  "campaign": "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg",
+  "baseline": {
+    "status": "qualified baseline; no performance timing",
+    "commit": "0bf6712afea66989e94ba9601205888cd5ca342c",
+    "native_tree_sha256": "193606716b1129964ee6e364b00d3e6b8da198384220050a155ccd42e712c5ec",
+    "native_file_count": 442,
+    "archive_sha256": "375f4b27a6f29aef7fd532a8b72d5871ab7fc7af1ef97d0d6cb726db2fe877d3",
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/baseline-release/blackbird",
+    "native_sha256": "9bd9d9b5ac95545c9c2f32ba0752fedd31c662e9e8783c53cbda9762426717f5",
+    "companions": {
+      "blackbird": "9bd9d9b5ac95545c9c2f32ba0752fedd31c662e9e8783c53cbda9762426717f5",
+      "blackbird-archive": "6be18ce8b0db85a640804733d635edbe1559ce65a0262146f82b324ef269cbce",
+      "blackbird-job-runner": "0bb31a557fe14a7394db0c97fb78491cd95250231bccf5f03df7e0c9ff767488"
+    },
+    "profile": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF",
+    "combined_qualification": {
+      "count": 13,
+      "passed": 13,
+      "seconds": 23.3
+    },
+    "pressure_qualification": {
+      "count": 1,
+      "passed": 1,
+      "seconds": 8.85
+    },
+    "selected_tests": {
+      "combined_tests": [
+        "command_jobs",
+        "responses_provider",
+        "application",
+        "application_cli",
+        "registered_responses_native",
+        "terminal_blocked",
+        "terminal",
+        "session_startup",
+        "provider_raw",
+        "command_center_semantic",
+        "command_center_raw",
+        "command_center_pressure",
+        "tui_command_center"
+      ],
+      "pressure_tests": [
+        "command_jobs_pty"
+      ],
+      "combined_count": 13,
+      "pressure_count": 1
+    },
+    "pressure_traces": [
+      {
+        "path": "context/tui-lua-composition-2026-10-16/performance/baseline-fixtures/command-jobs-pty/run-28wwn8ho/pressure.trace",
+        "value": {
+          "requested_bytes": 524288,
+          "written_bytes": 339968,
+          "remaining_bytes": 184320,
+          "blocked_writes": 34,
+          "elapsed_seconds": 2.7923557680333033,
+          "saturation_observed": true
+        }
+      }
+    ],
+    "artifact_fetch": "first local extraction failed on Python3.9 filter keyword; fetch-only correction succeeded, remote qualification not repeated",
+    "timing_authorized": false,
+    "owned_builds_and_checks_idle": true
+  },
+  "after": {
+    "compiled_native_tree_sha256": "34c5d5a1b17959bcf491c9629416e9b5cab527ad2fe168be077629eef487fb0e",
+    "compiled_archive_sha256": "312162deff4be35555365b103d87426726b26739e44f4d230d980e5facaa6ff0",
+    "native_file_count": 457,
+    "fixture_qualified_tree_sha256": "b4483f0c233bef889d1ecb0e746af05eafb16933e180f07ca62fa81611a73230",
+    "fixture_qualified_archive_sha256": "bc4e138d7330c755f589da69bf6733849e4d160abf47cc88e00b4e0c9bdb0ef2",
+    "native_sha256": "e918c16dbbdb6a07c633ae88f112ffd9c1b609e0fed46c4d9978089280031d04",
+    "companions": {
+      "blackbird": "e918c16dbbdb6a07c633ae88f112ffd9c1b609e0fed46c4d9978089280031d04",
+      "blackbird-archive": "543dc1a19c9ef38b34af36793c2ca1ac8396c6f269610382eb60db518bc98fdf",
+      "blackbird-job-runner": "0bb31a557fe14a7394db0c97fb78491cd95250231bccf5f03df7e0c9ff767488"
+    },
+    "owning_application_checks": {
+      "tests": [
+        "tui_snapshots",
+        "tui_retained_result"
+      ],
+      "passed": 2,
+      "total": 2,
+      "seconds": 23.97,
+      "actual_main_seconds": 23.89,
+      "snapshot_seconds": 0.07
+    },
+    "preserved_initial_qualification": "native snapshot GREEN, actual-main transient readiness print failure; original after-build-provenance checks_completed remains false",
+    "corrected_qualification": "after-qualification-provenance.json records explicit one-script overlay; unchanged native binary",
+    "final_source_test_only_delta": {
+      "path": "tests/tui_snapshot_test.cpp",
+      "measured_after_sha256": "7fc9d1f3ee1c17ff9e94e82a18da78b7cd4caed3da271c05a2ae36177039307c",
+      "final_source_sha256": "10978695de6a4e4c15c1fbae92c24bfcdd7c45fc98fd69282e035f134673cb9a",
+      "kind": "root-described test-only optional analyzer guard; product/native library/default Lua/observer unchanged",
+      "after_archive_retained_immutable": true,
+      "patch": "final-test-only-delta.patch"
+    }
+  },
+  "profile": {
+    "baseline_commit": "0bf6712afea66989e94ba9601205888cd5ca342c",
+    "native_scopes": [
+      "CMakeLists.txt",
+      "include",
+      "src",
+      "tests",
+      "programs",
+      "assets",
+      "scripts",
+      "tooling/probes",
+      "tooling/tui-test-profile.json"
+    ],
+    "remote_root": "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg",
+    "baseline_executable": "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/baseline-release/blackbird",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF",
+    "observer_sha256": "f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377",
+    "report_sha256": "dd4227cf1b29825ccc758f3aeb6da39fab23670310149b1d1935f585eb73650c",
+    "prior_campaign": "/home/patrick/.local/share/blackbird-campaigns/tui-command-center-20261016-_ycd6jjo",
+    "lua_library_sha256": "95fa79336051315a656c56e0271a2990ffb598adf6e8b1987ae0e239efff7fc2",
+    "lua_archive_sha256": "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae"
+  },
+  "measurement": {
+    "process_count": 120,
+    "counts": [
+      {
+        "variant": "after",
+        "scenario": "110x35-fresh",
+        "status": "ok",
+        "count": 30
+      },
+      {
+        "variant": "after",
+        "scenario": "80x24-fresh",
+        "status": "ok",
+        "count": 30
+      },
+      {
+        "variant": "before",
+        "scenario": "110x35-fresh",
+        "status": "ok",
+        "count": 30
+      },
+      {
+        "variant": "before",
+        "scenario": "80x24-fresh",
+        "status": "ok",
+        "count": 30
+      }
+    ],
+    "failed": 0,
+    "forced_shutdown_count": 0,
+    "interrupted": null,
+    "executable_changed": [],
+    "terminal_original_count": 120,
+    "terminal_original_bytes": 2374200,
+    "session_directory_count": 120,
+    "started_utc": "2026-10-16T15:18:35Z",
+    "finished_utc": "2026-10-16T15:18:48Z",
+    "load_before": [
+      5.17724609375,
+      4.9052734375,
+      5.07763671875
+    ],
+    "load_after": [
+      5.3662109375,
+      4.9599609375,
+      5.09326171875
+    ],
+    "host": {
+      "hostname": "neuroses",
+      "system": "Linux",
+      "release": "6.8.0-146-generic",
+      "machine": "x86_64",
+      "platform": "Linux-6.8.0-146-generic-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "cpu": "Intel(R) Xeon(R) CPU E5-2697 v2 @ 2.70GHz"
+    },
+    "inference_prompts_submitted": 0,
+    "round_count": 1,
+    "observer_sha256": "f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377",
+    "report_sha256": "dd4227cf1b29825ccc758f3aeb6da39fab23670310149b1d1935f585eb73650c",
+    "raw_samples_sha256": "748afd5725604907ced9f8ede245617e2645146452ee1aa45fb98e2cfd76966a"
+  },
+  "limits": [
+    "Shared Linux host, no exclusivity or causal source attribution for tails.",
+    "Startup/text/paste/palette/resize endpoints do not measure instrument-open, Lua composition, selection, action or refresh latency.",
+    "Physical rightmost gutter resize residue remains queued as arconaut-arw.",
+    "arconaut-14o remains an unexplained abort; this campaign does not resolve it.",
+    "Compiled tree34c5 includes old optional-access fixture spelling; final source adds one test-only guard, explicitly retained in final-test-only-delta.",
+    "Fixture overlay b448 changes readiness observation only; original failed source/archive/check logs remain intact.",
+    "No performance sample, tail or warmup excluded; no repeat to improve results.",
+    "No source hook result or final source commit is preclaimed."
+  ],
+  "owned_remote_builds_checks_and_timing_idle": true,
+  "delivered_source": {
+    "source_commit": "3e3a561b89b712e52f586d5727f8a1aebfd84ff2",
+    "compiled_native_tree_sha256": "34c5d5a1b17959bcf491c9629416e9b5cab527ad2fe168be077629eef487fb0e",
+    "qualified_fixture_tree_sha256": "b4483f0c233bef889d1ecb0e746af05eafb16933e180f07ca62fa81611a73230",
+    "differences": [
+      {
+        "path": "scripts/check-tui-instrument",
+        "compiled_sha256": "6fb6bc95f1abc4616b3df3c44ad7b1b72cc2a3ec19dcf66dc89b3577953d9d08",
+        "delivered_sha256": "17fad3c1cf47ebb4b256494d5d67cdbeca54f669347bc045edce6035c1b534d6"
+      },
+      {
+        "path": "tests/tui_action_bridge_test.cpp",
+        "compiled_sha256": "50700edf507c82861010dec6daad413b742d4f5f52282377fd4295a3e1977a35",
+        "delivered_sha256": "006a40b771e044145f7ee390fce1580c52d247458991d728318d44170178af8d"
+      },
+      {
+        "path": "tests/tui_snapshot_test.cpp",
+        "compiled_sha256": "7fc9d1f3ee1c17ff9e94e82a18da78b7cd4caed3da271c05a2ae36177039307c",
+        "delivered_sha256": "10978695de6a4e4c15c1fbae92c24bfcdd7c45fc98fd69282e035f134673cb9a"
+      }
+    ],
+    "scope": "Only test fixtures differ from compiled native tree. Production source, default Lua, observer and measured scenarios unchanged.",
+    "patch": "delivered-test-delta.patch"
+  }
+}

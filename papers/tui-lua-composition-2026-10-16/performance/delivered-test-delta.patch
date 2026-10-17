@@ -1,0 +1,137 @@
+--- compiled/scripts/check-tui-instrument
++++ delivered/scripts/check-tui-instrument
+@@ -194,9 +194,9 @@
+             assert not effects.exists(), '/instrument executed fixture work'
+             call('write', '\x1d')
+             call('write', 'fixture\r')
+-            expect('INSTRUMENT_FIXTURE_READY')
+-            expect('Turn complete')
+-            expect('B_PINNED_ORIGINAL')
++            wait_state(lambda s: identities.exists() and
++                       'Turn complete' in s['text'] and 'B_PINNED_ORIGINAL' in s['text'],
++                       'completed local fixture with native-returned IDs and live output')
+             assert identities.exists(), 'actual returned job IDs were not retained'
+             job_a, job_b = identities.read_text().splitlines()
+             assert job_a != job_b and all(re.fullmatch('[a-f0-9]{32}', identifier)
+--- compiled/tests/tui_action_bridge_test.cpp
++++ delivered/tests/tui_action_bridge_test.cpp
+@@ -28,6 +28,29 @@
+     std::this_thread::sleep_for(std::chrono::milliseconds{1});
+   }
+ }
++template <class T>
++std::optional<T> inbox_result(Result<T> result, const char *operation) {
++  if (result.has_value())
++    return std::move(result).value();
++  const auto error = result.error();
++  if (error.code == ErrorCode::busy)
++    return std::nullopt;
++  throw std::runtime_error{std::string{operation} + ": native " +
++                           std::string{error_name(error.code)} +
++                           " detail=" + std::to_string(error.detail)};
++}
++template <class T, class F> T await_inbox(F attempt, const char *operation) {
++  std::optional<T> ready;
++  until(
++      [&] {
++        ready = inbox_result(attempt(), operation);
++        return ready.has_value();
++      },
++      operation);
++  if (!ready)
++    throw std::runtime_error{"inbox polling completed without a result"};
++  return std::move(*ready);
++}
+ template <class Id> Id id(unsigned first) {
+   IdentityBytes bytes{};
+   bytes.front() = static_cast<std::byte>(first);
+@@ -145,9 +168,20 @@
+   }
+   ui::Trigger accept(const ui::FixedTarget &target,
+                      std::string_view verb = "interrupt") {
+-    const auto trigger = unwrap(inbox->new_trigger());
++    // A busy mint has not advanced the native trigger counter or accepted input.
++    const auto trigger = await_inbox<ui::Trigger>(
++        [&] { return inbox->new_trigger(); }, "ActionInbox::new_trigger stays busy");
+     submit(trigger, target, verb);
+     return trigger;
++  }
++  ui::ActionPage read(const char *operation) const {
++    return await_inbox<ui::ActionPage>([&] { return inbox->try_read(); }, operation);
++  }
++  bool empty(const char *operation) const {
++    const auto page = inbox_result(inbox->try_read(), operation);
++    if (!page)
++      return false;
++    return page->size == 0;
+   }
+ };
+ std::unique_ptr<ui::NativeActionBridge> bridge(Fixture &fixture, Producer &producer) {
+@@ -178,7 +212,7 @@
+   Producer producer;
+   const auto target = fixture.target();
+   const auto trigger = producer.accept(target);
+-  const auto pending = unwrap(producer.inbox->try_read());
++  const auto pending = producer.read("ActionInbox::try_read before bridge creation");
+   check(pending.size == 1, "real inbox accepted before refusing-scaffold RED");
+   auto consumer = bridge(fixture, producer);
+   check(consumer->owner().view() == owner(scope()) &&
+@@ -190,7 +224,7 @@
+             last(receipt).disposition == ui::BridgeDisposition::admitted &&
+             last(receipt).forward_called,
+         "exact whole native key maps to one actual mailbox admission");
+-  until([&] { return unwrap(producer.inbox->try_read()).size == 0; },
++  until([&] { return producer.empty("ActionInbox::try_read acknowledgment"); },
+         "bridge acknowledges only after preserving actual receipt");
+   const auto selected = fixture.jobs->requests();
+   check(selected.size() == 1 &&
+@@ -202,7 +236,7 @@
+   producer.vm.reset();
+   producer.vm = unwrap(ui::PresentationOwner::create(producer.inbox));
+   producer.submit(trigger, target);
+-  check(unwrap(producer.inbox->try_read()).size == 0 &&
++  check(producer.read("ActionInbox::try_read after token replay").size == 0 &&
+             fixture.jobs->requests().empty(),
+         "same token after acknowledgment/reload cannot resend the domain request");
+   (void)fixture.jobs->control(selected.front());
+@@ -278,7 +312,7 @@
+   std::vector<ui::Trigger> triggers;
+   for (std::size_t n = 0; n < 20; ++n) {
+     triggers.push_back(producer.accept(target));
+-    until([&] { return unwrap(producer.inbox->try_read()).size == 0; },
++    until([&] { return producer.empty("ActionInbox::try_read recent acknowledgment"); },
+           "each admitted receipt preserved before accepting successor");
+   }
+   const auto result = snapshot(*consumer, 16);
+@@ -288,7 +322,7 @@
+             result.entries.front()->envelope.key == triggers[4].key(),
+         "recent16 explicitly retires oldest derived rows in acceptance order");
+   producer.submit(triggers.front(), target);
+-  check(unwrap(producer.inbox->try_read()).size == 0,
++  check(producer.read("ActionInbox::try_read retired token replay").size == 0,
+         "retired cache row never authorizes original token replay");
+   const auto selected = fixture.jobs->requests();
+   check(selected.size() == 20, "exactly twenty actual distinct mailbox handoffs");
+@@ -308,7 +342,7 @@
+             state.size == 0 && fixture.jobs->requests().empty(),
+         "stopped bridge cannot dispatch a later accepted action");
+   consumer.reset();
+-  check(unwrap(producer.inbox->try_read()).size == 1,
++  check(producer.read("ActionInbox::try_read after bridge destruction").size == 1,
+         "bridge destruction retains independently owned undispatched envelope");
+ }
+ template <class T> T take(ByteView &bytes) {
+--- compiled/tests/tui_snapshot_test.cpp
++++ delivered/tests/tui_snapshot_test.cpp
+@@ -242,8 +242,9 @@
+       page = result.value();
+     return page.has_value();
+   });
+-  require(page.value().size == 0,
+-          "pure authored composition leaves native inbox empty");
++  if (!page)
++    throw std::runtime_error{"actual authored inbox observation missing"};
++  require(page->size == 0, "pure authored composition leaves native inbox empty");
+   auto host = unwrap(tui::SceneHost::create(input.stamp.view, lua::scene_limits));
+   unwrap(lua::publish(outcome, input.stamp, host));
+   auto control = unwrap(tui::CollectionInspector::create(

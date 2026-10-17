@@ -9,10 +9,29 @@ wide/narrow rendering and independent detail reading anchors. The conversation
 command-results adapter uses it with bounded owner observations and nonblocking
 recording admission; see the [tranche plan](../papers/tui-command-inspector-2026-10-16/PLAN.md)
 and [component results](../papers/tui-command-inspector-2026-10-16/COMPONENT_REPORT.md).
-The separate Lua composition owner, invocation bridge and reuse across command
-center remain design scope.
-See [delivered source results](../papers/mac-link-repair-2026-10-15/RESULTS.md) and
-the [next-slice source map](../papers/tui-next-components-2026-10-15/SOURCE_MAP.md).
+The [current-session center](../papers/tui-command-center-2026-10-16/RESULTS.md)
+reuses those controls across actual task, participant and command observations.
+The [isolated Lua composition owner/action bridge](../papers/tui-lua-composition-2026-10-16/README.md)
+and authored retained-result comparison instrument are also delivered. The
+[physical viewport integration](../papers/tui-full-viewport-2026-10-16/README.md)
+owns the final column and explicit resize/image recovery. These are qualified
+slices, not the whole component inventory below: forms, common routes/layout,
+binding inspection and wider composition still need implementation. The
+[2026-10-17 navigation slice](../papers/tui-shell-navigation-2026-10-17/PLAN.md)
+adds four typed local view actions, a shared route coordinator and native view
+picker. The authored comparison now follows command-run list continuation.
+Cross-path semantic operation references remain open. See the
+[current delivery scope](TUI_IMPLEMENTATION_PLAN.md#present-state-relative-to-the-original-program)
+for source/branch status; earlier source maps describe their own checkpoints.
+
+## Concrete vocabulary
+
+A **command run** is one execution with state, captured output and controls; a
+**task** describes intended work, and a **participant run** identifies a colleague's
+execution. These are separate domain objects. A **view** presents work; a local
+**route action** selects a view and does not execute that work. Use **list page**
+for command-run entries and **output page** for bytes from one run. Existing native
+`CommandJobs` and external `job_id` names remain protocol/implementation names.
 
 ## Boundary and data flow
 

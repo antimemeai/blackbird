@@ -1,0 +1,8 @@
+{
+  "path": "tests/tui_snapshot_test.cpp",
+  "measured_after_sha256": "7fc9d1f3ee1c17ff9e94e82a18da78b7cd4caed3da271c05a2ae36177039307c",
+  "final_source_sha256": "10978695de6a4e4c15c1fbae92c24bfcdd7c45fc98fd69282e035f134673cb9a",
+  "kind": "root-described test-only optional analyzer guard; product/native library/default Lua/observer unchanged",
+  "after_archive_retained_immutable": true,
+  "patch": "final-test-only-delta.patch"
+}

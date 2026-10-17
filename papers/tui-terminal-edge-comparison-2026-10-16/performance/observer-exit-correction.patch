@@ -1,0 +1,29 @@
+--- before/scripts/bench-terminal-edge
++++ after/scripts/bench-terminal-edge
+@@ -82,6 +82,8 @@
+         result["failure"] = repr(error)
+     finally:
+         clean_child(child, result)
++        if child is not None:
++            result["exit_code"] = child.returncode
+         if not original.with_suffix(".stdout").exists():
+             stdout, stderr = child.communicate(timeout=1) if child is not None else (b"", b"")
+             original.with_suffix(".stdout").write_bytes(stdout)
+@@ -172,8 +174,6 @@
+             pump(drain)
+             if predicate():
+                 return
+-            if child.poll() is not None:
+-                break
+         raise RuntimeError(label)
+ 
+     def fill():
+@@ -244,6 +244,8 @@
+         result["failure"] = repr(error)
+     finally:
+         clean_child(child, result)
++        if child is not None:
++            result["exit_code"] = child.returncode
+         result["finished_ns"] = time.monotonic_ns()
+         original.with_suffix(".terminal").write_bytes(terminal)
+         original.with_suffix(".events").write_bytes(events)

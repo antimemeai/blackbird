@@ -1,0 +1,22 @@
+{
+  "combined_tests": [
+    "command_jobs",
+    "responses_provider",
+    "application",
+    "application_cli",
+    "registered_responses_native",
+    "terminal_blocked",
+    "terminal",
+    "session_startup",
+    "provider_raw",
+    "command_center_semantic",
+    "command_center_raw",
+    "command_center_pressure",
+    "tui_command_center"
+  ],
+  "pressure_tests": [
+    "command_jobs_pty"
+  ],
+  "combined_count": 13,
+  "pressure_count": 1
+}

@@ -10606,3 +10606,460 @@ checked results/issue snapshot with explicit text-only exception, then fast-forw
 master to that identical qualified source and push per operator request. No source
 requalification for the fast-forward or change to any running executable. Next
 branch resumes separately owned Lua composition/action work from integrated master.
+
+Master fast-forward/push completes0bf6712; remote and local master agree.
+Begin work/tui-lua-composition-2026-10-16 and arconaut-rhi.3.6. Three targeted staff
+studies plus realLua5.4.8 nested-pcall yield experiment produce written PLAN,
+OWNER_PLAN and VM/native/delivery studies. One bounded design challenge adopts
+separate inputrevision, frozen targets, truthful delivery statuses and async source
+preparation. Root read-only Rhizome rigor watch reinforces explicit publication/
+reclamation; no imported project rules. Staff now own VM/inbox, pure delivery and
+actual-main oracle units; root owns adapter/actionintegration/raw/performance.
+Tests precede each source implementation. First unit alone does not deliver the
+instrument or domain receipt bridge; one review/fixes per conceptual unit.
+
+Actual qualified old-main Microsoft Ghostty RED captures missing Ctrl-] instrument
+with nonempty midcursor draft, native launch/cleanup and no submitted workflow.
+Native new-contract compiled scaffold REDs precede VM and delivery implementation;
+setup compile errors remain separate from behavioral results. Pure delivery owner
+first private checks pass15 new/owning cases; root single challenge requests truthful
+lookup-count naming/process-local lifetime and examines guarded launch publication.
+VM implementation proceeds against its permanent8-mode contract. Preserve default
+qualified native libraries via APFS clones for private links before the focused
+shared Debug lease; no executable activation. Research checkpoint is text/data
+plus unchanged probe study artifacts; active native/script changes remain unstaged.
+
+Lua retained-result implementation now includes fresh protected bounded Lua VM,
+typed scene/action inbox, native exact-key interrupt handoff and actual pure
+process-delivery facts, authored2-pin lab, independent comparison relation and
+asynchronous source reload/preview. All owning reviews/fixes closed:2VMoracle
+findings,1bridge worker-lineage omission,6adapter identity/admission/lifecycle
+faults, plus actual-main comparison relation. Runtime REDs precede implementation;
+live mapped-key F8 freezes actual B despite selecting A afterward. Source-less
+startup recovers by reload. Constructor-prepaid4098 preserves accepted remaining
+intents as unknown on whole-runtime exit after both workers join.
+
+Focused Debug, private owner8/bridge5/adapter6 profiles and Linux25 pass within
+recorded scopes. Preserve initial bridge ASan native Error abort (queued14o),
+pressurefixture TSan assertion and setup failures. Correct pressure by separate
+fixed no-consumer UI producer; unchanged product passes changed rawcase in both
+sanitizers. Two actual-main backends pass;20 readable styled expectations include
+actual defaultLua composition. False selected-detail warning fixed; physical
+narrow gutter residue queuedarw with originals. Root single neworacle/snapshot
+challenges find no defect. No added review panels or AFL/artwork interaction.
+
+Prepare stable source/index/Beads for installed full source hook. New Release
+baseline is integrated master0bf6712, not oldcenter: persistent owned Neuroses
+campaign baseline13+PTY1 qualifies; next matched round includes actual unchanged
+observer/source/profile identity. StyLua-only results.lua formatting after native
+Linux25 will be qualified by final authored snapshots/actual-main source gate and
+new Linux application checks, not by pretending that native fixture lane ran it.
+Full source gate/performance remain pending at this checkpoint preparation.
+
+First installed source hook251/252 Debug275.20s fails only the new actual-main
+oracle's transient INSTRUMENT_FIXTURE_READY text, matching the new Linux
+application failure: both actual children and returned IDs already exist, but
+faster output scrolls that message away. No analysis phase or commit occurred;
+no test process was signalled. Replace readiness with persistent turn completion,
+B's actual output and the independently written native IDs, preserving4s and
+all exact downstream ID/effect/private-input assertions. Corrected MacGhostty
+and Linux actual-main+20snapshots pass. Prepare the same staged source for the
+fresh mandatory complete source gate; no native change or new review panel.
+
+The matched Release round completes120/120 with zero failed/repeated samples,
+all originals retained. Median input remains comparable; startup/paste tails are
+mixed, including worse wide startup/paste p95. Publish the exact tables after
+source gate, keep f8f open and avoid source-causation claims on this shared host.
+
+Second installed source hook251/252 Debug265.92s fails only
+`tui_action_bridge_recent` with native busy/detail0. Unlike the earlier ASan
+abort, this diagnostic preserves the exact current native error. The bridge
+fixture unwraps nonblocking inbox reads/trigger creation while its real worker
+can hold the mutex; documented busy is not a completed operation. Return the
+owning fixture to its original owner: wait only on busy within the same finite
+watchdog, preserve all exact20 handoff/order/dedup assertions, fail other errors,
+and never retry an ambiguously accepted handler/effect. Preserve the complete
+failed gate. Native product and completed performance binaries remain unchanged;
+record the final test-only delta rather than rerunning timing to improve tails.
+
+The bridge owner returns the explicit busy fixture correction:5/5 owning Debug
+cases pass in1.54s and actual test-TU clang-tidy is clean. Root reads the exact
+diff and finds no issue: only pre-acceptance trigger mint and read busy wait,
+non-busy errors retain operation/code/detail, and existing predicates retain
+one5s deadline. Exact20 handoffs/order, accepted_requests and replay assertions
+are unchanged. Before-source/patch hashes and complete failed hook remain in
+bridge/hook-busy-repair. This does not identify the original ASan abort14o.
+All lanes stop writes and release Debug for the mandatory full source gate.
+
+Qualified and pushed source `3e3a561b89b712e52f586d5727f8a1aebfd84ff2` after the installed hook passes252/252
+Debug in265.84s plus all251 actual C++ translation units and owned C++/Lua checks.
+The preceding merge remains pushed at master0bf6712; this new tranche stays on
+its work branch. No running launcher/provider session was activated.
+
+Publish the one matched Linux Release round:120/120 normal processes,960 endpoint
+observations, all tails retained. Baseline is exact integrated master0bf6712;
+measured after native tree34c5d5a1 and qualified fixture overlayb4483f0c remain
+immutable. Source differs in only the persistent-readiness script, optional
+snapshot guard and explicit-busy bridge fixture. Exact hashes/patch are published;
+production/defaultLua/observer/scenarios are unchanged, so no timing repeat.
+Input medians remain close; startup medians and paste p95 rise with mixed tails
+on the shared host. Append one 10-field TSV tranche row and retain f8f/arw/14o.
+
+Closed only arconaut-rhi.3.6 after publication. Parent rhi.3 remains open for the
+real CodingEngine operation locator across human/model/Lua, configurable bindings,
+collection continuation and remaining reusable components/views. Follow the
+explicit AGENTS documentation-only exception for this results/data/Beads commit:
+relevant link/diff/TSV checks, no repeat of unchanged full source tests/analysis.
+
+Final publication checks:46 relative links resolve across10 changed/publication
+Markdown files, all tranche rows have10 TAB fields, JSON parses and all120 raw
+process samples remain. Supported Beads backup records171 issues/782 events.
+
+Publication diff check reports six trailing-space lines in the two original CMake
+build logs. Keep those original bytes: both published logs compare byte-for-byte
+with the retained campaign files. Authored documents/data pass diff whitespace
+checks with only those two originals excluded. No active source or source gate
+changes; the publication records this distinction instead of rewriting raw logs.
+
+2026-10-16 terminal edge research: operator requests a frumentarius to find
+mature TUI candidate solutions before repairing arw. Spawn one conceptual source
+research lane; root maps current renderer/mode/presenter contracts and synthesizes
+options. New work branch starts at qualified Lua delivery40a9212. Research-only
+plan under papers/tui-terminal-edge-2026-10-16; no source/tests/builds, dependency
+selection, live activation, AFL or artwork interaction.
+
+The terminal-edge frumentarius completes four grounded candidates from existing
+pinned sources: tmux physical-tail EL/BCE guards, Neovim delayed-wrap/cursor
+handling, FINAL CUT bottom-right wrap suppression/insertion, and Notcurses explicit
+clear/damage-all recovery. Root maps the actual logical-width loss, committed
+frame extent, nonblocking packet ownership, exact raw recapture and editor mode
+lifecycle; source excerpts support the mechanisms. Synthesis favors full physical
+frame ownership with explicit content bounds and Neovim-style edge handling,
+EL for suitable blank tails and explicit invalidation/recovery. This is a research
+preference, not an implemented repair or selected dependency.
+
+Record four reused source revisions/licenses/archive hashes/restoration in the
+new research catalog. No source archives/extracts changed, new download, acquired
+execution, product edit, test or performance run. Actual arw remains open; its
+later RED must inspect the physical final column rather than crop to logical
+width. Check documents/links/catalog format, update the existing bug and supported
+Beads backup, then commit/push this research checkpoint under the documentation
+exception. Prior source qualification, running sessions, AFL and artwork stay
+unchanged.
+
+2026-10-16 operator adopts full physical viewport ownership and authorizes a
+handful of approaches compared for performance/stability. New comparison branch
+from4af196d; written candidate/common-scene plan before source. Root owns native
+policies and fixture; independent physical-terminal oracle and external remote
+measurement own distinct lanes. Actual existing-main gutter RED already reproduces
+both Ghostty and Alacritty; no source edit needed. Startup preseed differs between
+profiles because repeated alternate-screen entry clears only one, so do not use
+that trick as a shared oracle. Four eligible fullphysical policies: absolute CUP,
+default blank-tail EL, bottom-right wrap suppression, full erase/repaint reference.
+Keep exact failures, no runtime adoption/main merge, no AFL/artwork interaction.
+
+Native refusing-policy seam RED: addressed already passes; erase, corner and full
+fail their direct output contracts before implementation. Add bounded policies
+inside ChatPainter, forwarded by ChatPresenter, while preserving default behavior
+and commit-after-flush. Native cases then pass4/4. One independent renderer review
+and root's fixture/oracle/observer source reviews close without a source finding.
+The first actual observer qualification completes16/16 normal processes; it is
+protocol qualification, not performance ranking.
+
+Physical comparison rejects corner: at Ghostty2x2 the bottom-right combining
+accent attaches to the preceding cell under DECAWM-off; Alacritty passes. Retain
+the exact prototype and failure without tuning it during the contest. Addressed,
+erase and full pass both profiles. The separately added width-two bottom-right
+case passes all four, exposing the distinction between two Unicode faults.
+Retain17 attempts/319 passing planes, the initial cleanup API error, and the
+intended cropped negative. The passing source gate explicitly selects the three
+eligible physical policies; native corner byte tests do not claim compatibility.
+No actual application caller selects corner. App width integration follows the
+comparison decision as a separate change. The remote snapshot predates only the
+CMake eligibility registration edit; declare that test-only difference rather
+than rebuilding unchanged measured code.
+
+ASan+UBSan passes native4/4 in0.84s and all four six-scenario200-frame batches,
+without sanitizer diagnostics. Actual core/test/fixture translation-unit analysis
+is clean. No new shared state or concurrency primitive exists in this renderer
+comparison; repeated TSan would not attack a new race class. Preserve the existing
+packet owner and exercise input progress during real output refusal instead.
+Create arconaut-rhi.3.7 for the comparison; arw remains open for app integration.
+Prepare source/index/Beads stability for the required full source gate. Remote
+build/qualification/results stay in ignored context while that gate runs.
+
+The first remote timing attempt stops after44 processes (43 observed OK, one
+collector failure). Addressed80x24 trial4 has all ten expected frames and input
+records; the collector's second child.poll could observe exit between its success
+predicate and early-break check, reporting failure precisely on termination.
+Its original final return code was not recorded and remains unknown. Preserve
+all44 originals, exact source and native binary; do not pool this aborted round
+with a replacement or claim the missing code was zero.
+
+Stop the identified owned rigor process during CTest to permit the concrete
+observer correction; the hook exits1 and no commit/source qualification occurred.
+Only source-hook log holders were inspected to identify that process. The fix
+removes the second poll/early break, keeps the same5s deadline and explicit exit0
+requirement, and records actual return codes in failure cleanup. Root reads the
+exact correction within the same observer review, without a new panel. Corrected
+actual Linux qualification passes12/12 normal processes with natural exit0 against
+the unchanged native binary. One fresh360-process matched round is authorized;
+its source overlay and corrected observer hash remain distinct from the failed
+attempt. All tracked files stop changing before the mandatory fresh source gate.
+
+2026-10-16 full-viewport comparison delivered: source0c62e964 passes the fresh
+installed hook,257/257 Debug385.30s and all253 actual C++/owned Lua checks. The
+first interrupted hook remains recorded as interrupted, not a successful gate.
+Push the source checkpoint on work/tui-terminal-edge-comparison-2026-10-16;
+no master merge or running application activation.
+
+Independent Linux Release qualification passes5/5 native cases and258 physical
+planes (43 per survivor/backend). Corrected timing completes360/360 natural
+exit-zero processes,216,000 batch frames,1,800 PTY packets and720 blocked input
+acquisitions before drain. Publish all204 p50/p95/max metric rows and raw samples,
+with the failed first44-process attempt kept separate. Only CMake physical-test
+selection and external observer exit-wait correction differ from the compiled
+snapshot; native code/scenes/transport match. Originals remain intact locally
+and in the owned persistent remote directory; exact source mapping/restoration
+accompany the published report. No extra timing or duplicate qualification.
+
+Select addressed deltas as the physical-frame foundation; default-style blank-tail
+EL is a bandwidth optimization with mixed timing tails, not a universal speed win.
+Blank-scene bytes fall34–38%; sparse CPU medians rise8–9% (0.7–1.5µs/frame).
+Full repaint costs3.3–3.5 times sparse CPU and37–60 times sparse output bytes;
+retain explicit clear for recovery. Corner remains rejected by actual Ghostty
+combining failure. Record full physical extent ownership in the enduring doctrine,
+close only the comparison child3.7 and retain arw open for real application
+integration. This is one-tree policy comparison, not a historical app speed delta.
+Publication uses the text/data-only hook exception after relevant diff/link/data
+checks. Source gate is settled; do not rerun it for results or fast-forward work.
+AFL, artwork, launchers, live sessions and unrelated services remain untouched.
+
+Publication checks:27 result files,46 local Markdown links resolve,416 retained
+sample rows parse (360 corrected,44 failed-first,12 corrected qualification),
+JSON and TSV formats valid. Supported Beads backup retains173 issues/791 events.
+Two original unified patches each contain one context line consisting of the
+required single space. Preserve those original patch bytes; authored diff
+whitespace checks exclude only delivered-source-delta.patch and
+observer-exit-correction.patch. No other whitespace finding occurs.
+
+2026-10-16 operator accepts measured full-viewport integration and directs send it.
+Create work/tui-full-viewport-2026-10-16 at4b4113d. Written integration plan under
+papers/tui-full-viewport-2026-10-16 precedes source. Defect is arw's actual last
+physical column after resize; select addressed deltas with normal blank-tail EL
+and explicit full clear for committed-geometry recovery. Preserve raw packet,
+partial-write/input and editor lifecycle contracts. Independent actual-main oracle
+and matched Linux app measurement are separate owning lanes, followed by one
+concrete source review. No AFL/artwork/live activation or implied master merge.
+
+Initial integration direct Debug10/10 passes18.73s; ASan+UBSan6/6 passes without
+diagnostics. The single source review finds F1 (ED2 removes Kitty image/cache,
+unchanged placement skips restore) and F2 (coalesced shrink/return while pending
+loses physical damage if only final dimensions are compared). Declare direct
+regressions in the owning plan before fixes. Existing graphics PTY and actual
+blocked-output episodes will attack those two contracts; physical Microsoft cells
+remain the independent actual-screen oracle. No new source-review round.
+
+Both review findings receive direct actual-source REDs before their fixes:
+graphics row-only recovery emits ED2 without an image reload; confirmed-pending
+native output with stopped-child shrink/return emits no recovery clear. Fix F1
+by invalidating pending image cache after full/tiny ED2 and reloading/placing a
+visible image inside the final captured packet. Fix F2 with a UI-owner resize
+invalidation flag, consumed by a newly built recovery frame and preserved across
+completion of an older pending frame. No packet mutation or concurrency change.
+
+Final Microsoft episodes pass18 phases each on Ghostty/Alacritty, clean exit and
+mode restoration, no turn. Root's direct oracle source review closes. Retain both
+original REDs, caption typo and mistaken grapheme-deletion oracle expectations;
+the editor intentionally remains scalar-based. Debug and ASan blocked/raw checks
+pass after the native fixes. The graphics check first uses a bare APC-load needle
+that its helper interprets as visible text; add the ESC prefix. It then observes
+a correct older image packet followed by an incomplete newer recovery frame;
+raw bytes and a scoped Python stack expose the too-early cursor assertion and
+an unbounded finally child.wait. Require latest synchronized completion/cursor
+and one image load per full clear, not one load across independently observed
+resize events. The corrected graphics episode passes Debug and ASan; no native
+change or deadline widening for these observer corrections. Preserve all attempts.
+
+Record underlying Mac failed-assert teardown wait as ordinary arconaut-igs:
+process-group cleanup now has5s deadline and records primary failure/terminal
+bytes, but the OS/native cause of one timeout remains unknown. No product hang
+claim or unrelated process survey. The source review is closed after its two
+owning fixes; no review of reviews. Release final native tree to the separate
+Linux measurement lane; all future lane reports remain ignored during source gate.
+
+Before the first source gate completed, root notices an old Microsoft minimum-width
+assertion still expects the12-column composer border at x10. Root missed this
+specific old layout expectation in the initial direct selection. Stop only the
+identified Python rigor process holding this task's source-hook log; it terminates
+its CTest group and the hook exits1 interrupted, without commit or green claim.
+The unchanged old assertion then fails directly against the repaired app at the
+border cell. Update only its explanatory comment and expected physical x11;
+the exact existing Microsoft Ghostty episode passes. Native sources and build
+identity scopes do not change for this test-only correction. Retain RED/GREEN
+captures and interrupted source log. No deadline/assertion weakening or implicit
+baseline reinterpretation.
+
+Linux candidate build and seven selected native/PTY cases pass first attempt,
+including extended graphics; both actual-main physical backends pass18 phases.
+Release the single120-process historical before/after round only after all owned
+remote jobs finish. The candidate archive predates the legacy test-coordinate
+correction only; preserve that immutable archive and report the test-only delta,
+without rebuilding or repeating native timing. Restart the full source gate on
+the complete staged result; all measurement drafts stay ignored until it ends.
+
+The fresh full source gate ends257/258 in360.20s; only tasks_pty fails its older
+hardcoded120-column task origin at x83. With all120 columns owned, layout is
+82 main +2 gutter +36 task cells, so origin is x84. Update that script's pane
+read range and literal origin assertion, preserving the failed full log. Its
+complete direct task episode then passes: subtask/fold/blocker/bound activity,
+burst freshness, draft/cursor and narrow fallback. No product source change.
+The immutable measured Linux snapshot therefore differs from delivered source
+only in the two legacy test-coordinate helpers; no benchmark rebuild/repeat.
+Restart required full hook after these concrete owning expectation fixes; all
+other direct tests/source review remain settled. The historical paired round
+passes120/120 normal processes and960 endpoints; all mixed medians/tails stay
+retained, with source publication still awaiting the mandatory clean gate.
+
+
+2026-10-16 full-viewport source delivery7523da7: fresh installed hook passes all
+258/258 Debug365.33s plus253 actual C++ and owned Lua checks. Commit and push
+work/tui-full-viewport-2026-10-16, without master merge or live activation. The
+first interrupted hook and subsequent257/258 task-origin failure remain distinct
+from the final green source gate; both legacy test coordinate corrections are
+explicit. Native recovery fixes, physical cells and graphics/input/raw oracles
+are complete within one source review/fixes; no additional assurance campaign.
+
+Matched actual-app Linux Release round completes120/120 normal processes and
+960 endpoints on unchanged historical observer/report; seven selected candidate
+cases and18 phases on each physical backend pass. Publish all16 endpoint rows,
+raw samples and originals/source restoration. Source-to-measured delta is only
+check-tui-microsoft x10→11 and check-tasks-pty x83→84, outside native build ID
+inputs; no rebuild/re-time. Typing medians improve slightly; wide shrink/restore
+and narrow restore medians/tails rise. Paste and palette tails are mixed. No
+blanket source-causal speedup/nonregression claim. Retain those observations in
+f8f, close repaired arw, keep ordinary Mac failed-assert teardown igs queued.
+Documentation/data publication uses its checked text-only hook exception; the
+source gate is settled and is not repeated for publication. AFL and artwork stay
+untouched, as do live sessions/launchers and unrelated services.
+
+Final publication checks:23 result files,45 local Markdown links resolve,120 raw
+process samples parse, JSON and all10-field tranche rows are valid. Supported
+Beads backup retains174 issues/797 events. The original source-delta unified
+patch contains two required single-space context lines; preserve its bytes and
+exclude only that patch from authored whitespace checks. All other authored
+changes pass. Close arw, retain f8f/igs open, and publish/push this checked
+text/data result without repeating the settled source gate.
+
+
+2026-10-16 operator parks deeper resize latency work and returns to original TUI
+upgrade/redesign status. Create arconaut-8zx (P2 task), relate it to f8f without
+blocking the TUI program; record exact matched endpoints, raw-timestamp-only
+instrumentation rule and future stage decomposition. No investigation/benchmark
+rerun is started. Reconcile original six-unit plan against delivered sources,
+current public headers/adapters and Beads. Correct stale component/plan claims
+that Lua bridge and center reuse are still unimplemented. Units1–2 have real
+presenter/collection/inspector/center/Lua/result-lab deliveries, with remaining
+semantic operation reference, first8 catalog and general shell/binding/component
+scope. Units3–6 broader settings/Context/team, action fabric, capabilities/reuse
+and metrics views remain implementation work; MIDI/haptics remain later designs.
+Local master74a42f4 contains the earlier TUI integration, but not Lua3e3a561 or
+viewport7523da7; preserve that source/main/live distinction. Record product-facing
+shared shell/navigation/control work as the return direction, with original
+settings/Context/team sequence following it. Documentation/issue updates only;
+apply relevant link/diff checks and supported backup, then checkpoint/push under
+the text-only hook exception. No production source, master merge, live activation,
+AFL or user artwork action.
+
+
+2026-10-17 operator clarifies the eight-entry issue is display/list paging and
+asks to repair it, then resume shared shell/navigation/named controls. Create
+arconaut-rhi.3.8. Independent source plan in
+papers/tui-shell-navigation-2026-10-17/PLAN.md; paging owner plan in
+papers/tui-navigation-2026-10-17/PAGING_PLAN.md. Root native picker RED fails
+terminal_test at missing palette (line45), and actual old main fails Microsoft
+Ghostty waiting for Views after Ctrl-\; original logs/captures in ignored
+context/tui-navigation-2026-10-17/. Paging owner reports direct RED after17 real
+command runs: forward list page does not expose entries9–16. Implement bounded
+list/output navigation and stable requested/observed/displayed page guards;
+shared typed local view actions and coordinator; draft-preserving picker; modal
+key precedence. Use command-run wording without renaming existing external wire
+fields. Preserve paste, private PTY, cancellation, exact raw originals and pending
+output ownership. One independent review/fixes follows direct green checks.
+Matched Release comparison to cbb206b is preparing on isolated Neuroses campaign;
+no AFL, user artwork, provider turn, main integration or executable activation.
+
+Root review of separate paging owner finds no actionable paging-source defect.
+Independent shell review finds/fixes three concrete defects: Escape picker
+expiry stealing focus; route refusal hidden behind retained inspector; raw4010
+schema missing select_view text. Direct ui_raw reads all four route originals,
+picker action and actual feed links, and checks unavailable center while current
+inspector remains rendered. Native terminal, all7 instrument modes and21 readable
+styled expectations pass. Explicit baseline changes are COMMAND RUNS / Command
+run titles (including wrapping) plus the new view picker. Affected ASan12/12
+passes13.48s; changed raw episode passes ASan1/1 7.75s.
+Retain actual-main failed fixtures: source-width expectation still clipped at100
+instead of physical101 after longer title; hidden Turn complete behind active
+comparison; Ctrl-\ forwarded into a child whose VQUIT was still enabled. Correct
+oracles at those actual boundaries: complete physical detail width/body, leave
+comparison before visible turn settlement, disable only fixture child's VQUIT for
+its literal-byte claim. These are fixture errors, not claimed product defects.
+Retain all first attempts, including initial wrong native cursor key and unchanged
+first-three command palette ordering. Final Microsoft/source gate and matched
+performance results are recorded after qualification, with no source bypass.
+
+Final source commit064e794ea1665f241c82e92b431c689290deb205 passes the installed
+full source hook:259/259 Debug458.96s, all253 actual C++ translation units and
+owned Lua analysis. No bypass/new suppression; the whole-source static pass was
+slow but completed. Pushed work/tui-navigation-2026-10-17. Ghostty and Alacritty
+actual-main episodes pass with original returned identities, effect ledger,
+second-page pins and private controls; selected Linux16/16 pass. Rebuilt-current
+ASan blocked fixture passes11.25s; earlier12-case scoped run and changed ui_raw
+7.75s results retained. One matched Release round120/120 normal processes and960
+endpoints, zero failures/discards/repeats, records mixed medians/tails. Save wide
+startup max40.963→388.296ms with all raw samples in existing f8f; no retiming or
+causal claim. Exact source/test-driver mapping and originals are in the published
+performance report. Close only childrhi.3.8; parentUnits1–2 broader components,
+configurable bindings and semantic operation locator remain open.
+During mandatory analysis, independent source study writes the first Unit3
+settings-form proposal: actual session defaults have no guarded patch/versioned
+read mailbox; program_config is a different override owner. Proposed native
+model/effort form needs that shared owner contract, keeps drafts on conflicts,
+and must distinguish saved defaults from effective overrides. No implementation
+or additional review of current code follows from this research note.
+Publication/issue backup are text/data-only and use the explicitly authorized
+per-command hook exception after relevant link/diff checks. Settled source gate
+is not repeated. Source/main/live states remain distinct; AFL and artwork stay
+untouched. No provider/session activation or main merge.
+
+Final publication checks:102 local Markdown targets resolve; performance owner
+publishes25 files and stamps exact committed native content66dee5a2, differing
+from measuredc4966e2 only by the retained child-VQUIT test-driver correction.
+One historical ledger row is appended. Supported Beads backup retains176 issues,
+805 events,128 dependencies and27 labels. Preserve original unified patch bytes;
+exclude only their required context-space lines from authored whitespace checks.
+Source checkpoint is already pushed; commit/push checked documentation/data and
+backup with the authorized text-only hook exception. Do not repeat source tests.
+
+## 2026-10-17 — requested master integration and Claude auth inventory
+
+Operator asks whether TUI work is merged, authorizes merge, then Claude auth
+integration if absent. Master74a42f4 and feature2c75a49 combine without source
+conflicts; four derived Beads backups conflict. Their key comparison retains
+all master issues/events/dependencies in feature. Initial supported backup
+rejects conflict markers in backup_state.json; restore that file from feature
+stage3 and regenerate all backups with bd backup --force --json:176 issues,
+805 events,128 dependencies,27 labels. No records are hand-merged.
+Written bounded integration plan is papers/tui-main-integration-2026-10-17/PLAN.md.
+One independent review examines only automatic integration of master's empty
+exec binding/final_follows and feature's TUI changes; installed full source hook
+qualifies the combined tree. No new TUI implementation/performance round.
+
+Source inventory finds existing owned Anthropic PKCE/copy-code login, private
+storage, refresh and direct colleague support, plus a distinct installed-Claude
+CLI bridge. Main coding rejects Messages and needs separate protocol work.
+Save inventory in papers/claude-auth-integration-2026-10-17/SOURCE_INVENTORY.md.
+Current primary provider docs are checked before making compatibility claims;
+synthetic auth tests do not demonstrate live subscription OAuth acceptance.
+No real credentials/cache contents, login, provider call, artwork, AFL or live
+session activation involved.

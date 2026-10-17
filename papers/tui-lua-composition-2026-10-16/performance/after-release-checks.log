@@ -1,0 +1,30 @@
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release
+    Start  24: tui_snapshots
+1/2 Test  #24: tui_snapshots ....................   Passed    0.07 sec
+    Start 252: tui_retained_result
+2/2 Test #252: tui_retained_result ..............***Failed    8.38 sec
+tui-test 0.1.0
+Traceback (most recent call last):
+  File "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-source-34c5d5a1b17959bc/scripts/check-tui-instrument", line 417, in <module>
+    main()
+  File "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-source-34c5d5a1b17959bc/scripts/check-tui-instrument", line 410, in main
+    raise failure
+  File "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-source-34c5d5a1b17959bc/scripts/check-tui-instrument", line 197, in main
+    expect('INSTRUMENT_FIXTURE_READY')
+  File "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-source-34c5d5a1b17959bc/scripts/check-tui-instrument", line 49, in expect
+    call('expect', 'text', text, '--timeout', '4000')
+  File "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-source-34c5d5a1b17959bc/scripts/check-tui-instrument", line 42, in call
+    raise AssertionError(f'{command}: {result.stdout}\n{result.stderr}')
+AssertionError: ('expect', 'text', 'INSTRUMENT_FIXTURE_READY', '--timeout', '4000'): {"ok":false,"message":"timed out after 4s waiting for 'INSTRUMENT_FIXTURE_READY' to be visible","kind":"assertion","details":{"schema_version":1,"operation":"locator.expect","reason":"locator_no_match","summary":"timed out after 4s waiting for 'INSTRUMENT_FIXTURE_READY' to be visible","locator":{"reason":"no_match","selectors":["INSTRUMENT_FIXTURE_READY"],"stage_index":0,"locations":[],"mismatches":[]},"truncated":false},"artifact":{"status":"written","directory":"/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release/tui-retained-result/ghostty-0a307ca987/failure-1792163474413-p633251-0","manifest":"/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release/tui-retained-result/ghostty-0a307ca987/failure-1792163474413-p633251-0/failure.json","report":"/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release/tui-retained-result/ghostty-0a307ca987/failure-1792163474413-p633251-0/failure.md","report_html":"/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release/tui-retained-result/ghostty-0a307ca987/failure-1792163474413-p633251-0/failure.html","timeline":"/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release/tui-retained-result/ghostty-0a307ca987/failure-1792163474413-p633251-0/timeline.json","screen_text":"/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release/tui-retained-result/ghostty-0a307ca987/failure-1792163474413-p633251-0/current.txt","screen_svg":"/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release/tui-retained-result/ghostty-0a307ca987/failure-1792163474413-p633251-0/current.svg"}}
+
+
+
+
+50% tests passed, 1 tests failed out of 2
+
+Total Test time (real) =   8.46 sec
+
+The following tests FAILED:
+	252 - tui_retained_result (Failed)
+Errors while running CTest

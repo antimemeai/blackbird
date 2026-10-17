@@ -1,0 +1,26 @@
+{
+  "command": [
+    "python3",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/source-eef11f879462e6c3/scripts/bench-terminal-edge",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/release/terminal_edge_fixture",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/round",
+    "--source",
+    "4af196d+native-tree-eef11f879462e6c33e5112f3c9ad3a13c4983ef4ba4c59e3299e9bab9aa5c026",
+    "--build-identity",
+    "linux-clang18.1.3-libstdc++13-lua5.4.8-Release-DebugOFF-none",
+    "--count",
+    "30",
+    "--iterations",
+    "200",
+    "--strategies",
+    "addressed",
+    "erase",
+    "full"
+  ],
+  "started_utc": "2026-10-16T20:52:24Z",
+  "owned_builds_and_checks_complete": true,
+  "global_host_idle_claim": false,
+  "completed": false,
+  "failure": "CalledProcessError(1, ['python3', '/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/source-eef11f879462e6c3/scripts/bench-terminal-edge', '/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/release/terminal_edge_fixture', '/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/round', '--source', '4af196d+native-tree-eef11f879462e6c33e5112f3c9ad3a13c4983ef4ba4c59e3299e9bab9aa5c026', '--build-identity', 'linux-clang18.1.3-libstdc++13-lua5.4.8-Release-DebugOFF-none', '--count', '30', '--iterations', '200', '--strategies', 'addressed', 'erase', 'full'])",
+  "finished_utc": "2026-10-16T20:52:32Z"
+}

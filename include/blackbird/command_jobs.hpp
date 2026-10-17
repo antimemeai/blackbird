@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/command_delivery.hpp"
 #include "blackbird/command_observation.hpp"
 #include "blackbird/raw_command.hpp"
 #include "blackbird/value.hpp"
@@ -49,6 +50,11 @@ public:
   Value read(const Value &arguments) const;
   // Pure bounded current projection: no allocation, capture, blocking or effects.
   CommandObservation try_observe(const CommandObservationQuery &) const noexcept;
+  // Borrowed owner read: caller holds this CommandJobs alive. Missing resident
+  // state includes retirement and never grants permission to repeat an effect.
+  // No allocation, waiting, Value traversal, capture, dispatch or settlement.
+  CommandDeliveryObservation
+  try_observe_delivery(const CommandDeliveryQuery &) const noexcept;
   Value control(const Value &arguments);
   // Enqueue reserves unique delivery identity/history capacity through dispatch.
   // Permanent exhaustion refuses synchronously; only pending PTY input can wait.

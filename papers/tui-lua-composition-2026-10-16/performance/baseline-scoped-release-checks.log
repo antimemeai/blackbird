@@ -1,0 +1,32 @@
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/baseline-release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/baseline-release
+      Start   9: command_jobs
+ 1/13 Test   #9: command_jobs .....................   Passed    2.07 sec
+      Start  10: responses_provider
+ 2/13 Test  #10: responses_provider ...............   Passed    0.01 sec
+      Start  11: application
+ 3/13 Test  #11: application ......................   Passed    0.34 sec
+      Start  14: application_cli
+ 4/13 Test  #14: application_cli ..................   Passed    0.13 sec
+      Start  16: registered_responses_native
+ 5/13 Test  #16: registered_responses_native ......   Passed    1.68 sec
+      Start  22: terminal_blocked
+ 6/13 Test  #22: terminal_blocked .................   Passed    2.14 sec
+      Start  26: terminal
+ 7/13 Test  #26: terminal .........................   Passed    0.06 sec
+      Start  37: session_startup
+ 8/13 Test  #37: session_startup ..................   Passed    0.49 sec
+      Start 138: provider_raw
+ 9/13 Test #138: provider_raw .....................   Passed    0.33 sec
+      Start 223: command_center_semantic
+10/13 Test #223: command_center_semantic ..........   Passed    0.03 sec
+      Start 224: command_center_raw
+11/13 Test #224: command_center_raw ...............   Passed    0.02 sec
+      Start 225: command_center_pressure
+12/13 Test #225: command_center_pressure ..........   Passed    0.01 sec
+      Start 226: tui_command_center
+13/13 Test #226: tui_command_center ...............   Passed   15.99 sec
+
+100% tests passed, 0 tests failed out of 13
+
+Total Test time (real) =  23.30 sec

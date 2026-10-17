@@ -1,0 +1,83 @@
+{
+  "campaign": {
+    "remote_root": "/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE",
+    "baseline_commit": "cbb206b629d936c13c9636b0a7bac999fa68e3e9",
+    "baseline_tree": "0c3b16a1a8114e016e655507baa2eceaf9205616beab28eee1e49906e4c0ea7e",
+    "baseline_source_dir": "baseline-source-0c3b16a1a8114e01",
+    "baseline_archive_sha256": "08f93a0aa0968a76878da546e98ccf3ada648fd35acec2acba80cc5db9035e71",
+    "qualified_lua_campaign": "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK",
+    "candidate_tree": "c4966e284ce086f9c09d2edb770cf30628d65b581b2e6b10c65c28a77ca65c82",
+    "candidate_source_dir": "candidate-source-c4966e284ce086f9",
+    "candidate_archive_sha256": "04a2c23791cc89ba7260d2fca4f04a787929e46ab0d957bfd202cedc21cdfe60"
+  },
+  "platform": "Linux-6.8.0-146-generic-x86_64-with-glibc2.39",
+  "started_utc": "2026-10-17T04:28:04Z",
+  "load_before": [
+    3.9501953125,
+    4.86474609375,
+    5.6572265625
+  ],
+  "lua_files": {
+    "lauxlib.h": "2d9e18e577a6062646268e7f7228264c28bd9b972c186e1af81b8357179c0ab4",
+    "liblua.a": "95fa79336051315a656c56e0271a2990ffb598adf6e8b1987ae0e239efff7fc2",
+    "lua.h": "3b77329f9deed929a5cbe7a7d5fc81ebbb63fd869a49e0a9302fe9240caf1930",
+    "lua.hpp": "fd83f7e823cfbb03ac2da937ec83f01b4a6ddaac220a4fa1ffd6c6c3842c5890",
+    "luaconf.h": "af243c94bee6d2601383e8b65ed66a0d1b4ab3b7418ff903fcd0679912160e3a",
+    "lualib.h": "4ea0f67d3e467f5d6a327616e22a3c2da8e03d47a3c3660916275f2842f521ea"
+  },
+  "completed": true,
+  "clang++-18": "Ubuntu clang version 18.1.3 (1ubuntu1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/bin\n",
+  "cmake": "cmake version 3.28.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).\n",
+  "ninja": "1.11.1\n",
+  "configure": [
+    "/usr/bin/cmake",
+    "-S",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/candidate-source-c4966e284ce086f9",
+    "-B",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/candidate-release",
+    "-G",
+    "Ninja",
+    "-DCMAKE_CXX_COMPILER=/usr/bin/clang++-18",
+    "-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja",
+    "-DBLACKBIRD_COMPILER_PROFILE=linux-clang18",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBLACKBIRD_DEBUG=OFF",
+    "-DBLACKBIRD_INSTRUMENTATION=none",
+    "-DLUA_INCLUDE_DIR=/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/lua-5.4.8/src",
+    "-DLUA_LIBRARY=/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/lua-5.4.8/src/liblua.a"
+  ],
+  "build": [
+    "/usr/bin/cmake",
+    "--build",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/candidate-release",
+    "--parallel",
+    "2",
+    "--target",
+    "blackbird",
+    "blackbird-raw-reader",
+    "terminal_test",
+    "tui_snapshot_test",
+    "tui_instrument_test",
+    "ui_raw_test",
+    "terminal_custody_raw_test",
+    "terminal_blocked_fixture"
+  ],
+  "binaries": {
+    "blackbird": "9b6c9e842b75d17eb66e8df4c78295d714e5af83b99739603fa974d54e92b5ab",
+    "blackbird-archive": "951f02f116985bc88556b122eae74764f0ea2f342b07753d0d39efa55c03108d",
+    "blackbird-job-runner": "0bb31a557fe14a7394db0c97fb78491cd95250231bccf5f03df7e0c9ff767488",
+    "blackbird-raw-reader": "ced5d14570435be3cda809b34cb877d53bed16b0228408a14c5dfd6fd15dac9d",
+    "terminal_test": "c03118e3ef653fa173dabcdb528dd5684cb8f9f0ae9598ac08b69d633ad9f872",
+    "tui_snapshot_test": "966e68ab4d547e2e900e85133d22fd179ac6fd30e56d4946c9683446ac3ae933",
+    "tui_instrument_test": "d1057d2584b4d3ac150d24027a4406c0a080884f287942b8f7d3bcb7078c5018",
+    "ui_raw_test": "ba87e783fce85c5e39e6c624c3d74bffcec2d73cc8d58b003f1adcede8a1bcff",
+    "terminal_custody_raw_test": "fe9639a30947e10a58373e3fcb209df2ac2119b18a9b4cfd3b62d5ffeff42afe",
+    "terminal_blocked_fixture": "e5627ca7de66e177220b3503629506094bb6955e064a5f77e9aec3d6cba290da"
+  },
+  "finished_utc": "2026-10-17T04:34:53Z",
+  "load_after": [
+    5.1396484375,
+    5.46337890625,
+    5.72900390625
+  ]
+}

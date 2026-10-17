@@ -1,0 +1,499 @@
+#!/usr/bin/env python3
+"""Actual retained-result instrument through the pinned Microsoft terminal driver."""
+import argparse
+from collections import Counter
+import hashlib
+import json
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('executable', type=Path)
+    parser.add_argument('--artifacts', type=Path, required=True)
+    parser.add_argument('--backend', choices=('ghostty', 'alacritty'), default='ghostty')
+    parser.add_argument('--source-checkpoint', help='declared source identity for this run')
+    args = parser.parse_args()
+    executable = args.executable.resolve()
+    artifacts = args.artifacts.resolve() / (args.backend + '-' + uuid.uuid4().hex[:10])
+    artifacts.mkdir(parents=True)
+    tool = ROOT / 'scripts/tui-test'
+    subprocess.run([str(tool), '--check'], check=True, timeout=10)
+    session = 'blackbird-instrument-' + uuid.uuid4().hex
+    history = []
+
+    def call(*command, check=True):
+        record = {'command': list(command)}
+        history.append(record)
+        result = subprocess.run([str(tool), '--session', session, '--json',
+                                 '--failure-artifacts', str(artifacts), *command],
+                                capture_output=True, text=True, timeout=12)
+        record.update(returncode=result.returncode, stdout=result.stdout, stderr=result.stderr)
+        if check and result.returncode:
+            raise AssertionError(f'{command}: {result.stdout}\n{result.stderr}')
+        return json.loads(result.stdout) if result.stdout.strip() else {}
+
+    def state():
+        return call('state')['data']
+
+    def expect(text):
+        call('expect', 'text', text, '--timeout', '4000')
+
+    def wait_state(predicate, label):
+        deadline = time.monotonic() + 4
+        latest = None
+        while time.monotonic() < deadline:
+            latest = state()
+            if predicate(latest):
+                return latest
+            time.sleep(.03)
+        raise AssertionError(f'{label}: {latest}')
+
+    def midcursor_draft(text):
+        call('write', text)
+        expect(text)
+        typed = state()
+        call('key', 'press', 'Left')
+        call('key', 'press', 'Left')
+        return wait_state(lambda s: text in s['text'] and
+                          s['cursor']['y'] == typed['cursor']['y'] and
+                          s['cursor']['x'] == typed['cursor']['x'] - 2,
+                          'two native ASCII cursor-left movements')
+
+    def interrupted(number, _frame):
+        raise InterruptedError(f'instrument fixture interrupted by signal {number}')
+
+    prior = {number: signal.signal(number, interrupted)
+             for number in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)}
+    failure = cleanup_error = None
+    opened = False
+    signal.alarm(45)
+    with tempfile.TemporaryDirectory(prefix='blackbird-instrument-') as temporary:
+        work = Path(temporary)
+        effects = work / 'effects'
+        identities = work / 'identities'
+        append = work / 'append'
+        worker = work / 'producer.py'
+        worker.write_text(r"""import os
+from pathlib import Path
+import select
+import signal
+import sys
+import termios
+import time
+root = Path(sys.argv[1])
+kind = sys.argv[2]
+def effect(line):
+    descriptor = os.open(root / 'effects', os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        os.write(descriptor, (line + '\n').encode())
+    finally:
+        os.close(descriptor)
+effect('LAUNCH_' + kind)
+if kind == 'A':
+    output = ('A_RETAINED_ORIGINAL\n' +
+              ''.join('A_ROW_%02d\n' % row for row in range(24)) +
+              'A_SETTLED_EXIT_7\n').encode()
+    assert os.write(1, output) == len(output)
+    raise SystemExit(7)
+count = 0
+def interrupted(_signal, _frame):
+    global count
+    count += 1
+    effect('INT_' + str(count))
+    print('LIVE_HANDLED_' + str(count), flush=True)
+attributes = termios.tcgetattr(0)
+attributes[0] = (attributes[0] | termios.ICRNL) & ~(termios.IGNCR | termios.INLCR)
+attributes[1] &= ~termios.ONLCR
+attributes[3] = (attributes[3] | termios.ICANON | termios.ISIG) & ~(termios.ECHO | termios.IEXTEN)
+# This literal-input fixture disables the child's Ctrl-\\ quit character.
+attributes[6][termios.VQUIT] = bytes([os.fpathconf(0, 'PC_VDISABLE')])
+termios.tcsetattr(0, termios.TCSANOW, attributes)
+signal.signal(signal.SIGINT, interrupted)
+print('B_PINNED_ORIGINAL', flush=True)
+appended = False
+while True:
+    if not appended and (root / 'append').exists():
+        print('B_LATER_UNPINNED', flush=True)
+        effect('APPEND_B')
+        appended = True
+    if select.select([0], [], [], .01)[0]:
+        data = os.read(0, 4096)
+        if data:
+            effect('INPUT_' + data.hex())
+""")
+        workflow = work / 'turn.lua'
+        workflow.write_text(
+            "local a=blackbird.call('exec',{yield_ms=0,argv={" +
+            json.dumps(sys.executable) + ',' + json.dumps(str(worker)) + ',' +
+            json.dumps(str(work)) + ",'A'}})\n" +
+            "local b=blackbird.call('exec',{yield_ms=0,pty=true,argv={" +
+            json.dumps(sys.executable) + ',' + json.dumps(str(worker)) + ',' +
+            json.dumps(str(work)) + ",'B'}})\n" +
+            "blackbird.call('write_file',{path=" + json.dumps(str(identities)) +
+            ",content=a.job_id..'\\n'..b.job_id..'\\n'})\n" +
+            "print('INSTRUMENT_FIXTURE_READY')\n")
+        def module_source(title, prefix=''):
+            return ("return {compose=function() " + prefix +
+                    "local c=ui.collection('results','RESULTS'); " +
+                    "for i=1,ui.rows() do ui.item(c,ui.key(i),ui.label(i),i) end; " +
+                    "ui.inspector('comparison'," + json.dumps(title) +
+                    ",'A\\n'..ui.detail_title(1)..'\\n'..ui.detail(1).." +
+                    "'\\n\\nB\\n'..ui.detail_title(2)..'\\n'..ui.detail(2)) end," +
+                    "interrupt=function() ui.request('interrupt') end}\n")
+
+        authored = work / 'authored.lua'
+        authored.write_text(module_source('AUTHORED_COMPARE'))
+        preview = work / 'preview.lua'
+        preview.write_text(module_source('PREVIEW_ONLY_MARKER'))
+        preview_effect = work / 'preview-effect.lua'
+        preview_effect.write_text(module_source('FORBIDDEN_PREVIEW_MARKER',
+            "pcall(function() ui.request('interrupt') end); "))
+        invalid = work / 'invalid.lua'
+        invalid.write_text('this is not a Lua module !!!\n')
+        loop = work / 'loop.lua'
+        loop.write_text("return {compose=function() while true do pcall(function() "
+                        "while true do end end) end end,interrupt=function() "
+                        "ui.request('interrupt') end}\n")
+        config = work / 'tui-test.toml'
+        config.write_text('')
+        (artifacts / 'identity.json').write_text(json.dumps({
+            'executable': str(executable),
+            'sha256': hashlib.sha256(executable.read_bytes()).hexdigest(),
+            'declared_source_checkpoint': args.source_checkpoint,
+            'backend': args.backend, 'session': session}, indent=2) + '\n')
+        try:
+            opened = True
+            call('run', '--backend', args.backend, '--config', str(config),
+                 '--env', 'BLACKBIRD_GRAPHICS=off', '--cols', '101', '--rows', '30',
+                 '--', str(executable), '--session', str(work / 'session'),
+                 '--workflow', str(workflow), '--model', 'gpt-6.1-sol')
+            expect('Workflow reloads')
+            before = midcursor_draft('INSTRUMENT_DRAFT_SENTRY')
+            (artifacts / 'before-open.json').write_text(json.dumps(before, indent=2) + '\n')
+            call('write', '\x1c')
+            expect('Views')
+            call('write', 'command runs\r')
+            expect('COMMAND RESULTS')
+            call('write', '\x0f')
+            restored_view = wait_state(lambda s: 'COMMAND RESULTS' not in s['text'],
+                                       'view action returned to conversation')
+            assert restored_view['cursor'] == before['cursor'], 'view action moved draft cursor'
+            assert 'INSTRUMENT_DRAFT_SENTRY' in restored_view['text'], 'view action replaced draft'
+            assert not effects.exists(), 'view action executed fixture work'
+            call('write', '\x1d')
+            # Permanent actual-old-main RED, before any submitted workflow.
+            expect('RETAINED RESULT LAB')
+            assert not effects.exists(), 'opening instrument executed fixture work'
+            call('write', '\x1d')
+            expect('INSTRUMENT_DRAFT_SENTRY')
+            restored = wait_state(lambda s: 'RETAINED RESULT LAB' not in s['text'],
+                                  'instrument route closed')
+            assert restored['cursor'] == before['cursor'], 'instrument moved byte cursor'
+            call('write', '\x15/instrument\r')
+            expect('RETAINED RESULT LAB')
+            expect('Source active')
+            assert state()['text'].count('Unpinned') == 2, 'initial A/B pins were invented'
+            assert not effects.exists(), '/instrument executed fixture work'
+            call('write', '\x1d')
+            call('write', 'fixture\r')
+            wait_state(lambda s: identities.exists() and
+                       'Turn complete' in s['text'] and 'B_PINNED_ORIGINAL' in s['text'],
+                       'completed local fixture with native-returned IDs and live output')
+            assert identities.exists(), 'actual returned job IDs were not retained'
+            job_a, job_b = identities.read_text().splitlines()
+            assert job_a != job_b and all(re.fullmatch('[a-f0-9]{32}', identifier)
+                                         for identifier in (job_a, job_b))
+            (artifacts / 'fixture-identities.json').write_text(json.dumps({
+                'A': job_a, 'B': job_b}, indent=2) + '\n')
+            ordered = sorted([job_a, job_b])
+            draft_before = midcursor_draft('LAB_RETURN_DRAFT')
+            call('write', '\x1d')
+            expect('RETAINED RESULT LAB')
+
+            def comparison(snapshot):
+                # Physical101: collection33, divider33, detail34..100.
+                lines = snapshot['text'].splitlines()
+                end = next((i for i, row in enumerate(lines)
+                            if row.startswith('Command runs · page ')), 25)
+                return '\n'.join(row[34:101].rstrip() for row in lines[2:end])
+
+            def compact(value):
+                return re.sub(r'\s+', '', value)
+
+            def selected(identifier):
+                return wait_state(lambda s: 'Selected ' + identifier + ' ' in s['text'],
+                                  'actual selected producer ' + identifier)
+
+            def choose(identifier):
+                call('key', 'press', 'Left')
+                call('key', 'press', 'Home')
+                for _ in range(ordered.index(identifier)):
+                    call('key', 'press', 'Down')
+                return selected(identifier)
+
+            a_bytes = ('A_RETAINED_ORIGINAL\n' +
+                       ''.join('A_ROW_%02d\n' % row for row in range(24)) +
+                       'A_SETTLED_EXIT_7\n').encode()
+            b_bytes = b'B_PINNED_ORIGINAL\n'
+            a_label = 'Command run %s bytes 0..%d of observed %d' % (job_a, len(a_bytes), len(a_bytes))
+            b_label = 'Command run %s bytes 0..%d of observed %d' % (job_b, len(b_bytes), len(b_bytes))
+            choose(job_a)
+            wait_state(lambda s: 'Selected ' + job_a + ' settled' in s['text'],
+                       'fixture A actually settled')
+            call('write', '\x1b[17~')
+            wait_state(lambda s: compact(a_label) in compact(comparison(s)) and
+                       'A_RETAINED_ORIGINAL' in comparison(s), 'pin A exact source window')
+            call('write', '\x1b[19~')
+            expect('Interrupt unavailable')
+            assert not any(line.startswith('INT_') for line in effects.read_text().splitlines())
+            choose(job_b)
+            call('write', '\x1c')
+            expect('Views')
+            call('write', '\x1b[19~')
+            call('key', 'press', 'Down')
+            expect('> Command runs')
+            call('write', '\x1b')
+            wait_state(lambda s: 'Views /' not in s['text'], 'picker dismissal restores inspector')
+            selected(job_b)
+            call('key', 'press', 'Home')
+            selected(ordered[0])
+            call('key', 'press', 'Down')
+            selected(ordered[1])
+            choose(job_b)
+            assert not any(line.startswith('INT_') for line in effects.read_text().splitlines()), 'picker leaked F8 interrupt'
+            call('write', '\x1b[18~')
+            call('key', 'press', 'Right')
+            call('key', 'press', 'End')
+            pinned = wait_state(lambda s: compact(b_label) in compact(comparison(s)) and
+                                'B_PINNED_ORIGINAL' in comparison(s),
+                                'pin B exact source window')
+            assert 'A_SETTLED_EXIT_7' in comparison(pinned), 'comparison lost settled A tail'
+            (artifacts / 'pinned-state.json').write_text(json.dumps(pinned, indent=2) + '\n')
+            (artifacts / 'wide-observed.txt').write_text(pinned['text'] + '\n')
+            append.touch()
+            wait_state(lambda _s: 'APPEND_B' in effects.read_text().splitlines(),
+                       'live producer emitted later unpinned output')
+            choose(job_b)
+            call('write', '\x1b[19~')
+            wait_state(lambda _s: 'INT_1' in effects.read_text().splitlines(),
+                       'explicit F8 reached actual selected live producer')
+            receipt = wait_state(lambda s: 'Mailbox admitted' in s['text'] and
+                                 'worker consumed' in s['text'] and
+                                 bool(re.search(r'native returns [1-3]', s['text'])),
+                                 'actual signal delivery disposition')
+            key_pattern = r'bb-ui:[a-f0-9]{32}:[a-f0-9]{16}:[a-f0-9]{16}:[a-f0-9]{8}'
+            keys = re.findall(key_pattern, compact(receipt['text']))
+            assert len(keys) == 1, 'actual full delivery key missing or ambiguous'
+            receipt_key = keys[0]
+            (artifacts / 'receipt-key.txt').write_text(receipt_key + '\n')
+            call('key', 'press', 'Right')
+            call('key', 'press', 'End')
+            pinned = wait_state(lambda s: 'B_PINNED_ORIGINAL' in comparison(s),
+                                'pinned comparison after real live output')
+            assert 'B_LATER_UNPINNED' not in comparison(pinned)
+            assert 'LIVE_HANDLED_1' not in comparison(pinned)
+            retained_reading = comparison(pinned)
+            call('write', '\x0f')
+            expect('COMMAND RESULTS')
+            call('key', 'press', 'Left')
+            call('key', 'press', 'Home')
+            for _ in range(ordered.index(job_b)):
+                call('key', 'press', 'Down')
+            wait_state(lambda s: job_b in comparison(s) and
+                       'B_LATER_UNPINNED' in comparison(s) and
+                       'LIVE_HANDLED_1' in comparison(s), 'same actual latest job output in inspector')
+            call('write', '\x18')
+            expect('COMMAND CENTER')
+            call('write', '\x1d')
+            selected(job_b)
+            restored = wait_state(lambda s: 'B_PINNED_ORIGINAL' in comparison(s),
+                                  'instrument route returns its pinned reading anchor')
+            assert comparison(restored) == retained_reading, 'instrument reading position changed'
+            call('write', '\x1c')
+            expect('Views')
+            call('write', 'conversation\r')
+            wait_state(lambda s: 'RETAINED RESULT LAB' not in s['text'], 'picker conversation route')
+            call('write', '\x1c')
+            call('write', 'result comparison\r')
+            restored = wait_state(lambda s: 'RETAINED RESULT LAB' in s['text'] and
+                                  'B_PINNED_ORIGINAL' in comparison(s), 'picker resumes comparison')
+            assert comparison(restored) == retained_reading, 'view picker reset comparison anchor'
+            call('resize', '32', '12')
+            expect('RETAINED RESULT LAB')
+            call('key', 'press', 'Right')
+            call('key', 'press', 'End')
+            expect('B_PINNED_ORIGINAL')
+            small = state()
+            (artifacts / 'narrow-state.json').write_text(json.dumps(small, indent=2) + '\n')
+            (artifacts / 'narrow-observed.txt').write_text(small['text'] + '\n')
+            assert 0 <= small['cursor']['x'] < 32 and 0 <= small['cursor']['y'] < 12
+            call('resize', '101', '30')
+            selected(job_b)
+            call('write', '\x1d')
+            restored = wait_state(lambda s: 'RETAINED RESULT LAB' not in s['text'],
+                                  'return original sole composer')
+            assert 'LAB_RETURN_DRAFT' in restored['text']
+            assert restored['cursor'] == draft_before['cursor'], 'routes/resize lost byte cursor'
+            call('write', '\x15\x1b[200~literal \x1d \x18 \x0f \x1b[19~ data\x1b[201~')
+            expect('literal \\x1d \\x18 \\x0f \\x1b[19~ data')
+            assert all(title not in state()['text'] for title in
+                       ('RETAINED RESULT LAB', 'COMMAND CENTER', 'COMMAND RESULTS'))
+            call('write', '\x15/instrument\r')
+            expect('RETAINED RESULT LAB')
+
+            def editor():
+                current = state()
+                if current['cursor']['y'] >= 25:
+                    return current
+                call('key', 'press', 'Escape')
+                return wait_state(lambda s: s['cursor']['y'] >= 25,
+                                  'native Escape returns sole composer')
+
+            def source_command(command, notice):
+                editor()
+                call('write', '\x15' + command + '\r')
+                return wait_state(lambda s: notice in s['text'], 'asynchronous source disposition ' + notice)
+
+            failed = source_command('/instrument reload ' + str(invalid),
+                                    'Lua source failed; last good retained')
+            assert any(marker in comparison(failed) for marker in
+                       ('A_RETAINED_ORIGINAL', 'A_ROW_', 'B_PINNED_ORIGINAL')), 'source error erased last good result'
+            budget = source_command('/instrument reload ' + str(loop),
+                                    'Lua instruction budget; last good retained')
+            assert any(marker in comparison(budget) for marker in
+                       ('A_RETAINED_ORIGINAL', 'A_ROW_', 'B_PINNED_ORIGINAL')), 'loop failure erased last good result'
+            loop_draft = midcursor_draft('LOOP_DRAFT_SENTRY')
+            call('write', '\x1d')
+            call('write', '\x1d')
+            choose(job_a)
+            choose(job_b)
+            call('write', '\x1d')
+            restored = wait_state(lambda s: 'RETAINED RESULT LAB' not in s['text'],
+                                  'native controls after nested-pcall budget failure')
+            assert 'LOOP_DRAFT_SENTRY' in restored['text'] and restored['cursor'] == loop_draft['cursor']
+            call('write', '\x1d')
+            source_command('/instrument preview ' + str(preview),
+                           'Preview ready; effective source unchanged')
+            assert 'PREVIEW_ONLY_MARKER' not in comparison(state()), 'preview activated candidate'
+            source_command('/instrument preview ' + str(preview_effect),
+                           'Lua source failed; last good retained')
+            source_command('/instrument reload ' + str(authored), 'Source active')
+            wait_state(lambda s: 'AUTHORED_COMPARE' in comparison(s), 'successful authored source adoption')
+            assert receipt_key in compact(state()['text']), 'reload replaced actual receipt identity'
+            assert effects.read_text().splitlines().count('INT_1') == 1
+            assert not any(line.startswith('INT_') and line != 'INT_1'
+                           for line in effects.read_text().splitlines()), 'source work repeated interrupt'
+
+            # Private PTY ownership precedes every instrument/global route control.
+            editor()
+            call('write', '\x1d')
+            # Nine additional actual command runs make a second list page.
+            paging_ids = work / 'paging-identities'
+            paging_code = ("local ids={} for i=1,9 do local r=blackbird.call('exec',"
+                           "{argv={'/usr/bin/printf','PAGED_OUTPUT_'..i},yield_ms=0}) "
+                           "ids[i]=r.job_id end blackbird.call('write_file',{path=" +
+                           json.dumps(str(paging_ids)) + ",content=table.concat(ids,'\\n')})")
+            call('write', '\x15/lua ' + paging_code + '\r')
+            wait_state(lambda s: paging_ids.exists() and 'Turn complete' in s['text'],
+                       'nine finite native command runs available')
+            extra_ids = paging_ids.read_text().splitlines()
+            assert len(extra_ids) == 9 and len(set(extra_ids + ordered)) == 11
+            all_ids = sorted(extra_ids + ordered)
+            (artifacts / 'paging-identities.json').write_text(json.dumps({
+                'ordered': all_ids, 'extra': extra_ids}, indent=2) + '\n')
+            call('write', '\x15/instrument\r')
+            expect('Command runs · page 1')
+            call('key', 'press', 'Left')
+            call('key', 'press', 'Home')
+            selected(all_ids[0])
+            call('write', '\x1b[1;5C')
+            expect('Command runs · page 2')
+            call('key', 'press', 'Home')
+            selected(all_ids[8])
+            call('write', '\x1b[1;5C')
+            call('key', 'press', 'End')
+            selected(all_ids[-1])
+            chosen_extra = next(identifier for identifier in all_ids[8:] if identifier in extra_ids)
+            call('key', 'press', 'Home')
+            for _ in range(all_ids.index(chosen_extra) - 8):
+                call('key', 'press', 'Down')
+            wait_state(lambda s: 'Selected ' + chosen_extra + ' settled' in s['text'],
+                       'selected later-page command actually settled')
+            call('write', '\x1b[17~')
+            call('key', 'press', 'Right')
+            call('key', 'press', 'Home')
+            wait_state(lambda s: chosen_extra in comparison(s) and
+                       'PAGED_OUTPUT_' + str(extra_ids.index(chosen_extra) + 1) in comparison(s),
+                       'second list page pins exact native command output')
+            call('key', 'press', 'Left')
+            call('write', '\x1b[1;5D')
+            expect('Command runs · page 1')
+            call('key', 'press', 'Home')
+            selected(all_ids[0])
+            assert 'B_PINNED_ORIGINAL' in comparison(state()), 'list navigation replaced immutable B pin'
+            call('write', '\x15/fg ' + job_b + '\r')
+            wait_state(lambda s: any('PTY input' in row and job_b in row
+                                    for row in s['text'].splitlines()), 'actual private PTY lease')
+            private = b'private_\x1c\x1d\x18\x0f\x1b[19~\n'
+            call('write', private[:-1].decode() + '\r')
+            input_effect = 'INPUT_' + private.hex()
+            wait_state(lambda _s: input_effect in effects.read_text().splitlines(),
+                       'instrument controls reached actual private reader as originals')
+            assert 'RETAINED RESULT LAB' in state()['text'], 'private Ctrl-] toggled local route'
+            call('write', '\x02')
+            wait_state(lambda s: not any('PTY input' in row and job_b in row
+                                        for row in s['text'].splitlines()), 'private PTY backgrounds')
+            assert Counter(effects.read_text().splitlines()) == Counter({
+                'LAUNCH_A': 1, 'LAUNCH_B': 1, 'APPEND_B': 1, 'INT_1': 1,
+                input_effect: 1}), 'browsing/reload/preview/PTY replayed or redirected work'
+            final = state()
+            (artifacts / 'final-state.json').write_text(json.dumps(final, indent=2) + '\n')
+            call('screenshot', '-o', str(artifacts / 'final.svg'))
+            call('write', '\x1d')
+            call('write', '\x11')
+            call('wait', 'exit', '--timeout', '4000')
+        except BaseException as error:
+            failure = error
+        finally:
+            signal.alarm(0)
+            for number in prior:
+                signal.signal(number, signal.SIG_IGN)
+            try:
+                if opened:
+                    result = call('close', check=False)
+                    if result.get('ok') is not True:
+                        raise AssertionError(f'owned terminal cleanup failed: {result}')
+            except BaseException as error:
+                cleanup_error = error
+            finally:
+                (artifacts / 'commands.json').write_text(json.dumps(history, indent=2) + '\n')
+                for name in ('turn.lua', 'producer.py', 'effects', 'identities', 'authored.lua',
+                             'preview.lua', 'preview-effect.lua', 'invalid.lua', 'loop.lua'):
+                    if (work / name).is_file():
+                        (artifacts / ('fixture-' + name)).write_bytes((work / name).read_bytes())
+                for number, handler in prior.items():
+                    signal.signal(number, handler)
+            if failure is not None:
+                if cleanup_error is not None:
+                    if hasattr(failure, 'add_note'):
+                        failure.add_note(f'Cleanup: {cleanup_error!r}')
+                    else:
+                        print(f'Cleanup: {cleanup_error!r}')
+                raise failure
+            if cleanup_error is not None:
+                raise cleanup_error
+    print(f'Native instrument {args.backend}: actual sources, immutable pins, signal receipt, reload/preview, native controls and private PTY: {artifacts}')
+
+
+if __name__ == '__main__':
+    main()

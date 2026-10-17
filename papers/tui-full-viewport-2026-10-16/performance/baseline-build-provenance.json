@@ -1,0 +1,74 @@
+{
+  "campaign": {
+    "remote_root": "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK",
+    "baseline_commit": "4b4113d18ba80ab1a23cea02f53a390c66bf7685",
+    "baseline_tree": "857d795d925a2ab2fb87c251a75ab7968c8f82f6083ab1433948c803ac48010e",
+    "baseline_source_dir": "baseline-source-857d795d925a2ab2",
+    "baseline_archive_sha256": "cd73c3b40dfa5c44a3d68dde380c65f4abf6febc537da7af52dd0f8b6995ae67",
+    "qualified_lua_campaign": "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D"
+  },
+  "platform": "Linux-6.8.0-146-generic-x86_64-with-glibc2.39",
+  "started_utc": "2026-10-16T21:46:45Z",
+  "load_before": [
+    3.89208984375,
+    3.91845703125,
+    4.03369140625
+  ],
+  "lua_files": {
+    "lauxlib.h": "2d9e18e577a6062646268e7f7228264c28bd9b972c186e1af81b8357179c0ab4",
+    "liblua.a": "95fa79336051315a656c56e0271a2990ffb598adf6e8b1987ae0e239efff7fc2",
+    "lua.h": "3b77329f9deed929a5cbe7a7d5fc81ebbb63fd869a49e0a9302fe9240caf1930",
+    "lua.hpp": "fd83f7e823cfbb03ac2da937ec83f01b4a6ddaac220a4fa1ffd6c6c3842c5890",
+    "luaconf.h": "af243c94bee6d2601383e8b65ed66a0d1b4ab3b7418ff903fcd0679912160e3a",
+    "lualib.h": "4ea0f67d3e467f5d6a327616e22a3c2da8e03d47a3c3660916275f2842f521ea"
+  },
+  "completed": true,
+  "clang++-18": "Ubuntu clang version 18.1.3 (1ubuntu1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/bin\n",
+  "cmake": "cmake version 3.28.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).\n",
+  "ninja": "1.11.1\n",
+  "configure": [
+    "/usr/bin/cmake",
+    "-S",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/baseline-source-857d795d925a2ab2",
+    "-B",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/baseline-release",
+    "-G",
+    "Ninja",
+    "-DCMAKE_CXX_COMPILER=/usr/bin/clang++-18",
+    "-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja",
+    "-DBLACKBIRD_COMPILER_PROFILE=linux-clang18",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBLACKBIRD_DEBUG=OFF",
+    "-DBLACKBIRD_INSTRUMENTATION=none",
+    "-DLUA_INCLUDE_DIR=/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/lua-5.4.8/src",
+    "-DLUA_LIBRARY=/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/lua-5.4.8/src/liblua.a"
+  ],
+  "build": [
+    "/usr/bin/cmake",
+    "--build",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/baseline-release",
+    "--parallel",
+    "2",
+    "--target",
+    "blackbird",
+    "blackbird-raw-reader",
+    "chat_view_test",
+    "terminal_custody_raw_test",
+    "terminal_blocked_fixture"
+  ],
+  "binaries": {
+    "blackbird": "15cbd28841c28cae58a8e412f1fea005267434d00ddfdebca26671c283063907",
+    "blackbird-archive": "2506c8e4d15b155fbe64a00ab6e54fc4ea3eee9c24aab77702227c4f23bc65ff",
+    "blackbird-job-runner": "0bb31a557fe14a7394db0c97fb78491cd95250231bccf5f03df7e0c9ff767488",
+    "blackbird-raw-reader": "44b445be93cd0b88771187d31542054c8e4cfe684a2466f86dbc505f3d1bd125",
+    "chat_view_test": "4d3714412f52cfb425c6a0364ed46d38041eced4fe9cbacbf07c679cdf66dc8d",
+    "terminal_custody_raw_test": "1d860e0147d5438ed37557c0a181e7a78e4deef3bbd5068631c1f2a1dcd323c6",
+    "terminal_blocked_fixture": "e21749e7ad0cbfcffee2f233ed309e143a84118a8e2ca3a259c7861094a190c2"
+  },
+  "finished_utc": "2026-10-16T21:53:06Z",
+  "load_after": [
+    5.357421875,
+    5.23681640625,
+    4.67138671875
+  ]
+}

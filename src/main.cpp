@@ -665,7 +665,19 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         output_context = &command_context;
         try {
           dispatch.run([&] {
-            if (prompt == "/help") {
+            if (tui && (prompt.starts_with("/instrument reload ") ||
+                        prompt.starts_with("/instrument preview "))) {
+              raw_main_branch(dispatch, 41);
+              const bool preview = prompt.starts_with("/instrument preview ");
+              const auto path = std::string{prompt.substr(preview ? 20 : 19)};
+              RawEventRef original;
+              auto script = unwrap(tui::lua::Script::create(read_file(
+                  path, tui::lua::source_limit, &command_context, &original)));
+              ui.instrument_source(
+                  {std::move(script), path, original, dispatch.reference(), preview});
+              ui.notice(preview ? "Instrument preview pending"
+                                : "Instrument source pending");
+            } else if (prompt == "/help") {
               raw_main_branch(dispatch, 1);
               emit(terminal_help());
             } else if (prompt.starts_with("/exec ") ||
@@ -1512,6 +1524,20 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       const auto initial_kind =
           resume_turn ? RawMainInputKind::resume : RawMainInputKind::tui;
       const auto initial_length = initial.size();
+      std::optional<InstrumentSource> instrument_source;
+      try {
+        const auto instrument_path =
+            std::filesystem::path{BLACKBIRD_WORKFLOW}.parent_path() /
+            "instruments/results.lua";
+        RawEventRef original;
+        auto script = unwrap(tui::lua::Script::create(read_file(
+            instrument_path, tui::lua::source_limit, &session_capture, &original)));
+        instrument_source.emplace(InstrumentSource{
+            std::move(script), instrument_path.string(), original, {}, false});
+      } catch (const Error &error) {
+        ui.notice(std::string{"Instrument source unavailable: "} +
+                  error_name(error.code));
+      }
       const CommandCenterContext center_context{
           {root->environment(), session_identity(log, &session_capture).conversation},
           engine.participant_observer()};
@@ -1553,7 +1579,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
               }
             },
             engine.command_jobs(), interrupt_wake.read_fd(),
-            [&] { return interrupt_owner.reset(); }, root.get(), center_context);
+            [&] { return interrupt_owner.reset(); }, root.get(), center_context,
+            std::move(instrument_source));
       });
       return finish_interactive();
     }

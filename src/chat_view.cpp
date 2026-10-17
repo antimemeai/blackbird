@@ -479,18 +479,20 @@ std::uint64_t raw_ui_owned_grid_bound(const ChatGrid &grid) {
   return raw_ui_add(
       raw_ui_add(raw_ui_multiply(grid.cells.size(), 4 + max_color), grid.tails.size()),
       raw_ui_add(raw_ui_multiply(grid.height, 4 + 2 * digits),
-                 mode_bytes + 2 * digits));
+                 mode_bytes + 2 * digits + sizeof("\x1b[?7l\x1b[?7h\x1b[0m\x1b[2J") -
+                     1));
 }
 const std::string &ChatPainter::prepare(const ChatGrid &next, std::size_t cursor_row,
-                                        std::size_t cursor_column, bool full) {
+                                        std::size_t cursor_column, bool full,
+                                        ChatPaintPolicy policy) {
   if (!next.width || !next.height)
     throw std::logic_error("cannot paint an empty grid");
   packet_.clear();
   touched_ = 0;
   cursor_row = std::min(cursor_row, next.height - 1);
   cursor_column = std::min(cursor_column, next.width - 1);
-  const bool all = full || !valid_ || previous_.width != next.width ||
-                   previous_.height != next.height;
+  const bool all = full || policy == ChatPaintPolicy::full || !valid_ ||
+                   previous_.width != next.width || previous_.height != next.height;
   for (std::size_t y = 0; y < next.height; ++y) {
     std::size_t first = next.width, last = 0;
     for (std::size_t x = 0; x < next.width; ++x)
@@ -507,12 +509,28 @@ const std::string &ChatPainter::prepare(const ChatGrid &next, std::size_t cursor
         (next.cells[y * next.width + last].width == 0 ||
          (!all && previous_.cells[y * next.width + last].width == 0)))
       ++last;
-    if (packet_.empty())
+    if (packet_.empty()) {
       packet_ = "\x1b[?2026h\x1b[?25l";
+      if (policy == ChatPaintPolicy::full)
+        packet_ += "\x1b[0m\x1b[2J";
+    }
+    std::size_t erase_from = next.width;
+    if (policy == ChatPaintPolicy::erase) {
+      auto tail = next.width;
+      while (tail) {
+        const auto &cell = next.cells[y * next.width + tail - 1];
+        if (cell.scalar != U' ' || cell.length || cell.width != 1 ||
+            cell.ink != Ink::normal)
+          break;
+        --tail;
+      }
+      if (last > tail)
+        erase_from = std::max(first, tail);
+    }
     packet_ += "\x1b[" + std::to_string(y + 1) + ";" + std::to_string(first + 1) + "H";
     Ink active = Ink::normal;
     bool styled = false;
-    for (auto x = first; x < last; ++x) {
+    for (auto x = first; x < std::min(last, erase_from); ++x) {
       const auto &cell = next.cells[y * next.width + x];
       ++touched_;
       if (!cell.width)
@@ -522,8 +540,20 @@ const std::string &ChatPainter::prepare(const ChatGrid &next, std::size_t cursor
         packet_ += color(cell.ink);
         active = cell.ink;
       }
+      const bool corner = policy == ChatPaintPolicy::corner && y + 1 == next.height &&
+                          x + cell.width == next.width;
+      if (corner)
+        packet_ += "\x1b[?7l";
       utf8(packet_, cell.scalar);
       packet_.append(next.tails, cell.tail, cell.length);
+      if (corner)
+        packet_ += "\x1b[?7h";
+    }
+    if (erase_from < next.width) {
+      packet_ += color(Ink::normal);
+      packet_ += "\x1b[" + std::to_string(y + 1) + ";" +
+                 std::to_string(erase_from + 1) + "H\x1b[K";
+      touched_ += next.width - erase_from;
     }
   }
   if (!packet_.empty() || !valid_ || cursor_row != cursor_row_ ||
@@ -709,11 +739,11 @@ ChatGrid &ChatPresenter::grid() {
   return grid_;
 }
 std::string &ChatPresenter::prepare(std::size_t cursor_row, std::size_t cursor_column,
-                                    bool full) {
+                                    bool full, ChatPaintPolicy policy) {
   require_idle();
   // Return the previous packet's capacity before constructing the next delta.
   packet_.swap(painter_.packet_);
-  (void)painter_.prepare(grid_, cursor_row, cursor_column, full);
+  (void)painter_.prepare(grid_, cursor_row, cursor_column, full, policy);
   packet_.swap(painter_.packet_);
   staged_ = {grid_.height, grid_.width, std::min(cursor_row, grid_.height - 1),
              std::min(cursor_column, grid_.width - 1), false};

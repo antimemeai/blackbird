@@ -1,0 +1,8 @@
+{
+  "before_sha256": "93453eab0623c8f1dabdd14ef89c1e8864ff246a606b53b66f1f21b32c9810cb",
+  "after_sha256": "ba06db9f2f6624ae647a88fcbf241f6fee1a6689d9bdb1cb19c167a3f6c83854",
+  "native_binary_unchanged": true,
+  "first_failed_samples": 44,
+  "first_failed_child_exit_code": "not recorded; unknown",
+  "correction": "Remove contradictory second child poll and preserve return code in finally. Same deadline and zero-exit assertion."
+}

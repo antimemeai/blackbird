@@ -1,0 +1,22 @@
+{
+  "compiled_candidate_tree": "0c610fd8281ae21f5498cf819f1dabb27d7633a24e113bcc86c4e36a9bab9da9",
+  "current_frozen_native_scope_tree": "0c3b16a1a8114e016e655507baa2eceaf9205616beab28eee1e49906e4c0ea7e",
+  "delivered_commit": "7523da7ab8134e377cff1186e12fc71919d68ea5",
+  "changes": [
+    {
+      "path": "scripts/check-tasks-pty",
+      "measured_sha256": "7f05373bb91b524f96971db2f2513dff170180c0d4c5a114e73b0a5dc1c0a22d",
+      "current_sha256": "5fe745faa1497cc72eca989e270dcc4b266bfeedaee822d2ff12b511581984ba",
+      "measured_bytes": 5768,
+      "current_bytes": 5838
+    },
+    {
+      "path": "scripts/check-tui-microsoft",
+      "measured_sha256": "ee6fc552d3d53f50f368d017244e82ba4402b94bc790d4d5ed596e68f51c3989",
+      "current_sha256": "7a75019769d31519f932d1b881b78b0518c34a76224ff00a2f229cfe0eec38ec",
+      "measured_bytes": 9927,
+      "current_bytes": 9929
+    }
+  ],
+  "scope": "Exactly two legacy test helper coordinate corrections: check-tui-microsoft right border x10 to x11 and explanatory comment; check-tasks-pty pane origin/range x83 to x84. Native code, build-hash scopes, common observer/report and timing scenarios unchanged. No rebuild or timing repeat."
+}

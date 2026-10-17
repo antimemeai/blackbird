@@ -1,0 +1,11 @@
+styled-grid-v1
+size 44 6
+cursor none
+state palette=open hidden_draft=preserve this draft cursor_bytes=17
+|{muted:Views / command runs_}{normal:                       }|
+|{selected:> Command}{muted: runs — Inspect command state and r}|
+|{muted:  Command center — Inspect current-session t}|
+|{muted:  Result comparison — Compare pinned output }|
+|{muted:Type search · Up/Down select · Enter opens ·}|
+|{normal:                                            }|
+cell-widths

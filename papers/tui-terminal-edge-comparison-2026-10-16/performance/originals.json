@@ -1,0 +1,21 @@
+{
+  "remote_root": "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D",
+  "archive": "/home/patrick/.local/share/blackbird-campaigns/tui-terminal-edge-20261016-qdv85I8D/originals.tar.gz",
+  "sha256": "1f80b05d7ff78d61ca9cb88d248ea5c5b48f1895df79a8bb8e01b604fd72158e",
+  "bytes": 6787141,
+  "entries": [
+    "qualification",
+    "round",
+    "round-corrected",
+    "observer-qualification-corrected",
+    "build-provenance.json",
+    "qualification.json",
+    "timing-release.json",
+    "timing-release-corrected.json",
+    "RESULTS-corrected.md",
+    "RESULTS-corrected.json",
+    "release/terminal_edge_fixture",
+    "release/terminal_edge_test",
+    "release/chat_view_test"
+  ]
+}

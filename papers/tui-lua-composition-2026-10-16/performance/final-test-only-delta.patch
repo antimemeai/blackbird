@@ -1,0 +1,14 @@
+--- measured-after/tests/tui_snapshot_test.cpp
++++ final-source/tests/tui_snapshot_test.cpp
+@@ -242,8 +242,9 @@
+       page = result.value();
+     return page.has_value();
+   });
+-  require(page.value().size == 0,
+-          "pure authored composition leaves native inbox empty");
++  if (!page)
++    throw std::runtime_error{"actual authored inbox observation missing"};
++  require(page->size == 0, "pure authored composition leaves native inbox empty");
+   auto host = unwrap(tui::SceneHost::create(input.stamp.view, lua::scene_limits));
+   unwrap(lua::publish(outcome, input.stamp, host));
+   auto control = unwrap(tui::CollectionInspector::create(

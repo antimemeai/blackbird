@@ -1,5 +1,16 @@
 # Sources and restoration
 
+## Physical terminal edge study, 2026-10-16
+
+The [candidate-options study](papers/tui-terminal-edge-2026-10-16/README.md)
+reads exact existing tmux, Neovim, FINAL CUT and Notcurses snapshots, plus the
+retained XTerm protocol capture. [Reused source identities and restoration](papers/tui-terminal-edge-2026-10-16/SOURCES.tsv)
+link original archives and their existing manifests. No reference tree/archive
+was changed or downloaded, no archived executable ran, and no dependency was
+adopted. The [frumentarius report](papers/tui-terminal-edge-2026-10-16/FRUMENTARIUS.md)
+distinguishes physical-cell ownership, content margins, wrap state, bottom-right
+emission and screen recovery; implementation selection remains future work.
+
 ## Explicit interaction theory and SR-71 controls, 2026-10-15
 
 The [theory research pack](papers/interaction-theory-2026-10-15/README.md) preserves

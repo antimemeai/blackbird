@@ -1,0 +1,21 @@
+styled-grid-v1
+size 32 16
+cursor none
+state synthetic-inputs=2;source=results.lua;selected=B;anchor=A;focus=detail;binding=independent;intents=0;editor=external
+|{selected:> A / B comparison}{normal:              }|
+|{normal:A                               }|
+|{normal:Command run 11111111111111111111}|
+|{normal:111111111111 bytes 0..10 of obse}|
+|{normal:rved 10                         }|
+|{normal:A\\x1b[31m\\x00END                }|
+|{normal:                                }|
+|{normal:B                               }|
+|{normal:Command run 22222222222222222222}|
+|{normal:222222222222 bytes 0..17 of obse}|
+|{normal:rved 17                         }|
+|{normal:B  PRESERVED                    }|
+|{normal:B_END                           }|
+|{normal:                                }|
+|{normal:                                }|
+|{normal:                                }|
+cell-widths

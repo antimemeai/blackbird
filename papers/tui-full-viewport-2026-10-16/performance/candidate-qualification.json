@@ -1,0 +1,48 @@
+{
+  "commands": [
+    [
+      "python3",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-source-0c610fd8281ae21f/scripts/tui-test",
+      "--install"
+    ],
+    [
+      "python3",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-source-0c610fd8281ae21f/scripts/tui-test",
+      "--check"
+    ],
+    [
+      "/usr/bin/ctest",
+      "--test-dir",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-release",
+      "--output-on-failure",
+      "--no-tests=error",
+      "--parallel",
+      "1",
+      "-R",
+      "^(chat_view|chat_render_oracle|terminal_custody_raw|terminal_custody_native|terminal_blocked|terminal_pty_editor|terminal_pty_graphics)$"
+    ],
+    [
+      "python3",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-source-0c610fd8281ae21f/scripts/check-tui-viewport",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-release/blackbird",
+      "--artifacts",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-physical/ghostty",
+      "--backend",
+      "ghostty"
+    ],
+    [
+      "python3",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-source-0c610fd8281ae21f/scripts/check-tui-viewport",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-release/blackbird",
+      "--artifacts",
+      "/home/patrick/.local/share/blackbird-campaigns/tui-full-viewport-20261016-Q1xcrVHK/candidate-physical/alacritty",
+      "--backend",
+      "alacritty"
+    ]
+  ],
+  "started_utc": "2026-10-16T22:09:15Z",
+  "completed": true,
+  "app_sha256": "4aa01a1143b6cab10aa513a4491d678f25373a2ed632b78adfa443a1b54e138e",
+  "tool_sha256": "c6b5629e0f7591f8d1dde672e5c9e12168527b8a88a8d3998547c28fddaa9e00",
+  "finished_utc": "2026-10-16T22:09:45Z"
+}

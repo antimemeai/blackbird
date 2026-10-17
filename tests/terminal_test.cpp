@@ -37,6 +37,49 @@ int main() {
     picker.choices({{"/resume /tmp/a", "", "/tmp/a", "Session", "Alpha"}}, "Sessions");
     feed(picker, "\x1b");
     check(picker.flush_escape() && picker.text() == "unsent draft");
+    Composer views;
+    views.draft("VIEW_DRAFT_SENTRY");
+    feed(views, "\x1b[D\x1b[D");
+    const auto view_cursor = views.cursor();
+    const auto open_views = feed(views, "\x1c");
+    check(open_views.action == InputAction::select_view &&
+          open_views.text == "view.picker");
+    views.views(tui::ViewRoute::conversation);
+    check(views.palette_open());
+    check(views.palette_lines(8)[0].starts_with("Views"));
+    feed(views, "command runs");
+    const auto view_choice = feed(views, "\r");
+    check(view_choice.view == tui::ViewRoute::command_runs);
+    check(view_choice.text == "view.command-runs" &&
+          view_choice.action != InputAction::choose_command &&
+          view_choice.action != InputAction::submit);
+    check(views.text() == "VIEW_DRAFT_SENTRY" && views.cursor() == view_cursor);
+    views.views(tui::ViewRoute::command_center);
+    const auto inspecting_feed = [&](std::string_view bytes) {
+      InputResult result;
+      for (const auto byte : bytes) {
+        auto next = views.feed(byte, nullptr, true);
+        check(next.action != InputAction::instrument_action &&
+              next.action != InputAction::inspect_next);
+        if (next.action != InputAction::none)
+          result = std::move(next);
+      }
+      return result;
+    };
+    inspecting_feed("\x1b[19~\x1b[B");
+    const auto modal_choice = inspecting_feed("\r");
+    check(modal_choice.view == tui::ViewRoute::command_runs);
+    check(views.text() == "VIEW_DRAFT_SENTRY" && views.cursor() == view_cursor);
+    views.views(tui::ViewRoute::result_comparison);
+    inspecting_feed("\x1b");
+    const auto dismissal =
+        terminal_input_dispatch(views, std::chrono::steady_clock::time_point::max(),
+                                std::chrono::steady_clock::time_point::min(), 0);
+    check(dismissal.redraw && !dismissal.focus_editor && !views.palette_open());
+    check(views.text() == "VIEW_DRAFT_SENTRY" && views.cursor() == view_cursor);
+    Composer literal_view_key;
+    feed(literal_view_key, "\x1b[200~\x1c\x1b[201~");
+    check(literal_view_key.text() == "\x1c" && !literal_view_key.palette_open());
     Composer optional;
     check(feed(optional, "/runs\r").text == "/runs");
     Composer slash;

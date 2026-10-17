@@ -48,10 +48,10 @@ class Observed(bytearray):
     def visible(self):
         return self.screen.text().encode()
 
-def wait_for(needle, seconds=5):
+def wait_for(needle, seconds=5, *, predicate=None):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
-        if observed and (needle in observed if b"\x1b" in needle else needle in observed.visible()):
+        if observed and (needle in observed if b"\x1b" in needle else needle in observed.visible()) and (predicate is None or predicate()):
             return
         readable, _, _ = select.select([master], [], [], 0.05)
         if readable:
@@ -698,15 +698,40 @@ if arguments.case in ('all', 'graphics'):
                 wait_for(b'c=12,r=6;\x1b\\\x1b8\x1b[?2026l')
                 assert b'a=t,' not in observed, 'corner change retransferred PNG'
                 assert (observed.screen.row, observed.screen.col) == (terminal_rows-3, 4)
+                # ED2 removes the image/cache even though a row-only resize
+                # leaves this corner placement's coordinates and size unchanged.
+                observed.clear()
+                fcntl.ioctl(slave, termios.TIOCSWINSZ,
+                            struct.pack('HHHH', terminal_rows + 1, terminal_columns, 0, 0))
+                os.kill(child.pid, signal.SIGWINCH)
+                wait_for(b'\x1b[2J')
+                wait_for(b'\x1b_Ga=t,f=100,t=f,i=72171,q=2;')
+                wait_for(b'c=12,r=6;\x1b\\\x1b8\x1b[?2026l', predicate=lambda:
+                         not observed.screen.synchronized_update and
+                         (observed.screen.row, observed.screen.col) == (terminal_rows-2, 4))
+                # Dimension sampling and a later resize wake may each invalidate
+                # the screen. Every completed clear must restore its image.
+                recoveries = bytes(observed).split(b'\x1b[2J')[1:]
+                assert recoveries and all(packet.count(b'a=t,f=100,t=f,i=72171,q=2;') == 1
+                                          and b'c=12,r=6;' in packet for packet in recoveries)
                 fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 6, 80, 0, 0))
                 os.kill(child.pid, signal.SIGWINCH)
                 observed.clear()
-                wait_for(b'\x1b_Ga=d,d=i,i=72171,q=2;')
-                assert b'a=t,' not in observed, 'small resize retransferred PNG'
+                wait_for(b'\x1b_Ga=d,d=i,i=72171,q=2;', predicate=lambda:
+                         not observed.screen.synchronized_update and
+                         (observed.screen.row, observed.screen.col) == (0, 2))
+                assert b'a=t,' not in bytes(observed).rsplit(b'\x1b[2J', 1)[-1], 'small frame retransferred PNG'
                 send(b'/quit\r')
                 assert exit_code() == 0
                 assert b'a=d,d=I,i=72171,q=2;' in observed, 'exit retained image pixels'
+            except BaseException:
+                (Path(work) / 'terminal').write_bytes(observed)
+                import traceback
+                traceback.print_exc()
+                raise
             finally:
-                if child.poll() is None: child.kill(); child.wait()
+                if child.poll() is None:
+                    os.killpg(child.pid, signal.SIGKILL)
+                    child.wait(timeout=5)
                 os.close(master); os.close(slave)
     print('Launcher PTY supplied PNG, 80x24 startup, cached corner, cursor, compact erase and exit release pass')

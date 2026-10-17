@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""Compare native edge policies with the complete Microsoft terminal cell plane."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+
+ROOT = Path(__file__).resolve().parent.parent
+TOOL = ROOT / 'scripts/tui-test'
+POLICIES = ('addressed', 'erase', 'corner', 'full')
+CODE = {'fg': '#bca8ef', 'bg': '#252833'}
+NORMAL = {'fg': 'default', 'bg': 'default'}
+FALSE_ATTRIBUTES = ('blink', 'bold', 'dim', 'inverse', 'invisible', 'italic',
+                    'strike', 'underline')
+
+
+def expected_plane(scene, columns, rows):
+    """Literal PLAN.md scenes; no candidate grid or reference renderer is read."""
+    plane = {(x, y): dict(char=' ', **NORMAL)
+             for y in range(rows) for x in range(columns)}
+
+    def put(x, y, char, style=NORMAL):
+        plane[x, y] = dict(char=char, **style)
+
+    for y in range(rows):
+        if scene == 's':
+            for x in range(columns):
+                put(x, y, chr(ord('A') + y % 26))
+            put(columns - 1, y, chr(ord('a') + y % 26))
+        elif scene in ('b', 'c'):
+            style = CODE if scene == 'c' else NORMAL
+            text = str(y % 10) + 'abc'
+            for x in range(columns):
+                put(x, y, text[x] if x < len(text) else ' ', style)
+        elif scene == 'o':
+            put(0, y, 'O')
+            if columns >= 2:
+                put(columns - 2, y, 'n')
+            put(columns - 1, y, 'z')
+    if scene == 'u':
+        put(0, 0, 'U')
+        if columns >= 2:
+            put(columns - 2, 0, '界')
+            put(columns - 1, 0, '')
+        if rows >= 2:
+            put(columns - 1, 1, 'e\u0301')
+        # The attempted width-two character at row2,lastcol cannot fit.
+        if rows >= 4 and columns >= 2:
+            put(columns - 2, 3, '界', CODE)
+            put(columns - 1, 3, '', CODE)
+    return plane
+
+
+def differences(state, cells, scene, columns, rows):
+    errors = []
+    if (state['cols'], state['rows']) != (columns, rows):
+        errors.append(f'physical size {(state["cols"], state["rows"])}')
+    cursor = state['cursor']
+    if (cursor['x'], cursor['y'], cursor['visible']) != (0, 0, True):
+        errors.append(f'cursor {cursor}')
+    if state['modes']['wraparound'] is not True:
+        errors.append('wraparound was not restored')
+    if state['modes']['alternate_screen'] is not True:
+        errors.append('fixture lost the alternate screen')
+    if state['modes']['bracketed_paste'] is not True:
+        errors.append('fixture lost bracketed paste mode')
+    expected = expected_plane(scene, columns, rows)
+    actual = {(cell['x'], cell['y']): cell for cell in cells}
+    if len(cells) != columns * rows or actual.keys() != expected.keys():
+        errors.append(f'physical cell extent {len(cells)} != {columns * rows}')
+    for coordinate, want in expected.items():
+        have = actual.get(coordinate)
+        if have is None:
+            continue
+        mismatch = {name: (have.get(name), value) for name, value in want.items()
+                    if have.get(name) != value}
+        mismatch.update({name: (have.get(name), False)
+                         for name in FALSE_ATTRIBUTES if have.get(name) is not False})
+        if have.get('link') != '':
+            mismatch['link'] = (have.get('link'), '')
+        if mismatch:
+            errors.append(f'{coordinate}: {mismatch}')
+    return errors
+
+
+def episode(executable, artifacts, backend, strategy, legacy, case):
+    directory = artifacts / (backend + '-' + strategy + '-' + case + '-' + uuid.uuid4().hex[:10])
+    directory.mkdir(parents=True)
+    responses = directory / 'responses'
+    responses.mkdir()
+    session = 'blackbird-edge-' + uuid.uuid4().hex
+    events = directory / 'native.events'
+    history = []
+    summary = []
+    opened = False
+    failure = cleanup_error = None
+
+    def call(*command, check=True):
+        record = {'command': list(command)}
+        history.append(record)
+        completed = subprocess.run(
+            [str(TOOL), '--session', session, '--json', '--failure-artifacts',
+             str(directory), *command], capture_output=True, text=True, timeout=12)
+        record.update(returncode=completed.returncode, stderr=completed.stderr)
+        if command[0] in ('state', 'cells'):
+            response = Path('responses') / (f'{len(history):04d}-' + command[0] + '.json')
+            (directory / response).write_text(completed.stdout)
+            record['response'] = str(response)
+        else:
+            record['stdout'] = completed.stdout
+        if check and completed.returncode:
+            raise AssertionError(f'{command}: {completed.stdout}\n{completed.stderr}')
+        return json.loads(completed.stdout) if completed.stdout.strip() else {}
+
+    def await_ready(sequence, columns, rows):
+        deadline = time.monotonic() + 5
+        latest = ''
+        while time.monotonic() < deadline:
+            latest = events.read_text() if events.exists() else ''
+            for line in latest.split('\n')[:-1]:
+                fields = line.split()
+                if fields[:2] == ['READY', str(sequence)]:
+                    # The deliberate cropped negative reports its committed
+                    # logical width. Its cell oracle still covers physical width.
+                    committed_columns = columns - 1 if legacy and columns > 1 else columns
+                    assert fields == ['READY', str(sequence), str(committed_columns), str(rows)], line
+                    return
+            time.sleep(.01)
+        raise AssertionError(f'no committed READY {sequence} {columns} {rows}: {latest}')
+
+    def inspect(sequence, scene, columns, rows):
+        await_ready(sequence, columns, rows)
+        deadline = time.monotonic() + 4
+        errors = ['terminal has not observed committed output']
+        state = cells = None
+        while True:
+            state = call('state')['data']
+            cells = call('cells', '0', '0', str(columns), str(rows))['data']['cells']
+            errors = differences(state, cells, scene, columns, rows)
+            if not errors or time.monotonic() >= deadline:
+                break
+            time.sleep(.02)
+        prefix = f'{sequence:02d}-{scene}-{columns}x{rows}'
+        summary.append({'sequence': sequence, 'scene': scene, 'cols': columns,
+                        'rows': rows, 'errors': errors,
+                        'state': history[-2]['response'], 'cells': history[-1]['response']})
+        if errors:
+            raise AssertionError(prefix + '\n' + '\n'.join(errors[:24]))
+
+    def interrupted(number, _frame):
+        raise InterruptedError(f'physical edge fixture interrupted by signal {number}')
+
+    prior = {number: signal.signal(number, interrupted)
+             for number in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)}
+    signal.alarm(60)
+    with tempfile.TemporaryDirectory(prefix='blackbird-edge-') as temporary:
+        config = Path(temporary) / 'tui-test.toml'
+        # Explicit automatic recording includes the startup frame, which can
+        # precede an interactive `record start` request.
+        config.write_text('[recording]\ndirectory = ' + json.dumps(str(directory / 'casts')) + '\n')
+        identity = {'executable': str(executable),
+                    'sha256': hashlib.sha256(executable.read_bytes()).hexdigest(),
+                    'backend': backend, 'strategy': strategy, 'legacy': legacy,
+                    'session': session, 'case': case}
+        (directory / 'identity.json').write_text(json.dumps(identity, indent=2) + '\n')
+        try:
+            opened = True
+            columns, rows = (2, 4) if case == 'wide-corner' else (101, 30)
+            call('run', '--backend', backend, '--config', str(config),
+                 '--cols', str(columns), '--rows', str(rows), '--', str(executable),
+                 '--strategy', strategy, '--events', str(events),
+                 *(['--legacy'] if legacy else []))
+            sequence = 0
+            inspect(sequence, 's', columns, rows)
+            commands = ('u', 'o', 'c', 'b') if case == 'wide-corner' else ('b', 'c', 'b', 'u', 'o', 's')
+            for command in commands:
+                call('write', command)
+                sequence += 1
+                inspect(sequence, command, columns, rows)
+            # Recovery is requested only after the driver physically resizes
+            # both its PTY and emulator. It retains the preceding scene.
+            sizes = () if case == 'wide-corner' else ((32, 12), (101, 30), (2, 4), (2, 2), (1, 1), (32, 12))
+            for columns, rows in sizes:
+                call('resize', str(columns), str(rows))
+                call('write', 'r')
+                sequence += 1
+                inspect(sequence, 's', columns, rows)
+                for command in ('u', 'o', 'c', 'b', 's'):
+                    call('write', command)
+                    sequence += 1
+                    inspect(sequence, command, columns, rows)
+            call('write', 'q')
+            call('wait', 'exit', '--timeout', '4000')
+            exited = call('state')['data']
+            assert exited['exited'] == 0 and exited['exit_signal'] is None, exited
+            assert exited['modes']['wraparound'] is True, 'exit left wraparound disabled'
+            assert exited['modes']['alternate_screen'] is False, 'exit retained alternate screen'
+            assert exited['modes']['bracketed_paste'] is False, 'exit retained bracketed paste'
+        except BaseException as error:
+            failure = error
+        finally:
+            signal.alarm(0)
+            if opened:
+                for command in (('close',), ('daemon', 'stop')):
+                    try:
+                        call(*command, check=command != ('daemon', 'stop'))
+                        if command == ('daemon', 'stop'):
+                            # close may already stop this session's daemon.
+                            # The CLI documents exit3 for an absent session.
+                            assert history[-1]['returncode'] in (0, 3), history[-1]
+                    except BaseException as error:
+                        cleanup_error = cleanup_error or error
+            for number, handler in prior.items():
+                signal.signal(number, handler)
+            (directory / 'history.json').write_text(json.dumps(history, indent=2) + '\n')
+            (directory / 'summary.json').write_text(json.dumps({
+                **identity, 'phases': summary, 'failure': repr(failure) if failure else None,
+                'cleanup_error': repr(cleanup_error) if cleanup_error else None}, indent=2) + '\n')
+    if failure:
+        raise failure
+    if cleanup_error:
+        raise cleanup_error
+    scope = ('width-two bottom-right and overwrite' if case == 'wide-corner'
+             else 'Unicode, resize and tiny geometry')
+    print(f'{backend} {strategy} {case}: {len(summary)} complete physical planes, '
+          f'styles, cursor, {scope} and clean modes pass', flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('executable', type=Path)
+    parser.add_argument('--artifacts', type=Path, required=True)
+    parser.add_argument('--backend', choices=('ghostty', 'alacritty'), default='ghostty')
+    parser.add_argument('--strategy', choices=POLICIES, action='append')
+    parser.add_argument('--case', choices=('full', 'wide-corner'), default='full')
+    parser.add_argument('--legacy', action='store_true', help='exercise the deliberate cropped negative control')
+    args = parser.parse_args()
+    subprocess.run([str(TOOL), '--check'], check=True, timeout=10)
+    for strategy in args.strategy or POLICIES:
+        episode(args.executable.resolve(), args.artifacts.resolve(), args.backend,
+                strategy, args.legacy, args.case)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (AssertionError, OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f'check-terminal-edge: {error}', file=sys.stderr)
+        sys.exit(1)

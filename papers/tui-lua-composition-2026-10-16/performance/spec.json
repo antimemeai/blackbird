@@ -1,0 +1,14 @@
+{
+  "before": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/baseline-release/blackbird",
+    "source": "0bf6712afea66989e94ba9601205888cd5ca342c+native-tree-193606716b1129964ee6e364b00d3e6b8da198384220050a155ccd42e712c5ec",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  },
+  "after": {
+    "executable": "/home/patrick/.local/share/blackbird-campaigns/tui-lua-composition-20261016-xjj_x_lg/after-release/blackbird",
+    "source": "659f62bc9435ae0931da578574ddb805fac77e94+compiled-native-tree-34c5d5a1b17959bcf491c9629416e9b5cab527ad2fe168be077629eef487fb0e+qualified-fixture-tree-b4483f0c233bef889d1ecb0e746af05eafb16933e180f07ca62fa81611a73230",
+    "profile": "release",
+    "build_identity": "linux-clang18.1.3-libstdc++13-lua5.4.8-DebugOFF"
+  }
+}
