@@ -6,6 +6,7 @@
 #include "blackbird/raw_ui.hpp"
 #include "blackbird/tasks.hpp"
 #include "blackbird/tui_instrument.hpp"
+#include "blackbird/tui_navigation.hpp"
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -41,12 +42,14 @@ enum class InputAction {
   inspect_next_output,
   center_toggle,
   instrument_toggle,
-  instrument_action
+  instrument_action,
+  select_view
 };
 struct InputResult {
   InputAction action = InputAction::none;
   std::string text;
   RawUiSource source{};
+  std::optional<tui::ViewRoute> view{};
 };
 struct TerminalState {
   std::string draft;
@@ -73,7 +76,9 @@ void save_terminal_state(const std::filesystem::path &path, const TerminalState 
 struct ComposerChoice {
   std::string name, arguments, description, group;
   std::string label{};
+  std::optional<tui::ViewRoute> view{};
 };
+std::vector<ComposerChoice> terminal_view_choices(tui::ViewRoute current);
 class Composer {
 public:
   InputResult feed(char byte, RawUiInput *raw = nullptr, bool inspecting = false);
@@ -82,6 +87,7 @@ public:
   TerminalState state() const;
   void draft(std::string text);
   void choices(std::vector<ComposerChoice> entries, std::string heading);
+  void views(tui::ViewRoute current = tui::ViewRoute::conversation);
   bool palette_open() const noexcept { return palette_open_; }
   bool slash_open() const noexcept { return slash_open_; }
   bool escape_pending() const noexcept { return !escape_.empty(); }
@@ -115,7 +121,7 @@ private:
 };
 // One poll-turn decision: expiry is serviced for ready and idle input alike.
 struct TerminalInputDispatch {
-  bool read_input = false, redraw = false;
+  bool read_input = false, redraw = false, focus_editor = false;
 };
 TerminalInputDispatch
 terminal_input_dispatch(Composer &composer, std::chrono::steady_clock::time_point now,

@@ -40,6 +40,7 @@ public:
   bool open() const noexcept { return open_; }
   bool focused() const noexcept { return focused_; }
   void focus_editor() noexcept { focused_ = false; }
+  void focus_view() noexcept { focused_ = open_; }
   bool needs_refresh() const noexcept { return refresh_; }
   bool refresh(const CommandCenterSources &sources, bool capture);
   Result<void> act(tui::InspectorAction action, RawEventRef origin = {});

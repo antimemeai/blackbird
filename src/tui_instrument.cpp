@@ -96,7 +96,7 @@ tui::SceneHost initial_host() {
   seed.view = view;
   seed.nodes = {{std::string{list_key}, {}, tui::NodeKind::collection, true},
                 {std::string{detail_key}, {}, tui::NodeKind::inspector, true}};
-  seed.collections = {{std::string{list_key}, {}, "RESULTS", {}}};
+  seed.collections = {{std::string{list_key}, {}, "COMMAND RUNS", {}}};
   seed.inspectors = {{std::string{detail_key}, "A / B comparison", {}, {}, {}, 0}};
   unwrap(host.publish(seed));
   return host;
@@ -241,6 +241,8 @@ struct TuiInstrument::State {
     InstrumentSource source;
     RawEventRef input, source_ref;
     bool compose = false;
+    std::optional<CommandObservationId> after;
+    std::size_t page = 0;
   };
   State(CommandCenterScope selected_scope, std::shared_ptr<CommandJobs> selected_jobs)
       : scope(selected_scope), jobs(std::move(selected_jobs)), host(initial_host()),
@@ -267,7 +269,12 @@ struct TuiInstrument::State {
   std::array<std::optional<Pin>, 2> pins{};
   CommandObservation observed;
   CommandObservationQuery observation_query;
-  std::string owner, receipt = "No action receipt", selected_status = "No selected job";
+  std::array<std::optional<CommandObservationId>, 33> pages{};
+  std::optional<CommandObservationId> observed_after, input_after, displayed_after;
+  std::size_t page = 0, input_page = 0, displayed_page = 0;
+  bool observed_ready = false, scene_ready = false;
+  std::string owner, receipt = "No action receipt",
+                     selected_status = "No selected command run";
   std::string_view notice = "Source pending";
   RawEventRef proposal_ref{}, effective_ref{}, origin{};
   RawUiOwner shutdown_owner;
@@ -275,6 +282,10 @@ struct TuiInstrument::State {
   Wire shutdown_wire;
   bool open = false, focused = false, dirty = true, input_ready = false,
        source_recorded = false;
+  bool current_page() const {
+    return observed_ready && scene_ready && observed_after == observation_query.after &&
+           displayed_after == observation_query.after;
+  }
   bool compose_active() const {
     return std::any_of(invocations.begin(), invocations.end(),
                        [](const auto &i) { return i && i->compose; });
@@ -430,6 +441,9 @@ struct TuiInstrument::State {
       next_notice = "Source active";
       accepted = lua::publish(outcome, now, host);
       if (accepted.has_value()) {
+        displayed_after = invocation.after;
+        displayed_page = invocation.page;
+        scene_ready = true;
         effective = std::move(prepared_source);
         effective_generation = outcome.stamp.source_generation;
         handlers = outcome.handlers;
@@ -500,6 +514,9 @@ void TuiInstrument::toggle(RawEventRef origin) {
   state_->changed(origin);
 }
 void TuiInstrument::first_page(RawEventRef origin) {
+  state_->pages.fill({});
+  state_->page = 0;
+  state_->observation_query.after.reset();
   state_->observation_query.offset = 0;
   state_->open = state_->focused = true;
   state_->changed(origin);
@@ -507,6 +524,7 @@ void TuiInstrument::first_page(RawEventRef origin) {
 bool TuiInstrument::open() const noexcept { return state_->open; }
 bool TuiInstrument::focused() const noexcept { return state_->focused; }
 void TuiInstrument::focus_editor() noexcept { state_->focused = false; }
+void TuiInstrument::focus_view() noexcept { state_->focused = state_->open; }
 Result<void> TuiInstrument::source(InstrumentSource proposal, bool capture) {
   try {
     if (!proposal.script || proposal.path.size() > 4096)
@@ -569,7 +587,7 @@ bool TuiInstrument::refresh(bool capture) {
           const auto &d = latest->delivery;
           switch (d.stage) {
           case CommandDeliveryStage::job_not_resident:
-            receipt += " · job not resident; unknown";
+            receipt += " · command run not resident; unknown";
             break;
           case CommandDeliveryStage::key_not_resident:
             receipt += " · key not resident; unknown";
@@ -615,20 +633,24 @@ bool TuiInstrument::refresh(bool capture) {
     }
     if (s.open) {
       auto query = s.observation_query;
-      query.selected = selected(s.host, s.controls, s.owner, s.incarnation);
+      query.selected = s.scene_ready && s.displayed_after == query.after
+                           ? selected(s.host, s.controls, s.owner, s.incarnation)
+                           : std::nullopt;
       const auto observed = s.jobs->try_observe(query);
-      if (observed.status == CommandObservationStatus::ready) {
+      s.observed_ready = observed.status == CommandObservationStatus::ready;
+      if (s.observed_ready) {
+        s.observed_after = query.after;
         s.observed = observed;
         s.observation_query = query;
         auto status = observed.selection == CommandObservationSelection::resident
                           ? "Selected " + std::string{observed.detail.id.view()} + " " +
                                 std::string{phase(observed.detail.phase)}
-                          : std::string{"No selected job"};
+                          : std::string{"No selected command run"};
         if (observed.selection != CommandObservationSelection::resident ||
             observed.detail.leader_exited || observed.detail.worker_finished)
           status += " · interrupt unavailable";
         if (observed.more_rows)
-          status += " · more jobs outside this cut";
+          status += " · more command runs available";
         if (s.selected_status != status) {
           s.selected_status = std::move(status);
           changed = true;
@@ -655,7 +677,7 @@ bool TuiInstrument::refresh(bool capture) {
             input.detail_size[n] = pin.window.size;
             text(
                 input.detail_titles[n],
-                "Job " + std::string{pin.job.view()} + " bytes " +
+                "Command run " + std::string{pin.job.view()} + " bytes " +
                     std::to_string(pin.window.begin) + ".." +
                     std::to_string(pin.window.next) + " of observed " +
                     std::to_string(pin.window.received_end) +
@@ -664,9 +686,12 @@ bool TuiInstrument::refresh(bool capture) {
           } else
             text(input.detail_titles[n], "Unpinned");
         }
-        if (!s.input_ready || !same_content(input, s.input)) {
+        if (!s.input_ready || s.input_after != query.after ||
+            !same_content(input, s.input)) {
           advance(s.query);
           s.input = std::move(input);
+          s.input_after = query.after;
+          s.input_page = s.page;
           s.input_ready = true;
           s.dirty = true;
         }
@@ -705,7 +730,8 @@ bool TuiInstrument::refresh(bool capture) {
       Wire wire;
       wire.stamp(input.stamp);
       const auto source_ref = s.proposal ? s.proposal_ref : s.effective_ref;
-      State::Invocation invocation{input.stamp, source, {}, source_ref, true};
+      State::Invocation invocation{input.stamp, source,        {},          source_ref,
+                                   true,        s.input_after, s.input_page};
       static_assert(std::is_nothrow_move_constructible_v<State::Invocation>);
       wire.reference(source_ref);
       wire.reference(source.original);
@@ -761,11 +787,36 @@ Result<void> TuiInstrument::act(tui::InspectorAction action, RawEventRef origin)
 }
 void TuiInstrument::page(bool forward, RawEventRef origin) {
   auto &s = *state_;
-  if (forward && s.observed.window.next > s.observation_query.offset)
-    s.observation_query.offset = s.observed.window.next;
-  else if (!forward)
-    s.observation_query.offset -=
-        std::min(s.observation_query.offset, std::size_t{4096});
+  const auto &focus = s.host.focused();
+  if (focus && focus->key == list_key) {
+    if (forward) {
+      if (!s.current_page() || !s.observed.more_rows || !s.observed.next ||
+          s.page + 1 >= s.pages.size())
+        return;
+      s.pages[++s.page] = s.observed.next;
+    } else if (s.page)
+      --s.page;
+    else
+      return;
+    s.observation_query.after = s.pages[s.page];
+    s.observation_query.offset = 0;
+  } else {
+    const auto id = selected(s.host, s.controls, s.owner, s.incarnation);
+    if (!s.current_page() || !id || s.observation_query.selected != id ||
+        s.observed.selection != CommandObservationSelection::resident ||
+        s.observed.detail.id != *id ||
+        s.observed.window.requested != s.observation_query.offset)
+      return;
+    const auto &window = s.observed.window;
+    if (forward && window.next < window.retained_end)
+      s.observation_query.offset = window.next;
+    else if (!forward && window.begin > window.cached_begin)
+      s.observation_query.offset =
+          std::max(window.cached_begin,
+                   window.begin - std::min(window.begin, std::size_t{4096}));
+    else
+      return;
+  }
   s.changed(origin);
 }
 Result<void> TuiInstrument::pin(std::size_t slot, RawEventRef origin, bool capture) {
@@ -773,7 +824,8 @@ Result<void> TuiInstrument::pin(std::size_t slot, RawEventRef origin, bool captu
   s.notice = "Pin unavailable; refresh selection";
   try {
     const auto id = selected(s.host, s.controls, s.owner, s.incarnation);
-    if (slot >= s.pins.size() || !id || s.observation_query.selected != id ||
+    if (!s.current_page() || slot >= s.pins.size() || !id ||
+        s.observation_query.selected != id ||
         s.observed.selection != CommandObservationSelection::resident ||
         s.observed.detail.id != *id ||
         s.observed.window.requested != s.observation_query.offset)
@@ -821,8 +873,8 @@ Result<void> TuiInstrument::request_interrupt(RawEventRef origin, bool capture) 
   s.notice = "Interrupt unavailable";
   try {
     const auto id = selected(s.host, s.controls, s.owner, s.incarnation);
-    if (!s.open || !s.focused || !id || !s.effective.script || s.bridge->quiescent() ||
-        s.observation_query.selected != id ||
+    if (!s.current_page() || !s.open || !s.focused || !id || !s.effective.script ||
+        s.bridge->quiescent() || s.observation_query.selected != id ||
         s.observed.selection != CommandObservationSelection::resident ||
         s.observed.detail.id != *id || s.observed.detail.leader_exited ||
         s.observed.detail.worker_finished ||
@@ -849,7 +901,7 @@ Result<void> TuiInstrument::request_interrupt(RawEventRef origin, bool capture) 
     target.incarnation = s.incarnation;
     lua::Text<64> handler;
     text(handler, "interrupt");
-    State::Invocation invocation{stamp, s.effective, {}, s.effective_ref, false};
+    State::Invocation invocation{stamp, s.effective, {}, s.effective_ref, false, {}, 0};
     constexpr std::string_view pending_notice = "Handler pending";
     const auto key = trigger.value().key();
     Wire wire;
@@ -885,7 +937,13 @@ Result<void> TuiInstrument::request_interrupt(RawEventRef origin, bool capture) 
 }
 Result<tui::InspectorLayout> TuiInstrument::render(ChatGrid &grid, tui::Rect bounds) {
   auto &s = *state_;
-  const auto foot = terminal_lines(s.selected_status + "\n" + s.receipt, bounds.width);
+  auto page_status = "Command runs · page " + std::to_string(s.displayed_page + 1);
+  if (!s.scene_ready || s.displayed_after != s.observation_query.after)
+    page_status += " · loading page " + std::to_string(s.page + 1);
+  else if (!s.observed_ready)
+    page_status += " · observation unavailable; last good retained";
+  const auto foot = terminal_lines(
+      page_status + "\n" + s.selected_status + "\n" + s.receipt, bounds.width);
   const auto reserve =
       bounds.height >= 10 ? std::min(foot.size(), bounds.height / 2) : std::size_t{0};
   auto body = bounds;

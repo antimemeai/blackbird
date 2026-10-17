@@ -10949,3 +10949,40 @@ settings/Context/team sequence following it. Documentation/issue updates only;
 apply relevant link/diff checks and supported backup, then checkpoint/push under
 the text-only hook exception. No production source, master merge, live activation,
 AFL or user artwork action.
+
+
+2026-10-17 operator clarifies the eight-entry issue is display/list paging and
+asks to repair it, then resume shared shell/navigation/named controls. Create
+arconaut-rhi.3.8. Independent source plan in
+papers/tui-shell-navigation-2026-10-17/PLAN.md; paging owner plan in
+papers/tui-navigation-2026-10-17/PAGING_PLAN.md. Root native picker RED fails
+terminal_test at missing palette (line45), and actual old main fails Microsoft
+Ghostty waiting for Views after Ctrl-\; original logs/captures in ignored
+context/tui-navigation-2026-10-17/. Paging owner reports direct RED after17 real
+command runs: forward list page does not expose entries9–16. Implement bounded
+list/output navigation and stable requested/observed/displayed page guards;
+shared typed local view actions and coordinator; draft-preserving picker; modal
+key precedence. Use command-run wording without renaming existing external wire
+fields. Preserve paste, private PTY, cancellation, exact raw originals and pending
+output ownership. One independent review/fixes follows direct green checks.
+Matched Release comparison to cbb206b is preparing on isolated Neuroses campaign;
+no AFL, user artwork, provider turn, main integration or executable activation.
+
+Root review of separate paging owner finds no actionable paging-source defect.
+Independent shell review finds/fixes three concrete defects: Escape picker
+expiry stealing focus; route refusal hidden behind retained inspector; raw4010
+schema missing select_view text. Direct ui_raw reads all four route originals,
+picker action and actual feed links, and checks unavailable center while current
+inspector remains rendered. Native terminal, all7 instrument modes and21 readable
+styled expectations pass. Explicit baseline changes are COMMAND RUNS / Command
+run titles (including wrapping) plus the new view picker. Affected ASan12/12
+passes13.48s; changed raw episode passes ASan1/1 7.75s.
+Retain actual-main failed fixtures: source-width expectation still clipped at100
+instead of physical101 after longer title; hidden Turn complete behind active
+comparison; Ctrl-\ forwarded into a child whose VQUIT was still enabled. Correct
+oracles at those actual boundaries: complete physical detail width/body, leave
+comparison before visible turn settlement, disable only fixture child's VQUIT for
+its literal-byte claim. These are fixture errors, not claimed product defects.
+Retain all first attempts, including initial wrong native cursor key and unchanged
+first-three command palette ordering. Final Microsoft/source gate and matched
+performance results are recorded after qualification, with no source bypass.

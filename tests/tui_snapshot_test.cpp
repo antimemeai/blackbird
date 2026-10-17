@@ -213,7 +213,7 @@ void instrument_snapshots(std::vector<Snapshot> &output) {
     std::copy(windows[index].begin(), windows[index].end(),
               reinterpret_cast<char *>(input.detail[index].data()));
     input.detail_titles[index] =
-        instrument_text<512>("Job " + std::string{ids[index]} + " bytes 0.." +
+        instrument_text<512>("Command run " + std::string{ids[index]} + " bytes 0.." +
                              std::to_string(windows[index].size()) + " of observed " +
                              std::to_string(windows[index].size()));
   }
@@ -350,6 +350,19 @@ std::vector<Snapshot> scenarios() {
   output.push_back(rows("tasks-ordinary", task_pane_rows(page, 36, activity), 36, 18));
   output.push_back(rows("tasks-narrow", task_pane_rows(page, 18, activity), 18, 24));
   output.push_back(rows("tasks-tiny", task_pane_rows(page, 7, activity), 7, 3));
+
+  Composer views;
+  views.draft("preserve this draft");
+  feed(views, "\x1b[D\x1b[D");
+  views.views(tui::ViewRoute::command_center);
+  feed(views, "command runs");
+  output.push_back(palette_frame("view-picker", views));
+  const auto route = feed(views, "\r");
+  require(route.action == InputAction::select_view &&
+              route.view == tui::ViewRoute::command_runs &&
+              route.text == "view.command-runs" &&
+              views.text() == "preserve this draft" && views.cursor() == 17,
+          "view picker must emit a local route and preserve draft/cursor");
 
   Composer palette;
   palette.draft("unsent operator draft");

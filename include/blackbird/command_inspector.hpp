@@ -14,6 +14,7 @@ public:
   bool open() const noexcept { return open_; }
   bool focused() const noexcept { return focused_; }
   void focus_editor() noexcept { focused_ = false; }
+  void focus_view() noexcept { focused_ = open_; }
   void first_page(RawEventRef origin = {});
   bool needs_refresh() const noexcept { return refresh_; }
   bool refresh(CommandJobs *commands, bool capture);

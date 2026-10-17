@@ -4,17 +4,17 @@ cursor none
 state synthetic-inputs=2;source=results.lua;selected=B;anchor=A;focus=detail;binding=independent;intents=0;editor=external
 |{selected:> A / B comparison}{normal:              }|
 |{normal:A                               }|
-|{normal:Job 1111111111111111111111111111}|
-|{normal:1111 bytes 0..10 of observed 10 }|
+|{normal:Command run 11111111111111111111}|
+|{normal:111111111111 bytes 0..10 of obse}|
+|{normal:rved 10                         }|
 |{normal:A\\x1b[31m\\x00END                }|
 |{normal:                                }|
 |{normal:B                               }|
-|{normal:Job 2222222222222222222222222222}|
-|{normal:2222 bytes 0..17 of observed 17 }|
+|{normal:Command run 22222222222222222222}|
+|{normal:222222222222 bytes 0..17 of obse}|
+|{normal:rved 17                         }|
 |{normal:B  PRESERVED                    }|
 |{normal:B_END                           }|
-|{normal:                                }|
-|{normal:                                }|
 |{normal:                                }|
 |{normal:                                }|
 |{normal:                                }|

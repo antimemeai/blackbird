@@ -73,10 +73,14 @@ an explicit trim notice; full originals remain audited and A2 retrieval still wo
 - Enter sends; Alt-Enter (or Ctrl-J) adds a line. Clipboard paste stays multiline
   until you send it. Left/right, Home/End, Backspace/Delete and Ctrl-A/E/U edit.
 - Up/down recall persisted submitted-prompt history. PgUp/PgDn scroll the view.
+- Ctrl-\ opens the local view picker; `/views` opens the same picker. Choose
+  Conversation, Command runs, Command center or Result comparison to switch
+  immediately while preserving the draft, cursor and each view's reading state.
+  Search/arrow keys belong to the picker; Escape returns to the invoking focus.
 - Ctrl-O toggles the command-results inspector without editing the draft or its
   cursor. In inspection focus, arrows/Home/End/PgUp/PgDn navigate; Tab changes
   collection/detail focus. Escape or typing returns to editing. Ctrl-Left/Right
-  pages the focused catalog or retained output. Pasted controls stay literal.
+  pages the focused command-run list or retained output. Pasted controls stay literal.
 - Type and submit during a turn to queue the next prompt. Commands queue too, so
   configuration changes apply after the current turn. `/jobs` and `/bg` are immediate
   local command controls, including while inference is busy.
@@ -90,11 +94,17 @@ Commands: `/help`, `/model NAME`, `/effort LEVEL`, `/context`, `/stats`, `/origi
 In plain mode `/paste` collects a block until `/send`.
 `--audit-last` inspects recent original records without a provider request.
 
-Running commands have stable job IDs. `/exec {"command":"sleep 30","yield_ms":0}`
+A command run is one execution with process state, output and controls. Command
+runs have stable IDs (called `job_id` in the existing tool protocol). `/exec {"command":"sleep 30","yield_ms":0}`
 starts one command and releases its wait immediately. In the TUI, `/jobs` opens
 the resident command-results inspector; plain mode keeps its structured list.
 The inspector identifies actual retained/received ranges and keeps its last good
 page visibly stale when the owner or recording capacity is unavailable.
+The authored Result comparison view also pages its command-run list in groups of
+up to eight: focus the list with Left, then use Ctrl-Left/Right. With detail focus,
+those controls page the selected run's output for the next pin. F6/F7 pin A/B;
+changing list pages leaves those snapshots intact. This page size does not limit
+command execution. The view reads recent resident runs; it is not an archive browser.
 `/fg ID` waits on that same command; `/bg` or Ctrl-B releases the foreground wait.
 Backgrounding keeps the process and collector running. Output and the original
 exec attempt retain their identity across later turns. `/process` accepts a JSON

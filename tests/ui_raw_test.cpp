@@ -895,6 +895,8 @@ void review_palette_and_holder_cuts() {
   IdentityBytes identity{};
   identity[0] = std::byte{77};
   RawEventRef captured{}, unused{}, missing{};
+  const std::string retained_draft = "retained draft";
+  std::map<Key, std::string> view_actions;
   {
     auto runtime = unwrap(
         RawRuntime::open(directory, unwrap(EnvironmentId::from_bytes(identity)),
@@ -926,6 +928,40 @@ void review_palette_and_holder_cuts() {
       const auto result = feed(longest, '\r');
       require(result.action == InputAction::choose_command && result.text == chosen,
               "maximum validated native workflow alias is fully acquired");
+      Composer views;
+      views.draft(retained_draft);
+      for (const char byte : std::string_view{"\x1b[D"})
+        (void)feed(views, byte);
+      const auto retain_action = [&](const InputResult &selected,
+                                     std::string_view expected,
+                                     std::optional<tui::ViewRoute> route) {
+        require(selected.action == InputAction::select_view &&
+                    selected.text == expected && selected.view == route &&
+                    selected.source.record.ordinal && selected.source.offset == 0 &&
+                    selected.source.length == expected.size(),
+                "native picker returns exact typed view action and original range");
+        require(views.text() == retained_draft &&
+                    views.cursor() == retained_draft.size() - 1,
+                "native view picker preserves exact draft and cursor");
+        require(view_actions
+                    .emplace(Key{selected.source.record.lane,
+                                 selected.source.record.ordinal},
+                             expected)
+                    .second,
+                "each view action has its own preserved native original");
+      };
+      retain_action(feed(views, '\x1c'), "view.picker", {});
+      const std::array expected_views{
+          std::pair{"view.conversation", tui::ViewRoute::conversation},
+          std::pair{"view.command-runs", tui::ViewRoute::command_runs},
+          std::pair{"view.command-center", tui::ViewRoute::command_center},
+          std::pair{"view.result-comparison", tui::ViewRoute::result_comparison}};
+      for (const auto &[action, route] : expected_views) {
+        views.views();
+        for (const char byte : std::string_view{action})
+          (void)feed(views, byte);
+        retain_action(feed(views, '\r'), action, route);
+      }
       output->raw_capture(true);
       output->attach(pipe[1]);
       RawUiFrame frame{true, 4};
@@ -983,20 +1019,38 @@ void review_palette_and_holder_cuts() {
   }
   publish_workflows({});
   const auto all = records(directory);
-  unsigned help = 0, long_command = 0, retired = 0, restoration = 0;
+  unsigned help = 0, long_command = 0, retired = 0, restoration = 0, routed = 0;
   bool absent_refused = false;
   for (const auto &[key, record] : all) {
     ByteView body = record.bytes;
     if (record.site == 4010) {
-      (void)reference(body);
-      (void)native<std::size_t>(body);
+      const auto feed = reference(body);
+      const auto index = native<std::size_t>(body);
       const auto action = native<int>(body);
-      (void)native<std::size_t>(body);
-      (void)native<std::size_t>(body);
+      const auto cursor = native<std::size_t>(body);
+      const auto size = native<std::size_t>(body);
       if (action == static_cast<int>(InputAction::choose_command)) {
         const auto text = literal(body);
         help += static_cast<unsigned>(text == "/help");
         long_command += static_cast<unsigned>(text == chosen);
+      } else if (action == static_cast<int>(InputAction::select_view)) {
+        require(view_actions.contains(key),
+                "raw view original is actual returned action");
+        const auto &expected = view_actions.at(key);
+        require(
+            literal(body) == expected && body.empty() && index == 0 &&
+                cursor == retained_draft.size() - 1 && size == retained_draft.size(),
+            "raw4010 preserves exact stable view bytes and unchanged draft position");
+        const auto source = all.find(feed);
+        require(source != all.end() && source->second.site == 4080,
+                "raw view selection links actual native feed request");
+        auto input = ByteView{source->second.bytes};
+        require(!native<bool>(input) && native<std::size_t>(input) == 0 &&
+                    native<char>(input) ==
+                        (expected == "view.picker" ? '\x1c' : '\r') &&
+                    input.empty(),
+                "view action source is exact picker key or typed-choice Enter");
+        ++routed;
       }
     }
     if (record.site == 4042) {
@@ -1025,8 +1079,8 @@ void review_palette_and_holder_cuts() {
     }
   }
   require(help == 1 && long_command == 1 && retired == 2 && restoration == 1 &&
-              absent_refused,
-          "exact native palette/holder/missing-capture source-to-disk outcomes");
+              absent_refused && routed == 5,
+          "exact native palette/view/holder/missing-capture source-to-disk outcomes");
   std::filesystem::remove_all(directory);
 }
 
@@ -1299,6 +1353,29 @@ void actual_terminal_queue(UiCut cut = UiCut::none) {
             "ordinary damaged-state explicit native quit");
     verify_state_failure(false);
     return;
+  }
+  if (cut == UiCut::none) {
+    const auto inspector_start = observed.size();
+    require(::write(master, "\x0f", 1) == 1, "open actual native command inspector");
+    phase = "native inspector before unavailable route";
+    while (observed.find("COMMAND RESULTS", inspector_start) == std::string::npos ||
+           observed.find("\x1b[?2026l",
+                         observed.find("COMMAND RESULTS", inspector_start)) ==
+               std::string::npos)
+      drain();
+    const auto refusal_start = observed.size();
+    require(::write(master, "\x18", 1) == 1, "request actual unavailable center route");
+    phase = "unavailable center retains current inspector";
+    const std::string_view refusal = "center unavailable; no current-session owner";
+    while (observed.find(refusal, refusal_start) == std::string::npos ||
+           observed.find("\x1b[?2026l", observed.find(refusal, refusal_start)) ==
+               std::string::npos)
+      drain();
+    const auto at = observed.find(refusal, refusal_start);
+    const auto end = observed.find("\x1b[?2026l", at);
+    require(observed.substr(at, end - at).find("COMMAND RESULTS") != std::string::npos,
+            "actual unavailable-route frame shows refusal and retained inspector");
+    require(::write(master, "\x0f", 1) == 1, "close retained native inspector");
   }
   require(::write(master, "first\r", 6) == 6, "actualnativefirstsubmit");
   if (save_refusal) {

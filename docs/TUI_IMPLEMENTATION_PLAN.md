@@ -24,8 +24,9 @@ Neuroses and is then left alone, following the operator's explicit instruction.
 
 ## Present state relative to the original program
 
-2026-10-16 status reconciliation, after full-viewport delivery7523da7 and results
-f0a2bed. The explicit theory, enduring doctrine, component contracts and view
+2026-10-17 status, after full-viewport delivery7523da7 and results
+f0a2bed, with the current bounded paging/shared-navigation slice in
+[implementation qualification](../papers/tui-shell-navigation-2026-10-17/PLAN.md). The explicit theory, enduring doctrine, component contracts and view
 research/designs are published. Implementation has reached working foundation
 and first applications in Units1–2; the broader visual/interaction redesign and
 Units3–6 remain real work. Test counts are qualification of delivered slices,
@@ -33,8 +34,8 @@ not a fraction of the product design completed.
 
 | Original work | Delivered scope | Remaining scope |
 | --- | --- | --- |
-| Unit1: native host and components | Owned frame presenter, checked scenes/local state, reusable keyed collection/inspector, native controls under output pressure, ESC repair, full physical viewport/recovery | General shared shell/routes/layout/overlays, reusable forms/editor/palette/status families, configurable named actions/bindings and a broader theme/composition vocabulary |
-| Unit2: Lua and useful applications | Isolated bounded composition/handlers; native exact-target action bridge; conversation result inspector; current-session task/participant/job center; authored retained-result A/B lab with reload/preview | Retained semantic operation reference shared across human/model/Lua paths; catalog continuation beyond the first8 jobs; wider reusable composition contract and consistent shell adoption |
+| Unit1: native host and components | Owned frame presenter, checked scenes/local state, reusable keyed collection/inspector, native controls under output pressure, ESC repair, full physical viewport/recovery; shared local view coordinator/picker and four named view actions | General layout/overlays, reusable forms/editor/palette/status families, configurable named actions/bindings and a broader theme/composition vocabulary |
+| Unit2: Lua and useful applications | Isolated bounded composition/handlers; native exact-target action bridge; conversation result inspector; current-session task/participant/job center; authored retained-result A/B lab with reload/preview and command-run list continuation | Retained semantic operation reference shared across human/model/Lua paths; wider reusable composition contract and consistent shell adoption |
 | Unit3: current settings, Context and team | Existing harness APIs and earlier CLI/TUI surfaces are available | Shared settings/session/task forms, Context/request/original-repair workbench, actual team roster/answers/directions views |
 | Unit4: start-turn/action fabric | Reviewed domain/view design | Owning event/binding execution contract, live configuration/activation, authoring/history/explanation surfaces |
 | Unit5: capabilities/skills/recipes/adapters | Native tool/module/workflow/package machinery exists; workbench/adapters researched | Unified qualified catalog and execution bench; reusable prompt/skill/API-recipe management; MCP/integration/infrastructure views and their missing owners |
@@ -47,8 +48,9 @@ native layout/composer and fixed control dispatch. The independently owned Lua
 instrument is a real authored extension, not general migration of every surface.
 The exact bridge can address a native job, but command delivery explicitly reports
 `semantic_link_available=false`: the retained CodingEngine operation locator is
-not supplied to that owner. The instrument's catalog is a visible first8-job cut;
-its existing detail-page control is not catalog continuation.
+not supplied to that owner. The comparison now follows the command-run observer's continuation cursor;
+list focus pages entries, while detail focus pages selected output. Eight is a
+read/display page size, independent of command execution limits.
 
 At this checkpoint, local master74a42f4 contains presenter, inspector and center
 integration. The Lua instrument3e3a561 and full-viewport7523da7 are qualified and
@@ -59,7 +61,7 @@ assert a live process changed.
 Return to product-facing TUI work: bring qualified branch work into the next
 integration, then deliver the shared shell/navigation and named action/binding
 controls through visible existing surfaces. Close the operation-reference and
-catalog gaps in coherent owning slices as those surfaces use them, and carry the
+remaining shared-control gaps in coherent owning slices as those surfaces use them, and carry the
 shared components into Unit3 settings, Context and team. Preserve the original
 sequence into live action fabric, capability/reuse workbenches and metrics;
 add device adapters after the common binding contract and actual hardware selection.
@@ -338,5 +340,6 @@ the earlier0bf6712 TUI integration and a later independent exec fix, but not
 this Lua tranche or the full-viewport delivery.
 The current receipt deliberately lacks a retained CodingEngine operation locator;
 Unit2's explicit cross-human/model/Lua semantic locator comparison remains open.
-The catalog is currently a visible bounded first8-job cut. No claim that every
+At that earlier checkpoint the comparison exposed only the first eight command
+runs; the 2026-10-17 paging slice repairs list continuation. No claim that every
 Unit1–2 component, configurable binding system or future view is complete.

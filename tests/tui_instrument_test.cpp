@@ -1,6 +1,7 @@
 #include "blackbird/raw_reader.hpp"
 #include "blackbird/tools.hpp"
 #include "blackbird/tui_instrument.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <filesystem>
@@ -158,7 +159,7 @@ void mapped_action(const std::filesystem::path &executable) {
             f.jobs->retained(event.job_id, event.offset + event.bytes->size());
         const auto cut = f.jobs->try_observe({});
         return cut.status == CommandObservationStatus::ready && cut.row_count == 2 &&
-               cut.rows[0].received && cut.rows[1].received;
+               cut.rows[0].retained == 5005 && cut.rows[1].retained == 5005;
       },
       "two independent live native targets");
   f.ready();
@@ -182,6 +183,7 @@ void mapped_action(const std::filesystem::path &executable) {
   require(pinned.has_value(), "presentation key must resolve actual B target for pin");
   f.until([&] { return f.shown().find(f.b) != std::string::npos; },
           "pin title names B actual target");
+  unwrap(f.view->act(tui::InspectorAction::focus_detail));
   f.view->page(true);
   const auto stale_pin = f.view->pin(1, {}, false);
   require(!stale_pin.has_value(), "page change cannot pin previous observed window");
@@ -201,6 +203,130 @@ void mapped_action(const std::filesystem::path &executable) {
               string_field(requests.front(), "signal") == "interrupt",
           "selection change after F8 cannot substitute A for frozen B target");
   (void)f.jobs->control(requests.front());
+}
+std::string run_id(std::size_t index) {
+  const auto suffix = std::to_string(index);
+  return std::string(32 - suffix.size(), '0') + suffix;
+}
+void paging(const std::filesystem::path &executable) {
+  Fixture f;
+  for (std::size_t n = 0; n < 16; ++n)
+    f.start(run_id(n), "RUN" + std::to_string(n) + ":" + std::string(5000, 'x'));
+  f.jobs->start(run_id(16),
+                Value::object({{"argv", Value{Value::Array{Value{executable.string()},
+                                                           Value{"--paging-child"}}}},
+                               {"timeout_seconds", Value{Number{15}}}}));
+  f.until(
+      [&] {
+        for (const auto &event : f.jobs->drain())
+          if (event.bytes)
+            f.jobs->retained(event.job_id, event.offset + event.bytes->size());
+        CommandObservationQuery query;
+        CommandObservationId selected_run;
+        const auto key = run_id(16);
+        std::copy(key.begin(), key.end(), selected_run.bytes.begin());
+        query.selected = selected_run;
+        const auto observation = f.jobs->try_observe(query);
+        return observation.status == CommandObservationStatus::ready &&
+               observation.detail.retained == 5006;
+      },
+      "live last-page command emits its complete test payload");
+  auto mapped = script(
+      "return {compose=function() local c=ui.collection('results','COMMAND RUNS') "
+      "for i=1,ui.rows() do ui.item(c,'row-'..ui.key(i),ui.label(i),i) end "
+      "ui.inspector('comparison','A / B',ui.detail_title(1)..'\\n'..ui.detail(1).."
+      "'\\n'..ui.detail_title(2)..'\\n'..ui.detail(2)) end, "
+      "interrupt=function() ui.request('interrupt') end}");
+  unwrap(f.view->source({mapped, "mapped-paging.lua", {}, {}, false}, false));
+  f.ready();
+  const auto exact_page = [&](std::size_t begin, std::size_t count) {
+    const auto &items = f.view->host().snapshot()->collections.front().items;
+    if (items.size() != count)
+      return false;
+    for (std::size_t n = 0; n < count; ++n)
+      if (items[n].key != "row-" + run_id(begin + n) || !items[n].target ||
+          items[n].target->key != run_id(begin + n))
+        return false;
+    return true;
+  };
+  f.until([&] { return exact_page(0, 8); }, "first eight exact command runs");
+  f.view->page(true);
+  f.until([&] { return exact_page(8, 8); },
+          "forward list paging must expose command runs nine through sixteen");
+  f.view->refresh(false);
+  unwrap(f.view->act(tui::InspectorAction::first));
+  f.view->refresh(false);
+  unwrap(f.view->pin(0, {}, false));
+  f.until([&] { return f.shown().find("RUN8:") != std::string::npos; },
+          "mapped second-page selection pins actual run eight bytes");
+  f.view->page(true);
+  require(!f.view->pin(1, {}, false).has_value(),
+          "pending list page cannot pin old selected output");
+  f.view->refresh(false);
+  require(!f.view->pin(1, {}, false).has_value(),
+          "observed but undisplayed page cannot pin old selected output");
+  f.view->page(true);
+  f.until([&] { return exact_page(16, 1); },
+          "repeated forward keys must not consume prior page continuation");
+  f.view->refresh(false);
+  unwrap(f.view->act(tui::InspectorAction::first));
+  f.view->refresh(false);
+  unwrap(f.view->pin(1, {}, false));
+  f.until([&] { return f.shown().find("RUN16:") != std::string::npos; },
+          "last page pins exact run sixteen");
+  const auto both_pins = f.shown();
+  f.view->page(true);
+  for (unsigned n = 0; n < 5; ++n)
+    f.view->refresh(false);
+  require(exact_page(16, 1), "last run-list page forward is a no-op");
+  f.view->page(false);
+  require(!f.view->request_interrupt({}, false).has_value(),
+          "pending list page cannot interrupt previously displayed live run");
+  require(f.jobs->requests().empty(), "stale page action emits no native request");
+  f.until([&] { return exact_page(8, 8); }, "backward list page");
+  f.view->page(false);
+  f.view->refresh(false);
+  f.view->page(true);
+  f.view->first_page();
+  f.until([&] { return exact_page(0, 8); }, "reset rejects obsolete page composition");
+  for (unsigned n = 0; n < 5; ++n)
+    f.view->refresh(false);
+  f.view->page(false);
+  require(exact_page(0, 8), "first run-list page backward is a no-op");
+  require(f.shown() == both_pins, "list paging retains both immutable pins");
+  unwrap(f.view->act(tui::InspectorAction::first));
+  f.view->refresh(false);
+  unwrap(f.view->act(tui::InspectorAction::focus_detail));
+  f.view->refresh(false);
+  f.view->page(true);
+  require(!f.view->pin(0, {}, false).has_value(),
+          "output page change cannot pin preceding observed bytes");
+  f.view->refresh(false);
+  unwrap(f.view->pin(0, {}, false));
+  f.until([&] { return f.shown().find("bytes 4096..5005") != std::string::npos; },
+          "detail paging changes selected output window without changing run list");
+  require(exact_page(0, 8) && f.shown().find("RUN16:") != std::string::npos,
+          "output paging preserves run list and independent B pin");
+  const auto last_good = f.view->host().snapshot();
+  unwrap(f.view->source({script("return {compose=function() error('bad paging') end}"),
+                         "bad-paging.lua",
+                         {},
+                         {},
+                         false},
+                        false));
+  unwrap(f.view->act(tui::InspectorAction::focus_collection));
+  f.view->page(true);
+  f.until(
+      [&] { return f.view->notice().find("source failed") != std::string_view::npos; },
+      "failed page composition is visible");
+  require(f.view->host().snapshot() == last_good,
+          "failed page composition preserves exact last-good scene");
+  unwrap(f.view->act(tui::InspectorAction::focus_detail));
+  unwrap(f.view->act(tui::InspectorAction::focus_collection));
+  f.view->page(false);
+  f.until([&] { return f.view->host().snapshot() != last_good; },
+          "backward recovery recomposes effective source after failed page");
+  require(exact_page(0, 8), "failed page cannot strand native navigation");
 }
 void source_failures() {
   Fixture f;
@@ -341,6 +467,10 @@ void isolated_pressure() {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
       }
       const auto recorded = unwrap(channel.cursors(RawPartition::data)).published;
+      unwrap(f.view->act(tui::InspectorAction::focus_detail));
+      unwrap(f.view->act(tui::InspectorAction::focus_collection));
+      require(f.view->focused(),
+              "native focus remains available under recording pressure");
       for (unsigned n = 0; n < 5; ++n) {
         f.view->refresh(true);
         require(exhausted() && f.view->host().snapshot() == before &&
@@ -507,9 +637,14 @@ void stale() {
 } // namespace
 int main(int argc, char **argv) {
   try {
-    if (argc == 2 && std::string_view{argv[1]} == "--child") {
+    if (argc == 2 && (std::string_view{argv[1]} == "--child" ||
+                      std::string_view{argv[1]} == "--paging-child")) {
       (void)::signal(SIGINT, SIG_IGN);
-      if (::write(STDOUT_FILENO, "LIVE\n", 5) != 5)
+      const std::string output =
+          (std::string_view{argv[1]} == "--paging-child" ? "RUN16:" : "LIVE\n") +
+          std::string(5000, 'x');
+      if (::write(STDOUT_FILENO, output.data(), output.size()) !=
+          static_cast<ssize_t>(output.size()))
         return 91;
       for (;;)
         (void)::pause();
@@ -520,6 +655,8 @@ int main(int argc, char **argv) {
       semantic();
     else if (mode == "mapping")
       mapped_action(std::filesystem::absolute(argv[0]));
+    else if (mode == "paging")
+      paging(std::filesystem::absolute(argv[0]));
     else if (mode == "source")
       source_failures();
     else if (mode == "recovery")

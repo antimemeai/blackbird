@@ -45,6 +45,8 @@ const std::array builtin_commands{
     ChatCommand{"/keys", "", "Keyboard guide (TUI only)", "Chat"},
     ChatCommand{"/commands", "",
                 "Search command palette; Ctrl-Space or Ctrl-T (TUI only)", "Chat"},
+    ChatCommand{"/views", "", "Switch local views; Ctrl-\\ preserves the draft",
+                "View"},
     ChatCommand{
         "/edit", "",
         "Open a blank draft in $VISUAL/$EDITOR; Ctrl-G edits current draft (idle TUI)",
@@ -193,11 +195,11 @@ std::vector<std::size_t> palette_matches(std::string_view query,
       matches.push_back(n);
   }
   auto rank = [&](std::size_t n) {
-    auto name = search_text(commands[n].name);
+    auto name = search_text(commands[n].view ? commands[n].label : commands[n].name);
     auto exact = needle;
     if (exact.starts_with("/"))
       exact.erase(0, 1);
-    if (name.substr(1) == exact)
+    if (commands[n].view ? name == needle : name.substr(1) == exact)
       return 0;
     if (name.find(needle) != std::string::npos)
       return 1;
@@ -312,11 +314,12 @@ std::string terminal_key_help() {
          "  Ctrl-C       Request stop and clear pending queue; keep unsent draft\n"
          "  Ctrl-B       Background foreground command; preserve composer\n"
          "  Ctrl-O       Inspect command results; preserve draft/cursor\n"
+         "  Ctrl-\\      View picker; switch views without replacing the draft\n"
          "  Ctrl-X       Current-session command center; preserve draft/cursor\n"
          "  Ctrl-]       Authored result lab; F6/F7 pin A/B; F8 request interrupt\n"
          "  Inspector    Arrows/Home/End/Page navigate; Tab focus; Esc draft\n"
-         "  Center       T tasks, P participants, J jobs; + means more rows\n"
-         "               Ctrl-Left/Right source pages; typing returns to draft\n"
+         "  Center       T tasks, P participants, J command runs; + means more\n"
+         "               Ctrl-Left/Right: list pages or output pages by focus\n"
          "  PTY input    Keys and Ctrl-C reach selected command; Ctrl-B returns\n"
          "  Ctrl-Q       Stop and exit; preserve unsent draft\n"
          "  PgUp / PgDn  Scroll transcript\n"
@@ -663,6 +666,21 @@ void Composer::draft(std::string text) {
   draft_cursor_ = 0;
   goal_column_.reset();
 }
+std::vector<ComposerChoice> terminal_view_choices(tui::ViewRoute current) {
+  std::vector<ComposerChoice> choices;
+  choices.reserve(tui::view_descriptions.size());
+  for (const auto &view : tui::view_descriptions)
+    choices.push_back(
+        {std::string{view.action}, "",
+         std::string{view.description} +
+             (view.route == current ? " (current view)" : "") +
+             (view.binding.empty() ? "" : " · " + std::string{view.binding}),
+         "Views", std::string{view.label}, view.route});
+  return choices;
+}
+void Composer::views(tui::ViewRoute current) {
+  choices(terminal_view_choices(current), "Views");
+}
 void Composer::choices(std::vector<ComposerChoice> entries, std::string heading) {
   std::size_t bound = 0;
   for (const auto &entry : entries)
@@ -704,8 +722,9 @@ TerminalInputDispatch
 terminal_input_dispatch(Composer &composer, std::chrono::steady_clock::time_point now,
                         std::chrono::steady_clock::time_point escape_deadline,
                         short events) {
+  const bool palette = composer.palette_open();
   const bool redraw = now >= escape_deadline && composer.flush_escape();
-  return {(events & (POLLIN | POLLHUP | POLLERR)) != 0, redraw};
+  return {(events & (POLLIN | POLLHUP | POLLERR)) != 0, redraw, redraw && !palette};
 }
 std::vector<std::string> Composer::palette_lines(std::size_t rows) const {
   const auto catalog = choices_ && palette_open_ ? choices_ : command_catalog();
@@ -735,9 +754,12 @@ std::vector<std::string> Composer::palette_lines(std::size_t rows) const {
     }
   }
   if (rows > 2)
-    out.emplace_back(slash_open_
-                         ? "↑↓ select · Tab fill · Enter run/fill · Esc dismiss"
-                         : "Type search · Up/Down select · Enter loads · Esc back");
+    out.emplace_back(
+        slash_open_ ? "↑↓ select · Tab fill · Enter run/fill · Esc dismiss"
+        : choices_ && std::any_of(choices_->begin(), choices_->end(),
+                                  [](const auto &c) { return c.view.has_value(); })
+            ? "Type search · Up/Down select · Enter opens · Esc back"
+            : "Type search · Up/Down select · Enter loads · Esc back");
   out.resize(rows);
   return out;
 }
@@ -826,7 +848,8 @@ InputResult Composer::feed(char byte, RawUiInput *raw, bool inspecting) {
     if (!result.source.record.ordinal) {
       const auto action = result.action;
       const auto length = result.text.size();
-      if (action == InputAction::choose_command || action == InputAction::submit) {
+      if (action == InputAction::choose_command || action == InputAction::submit ||
+          action == InputAction::select_view) {
         const auto ref =
             raw_ui_emit(4010,
                         std::array{ByteView{raw->feed.lane},
@@ -861,6 +884,7 @@ InputResult Composer::feed(char byte, RawUiInput *raw, bool inspecting) {
   });
 }
 InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
+  inspecting = inspecting && !palette_open_;
   const auto catalog = choices_ && palette_open_ ? choices_
                        : raw && capture_catalog_ ? capture_catalog_
                                                  : command_catalog();
@@ -997,6 +1021,10 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
     insert(byte == '\r' ? '\n' : byte);
     return {};
   }
+  if (c == 28) {
+    palette_open_ = slash_open_ = false;
+    return {InputAction::select_view, "view.picker"};
+  }
   if (c == 15) {
     palette_open_ = slash_open_ = false;
     return {InputAction::inspect_toggle, {}};
@@ -1040,8 +1068,10 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
         const auto &command =
             commands[matches[std::min(palette_selected_, matches.size() - 1)]];
         palette_open_ = false;
-        return {InputAction::choose_command,
-                std::string{command.name} + (command.arguments.empty() ? "" : " ")};
+        return {command.view ? InputAction::select_view : InputAction::choose_command,
+                std::string{command.name} + (command.arguments.empty() ? "" : " "),
+                {},
+                command.view};
       }
     } else if (c == 16 || c == 14 || c == 9)
       palette_move(c == 16);
@@ -1838,10 +1868,55 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     if (inspector && inspector->open())
       inspector->toggle();
   };
-  auto inspection_open = [&] {
-    return (instrument && instrument->open()) || (center && center->open()) ||
-           (inspector && inspector->open());
+  auto route = tui::ViewRoute::conversation;
+  std::string_view route_notice;
+  const auto select_view = [&](tui::ViewRoute requested, RawEventRef origin,
+                               bool toggle, bool reset) {
+    const auto next =
+        toggle && route == requested ? tui::ViewRoute::conversation : requested;
+    if (next == tui::ViewRoute::command_runs && !ensure_inspector()) {
+      route_notice = "Command runs unavailable; native view could not be created";
+      return false;
+    }
+    if (next == tui::ViewRoute::command_center && !ensure_center()) {
+      route_notice =
+          center_context
+              ? "Command center unavailable; native view could not be created"
+              : "Command center unavailable; no current-session owner";
+      return false;
+    }
+    if (next == tui::ViewRoute::result_comparison && !instrument) {
+      instrument_refused = true;
+      route_notice =
+          "Result comparison unavailable; no composition owner in this session";
+      return false;
+    }
+    if (next != tui::ViewRoute::command_runs)
+      close_inspector();
+    if (next != tui::ViewRoute::command_center)
+      close_center();
+    if (next != tui::ViewRoute::result_comparison)
+      close_instrument();
+    const auto activate = [&](auto &view) {
+      if (reset)
+        view.first_page(origin);
+      else {
+        if (!view.open())
+          view.toggle(origin);
+        view.focus_view();
+      }
+    };
+    if (next == tui::ViewRoute::command_runs)
+      activate(*inspector);
+    else if (next == tui::ViewRoute::command_center)
+      activate(*center);
+    else if (next == tui::ViewRoute::result_comparison)
+      activate(*instrument);
+    route = next;
+    route_notice = {};
+    return true;
   };
+  auto inspection_open = [&] { return route != tui::ViewRoute::conversation; };
   auto inspection_focused = [&] {
     return (instrument && instrument->open() && instrument->focused()) ||
            (center && center->open() && center->focused()) ||
@@ -2798,6 +2873,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           auto caption = std::string{authored   ? "RETAINED RESULT LAB"
                                      : centered ? "COMMAND CENTER"
                                                 : "COMMAND RESULTS"};
+          if (!route_notice.empty())
+            caption = std::string{route_notice} + " · " + caption;
           visit_inspection([&](auto &view) {
             inspection_layout = unwrap(view.render(grid, {0, 2, main_width, height}));
             if (!view.notice().empty())
@@ -2808,6 +2885,9 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                                 : " · Ctrl-O close · Tab focus · Esc draft";
           grid.line(1, {{std::string(main_width, ' '), Ink::normal}});
           grid.line(1, {{terminal_lines(caption, main_width).front(), Ink::heading}});
+        } else if (!route_notice.empty()) {
+          grid.line(1,
+                    {{terminal_lines(route_notice, main_width).front(), Ink::failure}});
         } else if (instrument_refused) {
           grid.line(1, {{"Instrument unavailable; draft retained", Ink::failure}});
         } else if (center_refused) {
@@ -2979,7 +3059,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     const auto dispatch = terminal_input_dispatch(
         composer, std::chrono::steady_clock::now(), escape_deadline, inputs[0].revents);
     redraw = redraw || dispatch.redraw;
-    if (dispatch.redraw)
+    if (dispatch.focus_editor)
       visit_inspection([](auto &view) { view.focus_editor(); });
     if (!dispatch.read_input)
       continue;
@@ -3120,14 +3200,17 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           escape_deadline =
               std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
         redraw = true;
-        if (result.action == InputAction::instrument_toggle) {
-          if (instrument) {
-            close_center();
-            close_inspector();
-            instrument->toggle(result.source.record);
-          } else
-            instrument_refused = true;
+        if (result.action == InputAction::select_view) {
+          if (result.view) {
+            if (!select_view(*result.view, result.source.record, false, false))
+              transcript.append(ChatKind::notice,
+                                "View unavailable; current view retained");
+          } else if (result.text == "view.picker")
+            composer.views(route);
         }
+        if (result.action == InputAction::instrument_toggle)
+          (void)select_view(tui::ViewRoute::result_comparison, result.source.record,
+                            true, false);
         if (result.action == InputAction::instrument_action && instrument &&
             instrument->open() && instrument->focused()) {
           const auto acted =
@@ -3141,20 +3224,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                               std::string{"Instrument action unavailable: "} +
                                   error_name(acted.error().code));
         }
-        if (result.action == InputAction::center_toggle) {
-          if (ensure_center()) {
-            close_inspector();
-            close_instrument();
-            center->toggle(result.source.record);
-          }
-        }
-        if (result.action == InputAction::inspect_toggle) {
-          if (ensure_inspector()) {
-            close_center();
-            close_instrument();
-            inspector->toggle(result.source.record);
-          }
-        }
+        if (result.action == InputAction::center_toggle)
+          (void)select_view(tui::ViewRoute::command_center, result.source.record, true,
+                            false);
+        if (result.action == InputAction::inspect_toggle)
+          (void)select_view(tui::ViewRoute::command_runs, result.source.record, true,
+                            false);
         if (inspection_open()) {
           std::optional<tui::InspectorAction> navigation;
           switch (result.action) {
@@ -3287,25 +3362,17 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           cancel_turn();
         }
         if (result.action == InputAction::submit && !result.text.empty() && !quitting) {
-          if (result.text == "/instrument") {
-            if (instrument) {
-              close_center();
-              close_inspector();
-              instrument->first_page(result.source.record);
-            } else
-              instrument_refused = true;
-          } else if (result.text == "/center") {
-            if (ensure_center()) {
-              close_inspector();
-              close_instrument();
-              center->first_page(result.source.record);
-            }
-          } else if (result.text == "/jobs") {
-            if (ensure_inspector()) {
-              close_center();
-              close_instrument();
-              inspector->first_page(result.source.record);
-            }
+          const auto requested_view = std::find_if(
+              tui::view_descriptions.begin(), tui::view_descriptions.end(),
+              [&](const auto &view) {
+                return !view.command.empty() && result.text == view.command;
+              });
+          if (result.text == "/views") {
+            composer.views(route);
+          } else if (requested_view != tui::view_descriptions.end()) {
+            if (!select_view(requested_view->route, result.source.record, false, true))
+              transcript.append(ChatKind::notice,
+                                "View unavailable; current view retained");
           } else if (commands &&
                      (result.text == "/bg" || result.text.starts_with("/bg "))) {
             release_command(result.text == "/bg"

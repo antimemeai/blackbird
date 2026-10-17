@@ -98,3 +98,10 @@ separate actual-main/native owner checks. The existing18 expectations are
 unchanged. Physical terminal gutter residue after resize is preserved separately
 in the instrument episode's paper fixtures; a freshly reset native grid cannot
 establish that a real terminal erased its previous cells.
+
+
+`view-picker` uses the native typed view choices, searches the human command-run
+label, and preserves a draft with its cursor before the end. Enter emits a local
+route action, not command insertion or submission. This brings the total to21
+styled expectations. The two instrument baselines deliberately adopt COMMAND RUNS
+and Command run labels; the extra title wrapping is retained explicitly.

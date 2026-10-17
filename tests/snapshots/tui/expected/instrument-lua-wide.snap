@@ -2,17 +2,17 @@ styled-grid-v1
 size 100 16
 cursor none
 state synthetic-inputs=2;source=results.lua;selected=B;anchor=A;focus=collection;binding=independent;intents=0;editor=external
-|{selected:> RESULTS}{normal:                        }{border:│}{heading:  A / B comparison}{normal:                                                }|
+|{selected:> COMMAND RUNS}{normal:                   }{border:│}{heading:  A / B comparison}{normal:                                                }|
 |{normal:  A settled exit7                }{border:│}{normal:A                                                                 }|
-|{selected:> B running}{normal:                      }{border:│}{normal:Job 11111111111111111111111111111111 bytes 0..10 of observed 10   }|
+|{selected:> B running}{normal:                      }{border:│}{normal:Command run 11111111111111111111111111111111 bytes 0..10 of observ}|
+|{normal:                                 }{border:│}{normal:ed 10                                                             }|
 |{normal:                                 }{border:│}{normal:A\\x1b[31m\\x00END                                                  }|
 |{normal:                                 }{border:│}{normal:                                                                  }|
 |{normal:                                 }{border:│}{normal:B                                                                 }|
-|{normal:                                 }{border:│}{normal:Job 22222222222222222222222222222222 bytes 0..17 of observed 17   }|
+|{normal:                                 }{border:│}{normal:Command run 22222222222222222222222222222222 bytes 0..17 of observ}|
+|{normal:                                 }{border:│}{normal:ed 17                                                             }|
 |{normal:                                 }{border:│}{normal:B  PRESERVED                                                      }|
 |{normal:                                 }{border:│}{normal:B_END                                                             }|
-|{normal:                                 }{border:│}{normal:                                                                  }|
-|{normal:                                 }{border:│}{normal:                                                                  }|
 |{normal:                                 }{border:│}{normal:                                                                  }|
 |{normal:                                 }{border:│}{normal:                                                                  }|
 |{normal:                                 }{border:│}{normal:                                                                  }|

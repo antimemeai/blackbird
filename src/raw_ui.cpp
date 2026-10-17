@@ -498,7 +498,7 @@ std::string_view raw_ui_description() noexcept {
          "branch,u8 stage,size_t actually applied,[ErrorCode,i64 detail only Error];"
          "4006:batchR,enqueueR,lastR,Kind,Ink,size_t text;4007:generic outcome;"
          "4010:actual_feedR,size_t index,InputAction,size_t cursor,size_t "
-         "draft,[size_t text,bytes for submit/choose];4011:actionR,u8 "
+         "draft,[size_t text,bytes for submit/choose/select_view];4011:actionR,u8 "
          "branch,targetR;4012:generic outcome;"
          "4013:actionR,u8 queue,sourceR,size_t offset,size_t bytes;4014:queueR,u8 "
          "branch,size_t index;4015:queueR,u8 branch,size_t index,targetR;4016:generic "

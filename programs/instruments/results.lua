@@ -1,7 +1,7 @@
 -- Composition is pure; only the named handler can request a native intent.
 return {
   compose = function()
-    local results = ui.collection("results", "RESULTS")
+    local results = ui.collection("results", "COMMAND RUNS")
     for i = 1, ui.rows() do
       ui.item(results, ui.key(i), ui.label(i), i)
     end

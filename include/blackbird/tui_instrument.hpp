@@ -22,6 +22,7 @@ public:
   bool open() const noexcept;
   bool focused() const noexcept;
   void focus_editor() noexcept;
+  void focus_view() noexcept;
   Result<void> source(InstrumentSource proposal, bool capture);
   bool refresh(bool capture);
   Result<void> act(tui::InspectorAction action, RawEventRef origin = {});

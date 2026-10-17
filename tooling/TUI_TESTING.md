@@ -133,3 +133,14 @@ Two old layout coordinates intentionally move with physical width:12-column box
 border x10→x11;120-column task origin x83→x84. Existing readable component
 expectations remain unchanged. arconaut-arw is repaired by source7523da7; original
 instrument captures are not rewritten to remove their historical residue.
+
+
+The 2026-10-17 navigation slice extends `tui_retained_result` with the typed
+Ctrl-\ view picker, draft/cursor and comparison-anchor continuity, modal
+arrow/F8 isolation, Escape focus restoration, nine extra native command runs,
+second-list-page selection and exact output pinning, backward navigation and
+literal Ctrl-\ under private PTY ownership. `tui_instrument_paging` independently
+checks17 actual native runs across three pages and stale-page action refusal.
+`ui_raw` reads all four view action originals and input links from disk and
+checks an unavailable center while the actual inspector remains open. The
+readable fixture `view-picker` brings the styled expectations to21.
