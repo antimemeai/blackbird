@@ -11063,3 +11063,22 @@ Current primary provider docs are checked before making compatibility claims;
 synthetic auth tests do not demonstrate live subscription OAuth acceptance.
 No real credentials/cache contents, login, provider call, artwork, AFL or live
 session activation involved.
+
+Mergea8a28fb91516f692603b47516660737534bea225 completed and pushed to
+origin/master after the installed full source hook passed:260/260 Debug in
+401.71s, all254 actual C++ translation units and owned Lua checks. No source
+bypass or new suppression. One bounded integration review found no source/CMake
+join defects. Source tests included empty optional exec binding, application
+error/final ownership, TUI paging/physical episodes and auth/OAuth fixtures.
+Original hook log stays in ignored context/tui-main-integration-2026-10-17/.
+
+Claude auth is already implemented; correct usage wording instead of adding a
+second account owner. Save source inventory and current primary-source notes;
+24 initial report links resolve. Anthropic OAuth compatibility remains locally
+tested but not live-qualified. Main Claude Messages/tool-use support is a
+separate missing protocol adapter. Update existing arconaut-uaa.5 with actual
+integration and follow-through, including multi-workspace key headers; leave it
+open for outstanding auth work. Supported backup retains177 current issues,
+808 events,128 dependencies and27 labels. Publish integration results and backup
+as a checked text/data-only checkpoint with the authorized hook exception;
+the settled combined source gate is not repeated. Artwork/AFL remain untouched.
