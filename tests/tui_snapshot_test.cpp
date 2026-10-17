@@ -351,6 +351,19 @@ std::vector<Snapshot> scenarios() {
   output.push_back(rows("tasks-narrow", task_pane_rows(page, 18, activity), 18, 24));
   output.push_back(rows("tasks-tiny", task_pane_rows(page, 7, activity), 7, 3));
 
+  Composer effort;
+  effort.draft("retained effort draft");
+  effort.choices({{"/effort low", "", "Use low effort", "Effort", "low", {}, true},
+                  {"/effort high", "", "Use high effort", "Effort", "high", {}, true},
+                  {"/effort max", "", "Use max effort", "Effort", "max", {}, true}},
+                 "What level of effort did you intend?");
+  feed(effort, "\x1b[B");
+  output.push_back(palette_frame("effort-question", effort));
+  const auto answer = feed(effort, "\r");
+  require(answer.action == InputAction::answer_question &&
+              answer.text == "/effort high" && effort.text() == "retained effort draft",
+          "question selection must answer explicitly and preserve draft");
+
   Composer views;
   views.draft("preserve this draft");
   feed(views, "\x1b[D\x1b[D");

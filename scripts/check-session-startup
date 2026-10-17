@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Fresh default launches and explicit reopen through the real binary and launcher."""
 import importlib.util
+import fcntl
 import json
 import os
 from pathlib import Path
+import pty
+import select
+import shlex
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
+import termios
+import time
 
 executable = str(Path(sys.argv[1]).resolve())
 launcher = str(Path(sys.argv[2]).resolve())
@@ -61,6 +68,7 @@ with tempfile.TemporaryDirectory(prefix='blackbird-startup-') as temporary:
             assert str(directory) in started.stderr, started.stderr
             assert directory.stat().st_mode & 0o777 == 0o700
             first = metadata(directory)
+            assert first['effort'] == 'medium'
             assert first['conversation'] not in conversations
             conversations.add(first['conversation'])
             reopened = run(command, ['--session', str(directory), '--once', '/context'])
@@ -126,4 +134,220 @@ end
         assert selected.stdout.strip() == 'NATIVE_SELECTED', selected
     assert not empty_home.exists()
 
-print('Fresh native/launcher conversations, explicit reopen, restart and old-session isolation pass')
+    # Exercise the operator's default entry point: no executable/session override,
+    # stale checkout binaries present, and a selected owned installed generation.
+    active_home = root / 'active installation home'
+    env['HOME'] = str(active_home)
+    sessions = active_home / '.local/state/blackbird'
+    (checkout / 'programs').mkdir()
+    (checkout / 'programs/turn.lua').write_text('print("LOCAL_WORKFLOW")\n')
+    for name in ('blackbird', 'blackbird-ui'):
+        (checkout / 'build/release' / name).write_text(
+            '#!/bin/sh\nprintf "STALE_CHECKOUT_' + name + '\\n" >&2\nexit 19\n')
+    generation = root / 'installed generation'
+    (generation / 'scripts').mkdir(parents=True)
+    (generation / 'build/release').mkdir(parents=True)
+    (generation / 'share/blackbird/programs').mkdir(parents=True)
+    shutil.copy2(launcher, generation / 'scripts/blackbird')
+    (generation / 'build/release/blackbird').symlink_to(executable)
+    current = active_home / '.local/lib/blackbird/current'
+    current.parent.mkdir(parents=True)
+    current.symlink_to(generation, target_is_directory=True)
+    managed = active_home / '.local/bin/blackbird'
+    managed.parent.mkdir(parents=True)
+    managed.write_text('#!/bin/sh\n# blackbird managed launcher v1\nset -eu\n'
+                       'blackbird_release=$(CDPATH= cd -- ' + shlex.quote(str(current)) +
+                       ' && pwd -P)\nexec "$blackbird_release/scripts/blackbird" "$@"\n')
+    managed.chmod(0o700)
+    transport = root / 'unexpected-provider-request'
+    transport.write_text('#!/bin/sh\ntouch ' + shlex.quote(str(root / 'dispatched')) +
+                         '\nexit 71\n')
+    transport.chmod(0o700)
+    env['BLACKBIRD_RESPONSES_CURL'] = str(transport)
+    run(executable, ['auth', 'add-provider', 'paper', 'https://paper.invalid/v1',
+                     'responses-portable', 'PAPER_STARTUP_FIXTURE_KEY'])
+    run(executable, ['auth', 'key', 'paper', 'startup'], 'synthetic-startup-key\n')
+    options = ['--provider', 'paper', '--model', 'ultramarine-1-flash']
+    # First establish that the selected native generation actually accepts Paper.
+    run(str(managed), [*options, '--effort', 'max', '--plain'], '/quit\n')
+
+    def interactive(arguments, exercise, ready="What level of effort did you intend?"):
+        master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 100, 0, 0))
+        modes = termios.tcgetattr(slave)
+        before = directories()
+        child = subprocess.Popen([str(copied_launcher), *arguments], env=env,
+                                 stdin=slave, stdout=slave, stderr=slave, cwd=root)
+        output = bytearray()
+        def until(marker):
+            deadline = time.monotonic() + 15
+            marker = marker.encode()
+            while marker not in output:
+                assert child.poll() is None and time.monotonic() < deadline, output[-3000:]
+                if select.select([master], [], [], .05)[0]:
+                    output.extend(os.read(master, 65536))
+            del output[:output.index(marker) + len(marker)]
+        def send(text):
+            os.write(master, text)
+        try:
+            until(ready)
+            added = directories() - before
+            directory = added.pop() if added else Path(arguments[arguments.index('--session') + 1])
+            exercise(directory, until, send)
+            send(b'\x11')
+            deadline = time.monotonic() + 5
+            while child.poll() is None and time.monotonic() < deadline:
+                if select.select([master], [], [], .05)[0]:
+                    output.extend(os.read(master, 65536))
+            assert child.wait(timeout=2) == 0, output[-2000:]
+            restored = termios.tcgetattr(slave)
+            # Darwin's PENDIN is queued-input state, not an unrestored configuration.
+            pending = getattr(termios, 'PENDIN', 0)
+            modes[3] &= ~pending
+            restored[3] &= ~pending
+            assert restored == modes, ('startup/quit left terminal modes changed', modes, restored)
+            assert not (root / 'dispatched').exists(), 'unanswered question dispatched inference'
+            return directory
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+            os.close(master)
+            os.close(slave)
+
+    def await_setting(directory, key, value):
+        deadline = time.monotonic() + 3
+        while metadata(directory).get(key) != value:
+            assert time.monotonic() < deadline, metadata(directory)
+            time.sleep(.01)
+
+    def choose_high(directory, until, send):
+        selected = metadata(directory)
+        assert selected['provider'] == 'paper' and selected['model'] == 'ultramarine-1-flash'
+        assert selected.get('effort_pending') is True, selected
+        # The first frame must ask rather than select a fallback or exit.
+        send(b'\x1b')
+        time.sleep(.08)
+        send(b'DRAFT_KEEP\r')
+        until('What level of effort did you intend?')
+        assert not (root / 'dispatched').exists()
+        send(b'\x1b[B\r')
+        until('Effort set to high')
+        await_setting(directory, 'effort', 'high')
+        await_setting(directory, 'effort_pending', False)
+    selected_directory = interactive(options, choose_high)
+    state = native_packet.read_packet(selected_directory / 'ui-state.bbm')
+    assert state['encoding'] == 'hex-v1' and bytes.fromhex(state['draft']) == b'DRAFT_KEEP', state
+    def valid_reopen(directory, until, send):
+        assert metadata(directory)['effort'] == 'high'
+        assert metadata(directory)['effort_pending'] is False
+    interactive(['--session', str(selected_directory)], valid_reopen, 'Enter send')
+    def unanswered(directory, until, send):
+        assert metadata(directory)['effort_pending'] is True
+        send(b'\x1b')
+        time.sleep(.08)
+    interactive(['--session', str(selected_directory), '--effort', 'nonsense'], unanswered)
+    assert metadata(selected_directory)['effort_pending'] is True
+    def resolve_reopen(directory, until, send):
+        assert metadata(directory)['effort_pending'] is True
+        send(b'\r')
+        until('Effort set to low')
+        await_setting(directory, 'effort', 'low')
+        await_setting(directory, 'effort_pending', False)
+    interactive(['--session', str(selected_directory)], resolve_reopen)
+
+    def invalid_live_effort(directory, until, send):
+        assert metadata(directory)['effort_pending'] is False
+        send(b'\x15/effort medium\r')
+        until('What level of effort did you intend?')
+        await_setting(directory, 'effort_pending', True)
+        send(b'\x1b[B\r')
+        until('Effort set to high')
+        await_setting(directory, 'effort_pending', False)
+    interactive(['--session', str(selected_directory)], invalid_live_effort, 'Enter send')
+
+    before = directories()
+    plain_question = run(str(copied_launcher), [*options, '--plain'],
+                         '/session\n/lua print("FORBIDDEN_BEFORE_ANSWER")\n'
+                         '/effort high\n/session\n/quit\n')
+    assert 'What level of effort did you intend?' in plain_question.stdout
+    assert 'FORBIDDEN_BEFORE_ANSWER' not in plain_question.stdout
+    assert 'Effort set to high' in plain_question.stdout
+    plain_directory = (directories() - before).pop()
+    assert metadata(plain_directory)['effort'] == 'high'
+    assert metadata(plain_directory)['effort_pending'] is False
+
+    # A pending effort question must not consume a durable restart intent.
+    resume_directory = root / 'pending-resume'
+    resume_workflow = root / 'resume.lua'
+    resume_workflow.write_text('print("CONTINUATION_AFTER_EFFORT")\n')
+    restarting = run(executable, ['--session', str(resume_directory), *options,
+                                 '--effort', 'high', '--workflow', str(resume_workflow),
+                                 '--plain'], '/restart PRESERVE_UNANSWERED_INTENT\n', success=False)
+    assert restarting.returncode == 75, (restarting.stdout, restarting.stderr)
+    interactive(['--session', str(resume_directory), '--effort', 'medium',
+                 '--resume-continue'], unanswered)
+    resumed = run(executable, ['--session', str(resume_directory), '--effort', 'high',
+                               '--resume-once'])
+    assert 'CONTINUATION_AFTER_EFFORT' in resumed.stdout, (resumed.stdout, resumed.stderr)
+    assert 'PRESERVE_UNANSWERED_INTENT' in run(
+        executable, ['--session', str(resume_directory), '--once', '/context']).stdout
+
+    restarting = run(executable, ['--session', str(resume_directory), '--plain'],
+                     '/restart ANSWER_THEN_CONTINUE\n', success=False)
+    assert restarting.returncode == 75
+    def answer_then_continue(directory, until, send):
+        assert metadata(directory)['effort_pending'] is True
+        assert not (root / 'dispatched').exists()
+        send(b'\x1b[B\r')
+        until('Effort set to high')
+        until('CONTINUATION_AFTER_EFFORT')
+    interactive(['--session', str(resume_directory), '--effort', 'medium',
+                 '--resume-continue'], answer_then_continue)
+
+    restarting = run(executable, ['--session', str(resume_directory), '--plain'],
+                     '/restart PLAIN_ANSWER_THEN_CONTINUE\n', success=False)
+    assert restarting.returncode == 75
+    plain_unanswered = run(executable, ['--session', str(resume_directory), '--plain',
+                                       '--effort', 'medium', '--resume-continue'], '/quit\n')
+    assert 'CONTINUATION_AFTER_EFFORT' not in plain_unanswered.stdout
+    plain_resumed = run(executable, ['--session', str(resume_directory), '--plain',
+                                    '--resume-continue'],
+                        '/effort high\n/session\n/effort high\n/quit\n')
+    assert plain_resumed.stdout.count('CONTINUATION_AFTER_EFFORT') == 1, plain_resumed.stdout
+    assert not (root / 'dispatched').exists(), 'plain effort repair dispatched inference'
+    consumed = run(executable, ['--session', str(resume_directory), '--resume-once'])
+    assert 'CONTINUATION_AFTER_EFFORT' not in consumed.stdout, consumed.stdout
+
+    refused = run(str(copied_launcher), [*options, '--once', '/session'], success=False)
+    assert '--effort' in refused.stderr and 'low' in refused.stderr, refused.stderr
+
+    # Explicit development selection wins; an unrelated installed command is not used.
+    explicit = root / 'explicit binary'
+    explicit.write_text('#!/bin/sh\nprintf "EXPLICIT_SELECTED\\n"\n')
+    explicit.chmod(0o700)
+    env['BLACKBIRD_EXECUTABLE'] = str(explicit)
+    assert run(str(copied_launcher), options).stdout.strip() == 'EXPLICIT_SELECTED'
+    env.pop('BLACKBIRD_EXECUTABLE')
+    env['ARCO_EXECUTABLE'] = str(explicit)
+    assert run(str(copied_launcher), options).stdout.strip() == 'EXPLICIT_SELECTED'
+    env.pop('ARCO_EXECUTABLE')
+    managed.write_text('#!/bin/sh\nprintf "UNRELATED_COMMAND\\n"\nexit 83\n')
+    native = checkout / 'build/release/blackbird'
+    native.write_text('#!/bin/sh\nprintf "LOCAL_NATIVE_SELECTED\\n"\n')
+    assert run(str(copied_launcher), options).stdout.strip() == 'LOCAL_NATIVE_SELECTED'
+    native.unlink()
+    missing = run(str(copied_launcher), options, success=False)
+    assert 'install-blackbird' in missing.stderr and 'STALE_CHECKOUT' not in missing.stderr
+
+    # Argument failures describe the option and never prescribe a new session.
+    before = directories()
+    for arguments, expected in ((['--unknown-startup-option'], 'Unknown option'),
+                                (['--model'], 'requires a value')):
+        invalid = run(executable, arguments, success=False)
+        assert expected in invalid.stderr and arguments[0] in invalid.stderr, invalid.stderr
+        assert '--help' in invalid.stderr and 'fresh --session' not in invalid.stderr
+        assert 'unresolved prior work' not in invalid.stderr
+    assert directories() == before
+
+print('Fresh native/default launcher Paper PTY, installed generation, overrides, diagnostics, reopen and restart pass')

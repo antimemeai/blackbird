@@ -37,6 +37,20 @@ int main() {
     picker.choices({{"/resume /tmp/a", "", "/tmp/a", "Session", "Alpha"}}, "Sessions");
     feed(picker, "\x1b");
     check(picker.flush_escape() && picker.text() == "unsent draft");
+    Composer question;
+    question.draft("EFFORT_DRAFT");
+    feed(question, "\x1b[D");
+    const auto caret = question.cursor();
+    question.choices(
+        {{"/effort low", "", "Use low effort", "Effort", "low", {}, true},
+         {"/effort high", "", "Use high effort", "Effort", "high", {}, true}},
+        "What level of effort did you intend?");
+    check(question.palette_lines(6)[0].starts_with("What level of effort"));
+    check(question.palette_lines(6)[3].find("Enter answers") != std::string::npos);
+    const auto answered = feed(question, "\x1b[B\r");
+    check(answered.action == InputAction::answer_question &&
+          answered.text == "/effort high" && question.text() == "EFFORT_DRAFT" &&
+          question.cursor() == caret);
     Composer views;
     views.draft("VIEW_DRAFT_SENTRY");
     feed(views, "\x1b[D\x1b[D");

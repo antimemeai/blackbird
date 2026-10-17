@@ -43,7 +43,8 @@ enum class InputAction {
   center_toggle,
   instrument_toggle,
   instrument_action,
-  select_view
+  select_view,
+  answer_question
 };
 struct InputResult {
   InputAction action = InputAction::none;
@@ -77,6 +78,11 @@ struct ComposerChoice {
   std::string name, arguments, description, group;
   std::string label{};
   std::optional<tui::ViewRoute> view{};
+  bool answer = false;
+};
+struct TerminalQuestion {
+  std::string heading;
+  std::vector<ComposerChoice> choices;
 };
 std::vector<ComposerChoice> terminal_view_choices(tui::ViewRoute current);
 class Composer {
@@ -158,6 +164,7 @@ public:
   void operation_completed(std::string_view text, Ink outcome = Ink::muted);
   void failed();
   void title(std::string_view text);
+  void question(std::optional<TerminalQuestion> question);
   void sessions(const Value &listing, RawUiValueOrigin origin = {});
   void instrument_source(InstrumentSource source);
   void tasks(const Value &publication, RawUiValueOrigin origin = {});
@@ -191,7 +198,8 @@ private:
     complete,
     operation_complete,
     failure,
-    instrument_source
+    instrument_source,
+    question
   };
   struct Message {
     Kind kind;
@@ -201,6 +209,7 @@ private:
     RawEventRef enqueue{}, latest{};
     RawUiValueOrigin origin{};
     std::optional<InstrumentSource> instrument{};
+    std::shared_ptr<const TerminalQuestion> question{};
   };
   bool raw_capture_ = false;
   RawUiSource initial_source_{};
@@ -220,6 +229,7 @@ private:
   std::set<std::string> task_folded_;
   std::size_t task_offset_ = 0;
   std::string task_anchor_;
-  void post(Kind kind, std::string_view text, RawCapacityClaim *preheld_data = nullptr);
+  void post(Kind kind, std::string_view text, RawCapacityClaim *preheld_data = nullptr,
+            std::shared_ptr<const TerminalQuestion> question = {});
 };
 } // namespace blackbird

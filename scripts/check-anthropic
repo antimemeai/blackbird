@@ -152,9 +152,31 @@ def main():
         assert any(exact_stream in file.read_bytes() for file in session.rglob('*') if file.is_file()), 'exact native SSE missing from retained originals'
         reopened = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
         assert reopened.returncode == 0 and '"provider":"anthropic"' in reopened.stdout
-        refused = run(['--plain', '--session', str(session)], input='/effort xhigh\n/session\n/quit\n')
-        assert 'Anthropic model does not support the selected effort' in refused.stderr
-        assert '"effort":"medium"' in refused.stdout and '"effort":"xhigh"' not in refused.stdout
+        def state(result):
+            assert result.returncode == 0, (result.stdout, result.stderr)
+            return next(json.loads(line[line.index('{'):]) for line in result.stdout.splitlines()
+                        if '"workflow_id"' in line)
+
+        pending = run(['--plain', '--session', str(session)],
+                      input='/effort xhigh\n/session\nmust not dispatch while pending\n/quit\n')
+        assert 'What level of effort did you intend?' in pending.stdout
+        assert state(pending)['effort'] == 'xhigh' and state(pending)['effort_pending'] is True
+        assert len((root / 'requests').read_text().splitlines()) == 2
+        assert (root / 'effect').read_text() == 'X'
+        pending_reopen = run(['--plain', '--session', str(session)],
+                             input='/session\nstill must not dispatch\n/quit\n')
+        assert 'What level of effort did you intend?' in pending_reopen.stdout
+        assert state(pending_reopen)['effort'] == 'xhigh'
+        assert state(pending_reopen)['effort_pending'] is True
+        assert len((root / 'requests').read_text().splitlines()) == 2
+        unanswered_once = run(['--plain', '--session', str(session), '--once', 'must not dispatch'])
+        assert unanswered_once.returncode != 0 and '--effort' in unanswered_once.stderr
+        assert len((root / 'requests').read_text().splitlines()) == 2
+        repaired = run(['--plain', '--session', str(session)],
+                       input='/effort medium\n/session\n/quit\n')
+        assert 'Effort set to medium' in repaired.stdout
+        assert state(repaired)['effort'] == 'medium' and state(repaired)['effort_pending'] is False
+        assert len((root / 'requests').read_text().splitlines()) == 2
         follow = run(['--plain', '--session', str(session), '--rebuild-session', '--once', 'Confirm the prior result.'])
         assert follow.returncode == 0, (follow.stdout, follow.stderr)
         assert len((root / 'requests').read_text().splitlines()) == 3
@@ -173,7 +195,7 @@ def main():
         stdout, stderr = cancelled.communicate(timeout=10)
         assert cancelled.returncode != 0, (stdout, stderr)
         assert not (root / 'effect').exists()
-        for result in (first, reopened, follow):
+        for result in (first, reopened, pending, pending_reopen, unanswered_once, repaired, follow):
             assert 'fixture-secret' not in result.stdout + result.stderr
         for file in session.rglob('*'):
             if file.is_file():

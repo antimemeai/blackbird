@@ -42,8 +42,9 @@ void validate(const SessionSettings &value) {
       value.model.find('\0') != std::string::npos || value.workflow.empty() ||
       value.workflow.find('\0') != std::string::npos || !valid_provider ||
       (value.provider == "openrouter" && value.model.find('/') == std::string::npos) ||
-      (value.effort != "low" && value.effort != "medium" && value.effort != "high" &&
-       value.effort != "xhigh" && value.effort != "max"))
+      (value.effort.size() > 1024 || value.effort.find('\0') != std::string::npos) ||
+      (!value.effort_pending && value.effort != "low" && value.effort != "medium" &&
+       value.effort != "high" && value.effort != "xhigh" && value.effort != "max"))
     throw Error{ErrorCode::invalid_range};
 }
 RawSessionCall session_call(AuditLog &log, std::uint8_t action,
@@ -130,6 +131,7 @@ void save_session_info(const std::filesystem::path &directory,
                        {"name", Value{settings.name}},
                        {"model", Value{settings.model}},
                        {"effort", Value{settings.effort}},
+                       {"effort_pending", Value{settings.effort_pending}},
                        {"workflow", Value{settings.workflow}},
                        {"provider", Value{settings.provider}},
                        {"actor", Value{hex_identity(id.actor.bytes())}},
@@ -283,6 +285,8 @@ Value list_sessions(const std::filesystem::path &requested,
             (void)metadata.source(3, effort, 4222);
             (void)metadata.source(4, workflow, 4222);
             SessionSettings settings{model, effort, workflow};
+            if (const auto *pending = packet.find("effort_pending"))
+              settings.effort_pending = std::get<bool>(pending->value());
             if (const auto *provider = packet.find("provider")) {
               settings.provider = provider->string();
               (void)metadata.source(11, settings.provider, 4222);
@@ -300,6 +304,7 @@ Value list_sessions(const std::filesystem::path &requested,
             config = Value::object({{"name", Value{settings.name}},
                                     {"model", Value{settings.model}},
                                     {"effort", Value{settings.effort}},
+                                    {"effort_pending", Value{settings.effort_pending}},
                                     {"workflow", Value{settings.workflow}},
                                     {"provider", Value{settings.provider}}});
             status = "snapshot";
@@ -437,6 +442,8 @@ SessionStore::SessionStore(AuditLog &log, const RawAdapterContext *context)
         (void)call.source(4, workflow);
         auto assigned = call.control(41);
         settings_ = {model, effort, workflow};
+        if (const auto *pending = value.find("effort_pending"))
+          settings_.effort_pending = std::get<bool>(pending->value());
         if (const auto *provider = value.find("provider")) {
           settings_.provider = provider->string();
           (void)call.source(11, settings_.provider);
@@ -501,6 +508,7 @@ void SessionStore::save(const SessionSettings &value,
                                    {"name", Value{next.name}},
                                    {"model", Value{next.model}},
                                    {"effort", Value{next.effort}},
+                                   {"effort_pending", Value{next.effort_pending}},
                                    {"workflow", Value{next.workflow}},
                                    {"provider", Value{next.provider}}}));
     (void)call.bytes(4213, recorded, locator);

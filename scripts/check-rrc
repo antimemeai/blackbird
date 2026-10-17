@@ -43,12 +43,16 @@ end
     assert first['model']=='fixture-model' and first['effort']=='low' and first['workflow']==str(workflow),first
     second=state(run([binary,'--session',str(root/'session'),'--plain','--model','override'],
                      '/effort nonsense\n/session\n/exit\n'))
-    assert second['model']=='override' and second['effort']=='low',second
+    assert second['model']=='override' and second['effort']=='nonsense' and second['effort_pending'] is True,second
+    pending=state(run([binary,'--session',str(root/'session'),'--plain'], '/session\n/exit\n'))
+    assert pending==second,pending
     for key in ('actor','conversation','workflow_id'): assert first[key]==second[key],(first,second)
     third=state(run([binary,'--session',str(root/'session'),'--plain'],
                     '/effort high\n/model changed\n/session\n/exit\n'))
     fourth=state(run([binary,'--session',str(root/'session'),'--plain'], '/session\n/exit\n'))
     assert third==fourth and fourth['model']=='changed' and fourth['effort']=='high'
+    assert fourth['effort_pending'] is False
+    for key in ('actor','conversation','workflow_id'): assert first[key]==fourth[key],(first,fourth)
     escaped=run([binary,'--session',str(root/'session'),'--plain'],
                 r"/lua print('\u{0080}')"+'\n/exit\n')
     assert r'\xc2\x80' in escaped and '\x80' not in escaped, escaped

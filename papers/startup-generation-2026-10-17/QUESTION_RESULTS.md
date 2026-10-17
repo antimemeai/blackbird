@@ -53,3 +53,51 @@ The root owner performs the single independent source review, full gate, scoped
 Linux qualification, matched common-path performance and installed activation.
 These direct synthetic checks make no claim about live inference or service
 model-capability discovery.
+
+## Bounded independent review fixes
+
+The root owner's single source review found two continuation details. Deferred
+resume input must keep its resume classification when resume_requested is true
+before resume_turn becomes true. Plain input also needed to hold its initial
+continuation until a valid answer, then dispatch it once. Both are corrected.
+
+The new real-native plain RED opens a pending resume, quits unanswered, reopens,
+answers high and repeats the valid answer. Before the fix it prints the answer
+confirmation but never runs the local continuation. That RED is retained at
+`context/startup-generation-2026-10-17/plain-resume-red.log`. The corrected oracle
+requires exactly one continuation marker, no provider transport dispatch and no
+remaining consumed restart intent. Modified C++ ranges were formatted with the
+pinned LLVM23 clang-format; no unrelated format sweep was run.
+
+Post-review focused result: **4/4 passed in10.33s** (session_startup7.67s),
+recorded at `context/startup-generation-2026-10-17/question-review-green.log`.
+This includes the plain exactly-once continuation regression. The owner returns
+this bounded fix pass without another code review or full-gate duplication.
+
+## Required full-gate integration-oracle updates
+
+The full source gate reached259/263 passing tests. Four older actual-process
+oracles still specified the superseded behavior: invalid effort throws and keeps
+the prior accepted effort. Updated only those test expectations; production
+fences remain unchanged.
+
+Native Anthropic and registered Responses now assert the requested unsupported
+effort plus effort_pending, the in-harness question, persistence across reopen,
+and zero new requests or effects from ordinary prompts while pending. An explicit
+valid answer repairs the setting before their existing real injected-transport
+continuation. Existing tool-effect, signed-prefix/native-original, failure-tail,
+cancellation and secret checks remain. One-shot unsupported effort still refuses
+with actionable --effort guidance and preserves accepted settings.
+
+The RRC fixture retains requested nonsense as pending across reopen, then clears
+it with high while preserving actor/conversation/workflow identity. The raw Main
+input fixture explicitly answers high after bogus: all five exact dispatch input
+originals, both effort commands, their non-error outcomes, the malformed-name
+error, unknown-command path, literal paste bytes and complete native-read source
+remain asserted. This reconciliation found no new production defect.
+
+Focused gate-feedback result: **5/5 passed in24.32s**:
+anthropic_native, registered_responses_native, session_startup, rrc and
+main_input_raw. Log: `context/startup-generation-2026-10-17/gate-oracle-recheck.log`.
+This is required gate feedback within the existing bounded recheck, not another
+review campaign. Root owns the remaining full gate and delivery.

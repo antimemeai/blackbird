@@ -11304,3 +11304,27 @@ source qualification and installed activation. No saved work is discarded, no
 provider request or real account read is needed. Keep artwork, old source recovery
 stash and the already-launched AFL campaign untouched. Diagnosis/checkpoint is in
 papers/startup-generation-2026-10-17/RESULTS.md; delivery is still in progress.
+
+Publish text-only diagnosis/plan checkpointbfa0700 after diff/link checks, using
+the documented per-command text-only hook exception. Native source remains
+uncommitted until its required gate. Question owner delivers native pending
+settings, intentional palette answer with retained draft/cursor and plain input
+resolution. Existing21 readable expectations remain unchanged; add one question
+expectation. Reciprocal single review finds no launcher defect and two delayed
+continuation details: dispatch capture must retain resume classification, and
+plain input must continue once after a valid answer. Owner reproduces the latter
+RED and fixes both; same focused four checks pass in10.33s. Installer transaction
+is separately green. No further review layer. Queue legacy benchmark metadata
+selection as arconaut-k9r; use the exact-executable retained paired observer.
+Stage integrated source for the full installed source hook and scoped Linux
+Release/ASan startup, session/raw, composer/readable and installer checks.
+
+First full Mac source gate passes259/263 in461.90s, stopping before lint on four
+old effort-policy expectations: native Anthropic/portable Responses, RRC and Main
+raw input. Their owner updates pending/question/explicit-answer expectations,
+keeps no-request/effect/secret and exact original-byte assertions, and obtains
+5/5 focused GREEN in24.32s including startup. No production change, deadline
+relaxation or suppression. Preserve first gate log and rerun the required full
+hook on final staged tests. Linux original scoped checks pass8/8 Release2.70s
+and8/8 ASan/UBSan11.44s; run only the four newly changed integration oracles on
+those profiles. No new review campaign or source assurance layer is added.

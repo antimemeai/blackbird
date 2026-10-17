@@ -105,3 +105,10 @@ label, and preserves a draft with its cursor before the end. Enter emits a local
 route action, not command insertion or submission. This brings the total to21
 styled expectations. The two instrument baselines deliberately adopt COMMAND RUNS
 and Command run labels; the extra title wrapping is retained explicitly.
+
+
+`effort-question` retains the shared choice palette with low/high/max answers,
+high deliberately selected and an unsent draft retained underneath. Enter emits
+an answer action and preserves that draft; the real startup PTY test separately
+checks pending settings, dispatch fences, quit/reopen and restart continuation.
+The existing21 expectations are unchanged (22 total).

@@ -7,6 +7,7 @@ struct SessionSettings {
   std::string model = "gpt-6.1-sol", effort = "medium", workflow;
   std::string name{};
   std::string provider = "openai";
+  bool effort_pending = false;
   bool operator==(const SessionSettings &) const = default;
 };
 struct SessionIdentity {

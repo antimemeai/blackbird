@@ -1,14 +1,27 @@
 #!/bin/sh
 set -eu
-blackbird_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-blackbird_executable=${BLACKBIRD_EXECUTABLE:-${ARCO_EXECUTABLE:-"$blackbird_root/build/release/blackbird"}}
-BLACKBIRD_SPRITE_ASSET=${BLACKBIRD_SPRITE_ASSET:-"$blackbird_root/assets/sr71.png"}
-export BLACKBIRD_SPRITE_ASSET
+blackbird_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 # Only a nonsecret locator is exported; credentials are read lazily by native code.
 if [ -z "${BLACKBIRD_JEV_ENV_FILE:-}" ] && [ -f "$blackbird_root/../.env" ]; then
   BLACKBIRD_JEV_ENV_FILE="$blackbird_root/../.env"
   export BLACKBIRD_JEV_ENV_FILE
 fi
+# A checkout follows the selected installed generation. Packaged launchers stay
+# within their own generation; an explicit development executable always wins.
+if [ -z "${BLACKBIRD_EXECUTABLE:-}${ARCO_EXECUTABLE:-}" ] &&
+   [ -f "$blackbird_root/programs/turn.lua" ] &&
+   [ -x "$HOME/.local/bin/blackbird" ] &&
+   [ ! -L "$HOME/.local/bin/blackbird" ] &&
+   [ "$(sed -n '2p' "$HOME/.local/bin/blackbird")" = '# blackbird managed launcher v1' ]; then
+  exec "$HOME/.local/bin/blackbird" "$@"
+fi
+blackbird_executable=${BLACKBIRD_EXECUTABLE:-${ARCO_EXECUTABLE:-"$blackbird_root/build/release/blackbird"}}
+if [ ! -x "$blackbird_executable" ]; then
+  printf 'Blackbird executable is not runnable: %s\nRun ./scripts/install-blackbird to install or update the harness.\n' "$blackbird_executable" >&2
+  exit 127
+fi
+BLACKBIRD_SPRITE_ASSET=${BLACKBIRD_SPRITE_ASSET:-"$blackbird_root/assets/sr71.png"}
+export BLACKBIRD_SPRITE_ASSET
 if [ "${1:-}" = auth ]; then
   exec "$blackbird_executable" "$@"
 fi
@@ -51,12 +64,6 @@ if ! "$blackbird_session_option" && ! "$blackbird_probe" && ! "$blackbird_existi
   )
   set -- "$@" --session "$blackbird_session"
   printf 'Starting Blackbird session: %s\n' "$blackbird_session" >&2
-fi
-# Keep interactive startup on its published generation while the dev campaign
-# builds/replaces Blackbird. Explicit executable selection always wins.
-if [ -z "${BLACKBIRD_EXECUTABLE:-}${ARCO_EXECUTABLE:-}" ] && ! "$blackbird_once" && ! "$blackbird_probe" && ! "$blackbird_existing_session" &&
-   [ -x "$blackbird_root/build/release/blackbird-ui" ]; then
-  blackbird_executable="$blackbird_root/build/release/blackbird-ui"
 fi
 if "$blackbird_session_option" && ! "$blackbird_once" && ! "$blackbird_probe" && [ -t 0 ] && [ -t 1 ]; then
   printf 'Opening Blackbird session: %s\n' "$blackbird_session" >&2

@@ -20,6 +20,7 @@
 #include "blackbird/station.hpp"
 #include "blackbird/terminal.hpp"
 #include "blackbird/trace_archive.hpp"
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -28,6 +29,7 @@
 #include <iostream>
 #include <map>
 #include <poll.h>
+#include <stdexcept>
 #include <sys/random.h>
 #include <sys/stat.h>
 #include <thread>
@@ -153,34 +155,39 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         inspect = true;
         continue;
       }
-      if (i + 1 == argc)
-        throw Error{ErrorCode::invalid_range};
+      const auto next_argument = [&]() {
+        if (i + 1 == argc)
+          throw std::invalid_argument{"Option " + std::string{arg} +
+                                      " requires a value. Run blackbird --help."};
+        return argv[++i];
+      };
       if (arg == "--station")
-        station_path = argv[++i];
+        station_path = next_argument();
       else if (arg == "--backstop")
-        backstop_path = argv[++i];
+        backstop_path = next_argument();
       else if (arg == "--seed-session")
-        seed_path = argv[++i];
+        seed_path = next_argument();
       else if (arg == "--session") {
-        session = argv[++i];
+        session = next_argument();
         session_option = true;
       } else if (arg == "--effort") {
-        effort = argv[++i];
+        effort = next_argument();
         effort_option = true;
       } else if (arg == "--workflow") {
-        workflow = argv[++i];
+        workflow = next_argument();
         workflow_option = true;
       } else if (arg == "--provider") {
-        provider_name = argv[++i];
+        provider_name = next_argument();
         provider_option = true;
       } else if (arg == "--model") {
-        model = argv[++i];
+        model = next_argument();
         model_option = true;
       } else if (arg == "--once") {
-        once = argv[++i];
+        once = next_argument();
         one = true;
       } else
-        throw Error{ErrorCode::invalid_range};
+        throw std::invalid_argument{"Unknown option " + std::string{arg} +
+                                    ". Run blackbird --help."};
     }
     if (!station_path.empty() &&
         (one || inspect || discovery || !backstop_path.empty() || !seed_path.empty()))
@@ -438,9 +445,12 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     SessionStore session_store{log, &session_capture};
 
     auto settings = session_store.settings();
+    const bool provider_changed = provider_option && provider_name != settings.provider;
     if (provider_option) {
-      if (provider_name != settings.provider && !model_option)
+      if (provider_changed && !model_option) {
+        warning("Changing providers requires --model NAME.\n");
         throw Error{ErrorCode::invalid_range};
+      }
       settings.provider = provider_name;
     }
     if (model_option)
@@ -451,42 +461,64 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       settings.workflow =
           std::filesystem::absolute(workflow).lexically_normal().string();
     (void)read_file(settings.workflow, 16 * 1024 * 1024, &session_capture);
-    const auto validate_route = [&](const SessionSettings &candidate,
-                                    const RawAdapterContext &capture) {
+    const bool tui = station_path.empty() && !plain && !one && !application &&
+                     isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
+    const auto route_efforts = [&](const SessionSettings &candidate,
+                                   const RawAdapterContext &capture) {
+      std::vector<std::string> levels{"low", "medium", "high", "xhigh", "max"};
       if (candidate.provider == "openai" || candidate.provider == "openrouter")
-        return;
+        return levels;
       ProviderAuth auth;
       const RawAuthParent parent{capture.parent.value_or(RawEventRef{})};
       const auto descriptor = auth.descriptor(candidate.provider, &parent);
       const auto &protocol = string_field(descriptor, "protocol");
       if (candidate.provider == "anthropic" && protocol == "messages") {
-        try {
-          validate_anthropic_route(candidate.model, candidate.effort);
-        } catch (const Error &) {
-          warning("Anthropic model does not support the selected effort.\n");
-          throw;
-        }
-        return;
+        std::erase_if(levels, [&](const auto &level) {
+          try {
+            validate_anthropic_route(candidate.model, level);
+            return false;
+          } catch (const Error &error) {
+            if (error.code != ErrorCode::unsupported)
+              throw;
+            return true;
+          }
+        });
+        return levels;
       }
       if (protocol != "responses" && protocol != "responses-portable") {
         warning("Main coding requires a Responses provider or native Anthropic "
                 "Messages.\n");
         throw Error{ErrorCode::unsupported};
       }
-      if (protocol == "responses-portable" && candidate.effort != "low" &&
-          candidate.effort != "high" && candidate.effort != "max") {
-        warning("Portable Responses requires effort low, high or max.\n");
-        throw Error{ErrorCode::unsupported};
-      }
+      if (protocol == "responses-portable")
+        levels = {"low", "high", "max"};
+      return levels;
     };
-    validate_route(settings, session_capture);
+    const auto prepare_route = [&](SessionSettings &candidate,
+                                   const RawAdapterContext &capture) {
+      const auto levels = route_efforts(candidate, capture);
+      candidate.effort_pending =
+          candidate.effort_pending ||
+          std::find(levels.begin(), levels.end(), candidate.effort) == levels.end();
+      return levels;
+    };
+    if (effort_option)
+      settings.effort_pending = false;
+    const auto initial_efforts = prepare_route(settings, session_capture);
+    if (settings.effort_pending && (one || application || !station_path.empty())) {
+      warning("Choose the intended effort with --effort LEVEL (supported:");
+      for (const auto &level : initial_efforts)
+        warning(" " + level);
+      warning("). Open an interactive harness to answer there.\n");
+      throw Error{ErrorCode::unsupported};
+    }
     session_store.save(settings, &session_capture);
     model = settings.model;
     provider_name = settings.provider;
     effort = settings.effort;
     workflow = settings.workflow;
-    bool resume_turn =
-        resume_requested && session_store.resume(context, &session_capture);
+    bool resume_turn = resume_requested && !settings.effort_pending &&
+                       session_store.resume(context, &session_capture);
     if (resume_requested && !resume_turn && one)
       return 0;
     std::atomic_bool restart_pending{false};
@@ -530,7 +562,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       if (supported)
         unwrap(context.checkpoint());
     }
-    engine.effort(effort);
+    if (!settings.effort_pending)
+      engine.effort(effort);
     if (application) {
       save_session_info(session, settings, session_identity(log, &session_capture),
                         &session_capture);
@@ -547,7 +580,9 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     engine.cancelled = [&] {
       return interrupted.load(std::memory_order_relaxed) || cancelled.load();
     };
-    TerminalUI ui{"Blackbird · " + model + " · " + effort + " · " + session.string()};
+    TerminalUI ui{"Blackbird · " + model + " · " + effort +
+                  (settings.effort_pending ? " (choose effort)" : "") + " · " +
+                  session.string()};
     struct ParticipantShutdown {
       CodingEngine &engine;
       ~ParticipantShutdown() {
@@ -561,8 +596,6 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         }
       }
     } participant_shutdown{engine}; // Before UI destruction, on every exit path.
-    const bool tui = station_path.empty() && !plain && !one && isatty(STDIN_FILENO) &&
-                     isatty(STDOUT_FILENO);
     ui.raw_capture(tui);
     const RawAdapterContext *output_context = &session_capture;
     auto emit = [&](std::string_view text) {
@@ -583,6 +616,32 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
              "authoritative.\n");
       }
     };
+    const auto ask_effort = [&](const SessionSettings &candidate,
+                                const std::vector<std::string> &levels) {
+      if (!candidate.effort_pending) {
+        if (tui)
+          ui.question(std::nullopt);
+        return;
+      }
+      TerminalQuestion question{"What level of effort did you intend?", {}};
+      for (const auto &level : levels)
+        question.choices.push_back({"/effort " + level,
+                                    "",
+                                    "Use " + level + " effort",
+                                    "Effort",
+                                    level,
+                                    {},
+                                    true});
+      if (tui)
+        ui.question(std::move(question));
+      else {
+        std::string prompt = "What level of effort did you intend? Use /effort LEVEL (";
+        for (std::size_t index = 0; index < levels.size(); ++index)
+          prompt += (index ? ", " : "") + levels[index];
+        emit(prompt + ").\n");
+      }
+    };
+    ask_effort(settings, initial_efforts);
     refresh_info(session_capture);
     engine.display = emit;
     if (tui) {
@@ -659,10 +718,11 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       // returned. Rearm its signal wake before this input's first admission.
       if (!tui)
         unwrap(interrupt_owner.reset());
-      const auto kind = resume_turn && prompt == "continue" ? RawMainInputKind::resume
-                        : one                               ? RawMainInputKind::once
-                        : tui                               ? RawMainInputKind::tui
-                                                            : RawMainInputKind::plain;
+      const auto kind = (resume_turn || resume_requested) && prompt == "continue"
+                            ? RawMainInputKind::resume
+                        : one ? RawMainInputKind::once
+                        : tui ? RawMainInputKind::tui
+                              : RawMainInputKind::plain;
       const auto length = prompt.size();
       RawSessionCall input{
           4200, 4201, &session_capture,
@@ -681,6 +741,13 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         output_context = &command_context;
         try {
           dispatch.run([&] {
+            if (session_store.settings().effort_pending &&
+                !prompt.starts_with("/effort ") && !prompt.starts_with("/model ") &&
+                prompt != "/session" && prompt != "/help" && prompt != "/context") {
+              ask_effort(session_store.settings(),
+                         route_efforts(session_store.settings(), command_context));
+              return;
+            }
             if (tui && (prompt.starts_with("/instrument reload ") ||
                         prompt.starts_with("/instrument preview "))) {
               raw_main_branch(dispatch, 41);
@@ -727,8 +794,13 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                                       {"job_id", Value{id}},
                                       {"wait_epoch", field(lease, "wait_epoch")}})))) +
                    "\n");
-            } else if (prompt == "continue" && resume_turn) {
+            } else if (prompt == "continue" && (resume_turn || resume_requested)) {
               raw_main_branch(dispatch, 6);
+              if (!resume_turn && !session_store.resume(context, &command_context)) {
+                emit("No pending continuation.\n");
+                return;
+              }
+              resume_requested = false;
               resume_turn = false;
               engine.turn(
                   {"", read_file(workflow, 16 * 1024 * 1024, &command_context)});
@@ -895,6 +967,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                         {"model", Value{model}},
                         {"provider", Value{provider_name}},
                         {"effort", Value{effort}},
+                        {"effort_pending",
+                         Value{session_store.settings().effort_pending}},
                         {"workflow", Value{workflow.string()}}}))) +
                    "\n");
             } else if (prompt == "/name" || prompt.starts_with("/name ")) {
@@ -1075,18 +1149,25 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
               raw_main_branch(dispatch, 35);
               auto candidate = session_store.settings();
               candidate.model = prompt.substr(7);
+              const auto levels = prepare_route(candidate, command_context);
               session_store.save(candidate, &command_context);
               engine.model(candidate.model);
               model = candidate.model;
+              ask_effort(candidate, levels);
             } else if (prompt.starts_with("/effort ")) {
               raw_main_branch(dispatch, 36);
               auto value = std::string{prompt.substr(8)};
               auto candidate = session_store.settings();
               candidate.effort = value;
-              validate_route(candidate, command_context);
+              candidate.effort_pending = false;
+              const auto levels = prepare_route(candidate, command_context);
               session_store.save(candidate, &command_context);
-              engine.effort(value);
               effort = std::move(value);
+              if (!candidate.effort_pending) {
+                engine.effort(effort);
+                emit("Effort set to " + effort + ".\n");
+              }
+              ask_effort(candidate, levels);
             } else if (prompt.starts_with("/decision ")) {
               raw_main_branch(dispatch, 37);
               emit(unwrap(dump_json(engine.operator_call(
@@ -1151,11 +1232,14 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
               restart_pending.store(true);
             }
             if (tui)
-              ui.title("Blackbird · " +
-                       (session_store.settings().name.empty()
-                            ? ""
-                            : session_store.settings().name + " · ") +
-                       model + " · " + effort + " · " + session.string());
+              ui.title(
+                  "Blackbird · " +
+                  (session_store.settings().name.empty()
+                       ? ""
+                       : session_store.settings().name + " · ") +
+                  model + " · " + effort +
+                  (session_store.settings().effort_pending ? " (choose effort)" : "") +
+                  " · " + session.string());
           });
         } catch (const Error &e) {
           dispatch.require_capture();
@@ -1536,9 +1620,12 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         ui.restore_message(
             role->string() == "user" ? ChatKind::user : ChatKind::assistant, text);
       }
-      const std::string_view initial = resume_turn ? "continue" : "";
-      const auto initial_kind =
-          resume_turn ? RawMainInputKind::resume : RawMainInputKind::tui;
+      const std::string_view initial =
+          resume_turn || (resume_requested && settings.effort_pending) ? "continue"
+                                                                       : "";
+      const auto initial_kind = (resume_turn || resume_requested)
+                                    ? RawMainInputKind::resume
+                                    : RawMainInputKind::tui;
       const auto initial_length = initial.size();
       std::optional<InstrumentSource> instrument_source;
       try {
@@ -1611,6 +1698,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                            session.native(),
                            "\n/help lists commands; /quit or /exit exits.\n"},
                        &session_capture);
+    bool deferred_resume = resume_requested && settings.effort_pending;
     if (resume_turn)
       perform("continue");
     if (restart_pending.load() || new_pending.load())
@@ -1723,13 +1811,17 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       perform(line);
       if (restart_pending.load() || new_pending.load())
         break;
+      if (deferred_resume && !session_store.settings().effort_pending) {
+        deferred_resume = false;
+        perform("continue");
+        if (restart_pending.load() || new_pending.load())
+          break;
+      }
     }
     return finish_interactive();
 
   } catch (const Error &e) {
-    std::cerr << "blackbird: " << error_name(e.code) << " (" << e.detail
-              << "). Inspect --audit-last; use a fresh --session for unresolved prior "
-                 "work.\n";
+    std::cerr << "blackbird: " << error_name(e.code) << " (" << e.detail << ").\n";
     return 1;
   } catch (const std::exception &e) {
     std::cerr << "blackbird: " << safe(e.what()) << '\n';

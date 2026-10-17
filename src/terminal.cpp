@@ -759,6 +759,9 @@ std::vector<std::string> Composer::palette_lines(std::size_t rows) const {
         : choices_ && std::any_of(choices_->begin(), choices_->end(),
                                   [](const auto &c) { return c.view.has_value(); })
             ? "Type search · Up/Down select · Enter opens · Esc back"
+        : choices_ && std::any_of(choices_->begin(), choices_->end(),
+                                  [](const auto &c) { return c.answer; })
+            ? "Type search · Up/Down select · Enter answers · Esc keeps draft"
             : "Type search · Up/Down select · Enter loads · Esc back");
   out.resize(rows);
   return out;
@@ -849,7 +852,8 @@ InputResult Composer::feed(char byte, RawUiInput *raw, bool inspecting) {
       const auto action = result.action;
       const auto length = result.text.size();
       if (action == InputAction::choose_command || action == InputAction::submit ||
-          action == InputAction::select_view) {
+          action == InputAction::select_view ||
+          action == InputAction::answer_question) {
         const auto ref =
             raw_ui_emit(4010,
                         std::array{ByteView{raw->feed.lane},
@@ -1068,7 +1072,9 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
         const auto &command =
             commands[matches[std::min(palette_selected_, matches.size() - 1)]];
         palette_open_ = false;
-        return {command.view ? InputAction::select_view : InputAction::choose_command,
+        return {command.answer ? InputAction::answer_question
+                : command.view ? InputAction::select_view
+                               : InputAction::choose_command,
                 std::string{command.name} + (command.arguments.empty() ? "" : " "),
                 {},
                 command.view};
@@ -1449,8 +1455,8 @@ void withdraw_ui_prompts(bool enabled, std::vector<UiPrompt> &prompts,
 } // namespace
 TerminalUI::TerminalUI(std::string title) : title_(std::move(title)) {}
 TerminalUI::~TerminalUI() = default;
-void TerminalUI::post(Kind kind, std::string_view text,
-                      RawCapacityClaim *preheld_data) {
+void TerminalUI::post(Kind kind, std::string_view text, RawCapacityClaim *preheld_data,
+                      std::shared_ptr<const TerminalQuestion> question) {
   const auto size = text.size();
   const Ink outcome = Ink::muted;
   RawUiTrace trace{
@@ -1477,7 +1483,9 @@ void TerminalUI::post(Kind kind, std::string_view text,
                            Value{},
                            trace.reference(),
                            trace.reference(),
-                           {}});
+                           {},
+                           {},
+                           std::move(question)});
     }
     const auto &message = messages_.back();
     const auto current = message.text.size();
@@ -1489,6 +1497,16 @@ void TerminalUI::post(Kind kind, std::string_view text,
     raw_ui_notify(trace, notification_);
     trace.close();
   });
+}
+void TerminalUI::question(std::optional<TerminalQuestion> value) {
+  if (value)
+    for (auto &choice : value->choices) {
+      choice.answer = true;
+      choice.view.reset();
+    }
+  auto pending = value ? std::make_shared<const TerminalQuestion>(std::move(*value))
+                       : std::shared_ptr<const TerminalQuestion>{};
+  post(Kind::question, pending ? pending->heading : "", nullptr, pending);
 }
 void TerminalUI::sessions(const Value &listing, RawUiValueOrigin origin) {
   auto trace = raw_ui_value_trace(raw_capture_, origin);
@@ -1702,6 +1720,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   };
   RawRegion first_frame{raw_regions::terminal_first_frame};
   Composer composer;
+  std::shared_ptr<const TerminalQuestion> question;
   std::unique_ptr<RawRetainedTransfer> transfer;
   std::jthread worker;
   std::optional<RawControlToken> joined_rearm_credit;
@@ -2322,9 +2341,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     return true;
   };
   if (!initial.empty())
-    if (!start(initial, initial_source_))
-      (void)enqueue_ui_prompt(raw_capture_, queued, initial, initial_source_, 1,
-                              initial_source_.record);
+    (void)enqueue_ui_prompt(raw_capture_, queued, initial, initial_source_, 1,
+                            initial_source_.record);
   while (true) {
     std::exception_ptr publication_failure;
     std::optional<Error> capture_failure;
@@ -2410,6 +2428,14 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                                   "Instrument source refused; last good retained");
             } else
               instrument_refused = true;
+          }
+          if (message.kind == Kind::question) {
+            question = message.question;
+            if (question) {
+              welcoming = false;
+              transcript.append(ChatKind::notice, question->heading);
+              composer.choices(question->choices, question->heading);
+            }
           }
           if (message.kind == Kind::sessions) {
             std::vector<ComposerChoice> entries;
@@ -2566,7 +2592,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       break;
     if (!busy && quitting)
       break;
-    if (!busy && !wake_refused && !queued.empty()) {
+    if (!busy && !question && !wake_refused && !queued.empty()) {
       auto dispatch_credit = raw_ui_control(raw_capture_, 73);
       if (persist()) {
         if (start(queued.front().text, queued.front().source)) {
@@ -3295,6 +3321,25 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                             error_name(moved.error().code) + "\n";
           }
         }
+        if (result.action == InputAction::answer_question) {
+          if (question && !busy &&
+              std::any_of(
+                  question->choices.begin(), question->choices.end(),
+                  [&](const auto &choice) { return choice.name == result.text; })) {
+            if (persist()) {
+              saved_last_input = true;
+              input.outcome(RawRegionOutcome::dispatch);
+              input.finish();
+              keyboard_burst.reset();
+              keyboard_data.reset();
+              keyboard_control.reset();
+              (void)start(result.text, result.source);
+              action_target = last_launch;
+              action_branch = wake_refused ? 4 : 3;
+            }
+          } else if (question)
+            composer.choices(question->choices, question->heading);
+        }
         if (result.action == InputAction::choose_command) {
           bool load = true;
           if (!composer.text().empty()) {
@@ -3495,6 +3540,27 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
               composer.draft(std::move(recovered[n - 1].text));
               recovered.erase(recovered.begin() + static_cast<std::ptrdiff_t>(n - 1));
               transcript += "\nLoaded recovered draft; Enter submits explicitly.\n";
+            }
+          } else if (question) {
+            const bool answer = std::any_of(
+                question->choices.begin(), question->choices.end(),
+                [&](const auto &choice) { return choice.name == result.text; });
+            if (answer && !busy) {
+              if (persist()) {
+                saved_last_input = true;
+                input.outcome(RawRegionOutcome::dispatch);
+                input.finish();
+                keyboard_burst.reset();
+                keyboard_data.reset();
+                keyboard_control.reset();
+                (void)start(result.text, result.source);
+                action_target = last_launch;
+                action_branch = wake_refused ? 4 : 3;
+              }
+            } else {
+              composer.draft(std::move(result.text));
+              transcript.append(ChatKind::notice, question->heading);
+              composer.choices(question->choices, question->heading);
             }
           } else if (busy || !queued.empty()) {
             wake_refused =

@@ -110,6 +110,18 @@ int main() {
       check(string_field(
                 field(field(portable_sessions, "sessions").array()[0], "configuration"),
                 "provider") == "paper");
+      auto pending = portable;
+      pending.effort = "unrecognized-intent";
+      pending.effort_pending = true;
+      store.save(pending);
+      save_session_info(path, pending, identity);
+      check(SessionStore{log}.settings() == pending);
+      const auto pending_snapshot = unwrap(decode_packet_string(
+          read_file(std::filesystem::path{path} / "session-info.bbm")));
+      check(field(pending_snapshot, "effort_pending") == Value{true});
+      check(string_field(field(field(list_sessions(path), "sessions").array()[0],
+                               "configuration"),
+                         "effort") == "unrecognized-intent");
       store.save(routed);
       store.restart("Retain this note");
       const auto &fact = root->committed_facts().back();

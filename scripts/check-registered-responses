@@ -109,15 +109,33 @@ def main():
         reopened = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
         assert reopened.returncode == 0, reopened.stderr
         assert '"provider":"paper"' in reopened.stdout and '"effort":"max"' in reopened.stdout
+        def state(result):
+            assert result.returncode == 0, (result.stdout, result.stderr)
+            return next(json.loads(line[line.index('{'):]) for line in result.stdout.splitlines()
+                        if '"workflow_id"' in line)
+
+        pending_effort = run(['--plain', '--session', str(session)],
+                             input='/effort medium\n/effort xhigh\n/session\n'
+                                   'must not dispatch while pending\n/quit\n')
+        assert 'What level of effort did you intend?' in pending_effort.stdout
+        assert state(pending_effort)['effort'] == 'xhigh'
+        assert state(pending_effort)['effort_pending'] is True
+        assert len((root / 'requests').read_text().splitlines()) == 2
+        assert (root / 'effect').read_text() == 'X'
+        pending_reopen = run(['--plain', '--session', str(session)],
+                             input='/session\nstill must not dispatch\n/quit\n')
+        assert 'What level of effort did you intend?' in pending_reopen.stdout
+        assert state(pending_reopen)['effort'] == 'xhigh'
+        assert state(pending_reopen)['effort_pending'] is True
+        assert len((root / 'requests').read_text().splitlines()) == 2
+        repaired = run(['--plain', '--session', str(session)],
+                       input='/effort max\n/session\n/quit\n')
+        assert 'Effort set to max' in repaired.stdout
+        assert state(repaired)['effort'] == 'max' and state(repaired)['effort_pending'] is False
+        assert len((root / 'requests').read_text().splitlines()) == 2
         follow = run(['--plain', '--session', str(session), '--once', 'Confirm the fixture.'])
         assert follow.returncode == 0, (follow.stdout, follow.stderr)
         assert len((root / 'requests').read_text().splitlines()) == 3
-        refused_effort = run(['--plain', '--session', str(session)],
-                             input='/effort medium\n/effort xhigh\n/session\n/quit\n')
-        assert 'Portable Responses requires' in refused_effort.stderr
-        assert '"effort":"max"' in refused_effort.stdout
-        repaired = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
-        assert repaired.returncode == 0 and '"effort":"max"' in repaired.stdout
         assert (root / 'effect').read_text() == 'X'
         register('chat-only', 'chat')
         register('messages-only', 'messages')
@@ -128,9 +146,10 @@ def main():
         for effort in ('medium', 'xhigh'):
             refused = run([*options, '--effort', effort, '--once', 'must not dispatch'])
             assert refused.returncode != 0
-            assert 'Portable Responses requires' in refused.stderr
+            assert '--effort' in refused.stderr and 'low high max' in refused.stderr
         still = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
         assert '"provider":"paper"' in still.stdout and '"model":"ultramarine-1-flash"' in still.stdout
+        assert state(still)['effort'] == 'max' and state(still)['effort_pending'] is False
         assert len((root / 'requests').read_text().splitlines()) == 3
         for mode in ('failed', 'incomplete', 'contradictory_error', 'in_progress',
                      'partial_tool', 'duplicate_call', 'invalid_arguments',
@@ -141,7 +160,7 @@ def main():
                          selected_env=selected)
             assert result.returncode != 0, (mode, result.stdout, result.stderr)
             assert not (root / 'effect').exists(), mode
-        for result in (first, reopened, follow, still):
+        for result in (first, reopened, pending_effort, pending_reopen, repaired, follow, still):
             assert 'fixture-secret' not in result.stdout + result.stderr
         for file in session.rglob('*'):
             if file.is_file():

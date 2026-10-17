@@ -54,3 +54,25 @@ details: delayed `continue` must retain resume classification in the dispatch
 capture, and the plain command loop must run its deferred initial continuation
 once after a valid answer. Both are returned to the conceptual owner for the
 bounded fix/recheck; no additional general review is added.
+
+Both continuation findings are fixed. The added plain native RED shows answer
+confirmation with no continuation before the fix; the same oracle now requires
+one continuation, retained unanswered intent and no provider dispatch. Post-review
+focused C++23 Debug checks pass4/4 in10.33s. Required full Mac source gate and
+scoped Linux Release/ASan checks follow on this integrated source.
+
+The first full Mac gate passes259/263 in461.90s. Four existing integration
+oracles still require the superseded throw/retain-old-effort policy:
+`anthropic_native`, `registered_responses_native`, `rrc`, `main_input_raw`.
+Update these to inspect pending configuration, explicitly answer before further
+work, retain pending across reopen and prove zero extra requests/effects. The raw
+input episode includes both exact effort inputs and retains malformed-name and
+unknown-command checks. No production change or assertion/deadline suppression
+is required. The same four cases plus startup pass5/5 in24.32s. Original full
+gate is `context/startup-generation-2026-10-17/source-gate.log`; owning recheck is
+`gate-oracle-recheck.log` in that directory.
+
+Scoped Linux Release8/8 passes2.70s and ASan/UBSan8/8 passes11.44s, under the
+qualified LLVM23.1.4/libc++23.1.4 profile. Original logs are in
+`context/linux/run-0ha1czgb/`. The full Mac gate reruns because its test sources
+changed; Linux separately checks the four newly reconciled integration oracles.
