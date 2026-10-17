@@ -53,3 +53,7 @@ One generation was installed on the actual host. Update retention and rollback
 were checked by the existing filesystem transaction fixture; no redundant second
 production rebuild was run. `arconaut-5c4` is complete. Live Claude authorization
 remains separate and unresolved.
+
+At the operator's subsequent request, master fast-forwarded to `acfe0f9` and was
+pushed, including installed source `9e9dad5`. The active host generation remains
+the same qualified build; integration introduces no native/runtime change.

@@ -108,4 +108,8 @@ The host installer built and activated generation `generation-z8hyFGNP` from
 catalog checks from `/tmp`. Owned auth status still contains only Paper; neither
 live Anthropic login nor a real Messages exchange is qualified. Native issue
 `arconaut-12q` and auth issue `arconaut-uaa.5` retain that follow-through. This
-candidate publication and host installation do not merge the branch into master.
+candidate publication and host installation initially left the branch unmerged.
+The operator subsequently requested integration: master was fast-forwarded from
+`c38a7de` to `acfe0f9` and pushed. The source is identical to qualified `9e9dad5`;
+later changes are documentation and issue records. Settled source checks were
+carried through this fast-forward under the repository's explicit rule.

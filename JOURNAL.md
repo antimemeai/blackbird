@@ -11260,3 +11260,21 @@ master by implication. Results and limitations are recorded in both owner result
 notes and OPENCODE_ALIGNMENT.md. Support issue updates/backups and checked
 text-only publication follow. Keep untracked artwork, source recovery stash and
 AFL untouched.
+
+## 2026-10-17 — native Claude and installer merged into master
+
+Operator explicitly requests merging the published candidate. Fetch confirms
+origin/master remains `c38a7de`, an ancestor of candidate `acfe0f9`; tracked
+worktree/index are clean. Source `9e9dad5` already passed the installed full gate
+(263 Mac Debug tests and owned C++/Lua checks) plus scoped Linux Release/ASan.
+Its later changes contain documentation and issue records only. Follow the
+explicit fast-forward rule: preserve this qualification without rerunning the
+settled source gate. Switch master, fast-forward to `acfe0f9`, and push; local
+and origin/master agree after successful publication. No merge conflict or
+production change is introduced.
+
+Record current integration in owner results and issue notes; keep native/live
+Claude issues open because merge does not establish service acceptance. The
+existing installed generation `generation-z8hyFGNP` already contains this source
+and needs no rebuild. Preserve artwork, source recovery stash and AFL. Export
+the supported issue backup and publish this checked documentation/data update.
