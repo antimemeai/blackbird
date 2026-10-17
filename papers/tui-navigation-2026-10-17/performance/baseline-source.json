@@ -1,0 +1,3259 @@
+{
+  "base_commit": "cbb206b629d936c13c9636b0a7bac999fa68e3e9",
+  "scopes": [
+    "CMakeLists.txt",
+    "include",
+    "src",
+    "tests",
+    "programs",
+    "assets",
+    "scripts",
+    "tooling/probes",
+    "tooling/tui-test-profile.json"
+  ],
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "a3bdabdb5d6ff48365d5d459aa4e95e60c816cedf0e4702c62d150cd92c56e03",
+      "bytes": 64356,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "assets/README.md",
+      "sha256": "cf2e0c39d0383ab48bcd0b697ea7d10e8b7d21ce2368a2a662b6041d121aefba",
+      "bytes": 629,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "assets/blackbird-readme.png",
+      "sha256": "6184d61caffc0d8ca44dee3f28335925b9fb90f9c7338cc02ae8a73ba569d0e3",
+      "bytes": 9174,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "assets/sr71.png",
+      "sha256": "6401bd5b63844ada654ed27f9e80d202fb48ddc51b1c6e49f7223e0881ae1882",
+      "bytes": 1760334,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/admission.hpp",
+      "sha256": "288c780b178ecc9860647d7032311ace46f4b1f605fb74c2f970a7e7b0a8c1e3",
+      "bytes": 1159,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/application.hpp",
+      "sha256": "f33e799c121031e58f8726b2de9d63943945843cb8de38d303e4c43f563fe2ca",
+      "bytes": 1399,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/archive_catalog.hpp",
+      "sha256": "c29350b5a8274f23f7ca0edd3a91c0f00df764d5d445293f55a854e993287fd0",
+      "bytes": 2108,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/backstop.hpp",
+      "sha256": "e8b3fcc39040de8415534bfedda401d9c7e8e84310e83b01b27e4131bd4158e8",
+      "bytes": 688,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/beads.hpp",
+      "sha256": "735555b0ae3560316a0719983c88c376641de3066aa0e476edc39c0f988e5c15",
+      "bytes": 770,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/chat_view.hpp",
+      "sha256": "c11aa9069e1804bd2178abad5ea1d75e85cc26d6ab9f8b3ccbfc14ffbd9d90c4",
+      "bytes": 5966,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/coding.hpp",
+      "sha256": "cc055d2e7fdd92bed602c6221c076b3ccb14a04e639f2a6120cfb6d4e2f90725",
+      "bytes": 10066,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/colleague.hpp",
+      "sha256": "8f7284bb643367f61e8bcb3da0688dbe62274a7de64af639c84486de34a150ed",
+      "bytes": 1803,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/command_center.hpp",
+      "sha256": "cd1376a14ffd52b55b3749c1c1c82f1ec6a9faa54349221b2e61ba4a193af303",
+      "bytes": 2282,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/command_delivery.hpp",
+      "sha256": "b8451bcd772a33a742e3c2fae3bf22e4117c21d9eec90eb88b74b514ecbbbdbd",
+      "bytes": 2863,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/command_inspector.hpp",
+      "sha256": "91d0799eb18c8e44d21a22184174de6fc4e2f5804bbcc13cbc2e51eb920b2f63",
+      "bytes": 1744,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/command_jobs.hpp",
+      "sha256": "bc1187eee1614c5ec81a42a9e47d9641dc8504e73901fee917591c5efe0e7404",
+      "bytes": 3607,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/command_observation.hpp",
+      "sha256": "f33e162448b22f86cd8a68a364ce213a880ad5579fb5c7c157706e9ce68c521d",
+      "bytes": 2796,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/context.hpp",
+      "sha256": "1e6e6191060430c0bb91c04da7509eaeb7dc4d15664e3f3346835f5a251cbd3e",
+      "bytes": 6742,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/decision_models.hpp",
+      "sha256": "b54bd9eaa5995bd5ee0437491bd83f48feb84f5ec290d817ccd3b92a8aacccb9",
+      "bytes": 1006,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/display_text.hpp",
+      "sha256": "f7dced5b8088a45761deb733ed1b40f5fc1b8a98b8cb8fab871c5590438bd11f",
+      "bytes": 2229,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/environment_head.hpp",
+      "sha256": "15e44121959c6a7bdc2ddb937a58ed4c030281e19c1b53fb3814c513177ab580",
+      "bytes": 3163,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/file_effect.hpp",
+      "sha256": "608882d8a6519e5b332482a512e9797c8987409054562cbbf57292c27f5d497c",
+      "bytes": 929,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/foundation.hpp",
+      "sha256": "30f32138b09d11971802cec29a47c643597e7656226a1a94bf0b7352664f0a7c",
+      "bytes": 10550,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/journal.hpp",
+      "sha256": "e4629c2a3ce92b5ea01812168efba55706be7f1bdfb9c2d3eca436eef3a8067f",
+      "bytes": 2489,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/journal_storage.hpp",
+      "sha256": "6da70fa1fb2a180219733db05f07a042a1f0d5a7fb149843cc5ab9d8c2abbdb1",
+      "bytes": 6742,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/journal_writer.hpp",
+      "sha256": "ec70ddf838366566663aa4014a6f7e90b9dd6b1b69b8f6f8b6fae2f31c996327",
+      "bytes": 7821,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/json.hpp",
+      "sha256": "4ab4543645df463e7e7828cb278732b2e391a1c0f1e57351cdf9046a6e0d339e",
+      "bytes": 619,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/local_timing.hpp",
+      "sha256": "f98c24656a7acdb58482e875d68097fc28b2d9f6645e97db45d322a40cd5c90c",
+      "bytes": 6302,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/observations.hpp",
+      "sha256": "c523bb8a35c1e6c3284608c254612e2b387d6a8c28ac9408a71abcf842525718",
+      "bytes": 1184,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/openai.hpp",
+      "sha256": "b6b5aea382bf172e2fa86b0bd413adf33ce889318773f5af4083a66707940b49",
+      "bytes": 2766,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/openrouter.hpp",
+      "sha256": "b462d30e6ad5621456613dcb499148f8cc5d45899a6a12e9c2bcd0cb7786ba88",
+      "bytes": 1442,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/packet.hpp",
+      "sha256": "4acb42f9f927d278a73f2a52c523a21a7b2d31491825b4079803b813d08033b7",
+      "bytes": 826,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/participant_observation.hpp",
+      "sha256": "006e1eeeeb90c4c4f9d5cf6ed5955599b851656e7f1e31aa82f1f2111ac596ab",
+      "bytes": 3679,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/participants.hpp",
+      "sha256": "0731a04655a6684015b9e40fbdd91980883fb5d5ce90c313cef856ac4f3b40c7",
+      "bytes": 2460,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/process_lifetime.hpp",
+      "sha256": "c200c5405bddee903440a8d9299ef1fd086b47f5ff9b357dcae9d66b217d47b1",
+      "bytes": 640,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/provider_auth.hpp",
+      "sha256": "e98b06e844f77b97e478ae115f6fd5f62ba7fca64c6ef5c115f0d16297ac0052",
+      "bytes": 5124,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/provider_original.hpp",
+      "sha256": "139266fe82e5398f261dc9f7271d72f144287876957b71be5b5c0c1902daff1b",
+      "bytes": 12258,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_audit.hpp",
+      "sha256": "611200fbce33d65b277a94db9169d3f4a13ac5187600586f3c98e298694816a6",
+      "bytes": 3947,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_auth.hpp",
+      "sha256": "181622562698170e85bb63e6e2a3630f158e72b17c0a2b4cee10ca9103ae6c86",
+      "bytes": 5454,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_authored.hpp",
+      "sha256": "4fa615b44df91fdca57b49e2a440a52308a9e3085893876209115b0f40b1131d",
+      "bytes": 1387,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_backstop.hpp",
+      "sha256": "50de917a900fbd4cb65ad7ac0f23e8e4d928b5396ff2ba366555f3e274063e00",
+      "bytes": 137,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_beads.hpp",
+      "sha256": "131c33b1afcd748a666c23b9a5932605b428e3bc23600b95cf080c3f64a148bd",
+      "bytes": 5297,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_bridge.hpp",
+      "sha256": "27f525d988fe1dbad7058ca3f3bf8497bb92a7c69ceceecf497faec9a49e3256",
+      "bytes": 3343,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_caller.hpp",
+      "sha256": "5202a9b750f39c197cf290c5e1dee51f036c5553afabc7566f2e0751a2960d37",
+      "bytes": 6438,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_candidate.hpp",
+      "sha256": "9c84d66290a810f7c2cd2b443cb7014b862a678507ec7b84b8f5f5e12f338131",
+      "bytes": 115,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_channel.hpp",
+      "sha256": "31c65eddbd3888c4ecbd9ae39e058fb218355284599d4c0a020250a63a7dc161",
+      "bytes": 7918,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_command.hpp",
+      "sha256": "8d680f2bc21707ce33631eb91de84412950edbb1ab3498acfec648871637d874",
+      "bytes": 6193,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_complaint.hpp",
+      "sha256": "addace9151f41ff55314c4f89bdd7adfb57059ee8616ce39accda181336e8d07",
+      "bytes": 152,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_context.hpp",
+      "sha256": "3b40a10723e3bd8a7ae4bb903ca2388e944fa5b667c396e2a701388daf9bd404",
+      "bytes": 6268,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_file.hpp",
+      "sha256": "30b0f3113470ec0099e5bf12404710cbaa0a83b524e99abb8b45fb7afc673ac9",
+      "bytes": 4638,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_format.hpp",
+      "sha256": "5e18928b888e0b13aa41c25e9c3ece27a7ab32d569d8051904ae8ea8b0c9f9e0",
+      "bytes": 533,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_input.hpp",
+      "sha256": "a70beccae4df36b433e098a54a8505ec7fa770fd0954443118ae60f22e4ea59a",
+      "bytes": 615,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_operation.hpp",
+      "sha256": "897435a2b5962ebadb5006288ed6eac38f81dc8998d8915088e4e58acf6d395c",
+      "bytes": 4961,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_participants.hpp",
+      "sha256": "84287cf80c40d08d4172e57d4b36abe749605c5b914fe14f44191b7e558a2e2f",
+      "bytes": 2531,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_plain.hpp",
+      "sha256": "0a09efcf149ba88e54ff47a6fc31fc59e09dcf2966767fd33c97a5d5ae029f39",
+      "bytes": 3433,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_program.hpp",
+      "sha256": "259ee1827e80b0bc2aca4f33e8b89a129d87dc8da65b20b6673502cc0b4d0c2a",
+      "bytes": 3705,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_provider.hpp",
+      "sha256": "4999aa5ab5a650c9353ef9f2ec7f26c9966197b888efdc086c83413999d49812",
+      "bytes": 3716,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_query.hpp",
+      "sha256": "cdc52e88f184071576e0d2fa07d27b61afc1a2fcc87c6dd99c8b02ab7fa62e5c",
+      "bytes": 4240,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_reader.hpp",
+      "sha256": "c985aa3228bfec7a8f071484fc54d73631e6679b840b509c72edb1854a729b56",
+      "bytes": 2947,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_restart.hpp",
+      "sha256": "765b7ee1cb6b29ef5a5bbdce06977d03139dd8c4c50621c412032b336fa2d879",
+      "bytes": 2889,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_retained.hpp",
+      "sha256": "c3221bfd9fe8dafcd6f0df7cb160a0dd025fb61da410741ec42c0d0acbfe35f3",
+      "bytes": 13301,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_runtime.hpp",
+      "sha256": "bb79a07b03b6946d635c6120cfbcc52b3fd2139785fc469627569d1f4864fca0",
+      "bytes": 6007,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_sampler.hpp",
+      "sha256": "8907354a73f443a6c4cda8c0204b459603e292d3bd373a5eddaed92f17564a12",
+      "bytes": 2209,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_session.hpp",
+      "sha256": "e1489fcbcca4a91ca3e657d7e07b0b781221eca767bf437e3d87ab14bb81d0bf",
+      "bytes": 3208,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_station.hpp",
+      "sha256": "1fcd890beea4976c70689dd6f4c5aff922c215462fa131b01bbf71998c9387ba",
+      "bytes": 113,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_storage.hpp",
+      "sha256": "df1ab220bb0ce3fa55de94139d51518dbd1459745ae937e08fb096874d562a3f",
+      "bytes": 14240,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_tasks.hpp",
+      "sha256": "b5c8107b4d732378a3c096ff0dbf849e6ac861fe44a5771a4e37fcb8c008d243",
+      "bytes": 2223,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_turn.hpp",
+      "sha256": "1f0168f2343eea1f4e179a9329b690de10e32aa0d56c396f19630b2fc13b8dac",
+      "bytes": 5009,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/raw_ui.hpp",
+      "sha256": "16bea6201eab5eceb28406b1cfb95835794febdabea11482d6d7fb3abb100c3c",
+      "bytes": 7170,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/recovery_index.hpp",
+      "sha256": "3f9d39feb1ea6c03d2b99e8d186176458f924ab995803441a22e36867d1f23be",
+      "bytes": 2836,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/request_cache.hpp",
+      "sha256": "29c62841e688e9133c882eb6fe84f52025597e497526a6e246d526c731e81709",
+      "bytes": 686,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/responses_provider.hpp",
+      "sha256": "1d8d6d479bae4acd0e0b26eecc5aebdef3f9977de0d196724141a0716e861e03",
+      "bytes": 1445,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/retained_environment.hpp",
+      "sha256": "09e92d17e5c157250bb18f0a598e8f95a74d1b00e25ef9120aecf2ecb5e592a1",
+      "bytes": 5316,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/retained_events.hpp",
+      "sha256": "b3d3eb63c8aa5425e2861ee5a85c62a38ed1694a3501a26456bc17d1d04cc2eb",
+      "bytes": 8912,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/retained_proposal.hpp",
+      "sha256": "07b13f3ee71caea761596ea64645b61d5fd978758bce2f41cd178352f12a5c62",
+      "bytes": 789,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/retained_state.hpp",
+      "sha256": "e47458c78dc1a7e4a26f1cc2f56b1f3c187db3a10ae158880fc5f2d7729e1d31",
+      "bytes": 16305,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/saved_state.hpp",
+      "sha256": "c133bd77226aaa239855bb9994551318ca9b1f351ba298e83d109c0274d74f2a",
+      "bytes": 1050,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/session.hpp",
+      "sha256": "4bbbb7ab0d624c5a944db0038f8a777ebe86d38c24a55a437de255fd3cb95088",
+      "bytes": 1412,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/shared_sequence.hpp",
+      "sha256": "dcc047e59fd5fa64cb6a9bf0c1f267f50223d058ec24c11b0f26ca9bc2d96ffd",
+      "bytes": 5414,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/sprite.hpp",
+      "sha256": "dafde5a83cd3477e1c3d5bebd2c3c726bed2d0599828ceedae90b9319942bac3",
+      "bytes": 1221,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/station.hpp",
+      "sha256": "f1e63af9e1fc2b611ae17c57ed51ddcca75b3a6e7e2618a2e02985c51b5f665f",
+      "bytes": 1394,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/task_observation.hpp",
+      "sha256": "df3c49ae4e55e170835b69d16dc5a07680153274a4bddf765f8d097a5240cf1a",
+      "bytes": 2276,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/task_view.hpp",
+      "sha256": "6ce43bff5d73cad43e042624dcb080a299e9db190f39c367d59f6a012b8a3989",
+      "bytes": 421,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/tasks.hpp",
+      "sha256": "fa0d0a3c40d5c1af1369fa63e88fa5eb04e893c29fa3cb85f4f91915e9869d4f",
+      "bytes": 3229,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/terminal.hpp",
+      "sha256": "e1c7439e8d91d1c91455497d62f4ffaefd4d4655f9ee040468a950e2cb20f87b",
+      "bytes": 7850,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/terminal_custody.hpp",
+      "sha256": "ea433b8b95de367eb89223188a6a0366e324d2b2c8d569e4a32c60e83474dc5a",
+      "bytes": 2150,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/token_usage.hpp",
+      "sha256": "663a098d5035a0f4c4d1c6e1546f199b4403f1cbfd5bc6f2acebb58fc9234892",
+      "bytes": 4471,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/tools.hpp",
+      "sha256": "126ef973c94c9fe194def84e3885adbb3a16c16d3005d555daca87a2c6df70b9",
+      "bytes": 2282,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/trace_archive.hpp",
+      "sha256": "b05d69baba62be15642b590d8013af3bb1bca4a6e7c6f490463072aa689cf897",
+      "bytes": 637,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/tui_action_bridge.hpp",
+      "sha256": "1d1f90f4eb73bdc174f078a127704ed547db6fcb2897476c55f27f25543918db",
+      "bytes": 2104,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/tui_components.hpp",
+      "sha256": "dd3c9ae9fd43d8269fb19c1f17d97712b8d45fde1e16b648280c642690d147ae",
+      "bytes": 5090,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/tui_inspector.hpp",
+      "sha256": "0c9b21b318faa51c31bd95469145b5cacb915dbeb3ef2cfeb3cc5678869ad3cf",
+      "bytes": 2491,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/tui_instrument.hpp",
+      "sha256": "42c17c9242d42f816650632773b48854f7349d3e8aa338d748d0b1c30993a629",
+      "bytes": 1486,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/tui_lua.hpp",
+      "sha256": "804f91a9d4801893a6eafac8727ec734efd495c0b3b8479dd7f5520b352e799a",
+      "bytes": 5164,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/value.hpp",
+      "sha256": "98067a694a49dcfc67a0233d682551b109ae4b646ad5a0f9d863b891cd73e793",
+      "bytes": 3692,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/workflow_executor.hpp",
+      "sha256": "7a5b60c927fba2dc6bdcbd5ad3814154ba3f30607a399a715ebacc0c2b0f177f",
+      "bytes": 4857,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/workflow_host.hpp",
+      "sha256": "0b3fe0a2052fb0249fbb31ba7e279da8d1277e0f611c059de38655e56e00bf45",
+      "bytes": 2339,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/workflow_join.hpp",
+      "sha256": "53d5ec83345e20abf89e18c15b2e0c6a01a02179390b4e2d74124c103adb7e37",
+      "bytes": 6160,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/workflow_runtime.hpp",
+      "sha256": "c9068c8d64dc6b597b21c8f2398ec269d0232fe999bef580f5671c73931d6b1a",
+      "bytes": 918,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/workflow_store.hpp",
+      "sha256": "f74d451058c21efb73fce542cd594d027eee17484f72a00caa130fada2abb262",
+      "bytes": 3710,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "include/blackbird/workflows.hpp",
+      "sha256": "105209bccbc7c6a15c4b7c64c7ad5d49561b212d4fdd2346f3727d4896b57cf8",
+      "bytes": 1628,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "programs/economy_pilot.lua",
+      "sha256": "08f702d00e079cb0b5cb8d113b5a7a8e060efd0e53f24311edbac5294624bb35",
+      "bytes": 3834,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "programs/instruments/results.lua",
+      "sha256": "89c85f88a915b32e944bf43d6c4e4f988553f2f7606d5cdae3e29da89a16868a",
+      "bytes": 562,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "programs/maintenance.lua",
+      "sha256": "47026c6e21d39d8ff0a2fb4cfe55427ab137203501f640fb1e008947ee59d3ea",
+      "bytes": 929,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "programs/orchestration.lua",
+      "sha256": "13f8891697112dc5166439227f6e89897e97ff11da68ffe75e66e9f9db0b1af0",
+      "bytes": 5901,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "programs/packages.lua",
+      "sha256": "98275fab415b6d576f6e0707f2eeb50df7d6e15a3bf2b9b7f23c92a4bcee9227",
+      "bytes": 7555,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "programs/turn.lua",
+      "sha256": "44d9a6595e39dc4cb46a86e8e8c21ce1ef59fe78084f5ef101aa9cf9d3ffba3c",
+      "bytes": 1552,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "programs/useful_turn.lua",
+      "sha256": "28534357871ca1f534cb832a595927b3b70678759ed4ed9f4a32ec41ab9f7430",
+      "bytes": 1163,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "programs/useful_work.lua",
+      "sha256": "69e76c6e99daf3e6be7557cc336a9a1ae1db35eca03245d007af798ee7762689",
+      "bytes": 5953,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/acquire_references.py",
+      "sha256": "706267477a6f474a95ffd3e3bbfea4afde581e520f334053b1c9fe493c0738ec",
+      "bytes": 12677,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/arco",
+      "sha256": "3b3fab968da987b8673e9f529462264e1ded7dda8d3b47c5231d5e2c3d880c1c",
+      "bytes": 180,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/arco-phux",
+      "sha256": "328e197d1d3da96db0411ceca30e4febd2e1a110c1b5dd7d37441d20d6c854ee",
+      "bytes": 132,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/autodev-profiled",
+      "sha256": "bfbf5f3d32ed3cb7288d0b32f64200576d8afa9b4a951964d8164c5fe9d579f6",
+      "bytes": 3888,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/autodev-segments",
+      "sha256": "12bcb165e0da12b8c8475cd5bc72db01a61fe3a228c6132d6f46258b3aa4e4ed",
+      "bytes": 1078,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/bench-terminal-edge",
+      "sha256": "ba06db9f2f6624ae647a88fcbf241f6fee1a6689d9bdb1cb19c167a3f6c83854",
+      "bytes": 14811,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/bench-terminal-edge-report",
+      "sha256": "078e94684c8618185221bf62acf9aa88668282804475135e768437290ceeb87f",
+      "bytes": 9566,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/bench-workflow-host",
+      "sha256": "9ee90916a6663571bd46e712df6ad88a4af47ad0156536b58a4a4b19a5156338",
+      "bytes": 22206,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/benchmark-agent-startup",
+      "sha256": "4d3225532bae81ebe2d0cf6723d96d4e8d7905c65e80c975107cb1e5f8e0b090",
+      "bytes": 15753,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/benchmark-startup",
+      "sha256": "ead4999d23733fea620651dcee1b2609165e5dd009c6d177bb0764dff70e781d",
+      "bytes": 7243,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/blackbird",
+      "sha256": "b4b53d22dc6f0e90de046bb37edee58c2624378f7908cf65f627219094b99d61",
+      "bytes": 3126,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/blackbird-phux",
+      "sha256": "0681b2696b3dd844795c97130bfa22267f8479ef626976e26a0a29f126248c09",
+      "bytes": 1000,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/build_capabilities_page.py",
+      "sha256": "eafe472820e772ae24f405088fab0210f778dd4cfab5948c678376a63793037d",
+      "bytes": 15843,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/chart-agent-startup",
+      "sha256": "da7b885f15c4c35c7c28df3b55a09826034fd0b45b4172a3951f7114a33e1ae1",
+      "bytes": 4659,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-application",
+      "sha256": "5b7eebf11c4c0103fa9be5cd3d196ff1204e91b8f51eeab5efc9d74b85971942",
+      "bytes": 2625,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/check-command-jobs-pty",
+      "sha256": "ee02f0318b3142ec7b0748cb74c0a1b43a9b5bc2d7c7dbde9c4750aeff60ae39",
+      "bytes": 29771,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-command-jobs-station",
+      "sha256": "29d4ebcad280c030db377d4831759da907080b6d937ec6d666b6d52781b0213f",
+      "bytes": 6249,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-display-text",
+      "sha256": "e31fbce307bfde55e7fb6ee896132b998935a24aaed9bf76b74110d03d79a959",
+      "bytes": 4673,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-foundation-api",
+      "sha256": "052abcce28180fa2c69de3fd4afb530f7f1f1359ac73ce316ae537be3f0ec94a",
+      "bytes": 2993,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-linux",
+      "sha256": "25773fd6b52c6d33203b830e7683eb70b1b6acec402c60f54686fd3014865f0c",
+      "bytes": 7356,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-main-input",
+      "sha256": "6beeb407a8c79e4dcc726325e6cd67aacee60c7377a8a15b39a4aece76ff9f1f",
+      "bytes": 9392,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/check-new-session-pty",
+      "sha256": "d2bc572f88d6f5c6fe459e36cfa3c843f05c26c5a0b998e220d106cf54a82a22",
+      "bytes": 9222,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-observations",
+      "sha256": "9ad1aec59b9ddb0d4558f8585d00a2c7cf9f7b64a9c96dce6b124e8bb7f524e6",
+      "bytes": 3512,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-openrouter",
+      "sha256": "b5f982fa9b37ccaa2d69adaaa05458b46f301370858ebfd455a22533408d94ac",
+      "bytes": 8112,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-participants-pty",
+      "sha256": "94ab53bbf63124a1b0566a215021f1f42c1b61520196ee01076cce605a7edca0",
+      "bytes": 6903,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-provider-auth",
+      "sha256": "d7bf387254844c4719709cbfe7b9d55f6ed50567f7b3935d48aa78d87dfbfe22",
+      "bytes": 3991,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-raw-capture",
+      "sha256": "57cc1d331499a5e571d46135c31a61a6471cddd3dd4e25239198bb420f1d8ccc",
+      "bytes": 5753,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/check-registered-responses",
+      "sha256": "8ac9b0919477f908c9880690885fb1fac68ab5e73e263a107e8759fa2faa7d0e",
+      "bytes": 8867,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-rrc",
+      "sha256": "beafc16f83f146ff71cd5f8db8a4276c414ca63cd1cf085704bf456c3b736d6d",
+      "bytes": 6825,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-session-startup",
+      "sha256": "3bd922bdccb917ab406c133b07ca19c86ed6180fdc8f29e85fb42529cbd4e072",
+      "bytes": 6123,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-tasks-pty",
+      "sha256": "5fe745faa1497cc72eca989e270dcc4b266bfeedaee822d2ff12b511581984ba",
+      "bytes": 5838,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-terminal-blocked",
+      "sha256": "2d15839cab8d1c76e70419dc0f3ecad4075cc7437d6fd2a9c33b3afcff006385",
+      "bytes": 9338,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-terminal-edge",
+      "sha256": "291ff119f641d62fe38f32fed04b886caa868995871f2d7755f7f86a905805dd",
+      "bytes": 12076,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-terminal-pty",
+      "sha256": "c46ef9666501c8a788d32ff218bad7366a1c67d40f15ce5ee27c945fecb9e3f6",
+      "bytes": 37404,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-tiny-terminal-pty",
+      "sha256": "fbc515f8372a3a91654df61a234e2e202d88e49d482a43f84be27a4d6619390b",
+      "bytes": 3780,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-trace-archive",
+      "sha256": "1109805e9bcb7e6286e333932042e4e37336013ff9529ba73e1aa73d7c8317ab",
+      "bytes": 10843,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/check-trajectory",
+      "sha256": "ce7441feec2e0fab68a7ab4c82a6b6a120b54121a27dcb23264cf87aa55844c3",
+      "bytes": 1669,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-tui-center",
+      "sha256": "b325d006da97ccaeb99ed86e53d94e462e5cb01d15bc8fd4b84f1e3d9a9f5717",
+      "bytes": 16309,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-tui-inspector",
+      "sha256": "610bac95a2a1f38efde4584a3bff9f249feed9389d5629243cd0948017c0d30e",
+      "bytes": 8050,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-tui-instrument",
+      "sha256": "17fad3c1cf47ebb4b256494d5d67cdbeca54f669347bc045edce6035c1b534d6",
+      "bytes": 21377,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-tui-microsoft",
+      "sha256": "7a75019769d31519f932d1b881b78b0518c34a76224ff00a2f229cfe0eec38ec",
+      "bytes": 9929,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/check-tui-viewport",
+      "sha256": "c1e2b5740c9673f13f9b39319620e04ca0ab5025e919383fb725f0c364cd5231",
+      "bytes": 14731,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/clangd",
+      "sha256": "8f9d70df222378a93660d04f83e48e6a40e7474956709813512f621335abf126",
+      "bytes": 96,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/ingest_zip.py",
+      "sha256": "54fcfc15039335febaf67db0079b5cf01c02c335d02fc3e65cc6d4e1531312ef",
+      "bytes": 3066,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/install-hooks",
+      "sha256": "8c8e89ad61ec0965feaec3e0bec56a59094f09f07cb43c0209dffd4165124848",
+      "bytes": 224,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/issuer-single-baseline",
+      "sha256": "f182d39b9b235edd60e07fb16e018deaeceb5de3dcfeb2e4a88b6c266efb6f87",
+      "bytes": 1972,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/jev-check.py",
+      "sha256": "2e8720f70f68ca873df9960f8a9c6b0ebff72dc959e906ee5117e34681ddc91d",
+      "bytes": 6335,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/kimi-review",
+      "sha256": "84405f39a8c0c574b7e9ed22e7df11b40502f1b300bf09cf84f2d15642f9ec30",
+      "bytes": 7539,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/native-packet.py",
+      "sha256": "cd860602d45d79bce20d43eb1e4cce855c20d015d8f5e82c1d7940c2ddabcaa2",
+      "bytes": 3795,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/profile",
+      "sha256": "a957c1b382260e4441fbc12958e1dc61f55b3011d12b22682f2ab1a01a13821d",
+      "bytes": 7472,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/profile-autodev",
+      "sha256": "3d722c64af409054a94e50e6b172ced9fb74014bc0def2b9b02caeac7779f78a",
+      "bytes": 22135,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/render_capabilities.py",
+      "sha256": "19409a84078597afb88168dc46fe846a06bf1172e66144baf8d6280aa4bc0f61",
+      "bytes": 18800,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/rigor",
+      "sha256": "e5cb29cdf28329f62e455eaefd3269ccfb4848b0e2dd18d2e984d58fdd8a5cf7",
+      "bytes": 13330,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "scripts/terminal-screen-oracle.py",
+      "sha256": "1eb8479a7dd0cd45146355b64d777b50bd392f556e8ae4431390eefcc98a6b17",
+      "bytes": 21219,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/test_acquire_references.py",
+      "sha256": "2c9fb27d317a0508f35a28c64408ac02840b476bc6820f0ab0f4833dfa32835e",
+      "bytes": 5627,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/test_render_capabilities.py",
+      "sha256": "d67c5a6feef33273a11ab1935839855b6e4143f4f4a1092c1858e72432043259",
+      "bytes": 9321,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "scripts/tui-test",
+      "sha256": "263893dbe1028cf843a3a77a00a83d05f8e3b22e9d4ed614c7ae9f0929386bfb",
+      "bytes": 4588,
+      "mode": 509,
+      "executable": true
+    },
+    {
+      "path": "src/admission.cpp",
+      "sha256": "0f6998d1a513260ab28e7d25029822b5f996b3afa6e1b1b87d3735c513bfbdc8",
+      "bytes": 937,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/application.cpp",
+      "sha256": "19a32013853c5a3f1f5d4c19f76f7dc388f65ec0d0036734e15cd78357ccacfb",
+      "bytes": 11618,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/archive_catalog.cpp",
+      "sha256": "193c0e5ea8255d3b7314c72ccec517125233bfb1edfb2ff16dff70a4f1d11d5c",
+      "bytes": 15745,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/audit.cpp",
+      "sha256": "6a2970ebd67fed14d8802efd1373eb05bfad08c9855675a67e17bbb63abd4525",
+      "bytes": 26392,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/auth_main.cpp",
+      "sha256": "9f22aa52a368b7a79eeeaed927358296bf67d2d83192e460b333928aa72223a4",
+      "bytes": 124,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/backstop.cpp",
+      "sha256": "2a8ae6635c032cbe6242fab3257431e3751e3dbb55cd0620888bef9c48a922a0",
+      "bytes": 34986,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/beads.cpp",
+      "sha256": "2df0b47ad2f46948b75c0fd9cc41ae866db518310c53ac6a9f493b710d3225fc",
+      "bytes": 24867,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/candidate.cpp",
+      "sha256": "1417bae9f6dfc4a26ad4280ff4d17711ed70e528ba0fc2344c2dcab07f714160",
+      "bytes": 57868,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/chat_view.cpp",
+      "sha256": "df5a2f1bebc27232e4c7bdbd423c73abc06dc59fa791bab5b7c2f26ac257183d",
+      "bytes": 29565,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/coding.cpp",
+      "sha256": "0bec25a134f6f014b03720ad277f7606f88a0210d39fb17cd0716ccb5320e6e2",
+      "bytes": 272752,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/colleague.cpp",
+      "sha256": "4c46f84236f3d24bbd091455814d9068a8a7622a65e2559c4fddb944f2779365",
+      "bytes": 26691,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/colleague_main.cpp",
+      "sha256": "b473ef94aa0ad60124c3be48d45e03155d9b075e68f75d4d1e470804f14a2c22",
+      "bytes": 3032,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/command_center.cpp",
+      "sha256": "ba553ddc224fee809575f6f70b7ac0c289075b0ae211a0c18f8ac23500c71d0c",
+      "bytes": 38634,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/command_inspector.cpp",
+      "sha256": "67cdee0879c930e0e08a90dcfc414b2ccae0b1b3f3c72a494fe18acd13872d0d",
+      "bytes": 13766,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/command_job_runner.cpp",
+      "sha256": "4cf6c94b30ebaf8710ab65abc3943603e6a0d498ab5ae46febd574002807235e",
+      "bytes": 1939,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/command_jobs.cpp",
+      "sha256": "dce2933b15565754cad29a5dd50654fc9754f8bbf09b58c8d54bc475052b3508",
+      "bytes": 108403,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/context.cpp",
+      "sha256": "674946c5ec8c829b010f259dc6eecad1c852f922b42a40c5bb9276b893f91553",
+      "bytes": 77818,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/decision_models.cpp",
+      "sha256": "fbf98a94249eaaca4203f408eb426c9723a3db18fbef4a5d2f65be33650595fc",
+      "bytes": 16867,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/diagnostics.cpp",
+      "sha256": "800240790233c7e4686489469e4cc49ef7e43df41b6e96f777f4831d0743d368",
+      "bytes": 11281,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/display_text.cpp",
+      "sha256": "f6340654611239a1fd7dccb60d62445e3ead4c9e25d34d64de369220ee79ef33",
+      "bytes": 6232,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/environment_head.cpp",
+      "sha256": "086299377e82f1821decaded00146ba1403a2e6d4cc743001147138d792454c1",
+      "bytes": 21267,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/foundation.cpp",
+      "sha256": "355163190da37b2ce643d53418e0a97bd94aba9481d5200967e2c0d9b1595e5d",
+      "bytes": 6236,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/journal.cpp",
+      "sha256": "f05b488c058e9d4c0b8e3cbaabc45f05a3b8dcd8d7ccff591f8103dc3a98f22f",
+      "bytes": 13036,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/journal_checkpoint.cpp",
+      "sha256": "41612b7c0109d09f1547065779b511cd5117bdb6acde750fb416f25e88d77394",
+      "bytes": 13789,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/journal_storage.cpp",
+      "sha256": "a68005d9a822a03a91a419fadb8381075d0edfbcb5e1ca2f88056180a52cd7d8",
+      "bytes": 26775,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/journal_writer.cpp",
+      "sha256": "5d01bfb4f90999acf7642aca485e9415a00927231434bfd13bbf0c3bbcf0a92e",
+      "bytes": 53232,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/json.cpp",
+      "sha256": "81851468f5da5d9422babb094ba43652443951b9a0cd9f234545d9d8d7406bf8",
+      "bytes": 16003,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/local_timing.cpp",
+      "sha256": "c91b0c118247b1eb6ab95ba2ea077618a0370556d5e92f8ce4d0edcb7d4872e3",
+      "bytes": 9317,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/main.cpp",
+      "sha256": "0de8084c0c8453b1fff67cc1a9391b7f20a0703cd040f2bc1c5ceaaa7ada4eea",
+      "bytes": 86006,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/native_process.hpp",
+      "sha256": "0d99fb498b2ab47b53a814cfc949ed7423f434e5c1572f660ed89a413be4f37f",
+      "bytes": 22005,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/observations.cpp",
+      "sha256": "31cac47624bd4e32d26d11acda5ec012cf671edda77f2b702a7f3d9e22b1addd",
+      "bytes": 15573,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/openai.cpp",
+      "sha256": "84c1055a3b9b2dd5bd1966c22fba42f21b8a3d12616615488f644e60722526fd",
+      "bytes": 26852,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/openrouter.cpp",
+      "sha256": "f3f7f1654fabb511b5b194c53c6c1534a889d0c66b0bd45ccf010c2d895647a5",
+      "bytes": 10208,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/packet.cpp",
+      "sha256": "cea5d2881cab583c218b4a68ebf4b7335df05e3cd304ed492a0c99c04a396525",
+      "bytes": 16855,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/participants.cpp",
+      "sha256": "9e7a2895f0483f27243339bac50499298347623998b97be1b273ff4cb4b06455",
+      "bytes": 73711,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/presentation.cpp",
+      "sha256": "3beedf26899f8a724c0af78dc972e223ee6324bac02005522be9534720c44e55",
+      "bytes": 2508,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/provider_auth.cpp",
+      "sha256": "30ff29b49da0cdea38ef3c36677fa5005a684a1ebc0236f772aef172c3b7d70a",
+      "bytes": 59335,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/provider_oauth.cpp",
+      "sha256": "9ced131d386110fc9d8a76f65fc3a5013cb0c9d6bd6b5a4803f88cb22aeddb4d",
+      "bytes": 34533,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/provider_original.cpp",
+      "sha256": "6c80220be972fc1fc0717e339164e60c78035d1f9a648b6a8b62faa0b2ea05c7",
+      "bytes": 19541,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_audit.cpp",
+      "sha256": "75833bfaaa68acc3668a05e8e62e5c10518745833742dddb1870b6a031666945",
+      "bytes": 22517,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_auth.cpp",
+      "sha256": "10ad9c567c8d76a3ff0c8b7d131112aac28ca10e20cc77df93c455e88ac87760",
+      "bytes": 32878,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_authored.cpp",
+      "sha256": "07a37d1534ecfcc007b90a5d894b685ab8eb9b29f0bcd457695e51b4460d2a6a",
+      "bytes": 6251,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_backstop.cpp",
+      "sha256": "8a8e601adb1296dfbfcdb0936356015de255fbc4a5ace247e34765f8865986e0",
+      "bytes": 3135,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_beads.cpp",
+      "sha256": "498fb4a8fd1a325daccb73f10a21875772c390279f8ed63c0eeaf1555c1a77f3",
+      "bytes": 8430,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_bridge.cpp",
+      "sha256": "b829e2ca87398ada84fa4de7f7ec92b8da9606ea1b911233374bb22a33cd453e",
+      "bytes": 9579,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_caller.cpp",
+      "sha256": "53573ccd1fefe3bfe83c91825196b12315e78e7ef3d55d8ef3f294eb58ad6a1b",
+      "bytes": 10751,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_candidate.cpp",
+      "sha256": "2b00008c994688eb7ddc1b348053ec34384b3f26bba37abb1f8845f88bb56a39",
+      "bytes": 6903,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_channel.cpp",
+      "sha256": "b345b95c5750a43e2de6874b2e0c3896713d8974cbfd9c8e75ecd55ccc4b500b",
+      "bytes": 30685,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_clock.cpp",
+      "sha256": "16be21fc736c7ee8da9c1d2c3b5e994d45a174624d806f49685ac993b838e9e5",
+      "bytes": 679,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_command.cpp",
+      "sha256": "3ea4a244530870e1d9d787cfddc9e2592c9a2ef7570ccb934ce99665cf9975a0",
+      "bytes": 32703,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_complaint.cpp",
+      "sha256": "389167841e4ee67bdbac7e06ba5a4fe8b41c43f2f258b61113f5cf4f967c81fe",
+      "bytes": 1960,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_context.cpp",
+      "sha256": "fd8cd37f83d1d1acbd0f539c01bb312da4bc922bc96bcbeadb537c0ed841911c",
+      "bytes": 17054,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_file.cpp",
+      "sha256": "f7b41cb6118db62a7d9a533ee6f4abf4e2736e21f931025e4ea063b1fc4e47b9",
+      "bytes": 45627,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_input.cpp",
+      "sha256": "1edab150c1baa6aab38772c63225a834850c35bf192d8799a332c6a523d16fdf",
+      "bytes": 5227,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_operation.cpp",
+      "sha256": "a6c5cea835b81bd1618debdd64f2f985d7328e7a5c08b8e4713fb965c1243f64",
+      "bytes": 14992,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_participants.cpp",
+      "sha256": "de657eaacf4b03e060b93d998aa693aaaa8d0f19c8d931ac763e845a309ccc0f",
+      "bytes": 7636,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_plain.cpp",
+      "sha256": "c80b2c92e9331be57f5c142c1d108956ae31c3d1276f1092890a80057f1e2aca",
+      "bytes": 4832,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_program.cpp",
+      "sha256": "4f07320901ae4405696ab25649f5f2934612a03d8171ec4d2c5557bb32f32f62",
+      "bytes": 11268,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_provider.cpp",
+      "sha256": "534e1919d68473bcbabcea9058999d1d93437d69ff873f118b8d6008cd9d9eb2",
+      "bytes": 16111,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_query.cpp",
+      "sha256": "7da45a9b6f30ff8629583a7970d281e234ec2d01b3b85782b8eca21232089ed8",
+      "bytes": 11904,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_reader.cpp",
+      "sha256": "4bb952d13ba78668895fe7f2a9ffb619e59b2b7a20570017ccee3f179e09faae",
+      "bytes": 16293,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_reader_main.cpp",
+      "sha256": "3202f7a4cb4ffa75866f0a5c5f1f9d03f75110c6e482c5ffb82572d06faac2cd",
+      "bytes": 5772,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_restart.cpp",
+      "sha256": "05f39408fbb31956349dc78b8349276ce2dda40a2b6d6317e65d0f0bd0cfc128",
+      "bytes": 13794,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_retained.cpp",
+      "sha256": "3e146d4c5bbc166bb3ac028fb5921ff345b6ebe9475e1efb23a3b19df205e716",
+      "bytes": 45594,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_runtime.cpp",
+      "sha256": "4a9576ac39880c593fa7d63732a3bb8157f1b6392e429bec82459bf19513abee",
+      "bytes": 93237,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_sampler.cpp",
+      "sha256": "b84b7bf3715d7a5ae8db1150216918f155c790b54fe540cf09273f522afa219b",
+      "bytes": 29791,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_sampler_main.cpp",
+      "sha256": "c6a7bf34138f8da4cbc41c95412e3b8d5b24b212d43e96f5890be7dce6c0232b",
+      "bytes": 4024,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_session.cpp",
+      "sha256": "9d94ac3b99da325a1802f1a202b271aa641be0fcf63aacca8437bcb03dae907d",
+      "bytes": 6370,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_station.cpp",
+      "sha256": "72cccae61ea93b01075b1e78396069ff32d2a8eac635974bf11f268a69c7ac37",
+      "bytes": 2653,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_storage.cpp",
+      "sha256": "1657c6ade038faaf298f60ef3c9e78dad2bd334c5d49771b95f5cdf5eb09188d",
+      "bytes": 62604,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_tasks.cpp",
+      "sha256": "cfde968b3793175a7b966164ff417455cd3239d0d3ffb712902c46a89451d73b",
+      "bytes": 6577,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_turn.cpp",
+      "sha256": "a49a0438fe0ae9dc134cb5367f932a201561369d895f87f610960d8b3d0193a7",
+      "bytes": 19083,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/raw_ui.cpp",
+      "sha256": "baf0dcbdc19bc99d617bdfa907e620f1165a5a3d9a78b122739175b44c70088f",
+      "bytes": 24652,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/recovery_index.cpp",
+      "sha256": "17bd80ead4ea0df4e67f8da7396b237ba06c48599c7d0073c1b2f1d33d3232b4",
+      "bytes": 18956,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/request_cache.cpp",
+      "sha256": "e618630dfa123c1dae5df1e966df8c76b9a00edc3da86c4bacf3466cf2d63abf",
+      "bytes": 5199,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/responses_provider.cpp",
+      "sha256": "4cd5e16c8a2f7214efe071ec2f3550243e211d6bc9d491e9b279966f808d3f94",
+      "bytes": 6393,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/retained_environment.cpp",
+      "sha256": "8766c232d2363c43d7bb36d128533495818fc0a789a43486358af60d44808124",
+      "bytes": 43268,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/retained_events.cpp",
+      "sha256": "94b8a29ac64a8dce0b46fab20faf8418cf859211483136cd72bac82489acc552",
+      "bytes": 29595,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/retained_proposal.cpp",
+      "sha256": "0551fd7cd500d39fba0e1f035009c0642ecc92aee99860a22234e84c250a36ad",
+      "bytes": 5822,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/retained_state.cpp",
+      "sha256": "90c767d537f1daef9d0890123d22b0b3241e72025b42823abccbc4cb10b08596",
+      "bytes": 145936,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/saved_state.cpp",
+      "sha256": "059e8ec8c8f827864975b49f1c876d9d60b6b09e87989e5f7ef59400b8233181",
+      "bytes": 16425,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/session.cpp",
+      "sha256": "c20a9b7b310ceb9b00abddfed44fc1f6026b5ced010a1dac6822324815d564a1",
+      "bytes": 27918,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/sprite.cpp",
+      "sha256": "e28ec203c4259881db44fe36690f2fdcf0a36aaaab3f9e7a494bf603b11e02c3",
+      "bytes": 7601,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/station.cpp",
+      "sha256": "681a79a0e23bff3b502512de65fad9437bcd8ecf2dc1c8cbfdb57e8256468e93",
+      "bytes": 22903,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/stream_capture.hpp",
+      "sha256": "266b796cecc3c0999b31b8637f6009553c0cc7fcaa304d2892e622c670a848bb",
+      "bytes": 1377,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/task_view.cpp",
+      "sha256": "abbc96527d8edf436bde2955c627a9dfdac7ffa5cdab94aca4bd9112e7c3f9d6",
+      "bytes": 3015,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/tasks.cpp",
+      "sha256": "55ace964a75a50f1e14cd0b543c5aef424a8f7fcc488622c8da18fcaa195fe4a",
+      "bytes": 47238,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/terminal.cpp",
+      "sha256": "4ffa863d49b98b9ebddbbcca7714475bda6787a5dbeaba4852a4c6bac3ab00ea",
+      "bytes": 149664,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/terminal_custody.cpp",
+      "sha256": "1a2e866ea3e7a411d95bbd9c5babe346354816b56d993ec7dcb1e0c72a0307fc",
+      "bytes": 49155,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/token_usage.cpp",
+      "sha256": "839f00125e5bf6b9abd46e2d1eb5a104de24b16eb95a7f04499693774e4ea067",
+      "bytes": 58448,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/token_usage_main.cpp",
+      "sha256": "a629dc535053134cc47a05824d7f30fee3fb45b001ca8abf834bf170e206bb6e",
+      "bytes": 2869,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/tools.cpp",
+      "sha256": "e846bb9a60509dd264c0678b9999f52cf5f9d219e8fd5e6ce1da7046676c512b",
+      "bytes": 72682,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/trace_archive_main.cpp",
+      "sha256": "063f25ab115c99df1237c1b884ee6420184cb35ac1c5c993c9e4b6ef88cfcf9e",
+      "bytes": 32797,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/trace_archive_worker.cpp",
+      "sha256": "e5fb97386457d6b3a6fb89d7dce263e144499211261b024e2672d7bfd7116999",
+      "bytes": 2947,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/tui_action_bridge.cpp",
+      "sha256": "353ccb3743053da25fc4d12b6a1db4331485c8b7919eeef357f8a8520bf43c7c",
+      "bytes": 14904,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/tui_components.cpp",
+      "sha256": "7f5eb55f57d770ec08b0f210261066ac96824c49a8b16834b4651b2315d6ba7a",
+      "bytes": 22611,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/tui_inspector.cpp",
+      "sha256": "a139d059e5fddeffba328af8251fdf8b641ac6f1e5be2a151f2b6262b3a2bb3e",
+      "bytes": 19104,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/tui_instrument.cpp",
+      "sha256": "5bda0393554a88cb1862a6e8e655ee2366d8c835b13d5499db82c422c901759d",
+      "bytes": 36907,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/tui_lua.cpp",
+      "sha256": "ee75018ba65b27186723acf810f8f88ebfe7a312732ed0d6067393f91131b7ec",
+      "bytes": 34103,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/unicode_emoji.hpp",
+      "sha256": "d9ca5033942d07e9d68901070bcee2c9ac32e73f8d20f14d35a529e5c5e6f523",
+      "bytes": 13735,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/unicode_pictographic.hpp",
+      "sha256": "1c0bc5ed0801750282566fa989a77955e55dce33955043d24f8b7526bdbf546b",
+      "bytes": 15719,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/value.cpp",
+      "sha256": "0e5f89b7dcb23f76227995e462737086f8a59f34b09bc04e4d19c52f0fa1cfd9",
+      "bytes": 7997,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/workflow_executor.cpp",
+      "sha256": "d2df9b2d9516b7ddaf4ffdca588602df81f8c2857766db68706fd3848ca0a1e5",
+      "bytes": 12828,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/workflow_host.cpp",
+      "sha256": "9c5ad2efe5924047afd400e455b669e830e8e018efb2350d22db7deb9f1ab0e5",
+      "bytes": 23868,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/workflow_join.cpp",
+      "sha256": "99a5d3f35cd676bb48b0e8d71fa056a7bc50bba466bf9aa81791c752cbb15d22",
+      "bytes": 24720,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/workflow_main.cpp",
+      "sha256": "76b3ba846933752f03f0aa6c054ce48c995b56bd034ec8a0dedf431ca7c32090",
+      "bytes": 8985,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/workflow_runtime.cpp",
+      "sha256": "618958e701f661cc9353e49369e25fff17b9b8f36104523aec08a085b29da40a",
+      "bytes": 34227,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/workflow_store.cpp",
+      "sha256": "0b8604eeb04065cc84d3dcb3028da19fb72c1d888e0e0c1650faa370fc85bccc",
+      "bytes": 24787,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "src/workflows.cpp",
+      "sha256": "bd56551319acab6a8571f364f3c7214e92a3a468f79afe7fc035f2609c8b8499",
+      "bytes": 12879,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/application_test.cpp",
+      "sha256": "ab465acb9eaff5f60b32d365604d6c183041082137b7cfbd14faf4a5d390ea36",
+      "bytes": 14117,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/archive_catalog_test.cpp",
+      "sha256": "3c5aae445e6ab9225d4664137d19533296602d08edb47bd1ed3f1e79b459f329",
+      "bytes": 5331,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/audit_query_raw_test.cpp",
+      "sha256": "de8f920f3cdb591a22b2498f9c06cf45e91d1b74b4748f6bf9a5ac84c6ecf438",
+      "bytes": 49882,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/audit_test.cpp",
+      "sha256": "91446e69cdfe7c9f4e980cbf34ba07d84eb07cd21ba33b53de914b5a6d3251f1",
+      "bytes": 3327,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/backstop_raw_test.cpp",
+      "sha256": "defa79d9ef1454bc6d0cb1075479598a0dac507028ec5567e5d79ab0c43e5760",
+      "bytes": 28694,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/backstop_test.cpp",
+      "sha256": "4a6cc436439771549d145e7591c393087be7be254e6eb46c24e68e9da4572aea",
+      "bytes": 11542,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/beads_raw_test.cpp",
+      "sha256": "68b0a159ed6abbf4f92d6d99428577a6b55823749dd07cfdc1f11f273f4a09b9",
+      "bytes": 69053,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/beads_test.cpp",
+      "sha256": "70d0c193a2006bb0d10957f93545dd9d82f15cc8df77c8014e761bf7eb015ced",
+      "bytes": 13078,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/bridge_module_raw_test.cpp",
+      "sha256": "82d19d902286ec15bec24cffa0c6d74a7e4ba29d746a8f10694c823eae7f927f",
+      "bytes": 41223,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/candidate_raw_test.cpp",
+      "sha256": "5e708ecc7c1e9152f42f6409fcac562e1c839ee2202f93eff236ac8e484056c0",
+      "bytes": 34971,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/candidate_test.cpp",
+      "sha256": "38525fd89e9a36513c42d8c8ece09792b81d2ede2fdecce4dac7aa98df509347",
+      "bytes": 12606,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/chat_view_test.cpp",
+      "sha256": "87e8693e54ebbb256244035edb569be7b6fc7bd6cfd9fe2000ac0e65882c85ee",
+      "bytes": 16798,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/child_custody_test.cpp",
+      "sha256": "72ff4b85446b9fabff14f99d6f3f60476af7df1b2b70e83191166c0a0a1ad406",
+      "bytes": 10062,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/coding_test.cpp",
+      "sha256": "592cef21b6e8e23cfdb49bc44a8f6e954a0d5ed2eeb45606627fc0c9970aebac",
+      "bytes": 78455,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/cold_history_test.cpp",
+      "sha256": "c55cc324453d2ce61edb8ea437c4e6b32803635389d2963f9337dc860bf579f5",
+      "bytes": 6156,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/colleague_engine_test.cpp",
+      "sha256": "d88e3e00f539591394e6f5783f554a7f1f846af26c086b259aeaff1a7e10b40f",
+      "bytes": 8068,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/colleague_test.cpp",
+      "sha256": "b9fbd9f130a04504bb8da7a64f9b3800b25709b731de9a1522c044d09cad9a22",
+      "bytes": 14155,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_admission_test.cpp",
+      "sha256": "b4f03d5f99f312e5184cb574ff026d8c6d6c6bbf9ec71ade34abf542d91c7ece",
+      "bytes": 13667,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_center_test.cpp",
+      "sha256": "3a99a80f848ff89353ea1089a35188ed172b228e36165a710ce7cdd0b7d77bd7",
+      "bytes": 27665,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_delivery_test.cpp",
+      "sha256": "10b5d094b23d0094622501d2f11675209b9b8289dc766a3ef5e331db54f3bb12",
+      "bytes": 25374,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_inspector_test.cpp",
+      "sha256": "f65a88cec039f534f584c90ea51e66a78297872820ab33f9be48ea5d323cabca",
+      "bytes": 24081,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_job_fixture.cpp",
+      "sha256": "378f07f694d158cb9010aca4373ffd166fd34e48bd62ca22025ac8907c17eaa5",
+      "bytes": 7519,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_jobs_engine_test.cpp",
+      "sha256": "664b06827dca4e2bcbe171a32fd4af7db681877ba84a58639fe2145243f47440",
+      "bytes": 27613,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_jobs_test.cpp",
+      "sha256": "4bb15d34394d8256083fade42b24dabfeb4b1f56dfe449cab67b578660f529a0",
+      "bytes": 41113,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_mailbox_test.cpp",
+      "sha256": "20fba7357368650147602810bfaa00315410e048d30c0f53ed2a0e704142c165",
+      "bytes": 14836,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_observation_test.cpp",
+      "sha256": "514dd1b92889e0b554097be11b7c4e48c16228cc84eb1a24da3f19085ce8b600",
+      "bytes": 18691,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_raw_test.cpp",
+      "sha256": "83a5ee7de9377f096e1ad9b726609f0bfcbdbcec8a0ff35b769ed5d6cf9d2059",
+      "bytes": 68835,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/command_wait_custody_test.cpp",
+      "sha256": "2dab631787a96db0c8e26279008c63f7c10a5d6fa0566f3455cc736b3de7ce2a",
+      "bytes": 11452,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/compaction_campaign_test.cpp",
+      "sha256": "893b0b324c3660beeb6f01e56d6286064ce5fcea58c8bf236ef9b5419728cf78",
+      "bytes": 31718,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/complaint_raw_test.cpp",
+      "sha256": "28fc4a730eaa8548fc78ef277130a0ba203c5800d182aadf03e3f3ac82c2e890",
+      "bytes": 32077,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/context_budget_test.cpp",
+      "sha256": "da4227db9d4651442baabebfb32ae599d23a464302b28d7ed3da9ecf179957b6",
+      "bytes": 10361,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/context_delta_test.cpp",
+      "sha256": "94b30d33c1838b68bb2d0d07a8f6d0f086fe84403b71a7704cfd6dbe9097cafe",
+      "bytes": 9173,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/context_test.cpp",
+      "sha256": "3c16dd993e9ffe46728e990af73172768ee6f17ec811da6680bcf098579fc848",
+      "bytes": 18512,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/decision_models_test.cpp",
+      "sha256": "347730dda97132fedda533ec8ea7596f01e3d14dc6e584e9491b24e9a9c3117b",
+      "bytes": 11522,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/decision_raw_test.cpp",
+      "sha256": "1a92dc190b6667293c332e4432a98472ff16464bc1d6e884591be3da79290aa8",
+      "bytes": 36439,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/diagnostics_test.cpp",
+      "sha256": "874004469cac66fc966900ce604b940a90aa9695e9837c35e745be656169d18d",
+      "bytes": 2810,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/display_text_test.cpp",
+      "sha256": "87afdd582b7ff5df7b76112a2bf2eaab76634832932755c0a2acd5dee3575db3",
+      "bytes": 5487,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/domain_admission_test.cpp",
+      "sha256": "69178c7fdf0b0103cc625cedfb8adab4697e2d9bc9bd5074402c279fbfcd1e79",
+      "bytes": 13622,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/economical_defaults_test.cpp",
+      "sha256": "ac42153392e1e064595b587ff63749370567fdd23d826171fc4dd17fed1e44ff",
+      "bytes": 10612,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/economy_pilot_test.lua",
+      "sha256": "2117339053cb8c4856253860f8176b5aa99c05e6c77dde89a9f2d8c5f07564e6",
+      "bytes": 2778,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/environment_head_test.cpp",
+      "sha256": "600def6d393ee7baf62bdaa21910d4cd8f30e202f160e5519f69baabc9bfab1e",
+      "bytes": 36105,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/file_effect_test.cpp",
+      "sha256": "0a87a2b8303a89fefe338ff8d1ded956e1682824748b2042e8e59502136ca88b",
+      "bytes": 10365,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/foundation_test.cpp",
+      "sha256": "93037a1c50930af75ee5814097ae0b4683d6b013e164a6eb4a5c766e75fdf88a",
+      "bytes": 16363,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/git_raw_test.cpp",
+      "sha256": "bc1f917c230dba4b306eccb2d906f3d2d119cef1a01c5b001ac7c099e7c76446",
+      "bytes": 27477,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/issuer_ranges_test.cpp",
+      "sha256": "25ad731332c4f2181a44823d621b9602b19609d3e7936051bfb56d50a548ad69",
+      "bytes": 6651,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/journal_batch_test.cpp",
+      "sha256": "89579d45f51304278796115d4ccc986bad93b5d4cecf94c16f451f7a6b0944a8",
+      "bytes": 45706,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/journal_checkpoint_test.cpp",
+      "sha256": "c7a4ebf9473c0cf4738720f884fd61cf20b77e3bf011bb8d09f2c525e5f6ee54",
+      "bytes": 13753,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/journal_codec_test.cpp",
+      "sha256": "e4be8f2f0cf2e1e3c6ad0cb4107830865956a529bb8d741f646530094ff914b7",
+      "bytes": 10418,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/journal_crash_test.cpp",
+      "sha256": "c701d847f49a40b29aaee4fc1de68f8d2c613c483e253a769f85b8a312e09d36",
+      "bytes": 11619,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/journal_native_test.cpp",
+      "sha256": "e993a80d3b56303aa532520478bb6e9ae0c92c5fd528fee1df93dc6f2de921b0",
+      "bytes": 6690,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/journal_resume_test.cpp",
+      "sha256": "9eff60d1ccf7c0c6f4feba9afd4ebded83bf24706d8d20568d1d9829997f7a09",
+      "bytes": 3953,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/json_test.cpp",
+      "sha256": "5a98940da9060415231c3d2304f57ccb4fd32de389024cbf4dcf4b1a2d845b3a",
+      "bytes": 4965,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/local_timing_test.cpp",
+      "sha256": "f076a268c864e9a585de2d9c911ecffa039d2d3f78aee6a1c669519b260194d2",
+      "bytes": 31224,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/lua_tools_test.cpp",
+      "sha256": "4fb559834eb073f57939cde04e9d16e7a6adbe781ecef01fd6a39118e03c42f9",
+      "bytes": 9110,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/main_input_native_test.cpp",
+      "sha256": "d56f37aa92bfe0b489747e1e6b52aa7a80064ff94889357699c2b8e7d5755a85",
+      "bytes": 37455,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/native_value_test.cpp",
+      "sha256": "9c582c60863f4622e3b71477467a06d5bbeb419063f23d10e8f33c9da6d510a2",
+      "bytes": 7753,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/observations_test.cpp",
+      "sha256": "9fa01a1f050a9af6fed903924e60eec8a0308e8f6563878758bf847490908809",
+      "bytes": 11938,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/openai_auth_test.cpp",
+      "sha256": "c021fb14b350e87f135248e8be0d8d4c28e168d2ce20d236f05fb7a071b6fbd2",
+      "bytes": 9450,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/openai_test.cpp",
+      "sha256": "e159fe366534e4122a78aafb32eabc386fff55b627597d87ec9e58e1be0332d3",
+      "bytes": 4256,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/openrouter_test.cpp",
+      "sha256": "5e095887e751e4d3b8cef4b6194f4d6cb34b55b70e7f9327dc32df21af96ed12",
+      "bytes": 5837,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/operation_raw_native.hpp",
+      "sha256": "13510e2c08b4348c50e50cf223623587968527a8e5fb4f4a256dbdfbffcc0d4d",
+      "bytes": 15314,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/operation_raw_oracles.hpp",
+      "sha256": "2231b901ed7190f029add57eb741be82679127c08d341a383ce71cd0912cf2dc",
+      "bytes": 5796,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/operation_raw_test.cpp",
+      "sha256": "f3d219d2606b8787ffc54559d5aa71917a303b60bc9bb5a3f86c08c78fbefa02",
+      "bytes": 76943,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/orchestration_test.lua",
+      "sha256": "e935b21c43083fd722b3115531aedec2a312bfbf044ef02f31e1192c8da66ae9",
+      "bytes": 4568,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/packages_test.lua",
+      "sha256": "5b00c7766d802850716f7ad42f3d636ec53cf63d03a2e0b04ceae1d1d61f883a",
+      "bytes": 5805,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/packet_test.cpp",
+      "sha256": "ed901fe6611ff851ff2b05bcf65d70194734b27a9b7716b09d1a145863aeafa5",
+      "bytes": 9599,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/participant_observation_test.cpp",
+      "sha256": "297d0acdd2cf0150334b83fc5aeea4487f9ff651658a14f51761d2884f1cec4e",
+      "bytes": 25723,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/participant_recovery_test.cpp",
+      "sha256": "effdd2a069d548a59dbb8b85109871c456ec1740d097496e32a5e09e055dc2b9",
+      "bytes": 6516,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/participants_custody_test.cpp",
+      "sha256": "6dec78e881534c60dd9714f19c3b6be7cfb4b399014bad8e2ce1ce22d9a5a7da",
+      "bytes": 8069,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/participants_raw_test.cpp",
+      "sha256": "1b84f515dbcd3d5888e344b5d9790cbc948970ea8153f193bee1b3635e1fefe6",
+      "bytes": 69325,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/participants_test.cpp",
+      "sha256": "a8adc0251b71137c55d61bcacd43726a238cb856afea5e706335464243b0f091",
+      "bytes": 9622,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/plain_output_raw_test.cpp",
+      "sha256": "0c291d09064f7c83140022cf0834a34b0ba781525096be5eb3ef17829e6dda1e",
+      "bytes": 12061,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/program_config_test.cpp",
+      "sha256": "1bf032dcdd31f8d13f9d83a0f70ebeab3fa31f2e6ddb8e1215adeb39904ada3d",
+      "bytes": 6969,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/program_workflow_raw_test.cpp",
+      "sha256": "733ace2b530eaef78a116fc2c743f059f18f0ed05d8571d9d61b597106d92f4c",
+      "bytes": 52707,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/provider_auth_raw_test.cpp",
+      "sha256": "e4bf88e9b01e585a2b5ba6af2b2f3584a083d8c5ad6230b32db0d04a2e020582",
+      "bytes": 47264,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/provider_auth_test.cpp",
+      "sha256": "65396bfc8067e19d68ed0921a742ee57dd76fe037839f6547f54e18d51d75dcc",
+      "bytes": 11190,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/provider_colleague_test.cpp",
+      "sha256": "04652bfc77e617db220a16a9cac6be3fa4b74b0a423d23b86c93d81c7c562fe1",
+      "bytes": 7478,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/provider_exchange_raw_test.cpp",
+      "sha256": "3914791086ce505666d0cd2d42dc362054fafcc1f44f30f3bce2326439feff5b",
+      "bytes": 61281,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/provider_oauth_test.cpp",
+      "sha256": "f4910f69eaa37b811b484cc50e31c0a8407daa61a33bfd4ca66f49c0eadcf4c1",
+      "bytes": 12053,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/provider_raw_test.cpp",
+      "sha256": "d29a17aade1e99ed679686fec76010d806d62fb899c49d0001c8f378107ab7ca",
+      "bytes": 39369,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_admission_test.cpp",
+      "sha256": "5b3bbd3072819b1a811ebcc624a5785aae35d9515414300b2b388bbd68416f0c",
+      "bytes": 25342,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_audit_test.cpp",
+      "sha256": "17d635190030eb589a4a99216e62d86c12f0f633222f2f6bdf52993c7b7c842e",
+      "bytes": 21063,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_authored_test.cpp",
+      "sha256": "1af85aeb8d036121fa2f62fa9d8b7e0503e7704613fb3652702c301be541ea40",
+      "bytes": 38180,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_channel_test.cpp",
+      "sha256": "1ab0eb5170ef62c8880114376f2a1761bc5828a0c87d6113b846a748ebaf9a09",
+      "bytes": 32842,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_clock_test.cpp",
+      "sha256": "6d34ac00910a7acfe28c813c27780eed52fd305b9a6b699fd5091136107125a1",
+      "bytes": 1408,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_command_wake_test.cpp",
+      "sha256": "ad7e8a1c6c5b576315729e1736b478d67f3e77ab196d7f6e359220fc1ade0bd0",
+      "bytes": 35738,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_context_test.cpp",
+      "sha256": "b8f08a1fc5b4535483f6f99027bb1efa963c8f642a4ef00d40a4b7535609185a",
+      "bytes": 54378,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_file_stdio.cpp",
+      "sha256": "09b546b17abd6ac2afee5ce45a601177a02a60d14b507ff87c78372d1f4e5435",
+      "bytes": 1454,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_file_stdio.hpp",
+      "sha256": "3dcd2d09fa7be484d19e154705df70849f0fa39d5f3f8c05ef5b0b6ba9eeb729",
+      "bytes": 252,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_file_test.cpp",
+      "sha256": "f08d889d2516b4736d681c3107accf105df2fdb6a8de18badf6508a67d4d6d8c",
+      "bytes": 80870,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_metadata_test.cpp",
+      "sha256": "c43301dc93228cb307ca36374bc50dbc4fa2434bd0a4a963033c8ae3cb29d3ee",
+      "bytes": 26564,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_reader_test.cpp",
+      "sha256": "c1b53e5a23dbeb1a4b4e3404084d76717c9b679ae296497af591ece6a88746b3",
+      "bytes": 19519,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_recorder_cuts_test.cpp",
+      "sha256": "46ec59ed5f3686bfb6ed01396ad4d2f1be3747f9d10b46eab9cca7bc99966f4a",
+      "bytes": 29236,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_retained_test.cpp",
+      "sha256": "074e17de626e26301a39ebb78020ae960c52a7fb67b3ba77d009cffe91dec281",
+      "bytes": 79174,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_runtime_test.cpp",
+      "sha256": "b79051f4d4f15cd7725614e8520fcdf896fc6e4fe573c841a6d4b1d698eafb02",
+      "bytes": 15753,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/raw_sampler_test.cpp",
+      "sha256": "518bbc6e3636118755d2a77afacc69f5b5520fd96b57c101da1bc463ab0c549b",
+      "bytes": 39663,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/recovery_index_test.cpp",
+      "sha256": "6742adb8be31488dc1f2a482ed7521bfb505a707944382bae56d3e2cc3b30a75",
+      "bytes": 6304,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/request_cache_test.cpp",
+      "sha256": "1162002b6674a39326ab75a4f594621d152c4aeb1bbd7329a0be6a73d5b9881d",
+      "bytes": 9089,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/request_storage_test.cpp",
+      "sha256": "6c6d9aac183a4191254ef7949810d754151b3fa3c75ddc300001aa49d3622afa",
+      "bytes": 10556,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/responses_provider_test.cpp",
+      "sha256": "094f7cc7e061a9efc5eba8563db65a04978fdf620fd91ff17fb1e7d8bf391dac",
+      "bytes": 7204,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/restart_recovery_raw_test.cpp",
+      "sha256": "d0040dc045407952865ad963fabd41705d097a2774a1a8f6904aac8973c5ae06",
+      "bytes": 45467,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/retained_environment_test.cpp",
+      "sha256": "918bf6475242d5a282e00f8f241effa9d87989996ed7d634ab27ca3326785549",
+      "bytes": 69287,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/retained_events_test.cpp",
+      "sha256": "ede0d4311ccb2079aa7ae57e29d79e9c2c0d198c3987ef9cb469fcc7277b7612",
+      "bytes": 26087,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/retained_proposal_test.cpp",
+      "sha256": "37a5d42811a1590f1f13c36b87be9cf415b262da12145131a00c7eebd0c89e33",
+      "bytes": 6002,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/retained_state_crash_test.cpp",
+      "sha256": "99ed4904336c853cc8969867f1ade3822d3682df319a404508d51db72a4cb7e5",
+      "bytes": 13635,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/retained_state_test.cpp",
+      "sha256": "14d205cea9a373067977ab9a5dc855d055607310fedb0c2d86d9ee8515a3600f",
+      "bytes": 77121,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/saved_state_test.cpp",
+      "sha256": "0b829ef3000607eb4f06dcf0e13e37f654a2b9b9b58b054c6b370b63140c2fcb",
+      "bytes": 20576,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/scratch_cleanup_test.cpp",
+      "sha256": "1928193c91a027b1b314995676d40b5d6d2a383c6bd87cddf7e8022530deb24f",
+      "bytes": 7484,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/session_raw_test.cpp",
+      "sha256": "03af59ada06f525fcad86b6083a902a403ae03ba5c56a620f7ace4f00ca5dd8d",
+      "bytes": 30729,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/session_recovery_test.cpp",
+      "sha256": "5ef7dc4d8efd44bd5b69279ab88b2ba4ac074c0acb15b9e3ed20cfbbd7cb2a80",
+      "bytes": 36499,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/session_store_test.cpp",
+      "sha256": "76ed56d6399e254e913dffebea8841f069e1fd5e373ad5dec56172e3d4e48f34",
+      "bytes": 6958,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/shared_sequence_test.cpp",
+      "sha256": "d869c4f107d051c8225bfbcbf215c5fb269046d40601fa4863a4b81e6d5493ea",
+      "bytes": 1577,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/README.md",
+      "sha256": "666034390da751278ead9e7cc83e707e97fe54af5d744ff10c6307b61e60b03c",
+      "bytes": 6033,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/check.py",
+      "sha256": "b168e01aa7077e19caf6e7405f982e321d6f4eb1b96537b722608438205aa7ba",
+      "bytes": 3046,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/center-narrow-stale.snap",
+      "sha256": "d1f33cd3ee60953802b98026a6a3f757ed694064003b3dd3b80de3b73c61f2fd",
+      "bytes": 741,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/center-wide.snap",
+      "sha256": "975fc96d866507b2dbd69cfa2b5dcd3aabfebee825776b9df959ec9392094f59",
+      "bytes": 2325,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/composer-joined-emoji.snap",
+      "sha256": "4ead0d0d192334a0ab730c7e54951949f82c2d67375858c41af86324e3e6daba",
+      "bytes": 230,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/composer-literal-paste.snap",
+      "sha256": "276973308d88d5081872b6cabfeba17fc12121657e164c94c0febd8eb1ed9454",
+      "bytes": 299,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/composer-multiline.snap",
+      "sha256": "89e82680497a973130673c4a132444dc9a196c49b592ec94bf0e43d4774550c6",
+      "bytes": 267,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/composer-unicode.snap",
+      "sha256": "bd662dd941451d8d34c03955ede6cd7584d2a614800ec05d63c98282286ed81f",
+      "bytes": 261,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/conversation-narrow.snap",
+      "sha256": "7ad769d8e750623b1dc45d5b218d475307b57b4ba4b99df0cd9ab697b25b3c03",
+      "bytes": 1160,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/conversation-ordinary.snap",
+      "sha256": "3bd2fd24decd395e5b634d3cfeed8919a4ef660b526dac2df51a267e6534d610",
+      "bytes": 1545,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/conversation-plain-joiners.snap",
+      "sha256": "f959ec42da6ad2dee3d2d1a0d0497481d43939ed592203ac060090ffee5a6938",
+      "bytes": 228,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/display-suffix-boundaries.snap",
+      "sha256": "c4fcc15fe7c8b7cc552a5c4899299355fd4e31f5fdf701d9ff9dd1ff7e41d454",
+      "bytes": 265,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/inspector-narrow.snap",
+      "sha256": "f6b3a94d25fc13a107a6085b471e9f89cccb17d5ecd24bf1dba798c707b7665a",
+      "bytes": 456,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/inspector-wide.snap",
+      "sha256": "9d725c5e16f73d682a8c378c52f090ad739fe45b3e80da8bbbaca32e90acbdc4",
+      "bytes": 1362,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/instrument-lua-narrow.snap",
+      "sha256": "b979b38ea49912b648d89b7167d76c0036388ef1dc4bb94aba764de46aca086f",
+      "bytes": 890,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/instrument-lua-wide.snap",
+      "sha256": "06c2357b4a5c97d0a1ccedc8c96fafcb6ec50cec148a3453d4ffe9d6be35e5c5",
+      "bytes": 2324,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/palette-no-match.snap",
+      "sha256": "d73b967c3f8dc26e08ac59867880e508e339705a7d8678bda4bc0f6310efc05a",
+      "bytes": 473,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/palette-return-draft.snap",
+      "sha256": "67743b7eb6877038cb899e38c334d6dd263d51eb111ca58459bc3069467539ba",
+      "bytes": 332,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/palette-selected.snap",
+      "sha256": "6a3a369d8ce909c7ee9845c21cfd9487816bede49955578ca44368064aa6a395",
+      "bytes": 496,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/tasks-narrow.snap",
+      "sha256": "f626eca62b04987c4319de6deb75e41fd080f7c1afe79e4bb82efe4d3f42c8e0",
+      "bytes": 915,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/tasks-ordinary.snap",
+      "sha256": "7d2c73b78966966d04a9a8bbc0b73c3ec480fec1c2b7cf71096036abffd6f930",
+      "bytes": 1087,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/snapshots/tui/expected/tasks-tiny.snap",
+      "sha256": "43bc1478d7c42101b02cb1b28e713ee713d8b6983593c6aa9df494d40d2295f6",
+      "bytes": 126,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/station_driver.py",
+      "sha256": "54d813f6f688e503bdf824bc02dd8d3c8f9abac3686fd4a47d7c9ae175250924",
+      "bytes": 6980,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/station_main_native_test.py",
+      "sha256": "ac25ac2aeea2fade002297bf986b2d1fdc9f55f212e6785d3a4b90e454b6bc63",
+      "bytes": 12781,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/station_main_raw_test.cpp",
+      "sha256": "608406891c8e54d3b04e2b5b346eff2331779f61bf7aeadcf2a0ad5eedc91932",
+      "bytes": 10731,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/station_raw_test.cpp",
+      "sha256": "bdbc98b1a620eda8649ce5611b1d3723173e3ef3e68ba463b61183e77ed85399",
+      "bytes": 29240,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/station_test.cpp",
+      "sha256": "6cccca16358ce2d6fe227aac6ab1674e4816a15a52a7d84f9d55d18863315453",
+      "bytes": 3996,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/storage_raw_test.cpp",
+      "sha256": "a379a39e247587772672ea0379d2e8a49d5ad324b1d3b7d364cc3553a1b3b9e9",
+      "bytes": 129745,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/stream_capture_test.cpp",
+      "sha256": "1d3199370ee4377f3ef5c7353e7645d863ac169bda636ad02a74058ca3d8bdcb",
+      "bytes": 1986,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/successor_seed_test.cpp",
+      "sha256": "7bbaad1abe2fd82d845034c6a35fe8b981dff7580d369c5c91994cf14fdea42b",
+      "bytes": 7127,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/task_observation_test.cpp",
+      "sha256": "b8813775b0aeb27425f94fe3d6e93399117b022c50a63e0c64dcc42d68da9bea",
+      "bytes": 16905,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/task_publication_test.cpp",
+      "sha256": "bcc7aab755719f8c67cd716513c199a190a2bd1c38b2a8771db984bad6a56e80",
+      "bytes": 2900,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/tasks_raw_test.cpp",
+      "sha256": "1c4031a66c96f484e128b33b852717b279e5cdb9c3df86492da44b8ed18feaf7",
+      "bytes": 31422,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/tasks_test.cpp",
+      "sha256": "8d380c0b8b7b9147f75addefca227134d7a9af444210819556cc1897b411efe8",
+      "bytes": 14232,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/terminal_blocked_fixture.cpp",
+      "sha256": "704fe66db71806626b4870068d3dc7d1b87a51401db0fb974670def13a07dd08",
+      "bytes": 6431,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/terminal_custody_native_test.py",
+      "sha256": "6823cadee7a4e89c15ba7cb2a267b088400ed17f9ac8005e124a4f78ed90bc49",
+      "bytes": 9846,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/terminal_custody_raw_test.cpp",
+      "sha256": "410dfa74793b3a605d9a0a7998ee2d279ed2d9990e99011314ccdc01e35ac5c7",
+      "bytes": 40917,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/terminal_edge_fixture.cpp",
+      "sha256": "bf4461d518f42332fa67435e30a839110aed895bc8c98efe5e54d3d4a7964b5d",
+      "bytes": 13141,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/terminal_edge_test.cpp",
+      "sha256": "21c2a817c753f450189afb8bea3b783066194be106219a8e537c09e4e71a0a48",
+      "bytes": 3985,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/terminal_test.cpp",
+      "sha256": "b441ba0b9e0f8eb141206dfebd8fabe03054a4e81fc4175f36e5328a6fac1fa1",
+      "bytes": 22344,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/token_usage_test.cpp",
+      "sha256": "e283883f8f5bd2a3980901c70bc8351a72138004573fba053de4805b34d29ef8",
+      "bytes": 31290,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/tools_test.cpp",
+      "sha256": "821a6753357ffd132341aed4cac64197942853018279176e304b439bcbb162ff",
+      "bytes": 10643,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/trajectory_test.cpp",
+      "sha256": "2e829622fc2167075c57f8b74971c4b34b068224714f921fb797d842d569f2be",
+      "bytes": 10623,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/tui_action_bridge_test.cpp",
+      "sha256": "006a40b771e044145f7ee390fce1580c52d247458991d728318d44170178af8d",
+      "bytes": 22146,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/tui_components_test.cpp",
+      "sha256": "b969d1e6d12abcb3416bba81c08575b3a1043540eac171ebb704586eb25b6dc1",
+      "bytes": 14341,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/tui_inspector_test.cpp",
+      "sha256": "9a99a5458011e4afaff209cac4c5d21e4f510472a53cbae73264582d05cf5d04",
+      "bytes": 11410,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/tui_instrument_test.cpp",
+      "sha256": "e28254972489c9db94ce6401607ab759875adcbe9929e01cb6377df679a21135",
+      "bytes": 22587,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/tui_lua_test.cpp",
+      "sha256": "9122a78da26e1d627986a574202b00b68102b4dec5180be33a0f38af6bd0b2fd",
+      "bytes": 23896,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/tui_snapshot_test.cpp",
+      "sha256": "10978695de6a4e4c15c1fbae92c24bfcdd7c45fc98fd69282e035f134673cb9a",
+      "bytes": 22568,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/turn_raw_test.cpp",
+      "sha256": "b2a27cc882cba2e68d965c8a42a0bf5c78de971eb2a0480338ae6f08956f181d",
+      "bytes": 45702,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/ui_raw_test.cpp",
+      "sha256": "d7c181628d807482246c3c6551a421bf625375617fb596c47f90bd162e3d9192",
+      "bytes": 57680,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/useful_feedback_regression.lua",
+      "sha256": "ffb520fbc3c7db01945c30d5c90f31937cb45a7c7e9dbc1470e81fd880cd9ab0",
+      "bytes": 4576,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/useful_record_regression.lua",
+      "sha256": "48a94bc7db2f153731faac2ca77545e9d49c0dc064fb964ee62455277a899972",
+      "bytes": 4254,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/useful_work_test.cpp",
+      "sha256": "782eecf26ab909c61a6097507e159d6a3d88e48f2d154f9bb4de70d0da4e5b65",
+      "bytes": 462,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/useful_work_test.lua",
+      "sha256": "cf5b676ed9f38cdc317b079a4273d86158f8d1cb7f31d7429b9d4a0410fd1b15",
+      "bytes": 4168,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/workflow_executor_test.cpp",
+      "sha256": "b580ba261cbc7424bc15a16aa4d0af0f29ec59dd76be03d442bf865edda1953e",
+      "bytes": 16419,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/workflow_host_test.cpp",
+      "sha256": "9c4b7e558c93d6536d7587c52733b59561eec4c1935fb5e1ec85dd566c894c05",
+      "bytes": 11899,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/workflow_join_test.cpp",
+      "sha256": "3c29f6a853125c7fd9ed34c0f06bf456b40931edfe44d33b999e9dd206d89151",
+      "bytes": 22491,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/workflow_process_test.cpp",
+      "sha256": "7cdb6e5ba00f6182709e1748eb3353da540aa4bb759c92814201b7ef98e44542",
+      "bytes": 17179,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/workflow_repair_test.cpp",
+      "sha256": "c540cfc07efcd69ee8e430fe134a22476c7317741106d72988690f8269ebf3d5",
+      "bytes": 6361,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/workflow_runtime_test.cpp",
+      "sha256": "6a0af180e4ac00d6f36378672e166118d6502598af84e9fa7060c92eec162df5",
+      "bytes": 35338,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/workflow_store_test.cpp",
+      "sha256": "944db8e9a0209f8c9d59b1ed464ca1e550eecf7b977fd6a98b5121aa25021563",
+      "bytes": 15590,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tests/workflows_test.cpp",
+      "sha256": "5e4296f25e9bcb1f006b03dffbc99f9e6623063e93d53e94d00efb3e51ac1acc",
+      "bytes": 17298,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/bytes_fuzz.cpp",
+      "sha256": "97dc663ad7e6fe4d743fcacf6e8d559cff32e45e2108552bf9803c9f41fa177b",
+      "bytes": 530,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/command_latency.py",
+      "sha256": "61e2556145847571575fbe0294f466e8be91cd487e7183478c12f36d970ad2f9",
+      "bytes": 12430,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/compiler_contract.cpp",
+      "sha256": "52782e08bc20a47a1de69e1aa075240d5d4783cab80967243e4b087a24521985",
+      "bytes": 632,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/instrumentation_fault.cpp",
+      "sha256": "554d9cdbdb63334ff7678d06cc60d88801348ad7be994c34846e49b6da2a46f0",
+      "bytes": 857,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/local_history.cpp",
+      "sha256": "e84851cd8c29fdf386c1fe041296d6efc9d3b62a5cd77606fe25aceeb645fbd8",
+      "bytes": 5688,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/local_history_summary.py",
+      "sha256": "bc22e231ec151f5ac8c29cfb6f12912085b9145100c4f351383af9c076fafb6a",
+      "bytes": 1771,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/lua_contract.lua",
+      "sha256": "f7e0a9f49bcaea1cf0b1816db34fb42f440c34d8c1bb2df689c3106513cc0caf",
+      "bytes": 442,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/openai_login.cpp",
+      "sha256": "0632a62a3212138d82ff4d89d71af80fab8149be75c56ac021522d9e40c7d4fb",
+      "bytes": 2958,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/render_workload.cpp",
+      "sha256": "b5d24b25b712dd915043139e969d3887d817f4592cea7ac7eb40b361b75198bf",
+      "bytes": 3016,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/startup_loading.cpp",
+      "sha256": "8dd43df3f5e285ee5d701a4704b50c567b897b094d9c733636cb9c4b7b342f43",
+      "bytes": 16120,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/startup_scenarios.cpp",
+      "sha256": "90ac337eb460177369a729562d0dbb8bb601e3354512db4508c75734202d48fd",
+      "bytes": 4031,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/probes/ui_state_syncs.c",
+      "sha256": "3197344f71144a110e8a14aa2138c7f0140a4906dfa505be2b992941a11b4cc7",
+      "bytes": 1037,
+      "mode": 436,
+      "executable": false
+    },
+    {
+      "path": "tooling/tui-test-profile.json",
+      "sha256": "1c8e09006461b2c115bd8bb1abde3977047b05988994a54faad7403b422236d3",
+      "bytes": 2402,
+      "mode": 436,
+      "executable": false
+    }
+  ],
+  "tree_sha256": "0c3b16a1a8114e016e655507baa2eceaf9205616beab28eee1e49906e4c0ea7e",
+  "archive_sha256": "08f93a0aa0968a76878da546e98ccf3ada648fd35acec2acba80cc5db9035e71"
+}

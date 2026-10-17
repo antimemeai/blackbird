@@ -10986,3 +10986,36 @@ its literal-byte claim. These are fixture errors, not claimed product defects.
 Retain all first attempts, including initial wrong native cursor key and unchanged
 first-three command palette ordering. Final Microsoft/source gate and matched
 performance results are recorded after qualification, with no source bypass.
+
+Final source commit064e794ea1665f241c82e92b431c689290deb205 passes the installed
+full source hook:259/259 Debug458.96s, all253 actual C++ translation units and
+owned Lua analysis. No bypass/new suppression; the whole-source static pass was
+slow but completed. Pushed work/tui-navigation-2026-10-17. Ghostty and Alacritty
+actual-main episodes pass with original returned identities, effect ledger,
+second-page pins and private controls; selected Linux16/16 pass. Rebuilt-current
+ASan blocked fixture passes11.25s; earlier12-case scoped run and changed ui_raw
+7.75s results retained. One matched Release round120/120 normal processes and960
+endpoints, zero failures/discards/repeats, records mixed medians/tails. Save wide
+startup max40.963→388.296ms with all raw samples in existing f8f; no retiming or
+causal claim. Exact source/test-driver mapping and originals are in the published
+performance report. Close only childrhi.3.8; parentUnits1–2 broader components,
+configurable bindings and semantic operation locator remain open.
+During mandatory analysis, independent source study writes the first Unit3
+settings-form proposal: actual session defaults have no guarded patch/versioned
+read mailbox; program_config is a different override owner. Proposed native
+model/effort form needs that shared owner contract, keeps drafts on conflicts,
+and must distinguish saved defaults from effective overrides. No implementation
+or additional review of current code follows from this research note.
+Publication/issue backup are text/data-only and use the explicitly authorized
+per-command hook exception after relevant link/diff checks. Settled source gate
+is not repeated. Source/main/live states remain distinct; AFL and artwork stay
+untouched. No provider/session activation or main merge.
+
+Final publication checks:102 local Markdown targets resolve; performance owner
+publishes25 files and stamps exact committed native content66dee5a2, differing
+from measuredc4966e2 only by the retained child-VQUIT test-driver correction.
+One historical ledger row is appended. Supported Beads backup retains176 issues,
+805 events,128 dependencies and27 labels. Preserve original unified patch bytes;
+exclude only their required context-space lines from authored whitespace checks.
+Source checkpoint is already pushed; commit/push checked documentation/data and
+backup with the authorized text-only hook exception. Do not repeat source tests.

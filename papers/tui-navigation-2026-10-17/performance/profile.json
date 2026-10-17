@@ -1,0 +1,53 @@
+{
+  "baseline_commit": "cbb206b629d936c13c9636b0a7bac999fa68e3e9",
+  "delivered_source_commit": "064e794ea1665f241c82e92b431c689290deb205",
+  "measured_candidate_tree": "c4966e284ce086f9c09d2edb770cf30628d65b581b2e6b10c65c28a77ca65c82",
+  "qualified_candidate_tree": "66dee5a207bff34b4806a463b3c5fd684b9ddc23ec6fb105852c8f2fe03356f2",
+  "measured_baseline_tree": "0c3b16a1a8114e016e655507baa2eceaf9205616beab28eee1e49906e4c0ea7e",
+  "compiler": "Clang 18.1.3",
+  "standard_library": "libstdc++ 13",
+  "cpp_standard": "C++20",
+  "build_type": "Release",
+  "debug": false,
+  "instrumentation": "none",
+  "lua_version": "5.4.8",
+  "lua_library_sha256": "95fa79336051315a656c56e0271a2990ffb598adf6e8b1987ae0e239efff7fc2",
+  "lua_intact_archive_sha256": "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae",
+  "binaries": {
+    "before": {
+      "blackbird": "e5aaa89e4e9f750c4686301c1164fd785f15a096350a712ef954565a22585856",
+      "blackbird-archive": "6d11f19f9bb001bad6c493637651a80fc0429bc0ba20e81567c8b4f90ea29bc5",
+      "blackbird-job-runner": "0bb31a557fe14a7394db0c97fb78491cd95250231bccf5f03df7e0c9ff767488",
+      "blackbird-raw-reader": "d47b68769d40395fefa8a579c1661738ebb8f3b874c638ca696d6a559d8059de",
+      "chat_view_test": "99ca7ba3fc7ec02026c6f5edf44adefe985a22ba280a213a50a4e9e2a7cf71ae",
+      "terminal_custody_raw_test": "db392b3f366543a6c4e37ac39afcce3f34273910937ad9cf31a24a0c1492df5f",
+      "terminal_blocked_fixture": "060c60066e3ceefc009928e5020d4cedf58915f91572bc0905605c9039fc3b20"
+    },
+    "after": {
+      "blackbird": "9b6c9e842b75d17eb66e8df4c78295d714e5af83b99739603fa974d54e92b5ab",
+      "blackbird-archive": "951f02f116985bc88556b122eae74764f0ea2f342b07753d0d39efa55c03108d",
+      "blackbird-job-runner": "0bb31a557fe14a7394db0c97fb78491cd95250231bccf5f03df7e0c9ff767488",
+      "blackbird-raw-reader": "ced5d14570435be3cda809b34cb877d53bed16b0228408a14c5dfd6fd15dac9d",
+      "terminal_test": "c03118e3ef653fa173dabcdb528dd5684cb8f9f0ae9598ac08b69d633ad9f872",
+      "tui_snapshot_test": "966e68ab4d547e2e900e85133d22fd179ac6fd30e56d4946c9683446ac3ae933",
+      "tui_instrument_test": "d1057d2584b4d3ac150d24027a4406c0a080884f287942b8f7d3bcb7078c5018",
+      "ui_raw_test": "ba87e783fce85c5e39e6c624c3d74bffcec2d73cc8d58b003f1adcede8a1bcff",
+      "terminal_custody_raw_test": "fe9639a30947e10a58373e3fcb209df2ac2119b18a9b4cfd3b62d5ffeff42afe",
+      "terminal_blocked_fixture": "e5627ca7de66e177220b3503629506094bb6955e064a5f77e9aec3d6cba290da"
+    }
+  },
+  "observer_sha256": "f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377",
+  "report_sha256": "dd4227cf1b29825ccc758f3aeb6da39fab23670310149b1d1935f585eb73650c",
+  "remote_root": "/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE",
+  "local_originals": "context/tui-navigation-2026-10-17",
+  "owned_remote_builds_and_checks_during_timing": false,
+  "global_host_idle_claim": false,
+  "round_processes": 120,
+  "endpoint_observations": 960,
+  "failed_processes": 0,
+  "attempts": 1,
+  "timing_started_utc": "2026-10-17T04:35:59Z",
+  "timing_finished_utc": "2026-10-17T04:36:15Z",
+  "source_mapping": "delivered-source-delta.json",
+  "qualification_driver_mapping": "qualification-driver-delta.json"
+}

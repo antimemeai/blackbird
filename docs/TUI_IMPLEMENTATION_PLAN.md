@@ -25,8 +25,10 @@ Neuroses and is then left alone, following the operator's explicit instruction.
 ## Present state relative to the original program
 
 2026-10-17 status, after full-viewport delivery7523da7 and results
-f0a2bed, with the current bounded paging/shared-navigation slice in
-[implementation qualification](../papers/tui-shell-navigation-2026-10-17/PLAN.md). The explicit theory, enduring doctrine, component contracts and view
+f0a2bed, with bounded paging/shared-navigation delivered in064e794.
+[Qualification and scope](../papers/tui-navigation-2026-10-17/RESULTS.md) record
+259/259 Debug, full C++/Lua checks, affected sanitizer/Linux/terminal episodes
+and the matched120-process performance round. The explicit theory, enduring doctrine, component contracts and view
 research/designs are published. Implementation has reached working foundation
 and first applications in Units1–2; the broader visual/interaction redesign and
 Units3–6 remain real work. Test counts are qualification of delivered slices,
@@ -46,7 +48,7 @@ The inspector/center exercise genuine reusable components; they do not yet suppl
 the whole proposed workbench. Most of the existing conversation still uses its
 native layout/composer and fixed control dispatch. The independently owned Lua
 instrument is a real authored extension, not general migration of every surface.
-The exact bridge can address a native job, but command delivery explicitly reports
+The exact bridge can address a native command run, but command delivery explicitly reports
 `semantic_link_available=false`: the retained CodingEngine operation locator is
 not supplied to that owner. The comparison now follows the command-run observer's continuation cursor;
 list focus pages entries, while detail focus pages selected output. Eight is a
@@ -58,9 +60,10 @@ pushed in the current work-branch lineage, not merged into that master. Running
 user executable activation is a separate state; source qualification does not
 assert a live process changed.
 
-Return to product-facing TUI work: bring qualified branch work into the next
-integration, then deliver the shared shell/navigation and named action/binding
-controls through visible existing surfaces. Close the operation-reference and
+Source064e794 adds the shared native route coordinator, draft-preserving view
+picker and four typed named view actions. This is local navigation, not the full
+configurable binding system. Bring qualified branch work into the next
+integration, then grow shared controls through visible existing surfaces. Close the operation-reference and
 remaining shared-control gaps in coherent owning slices as those surfaces use them, and carry the
 shared components into Unit3 settings, Context and team. Preserve the original
 sequence into live action fabric, capability/reuse workbenches and metrics;
@@ -123,7 +126,7 @@ C++/Lua checks, affected sanitizers and75 Linux Release cases. Its
 [results](../papers/tui-command-center-2026-10-16/RESULTS.md) retain behavioral REDs,
 review fixes, real source/pressure/screen checks and mixed matched performance.
 The independent Lua bridge is now delivered by3e3a561 below; remaining semantic
-reference, catalog and component gaps still prevent whole Units1–2 closure.
+reference and broader component gaps still prevent whole Units1–2 closure.
 
 Source `52f9103` delivers that inspector after206/206 Debug tests, full C++/Lua
 analysis, affected sanitizers and58 scoped Linux Release checks. The same tranche
@@ -190,6 +193,11 @@ an acknowledgment after owner admission and reload without repeating the effect.
 Compare actual operation references across human, model and Lua paths. This proves semantics, not just matching screenshots.
 
 ## Unit 3: shared settings, definitions and initial team surface
+
+The [first reusable form proposal](../papers/tui-settings-form-2026-10-17/PLAN.md)
+is source-grounded in current session defaults, serialized work and distinct
+program overrides. Its guarded observation/patch owner and model/effort form
+remain implementation work; saving a default must not imply an override changed.
 
 Migrate sessions/drafts, tasks/forms, model/account settings and native callable
 registries onto the collection/editor/inspector pattern. Deliver the Context/

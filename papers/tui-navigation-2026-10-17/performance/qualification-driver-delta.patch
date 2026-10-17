@@ -1,0 +1,11 @@
+--- captured/scripts/check-tui-instrument
++++ qualified/scripts/check-tui-instrument
+@@ -115,6 +115,8 @@
+ attributes[0] = (attributes[0] | termios.ICRNL) & ~(termios.IGNCR | termios.INLCR)
+ attributes[1] &= ~termios.ONLCR
+ attributes[3] = (attributes[3] | termios.ICANON | termios.ISIG) & ~(termios.ECHO | termios.IEXTEN)
++# This literal-input fixture disables the child's Ctrl-\\ quit character.
++attributes[6][termios.VQUIT] = bytes([os.fpathconf(0, 'PC_VDISABLE')])
+ termios.tcsetattr(0, termios.TCSANOW, attributes)
+ signal.signal(signal.SIGINT, interrupted)
+ print('B_PINNED_ORIGINAL', flush=True)

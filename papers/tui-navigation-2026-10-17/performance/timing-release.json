@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/observer.py",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/spec.json",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/round",
+    "--count",
+    "30"
+  ],
+  "started_utc": "2026-10-17T04:35:59Z",
+  "owned_remote_builds_checks_complete": true,
+  "global_host_idle_claim": false,
+  "completed": true,
+  "finished_utc": "2026-10-17T04:36:15Z"
+}

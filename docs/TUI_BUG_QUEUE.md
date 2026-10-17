@@ -156,3 +156,14 @@ master merge or running-user activation follows from qualification.
 to `arconaut-f8f`. It must separate parent request/observer parsing time from
 native layout/paint/output and wakeup costs;5.745ms is the observed wide-shrink
 median, not measured painter CPU. It does not block the original TUI redesign.
+
+
+2026-10-17 paging/shared-navigation source064e794 is qualified and pushed:
+259/259 Debug plus full C++/Lua checks, selected sanitizer/Linux cases, both
+Microsoft backends and21 readable expectations. The first-eight comparison-list
+limitation is repaired in arconaut-rhi.3.8. All120 matched Release processes and
+960 endpoints complete. Mixed deltas and wide startup maximum40.963→388.296ms
+remain ordinary arconaut-f8f observations, without source-causal attribution or
+retiming. [All results](../papers/tui-navigation-2026-10-17/RESULTS.md) preserve
+invalid fixture attempts and the final valid round. Resize decomposition8zx
+and the original AFL inbox remain separate; no fuzz findings were inspected.

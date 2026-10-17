@@ -1,0 +1,61 @@
+Installed microsoft/tui-test 0.1.0 from SHA256 c7096f55a1cdb58c46bc4bdb27f8b5e246f07a5324a904c5ccd1b0351df0466b
+tui-test 0.1.0
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/candidate-release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/candidate-release
+  Test  #27: terminal_blocked
+  Test  #29: tui_snapshots
+  Test  #32: terminal
+  Test  #36: terminal_pty_editor
+  Test  #41: terminal_pty_graphics
+  Test #152: ui_raw
+  Test #162: terminal_custody_raw
+  Test #164: terminal_custody_native
+  Test #234: tui_instrument_semantic
+  Test #235: tui_instrument_source
+  Test #236: tui_instrument_stale
+  Test #237: tui_instrument_mapping
+  Test #238: tui_instrument_recovery
+  Test #239: tui_instrument_raw
+  Test #240: tui_instrument_paging
+  Test #259: tui_retained_result
+
+Total Tests: 16
+
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/candidate-release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/candidate-release
+      Start  27: terminal_blocked
+ 1/16 Test  #27: terminal_blocked .................   Passed    1.72 sec
+      Start  29: tui_snapshots
+ 2/16 Test  #29: tui_snapshots ....................   Passed    0.07 sec
+      Start  32: terminal
+ 3/16 Test  #32: terminal .........................   Passed    0.05 sec
+      Start  36: terminal_pty_editor
+ 4/16 Test  #36: terminal_pty_editor ..............   Passed    0.42 sec
+      Start  41: terminal_pty_graphics
+ 5/16 Test  #41: terminal_pty_graphics ............   Passed    0.56 sec
+      Start 152: ui_raw
+ 6/16 Test #152: ui_raw ...........................   Passed    0.31 sec
+      Start 162: terminal_custody_raw
+ 7/16 Test #162: terminal_custody_raw .............   Passed    0.41 sec
+      Start 164: terminal_custody_native
+ 8/16 Test #164: terminal_custody_native ..........   Passed    0.36 sec
+      Start 234: tui_instrument_semantic
+ 9/16 Test #234: tui_instrument_semantic ..........   Passed    0.04 sec
+      Start 235: tui_instrument_source
+10/16 Test #235: tui_instrument_source ............   Passed    0.01 sec
+      Start 236: tui_instrument_stale
+11/16 Test #236: tui_instrument_stale .............   Passed    0.04 sec
+      Start 237: tui_instrument_mapping
+12/16 Test #237: tui_instrument_mapping ...........   Passed    0.02 sec
+      Start 238: tui_instrument_recovery
+13/16 Test #238: tui_instrument_recovery ..........   Passed    0.01 sec
+      Start 239: tui_instrument_raw
+14/16 Test #239: tui_instrument_raw ...............   Passed    0.08 sec
+      Start 240: tui_instrument_paging
+15/16 Test #240: tui_instrument_paging ............   Passed    0.26 sec
+      Start 259: tui_retained_result
+16/16 Test #259: tui_retained_result ..............   Passed   33.32 sec
+
+100% tests passed, 0 tests failed out of 16
+
+Total Test time (real) =  37.68 sec

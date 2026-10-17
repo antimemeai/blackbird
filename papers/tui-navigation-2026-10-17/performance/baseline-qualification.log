@@ -1,0 +1,18 @@
+Internal ctest changing into directory: /home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/baseline-release
+Test project /home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/baseline-release
+    Start  25: chat_view
+1/6 Test  #25: chat_view ........................   Passed    0.04 sec
+    Start  26: chat_render_oracle
+2/6 Test  #26: chat_render_oracle ...............   Passed    0.08 sec
+    Start  27: terminal_blocked
+3/6 Test  #27: terminal_blocked .................   Passed    1.54 sec
+    Start  36: terminal_pty_editor
+4/6 Test  #36: terminal_pty_editor ..............   Passed    0.39 sec
+    Start 162: terminal_custody_raw
+5/6 Test #162: terminal_custody_raw .............   Passed    0.39 sec
+    Start 164: terminal_custody_native
+6/6 Test #164: terminal_custody_native ..........   Passed    0.32 sec
+
+100% tests passed, 0 tests failed out of 6
+
+Total Test time (real) =   2.78 sec

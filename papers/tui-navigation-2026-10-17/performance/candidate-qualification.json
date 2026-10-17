@@ -1,0 +1,35 @@
+{
+  "qualified_driver_sha256": "8788d7c9850d2ab5787b1f2f68d95dbf06f48b0d3e1da22e7508630bd118891f",
+  "command": [
+    "/usr/bin/ctest",
+    "--test-dir",
+    "/home/patrick/.local/share/blackbird-campaigns/tui-navigation-20261017-p8UYMqsE/candidate-release",
+    "--output-on-failure",
+    "--no-tests=error",
+    "--parallel",
+    "1",
+    "-R",
+    "^(terminal|tui_snapshots|tui_instrument_.+|ui_raw|terminal_blocked|terminal_pty_editor|terminal_pty_graphics|terminal_custody_native|terminal_custody_raw|tui_retained_result)$"
+  ],
+  "started_utc": "2026-10-17T04:35:07Z",
+  "completed": true,
+  "enumerated_tests": [
+    "terminal_blocked",
+    "tui_snapshots",
+    "terminal",
+    "terminal_pty_editor",
+    "terminal_pty_graphics",
+    "ui_raw",
+    "terminal_custody_raw",
+    "terminal_custody_native",
+    "tui_instrument_semantic",
+    "tui_instrument_source",
+    "tui_instrument_stale",
+    "tui_instrument_mapping",
+    "tui_instrument_recovery",
+    "tui_instrument_raw",
+    "tui_instrument_paging",
+    "tui_retained_result"
+  ],
+  "finished_utc": "2026-10-17T04:35:46Z"
+}
