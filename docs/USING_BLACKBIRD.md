@@ -746,6 +746,15 @@ Source integration does not activate a running session or install a release.
 
 ### Native Claude main provider
 
+Native Messages keeps Blackbird's own tool loop. Anthropic documents
+[API authentication](https://platform.claude.com/docs/en/manage-claude/authentication)
+for direct clients; its subscription `/login` and `setup-token` instructions apply
+to Claude Code. The [Agent SDK guide](https://code.claude.com/docs/en/agent-sdk/overview#get-started)
+requires prior approval for third-party products offering claude.ai login or
+subscription rate limits. Blackbird's reference-derived subscription sign-in
+below has not passed live validation; matching OpenCode does not establish
+official support or successful service acceptance.
+
 Sign in through the separate operator auth process, then select the provider and
 model explicitly for a fresh conversation:
 

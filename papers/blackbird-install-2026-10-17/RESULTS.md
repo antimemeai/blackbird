@@ -36,3 +36,20 @@ production executables including blackbird-candidate, and the prior scenarios.
 Clarified that a reopened session retains its absolute old Lua path and documented
 explicit selection of the physical current generation's packaged workflow. No
 second independent review layer is opened.
+
+Root's combined source `9e9dad5` passes the full C++23 source gate:263/263 Mac
+Debug tests and all owned C++/Lua checks. Scoped Linux Release and ASan+UBSan also
+include the installer transaction case. Actual host installation then succeeds:
+`~/.local/bin/blackbird` selects
+`~/.local/lib/blackbird/releases/generation-z8hyFGNP`. All production executables
+are built at their final paths. The real native help, isolated auth catalog and
+Lua/PTY-helper smoke pass before activation. Through the installed PATH command,
+help and auth providers pass from `/tmp`; real auth status still has only the
+existing ready Paper account. No shell configuration, model selection, other
+application's credentials or billing route changes. Logs:
+`context/claude-main-2026-10-17/host-install.log` and `host-path-*.log`.
+
+One generation was installed on the actual host. Update retention and rollback
+were checked by the existing filesystem transaction fixture; no redundant second
+production rebuild was run. `arconaut-5c4` is complete. Live Claude authorization
+remains separate and unresolved.

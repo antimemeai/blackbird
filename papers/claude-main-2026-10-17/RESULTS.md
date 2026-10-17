@@ -89,3 +89,23 @@ the combined full source gate and publishes/integrates the candidate. No second
 independent review, broad audit, TUI performance run or AFL interaction was added.
 Real account authorization and end-to-end live Messages validation remain with
 root; the offline evidence above does not claim either has succeeded.
+
+## Combined C++23 qualification and host activation
+
+Root incorporated master `c38a7de` and published qualified source `9e9dad5` on
+`work/claude-main-install-cpp23-2026-10-17`. The installed full source hook passed
+263/263 Mac Debug tests in500.49s and all owned C++/Lua checks. No new suppression
+was added. The first combined suite's two raw-fixture failures, unchanged serial
+rechecks and final CTest scheduling correction are recorded in JOURNAL.md and
+`arconaut-9h5`; their assertions and deadlines remain unchanged.
+
+Neuroses Clang23.1.4/libc++23.1.4 scoped Release and ASan+UBSan each passed10/10
+in2.41s and6.71s respectively. Captures: `context/linux/run-i0mb2n67/checks.log`
+and `context/claude-main-2026-10-17/source-hook-cpp23-final.log`.
+
+The host installer built and activated generation `generation-z8hyFGNP` from
+`9e9dad5`, including the native adapter. The managed command passed help and auth
+catalog checks from `/tmp`. Owned auth status still contains only Paper; neither
+live Anthropic login nor a real Messages exchange is qualified. Native issue
+`arconaut-12q` and auth issue `arconaut-uaa.5` retain that follow-through. This
+candidate publication and host installation do not merge the branch into master.

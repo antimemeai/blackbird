@@ -11227,3 +11227,36 @@ the remaining clock-entry assumption for later deterministic fixture work. Full
 required source gate reruns on the final scheduler configuration. Current Linux
 LLVM23/libc++23 targeted Release10/10 passes2.41s and ASan/UBSan10/10 passes6.71s;
 actual native Anthropic Mac check passes6.13s in the first combined suite.
+
+## 2026-10-17 — native Claude candidate qualified; host command installed
+
+Published source `9e9dad5` on `work/claude-main-install-cpp23-2026-10-17`, based
+on current C++23 master. The full installed source hook passes263/263 Mac Debug
+checks in500.49s and all owned C++/Lua analysis/format/syntax/type checks. Existing
+NOLINT sites are unchanged. Both formerly failing raw cases pass with CTest
+RUN_SERIAL; unchanged deadlines/assertions and remaining deterministic-entry
+work are recorded in `arconaut-9h5`. No third review/assurance campaign is added.
+
+Actual `scripts/install-blackbird` builds production Release at final generation
+`/Users/patrickbeam/.local/lib/blackbird/releases/generation-z8hyFGNP`. Native
+help, isolated auth catalog and Lua exec with real PTY helper pass before atomic
+activation. `blackbird` resolves to `/Users/patrickbeam/.local/bin/blackbird`;
+help and auth providers pass through that wrapper from `/tmp`. Close installer
+`arconaut-5c4`. One actual host generation was built; update/rollback are covered
+by the direct filesystem fixture rather than a redundant production rebuild.
+
+Safe installed auth metadata still lists only the existing ready Paper account.
+Keep `arconaut-12q` and `arconaut-uaa.5` open for real Anthropic authorization and
+native inference. The first-party Claude CLI's prior authenticated status does
+not qualify the independent flow. Current official SDK guidance requires prior
+approval for third-party products offering claude.ai login/limits, otherwise API
+auth; setup-token is documented for Claude Code. Its login troubleshooting guide
+offers no specific independent token-exchange429 remedy. No billing switch,
+vendor-cache import, new login request or provider inference occurs here.
+
+The user guide now distinguishes documented API auth from the reference-derived
+subscription flow. Candidate source is published and installed, not merged into
+master by implication. Results and limitations are recorded in both owner result
+notes and OPENCODE_ALIGNMENT.md. Support issue updates/backups and checked
+text-only publication follow. Keep untracked artwork, source recovery stash and
+AFL untouched.

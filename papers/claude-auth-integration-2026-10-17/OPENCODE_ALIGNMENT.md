@@ -57,3 +57,10 @@ has approved offering claude.ai login and subscription rate limits. Matching the
 published plugin does not establish that approval or official API support. For
 Blackbird's own tool loop, the documented route is API authentication; wrapping
 the Claude Code CLI uses its agent loop and changes the integration boundary.
+
+The [official login troubleshooting guide](https://code.claude.com/docs/en/troubleshoot-install#login-and-authentication)
+describes fresh sign-in, expired/truncated codes, proxy checks and support. It
+does not specify a third-party OAuth token-exchange429 remedy. Do not infer that
+its API429 guidance diagnoses this endpoint, or log out the already authenticated
+Claude CLI to repair Blackbird. Installed Blackbird's safe status check still
+finds only Paper after source `9e9dad5` passes local qualification and installation.
