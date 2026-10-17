@@ -1,6 +1,7 @@
 # Use Blackbird
 
-From this repository, run `./scripts/blackbird` (the optimized release executable). In an interactive terminal it opens the
+From this repository, run `./scripts/blackbird` (the active installed generation,
+or the checkout's release executable when no managed installation exists). In an interactive terminal it opens the
 TUI. Piped input and `--once` use the plain interface; `--plain` selects it explicitly.
 The default OpenAI route can use your existing Codex ChatGPT sign-in; Codex supplies
 authentication only. Blackbird runs the requests, tools, context and workflows.
@@ -8,7 +9,7 @@ Owned accounts and explicit OpenRouter main coding are described in
 [provider routing, prompt caching and usage](TOKENOMICS.md).
 
 ```sh
-./scripts/blackbird --session context/live-bootstrap
+./scripts/blackbird
 ```
 
 Without `--session`, each launch starts a fresh conversation in a private
@@ -20,7 +21,13 @@ The working directory is the tool working
 directory. Only one process may hold a session. `--once 'prompt'` runs one turn.
 `--provider ID` selects OpenAI, OpenRouter or a registered Responses route; switching
 providers requires an explicit `--model NAME`. `--effort low|medium|high|xhigh|max` selects reasoning
-(initial default `medium`). Provider, model, effort and absolute workflow path persist with
+(initial default `medium`). If that effort is unsupported by the chosen route,
+the interactive harness opens and asks which supported level you intended.
+No request runs until you answer; quitting preserves the unanswered question for
+reopen. Use Up/Down and Enter to answer; Escape keeps the draft. The plain command
+loop prints the question and accepts `/effort LEVEL`. One-shot/application calls
+need a supported `--effort` because they have no later answering step.
+Provider, model, effort and absolute workflow path persist with
 the session; explicit launch options override and save them. Actor/conversation/
 workflow identities also survive restart. Lua request options can override model
 request defaults for a particular call. `/session` shows configuration and identities;
@@ -551,13 +558,17 @@ by importing this module; select an actually configured adapter/call path explic
 
 ### Operator executable during concurrent development
 
-Interactive `scripts/blackbird` prefers `build/release/blackbird-ui` when that published
-executable exists. Unattended `--once` / `--resume-once` uses `build/release/blackbird`;
-`ARCO_EXECUTABLE=/absolute/path` overrides either. This prevents a campaign build
-from silently changing the interactive generation. Native self-development in an
-interactive session must install the checked executable atomically to `blackbird-ui`
-before `/restart`, or explicitly select its executable when launching. A restart
-continues the selected path. Startup reports the session before reopening history.
+The checkout's `scripts/blackbird` follows the managed `~/.local/bin/blackbird`
+installation when present. Without one, it uses `build/release/blackbird`.
+`BLACKBIRD_EXECUTABLE=/absolute/path` selects a development executable explicitly;
+the older `ARCO_EXECUTABLE` name also works. Interactive and unattended launches
+follow the same selection. An old `blackbird-ui` sibling is never selected.
+
+Run `./scripts/install-blackbird --update` to build and activate checked source.
+A running installed harness, including `/restart`, stays within its selected
+generation; a new invocation uses the update. Native self-development can select
+a checked executable explicitly instead. Startup reports the session before
+reopening history. See [installation](INSTALLING.md) for packaged workflow paths.
 
 ## Opt-in native station
 
@@ -565,8 +576,7 @@ continues the selected path. Startup reports the session before reopening histor
 same native participant/context/Lua workflow. Idle needs no inference. Inspect
 `SESSION/station-status.bbm`; atomically replace source `events.json` and boundary
 `control.json` for pause/resume/steer/stop. Repeated or unknown source/id never
-redispatches. `workflow_returned` is not effect success. Use explicit release
-selection if your interactive launcher is pinned to an older UI generation.
+redispatches. `workflow_returned` is not effect success.
 See [Station operating interface](STATION.md) for exact bounds, RRC selection and
 source-owned backlog semantics. No live TUI attach or crash containment claim.
 
@@ -771,8 +781,8 @@ selection and is independent of owned Anthropic sign-in.
 Native Messages uses the retained Lua workflow and ordinary native tools. It
 streams text, preserves complete signed/redacted thinking and tool-result
 history across continuation/reopen, and refuses incomplete streams before tool
-execution. Provider-specific effort choices are checked before settings are
-saved. The initial adapter supports text and function tools; unsupported semantic
+execution. Unsupported effort opens an interactive choice before any request;
+valid answers are saved. The initial adapter supports text and function tools; unsupported semantic
 content is refused. A context containing Anthropic's opaque thinking cannot be
 sent to a Responses provider; start a fresh conversation for that change.
 

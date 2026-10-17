@@ -12,8 +12,7 @@ the key through the private auth prompt:
 ```sh
 ./scripts/blackbird auth add-provider paper https://api.paperinstruments.com/v1 responses-portable paper_api_key
 ./scripts/blackbird auth key paper default
-./scripts/blackbird --session context/paper-session \
-  --provider paper --model ultramarine-1-flash --effort max
+./scripts/blackbird --provider paper --model ultramarine-1-flash
 ```
 
 `auth key` prompts without echo; it also accepts stdin. An existing key in a
@@ -26,8 +25,12 @@ fallback, as with other owned providers.
 Use `responses` for a provider accepting Blackbird's normal OpenAI Responses
 fields. `responses-portable` sends developer messages as system messages,
 requests plaintext reasoning and accepts only `low`, `high` or `max` effort.
-Choose effort explicitly: the ordinary initial `medium` is unsupported. The
-portable adapter refuses encrypted history instead of discarding it; begin a
+The ordinary initial `medium` is unsupported, so the interactive harness opens
+and asks which supported effort you intended. No inference runs until you answer;
+quit/reopen preserves an unanswered choice. Explicit valid `--effort` or saved
+settings skip the question. The plain command loop accepts `/effort LEVEL`;
+one-shot/application calls need a supported effort before starting.
+The portable adapter refuses encrypted history instead of discarding it; begin a
 fresh session when moving from a provider whose history contains encrypted items.
 Plaintext reasoning and tool call/result IDs are replayed with the full history.
 Function tools without an explicit `strict` choice use `strict:false`, preserving
@@ -41,7 +44,8 @@ conversation replay, context editing, reopen and fresh `/new` sessions work.
 
 Provider/model/effort persist across reopen, native restart and `/new`. Chat and
 Messages registrations remain available for colleagues. A main route with an
-unsupported protocol or effort is refused before saving the new settings. No
+unsupported protocol is refused. An unsupported interactive effort remains
+pending until explicitly answered; it is never saved as accepted configuration. No
 request changes the provider or credentials automatically. Custom main routes
 use provider-default caching; explicit OpenAI/OpenRouter cache policies remain
 limited to those qualified routes. `BLACKBIRD_RESPONSES_CURL` selects a transport

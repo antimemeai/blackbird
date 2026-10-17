@@ -24,6 +24,13 @@ Cross-path semantic operation references remain open. See the
 [current delivery scope](TUI_IMPLEMENTATION_PLAN.md#present-state-relative-to-the-original-program)
 for source/branch status; earlier source maps describe their own checkpoints.
 
+The [startup question](../papers/startup-generation-2026-10-17/QUESTION_RESULTS.md)
+reuses native composer choices for an intentional answer while retaining the
+draft/cursor. Its owner persists unanswered effort and prevents inference until
+a valid answer. Queueing, terminal input and painting remain separate from the
+settings operation. This is one concrete question component, not the full forms
+and configuration-management design below.
+
 ## Concrete vocabulary
 
 A **command run** is one execution with state, captured output and controls; a

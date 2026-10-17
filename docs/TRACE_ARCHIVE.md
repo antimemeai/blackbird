@@ -26,8 +26,9 @@ build/release/blackbird-archive configure /absolute/session s3://bucket/blackbir
 Settings live at `SESSION/trace-archive.bbm`; they apply to that session's next
 launch. Configuration alone starts no process or upload. Normal Blackbird
 launches start the worker automatically. Existing running binaries are unaffected.
-The launcher can retain an older `blackbird-ui` generation. To select the newly
-built executable explicitly, set `BLACKBIRD_EXECUTABLE` when launching:
+The checkout launcher follows the managed installed generation when present.
+To exercise a newly built development executable explicitly, set
+`BLACKBIRD_EXECUTABLE` when launching:
 
 ```sh
 BLACKBIRD_EXECUTABLE="$PWD/build/debug/blackbird" ./scripts/blackbird --session /absolute/session

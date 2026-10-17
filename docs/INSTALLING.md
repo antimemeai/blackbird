@@ -28,6 +28,19 @@ Git changes. Local edits are included in the build. Run source checks before
 installing a changed checkout; the installer's offline smoke checks exercise
 packaging, rather than replacing the development suite.
 
+The checkout's `./scripts/blackbird` also follows the managed installation at
+`~/.local/bin/blackbird` when present, so an old checkout build cannot silently
+replace the installed harness. Without that installation it uses the checkout's
+`build/release/blackbird`. For source development, explicitly select the executable:
+
+```sh
+BLACKBIRD_EXECUTABLE="$PWD/build/debug/blackbird" ./scripts/blackbird
+```
+
+An installation under another prefix is selected through its `bin/blackbird`.
+Packaged launchers stay within their own generation regardless of other installs.
+An obsolete `blackbird-ui` sibling does not participate in executable selection.
+
 Each installation builds production executables directly into a fresh generation
 under `~/.local/lib/blackbird/releases/`, alongside copied Lua programs and assets.
 This preserves compiled absolute helper paths and removes the running program's

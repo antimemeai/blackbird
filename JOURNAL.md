@@ -11278,3 +11278,29 @@ Claude issues open because merge does not establish service acceptance. The
 existing installed generation `generation-z8hyFGNP` already contains this source
 and needs no rebuild. Preserve artwork, source recovery stash and AFL. Export
 the supported issue backup and publish this checked documentation/data update.
+
+## 2026-10-17 — ordinary startup and an in-harness effort question
+
+Operator's exact pathless Paper launch fails before audit and blames session
+selection. Inspect the actual launcher's selection and nonsecret file metadata:
+October8 `blackbird-ui` does not understand `--provider`; native checkout Release
+October14 also predates Paper, while installed source9e9dad5 is current. The
+reported session directory is empty. Normal launch already allocates a fresh
+private conversation; keep that behavior and optional explicit reopen.
+
+Create `arconaut-ebq`, branch from current masterf4bd931 and write the startup
+plan. Extend the real startup driver with a default no-override managed-install
+fixture, synthetic owned Paper descriptor/key and forbidden-dispatch marker.
+The positive control exposes inherited-medium refusal; with explicit max only
+in that control, default startup RED selects the deliberately stale UI. Launcher
+repair alone moves the same RED to the actual native unsupported-medium error.
+Missing native `--model` value separately reproduces false recovery advice.
+
+Operator explicitly rejects silently defaulting effort: open the harness and ask
+what was intended. Delegate that whole native question/settings/dispatch invariant
+to one conceptual owner, including direct PTY RED/GREEN and pending persistence.
+Root owns executable selection, documentation, one integrated review, required
+source qualification and installed activation. No saved work is discarded, no
+provider request or real account read is needed. Keep artwork, old source recovery
+stash and the already-launched AFL campaign untouched. Diagnosis/checkpoint is in
+papers/startup-generation-2026-10-17/RESULTS.md; delivery is still in progress.

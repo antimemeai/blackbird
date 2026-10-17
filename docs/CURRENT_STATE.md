@@ -179,8 +179,10 @@ storage; context edits avoid duplicate candidate entries. Maintenance streams ca
 renewal, resumes scratch cleanup, and bounds compact resident tails when publication
 fails. `/checkpoint` retries maintenance. The coding test failure is resolved.
 
-Ordinary interactive launches now select the current Release/OFF `blackbird-ui`,
-matching `blackbird` and the compatibility aliases. Program source and activation
+Ordinary checkout launches follow the active managed installation, falling back
+to the checkout's native Release executable when no managed installation exists.
+Explicit development executable overrides win; obsolete `blackbird-ui` siblings
+are ignored. See [installation](INSTALLING.md). Program source and activation
 share a durable batch; unchanged discovery metadata skips rewriting. Local phase
 attribution and a finite [reopen matrix](SESSION_REOPEN.md) are delivered. No
 under100ms readiness result is implied; final launcher outliers are retained.

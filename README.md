@@ -56,17 +56,17 @@ Install the configured local source with `./scripts/install-blackbird`, then run
 `./scripts/install-blackbird --update`. See [installation](docs/INSTALLING.md) for
 generation retention and existing-session behavior.
 
-From a configured checkout with the release executable built:
+From this checkout, the same installed generation opens with:
 
 ```sh
-./scripts/blackbird --session context/my-blackbird
+./scripts/blackbird
 ```
 
 In a terminal this opens the conversation view and composer. Piped input and `--once` select the plain interface; `--plain` selects it explicitly.
 
 ```sh
-./scripts/blackbird --session context/my-blackbird --once 'Inspect this project and explain its build.'
-./scripts/blackbird --session context/my-blackbird --model gpt-6.1-sol --effort medium
+./scripts/blackbird --once 'Inspect this project and explain its build.'
+./scripts/blackbird --model gpt-6.1-sol --effort medium
 ./scripts/blackbird --list-sessions
 ./scripts/blackbird --session context/my-blackbird --expire-diagnostics
 ```
@@ -77,7 +77,7 @@ running across detach/reattach and gives humans and models access to the same pa
 Start a named phux session with:
 
 ```sh
-./scripts/blackbird-phux arco --session context/my-blackbird
+./scripts/blackbird-phux arco
 ```
 
 Detach with `Ctrl-A`, then `d`; return with `phux attach arco`. See
@@ -110,7 +110,7 @@ The build is deliberately tied to qualified development profiles. The local macO
 ```sh
 scripts/rigor doctor
 scripts/rigor build release
-./scripts/blackbird --session context/my-blackbird
+BLACKBIRD_EXECUTABLE="$PWD/build/release/blackbird" ./scripts/blackbird
 ```
 
 Once the release build is configured, the ordinary native rebuild is:
