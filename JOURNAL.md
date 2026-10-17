@@ -11278,3 +11278,21 @@ Claude issues open because merge does not establish service acceptance. The
 existing installed generation `generation-z8hyFGNP` already contains this source
 and needs no rebuild. Preserve artwork, source recovery stash and AFL. Export
 the supported issue backup and publish this checked documentation/data update.
+
+## 2026-10-17 — C++26 upgrade plan and single review round
+
+Operator asks to upgrade Blackbird to C++26, plan in detail, one review round by a
+Claude subagent and Astra (gpt-6-astra, xhigh), fix, and present before launch.
+Investigation: an exported scratch copy of f4bd931 at CMAKE_CXX_STANDARD 26 builds
+417/417 Debug steps on Clang23.1.2 with zero warnings; tests not run. Clang23 C++26
+reports __cplusplus 202400L; Mac and Neuroses libc++23 report identical checked
+C++26 macros. libc++ spells saturation arithmetic saturating_*. The verbs reflection
+fork (clang-p2996, LLVM21 base, no contracts, no sanitizer runtimes) is not adopted;
+verbs SPEC §8 rev 0483549 now pins Homebrew LLVM23.1.2 at C++26 itself.
+
+Plan docs/CPP26_SUBPLAN.md changes only the language mode on the pinned profiles,
+with an explicit completion rule for pre-existing failures and serial
+`--timeout 120` reruns. Both reviews and their dispositions are in
+papers/cpp26-toolchain-2026-10-17/. Review cut the performance observation as
+ceremony and corrected the verbs citation. Bead arconaut-9xx. Execution awaits the
+operator's look; no source change yet.
