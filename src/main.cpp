@@ -1,3 +1,4 @@
+#include "blackbird/anthropic_provider.hpp"
 #include "blackbird/application.hpp"
 #include "blackbird/backstop.hpp"
 #include "blackbird/coding.hpp"
@@ -458,8 +459,18 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       const RawAuthParent parent{capture.parent.value_or(RawEventRef{})};
       const auto descriptor = auth.descriptor(candidate.provider, &parent);
       const auto &protocol = string_field(descriptor, "protocol");
+      if (candidate.provider == "anthropic" && protocol == "messages") {
+        try {
+          validate_anthropic_route(candidate.model, candidate.effort);
+        } catch (const Error &) {
+          warning("Anthropic model does not support the selected effort.\n");
+          throw;
+        }
+        return;
+      }
       if (protocol != "responses" && protocol != "responses-portable") {
-        warning("Main coding requires a Responses provider.\n");
+        warning("Main coding requires a Responses provider or native Anthropic "
+                "Messages.\n");
         throw Error{ErrorCode::unsupported};
       }
       if (protocol == "responses-portable" && candidate.effort != "low" &&
@@ -487,6 +498,11 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       if (const auto *curl = std::getenv("BLACKBIRD_OPENROUTER_CURL"); curl && *curl)
         config.auth.curl_executable = curl;
       provider = std::make_unique<OpenRouterCodingProvider>(std::move(config));
+    } else if (provider_name == "anthropic") {
+      AnthropicConfig config;
+      if (const auto *curl = std::getenv("BLACKBIRD_ANTHROPIC_CURL"); curl && *curl)
+        config.auth.curl_executable = curl;
+      provider = std::make_unique<AnthropicCodingProvider>(std::move(config));
     } else if (provider_name != "openai") {
       RegisteredResponsesConfig config;
       config.provider = provider_name;

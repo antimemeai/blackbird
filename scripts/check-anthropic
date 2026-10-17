@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Native Messages coding workflow: synthetic credentials and injected curl only."""
+import json
+import os
+from pathlib import Path
+import shlex
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import traceback
+
+
+def event(kind, **fields):
+    return 'event: ' + kind + '\ndata: ' + json.dumps(dict(type=kind, **fields), ensure_ascii=False) + '\n\n'
+
+
+def fixture_stream(blocks, reason='end_turn', mode='success'):
+    stream = event('message_start', message={
+        'id': 'msg_fixture', 'type': 'message', 'role': 'assistant',
+        'model': 'claude-sonnet-4-6', 'content': [], 'stop_reason': None,
+        'usage': {'input_tokens': 10, 'output_tokens': 1,
+                  'cache_creation_input_tokens': 3, 'cache_read_input_tokens': 7}})
+    for index, block in enumerate(blocks):
+        kind = block['type']
+        initial = dict(block)
+        if kind == 'text':
+            initial['text'] = ''
+        elif kind == 'thinking':
+            initial.update(thinking='', signature='')
+        elif kind == 'tool_use':
+            initial['input'] = {}
+        stream += event('content_block_start', index=index, content_block=initial)
+        if kind == 'text':
+            stream += event('content_block_delta', index=index, delta={'type': 'text_delta', 'text': block['text']})
+        elif kind == 'thinking':
+            stream += event('content_block_delta', index=index, delta={'type': 'thinking_delta', 'thinking': block['thinking']})
+            stream += event('content_block_delta', index=index, delta={'type': 'signature_delta', 'signature': block['signature']})
+        elif kind == 'tool_use':
+            encoded = json.dumps(block['input'])
+            if mode == 'invalid_arguments':
+                encoded = '{broken'
+            for fragment in (encoded[:3], encoded[3:]):
+                stream += event('content_block_delta', index=index, delta={'type': 'input_json_delta', 'partial_json': fragment})
+        if mode != 'unclosed_block':
+            stream += event('content_block_stop', index=index)
+    stream += event('message_delta', delta={'stop_reason': reason, 'stop_sequence': None}, usage={'output_tokens': 5})
+    if mode != 'partial_stream':
+        stream += event('message_stop')
+    if mode == 'malformed_tail':
+        stream += 'data: {broken}\n\n'
+    elif mode == 'error_tail':
+        stream += event('error', error={'type': 'overloaded_error', 'message': 'fixture'})
+    elif mode == 'duplicate_stop':
+        stream += event('message_stop')
+    return stream
+
+
+def fake_curl():
+    config = sys.stdin.read()
+    assert 'https://api.anthropic.com/v1/messages' in config
+    assert 'x-api-key: fixture-secret' in config
+    assert all('fixture-secret' not in arg for arg in sys.argv)
+    encoded = next(line.split(' = ', 1)[1] for line in config.splitlines() if line.startswith('data-binary = '))
+    request = json.loads(json.loads(encoded))
+    assert request['model'] == 'claude-sonnet-4-6'
+    assert request['stream'] is True and request['max_tokens'] >= 1024
+    assert request['thinking']['type'] == 'adaptive'
+    assert request['output_config']['effort'] == 'medium'
+    assert 'input' not in request and 'store' not in request
+    assert request['tools'] and all('input_schema' in tool and 'parameters' not in tool for tool in request['tools'])
+    messages = request['messages']
+    assert all(message['role'] in ('user', 'assistant') for message in messages)
+    previous = Path(os.environ['BLACKBIRD_AM_LOG'])
+    if previous.exists() and os.environ.get('BLACKBIRD_AM_MODE', 'success') == 'success':
+        prior = json.loads(previous.read_text().splitlines()[-1])
+        assert messages[:len(prior['messages'])] == prior['messages'], 'signed input prefix changed'
+    with previous.open('a') as out:
+        out.write(json.dumps(request, ensure_ascii=False) + '\n')
+    mode = os.environ.get('BLACKBIRD_AM_MODE', 'success')
+    if mode == 'cancel':
+        Path(os.environ['BLACKBIRD_AM_READY']).write_text('ready')
+        print(event('message_start', message={'id': 'msg_cancel', 'type': 'message', 'role': 'assistant', 'content': [], 'model': 'claude-sonnet-4-6', 'usage': {}}), end='', flush=True)
+        time.sleep(30)
+        return
+    flat = [block for message in messages for block in message['content']]
+    results = [block for block in flat if block.get('type') == 'tool_result']
+    if not results:
+        command = 'printf X >> ' + shlex.quote(os.environ['BLACKBIRD_AM_EFFECT'])
+        blocks = [
+            {'type': 'thinking', 'thinking': 'Fixture thought.\nUnicode: λ', 'signature': 'opaque+/=\nfixture'},
+            {'type': 'redacted_thinking', 'data': 'opaque-redacted+/='},
+            {'type': 'text', 'text': 'Checking the fixture. '},
+            {'type': 'tool_use', 'id': 'toolu_fixture', 'name': 'exec',
+             'input': {'command': command, 'yield_ms': 1000, 'output_max_bytes': 1024}}]
+        if mode == 'duplicate_call':
+            blocks.append(dict(blocks[-1]))
+        if mode == 'bad_block':
+            blocks.append({'type': 'server_tool_use', 'id': 'unsupported', 'name': 'unknown', 'input': {}})
+        reason = 'max_tokens' if mode == 'max_tokens' else 'tool_use'
+    else:
+        assert len(results) == 1 and results[0]['tool_use_id'] == 'toolu_fixture'
+        assert json.loads(results[0]['content'])['state'] == 'completed'
+        thinking = next(block for block in flat if block.get('type') == 'thinking')
+        assert thinking == {'type': 'thinking', 'thinking': 'Fixture thought.\nUnicode: λ', 'signature': 'opaque+/=\nfixture'}
+        redacted = next(block for block in flat if block.get('type') == 'redacted_thinking')
+        assert redacted == {'type': 'redacted_thinking', 'data': 'opaque-redacted+/='}
+        assistant = next(message for message in messages if any(block.get('type') == 'tool_use' for block in message['content']))
+        assert [block['type'] for block in assistant['content']] == ['thinking', 'redacted_thinking', 'text', 'tool_use']
+        index = messages.index(assistant)
+        assert messages[index + 1]['role'] == 'user' and messages[index + 1]['content'][0]['type'] == 'tool_result'
+        blocks, reason = [{'type': 'text', 'text': 'native Claude fixture completed'}], 'end_turn'
+    stream = fixture_stream(blocks, reason, mode)
+    Path(os.environ['BLACKBIRD_AM_STREAM']).write_text(stream)
+    sys.stdout.write(stream + '\n200')
+
+
+def main():
+    executable = Path(sys.argv[1]).resolve()
+    with tempfile.TemporaryDirectory(prefix='blackbird-anthropic-') as temporary:
+        root = Path(temporary).resolve()
+        curl = root / 'curl'
+        curl.write_text('#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' ' + shlex.quote(str(Path(__file__).resolve())) + ' --fake-curl "$@"\n')
+        curl.chmod(0o700)
+        env = dict(os.environ, BLACKBIRD_AUTH_HOME=str(root / 'auth'),
+                   BLACKBIRD_ANTHROPIC_CURL=str(curl), BLACKBIRD_AM_LOG=str(root / 'requests'),
+                   BLACKBIRD_AM_EFFECT=str(root / 'effect'), BLACKBIRD_AM_READY=str(root / 'ready'),
+                   BLACKBIRD_AM_DIAGNOSTIC=str(root / 'fake-error'), BLACKBIRD_AM_STREAM=str(root / 'stream'))
+
+        def run(args, *, input=None, selected_env=env):
+            result = subprocess.run([str(executable), *args], env=selected_env, input=input,
+                                    capture_output=True, text=True, timeout=30)
+            diagnostic = root / 'fake-error'
+            assert not diagnostic.exists(), diagnostic.read_text() if diagnostic.exists() else ''
+            return result
+
+        keyed = run(['auth', 'key', 'anthropic', 'fixture'], input='fixture-secret\n')
+        assert keyed.returncode == 0, keyed.stderr
+        session = root / 'session'
+        workflow = root / 'turn.lua'
+        workflow.write_text("blackbird.tasks.edit({op_id='seed',base=0,ops={{op='add',title='Native state continuity'}}})\n" +
+                            (Path(__file__).resolve().parent.parent / 'programs/turn.lua').read_text())
+        options = ['--plain', '--session', str(session), '--provider', 'anthropic', '--model', 'claude-sonnet-4-6', '--effort', 'medium', '--workflow', str(workflow)]
+        first = run([*options, '--once', 'Write the fixture with a native tool.'])
+        assert first.returncode == 0, (first.stdout, first.stderr)
+        assert (root / 'effect').read_text() == 'X'
+        assert 'Checking the fixture.' in first.stdout and 'native Claude fixture completed' in first.stdout
+        assert '["input_tokens"]=20' in first.stdout.replace(' ', ''), first.stdout
+        assert len((root / 'requests').read_text().splitlines()) == 2
+        exact_stream = (root / 'stream').read_bytes()
+        assert any(exact_stream in file.read_bytes() for file in session.rglob('*') if file.is_file()), 'exact native SSE missing from retained originals'
+        reopened = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
+        assert reopened.returncode == 0 and '"provider":"anthropic"' in reopened.stdout
+        refused = run(['--plain', '--session', str(session)], input='/effort xhigh\n/session\n/quit\n')
+        assert 'Anthropic model does not support the selected effort' in refused.stderr
+        assert '"effort":"medium"' in refused.stdout and '"effort":"xhigh"' not in refused.stdout
+        follow = run(['--plain', '--session', str(session), '--rebuild-session', '--once', 'Confirm the prior result.'])
+        assert follow.returncode == 0, (follow.stdout, follow.stderr)
+        assert len((root / 'requests').read_text().splitlines()) == 3
+        assert (root / 'effect').read_text() == 'X'
+        for mode in ('max_tokens', 'partial_stream', 'unclosed_block', 'malformed_tail', 'error_tail', 'duplicate_stop', 'duplicate_call', 'invalid_arguments', 'bad_block'):
+            (root / 'effect').unlink(missing_ok=True)
+            failed = run([*options, '--session', str(root / mode), '--once', 'Refuse incomplete tools.'], selected_env=dict(env, BLACKBIRD_AM_MODE=mode))
+            assert failed.returncode != 0, (mode, failed.stdout, failed.stderr)
+            assert not (root / 'effect').exists(), mode
+        cancelled = subprocess.Popen([str(executable), *options, '--session', str(root / 'cancel'), '--once', 'cancel fixture'], env=dict(env, BLACKBIRD_AM_MODE='cancel'), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        deadline = time.monotonic() + 10
+        while not (root / 'ready').exists() and time.monotonic() < deadline:
+            time.sleep(.02)
+        assert (root / 'ready').exists(), cancelled.poll()
+        cancelled.send_signal(signal.SIGINT)
+        stdout, stderr = cancelled.communicate(timeout=10)
+        assert cancelled.returncode != 0, (stdout, stderr)
+        assert not (root / 'effect').exists()
+        for result in (first, reopened, follow):
+            assert 'fixture-secret' not in result.stdout + result.stderr
+        for file in session.rglob('*'):
+            if file.is_file():
+                assert b'fixture-secret' not in file.read_bytes(), file
+        print('Native Anthropic tool continuation, thinking, reopen, semantic refusal, cancellation and secret checks pass')
+
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == '--fake-curl':
+        try:
+            fake_curl()
+        except Exception:
+            Path(os.environ['BLACKBIRD_AM_DIAGNOSTIC']).write_text(traceback.format_exc())
+            raise
+    else:
+        main()

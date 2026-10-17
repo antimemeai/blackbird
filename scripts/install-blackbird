@@ -1,0 +1,159 @@
+#!/bin/sh
+# Install/update a local source generation; no network or account mutation.
+set -eu
+blackbird_source=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+blackbird_prefix=${HOME:?HOME must be set}/.local
+blackbird_jobs=6
+blackbird_cmake=${CMAKE:-cmake}
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --prefix|--source|--jobs)
+      [ "$#" -ge 2 ] || { printf 'Missing value for %s\n' "$1" >&2; exit 2; }
+      case "$1" in
+        --prefix) blackbird_prefix=$2 ;;
+        --source) blackbird_source=$2 ;;
+        --jobs) blackbird_jobs=$2 ;;
+      esac
+      shift 2 ;;
+    --update) shift ;;
+    --help)
+      printf 'Usage: install-blackbird [--update] [--prefix DIRECTORY] [--source CHECKOUT] [--jobs N]\nBuild and atomically activate the selected local source. Default prefix: ~/.local.\n'
+      exit 0 ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
+  esac
+done
+case "$blackbird_jobs" in ''|*[!0-9]*|0) printf 'Jobs must be a positive integer.\n' >&2; exit 2 ;; esac
+blackbird_source=$(CDPATH= cd -- "$blackbird_source" && pwd -P)
+for blackbird_required in CMakeLists.txt CMakePresets.json scripts/blackbird programs/turn.lua programs/instruments/results.lua assets/sr71.png; do
+  [ -f "$blackbird_source/$blackbird_required" ] || { printf 'Incomplete source: %s\n' "$blackbird_required" >&2; exit 1; }
+done
+mkdir -p -- "$blackbird_prefix"
+blackbird_prefix=$(CDPATH= cd -- "$blackbird_prefix" && pwd -P)
+blackbird_home=$blackbird_prefix/lib/blackbird
+mkdir -p -- "$blackbird_home/releases" "$blackbird_prefix/bin"
+# A same-prefix concurrent installer must not replace this transaction's pointer.
+mkdir -- "$blackbird_home/install.lock" 2>/dev/null || {
+  printf 'Another install holds %s/install.lock (remove only after that installer exits).\n' "$blackbird_home" >&2
+  exit 1
+}
+blackbird_generation=''
+blackbird_link=''
+blackbird_launcher=''
+blackbird_previous_launcher=''
+blackbird_launcher_published=false
+blackbird_activated=false
+blackbird_cleanup() {
+  if [ -n "$blackbird_link" ]; then rm -f -- "$blackbird_link"; fi
+  if [ -n "$blackbird_launcher" ]; then rm -f -- "$blackbird_launcher"; fi
+  # A signal after rename must never remove the now-active generation.
+  if [ -n "$blackbird_generation" ] &&
+     [ "$(readlink "$blackbird_home/current" 2>/dev/null || :)" = "$blackbird_generation" ]; then
+    blackbird_activated=true
+  fi
+  if ! "$blackbird_activated"; then
+    if "$blackbird_launcher_published"; then
+      if [ -n "$blackbird_previous_launcher" ]; then
+        mv -f -- "$blackbird_previous_launcher" "$blackbird_prefix/bin/blackbird"
+        blackbird_previous_launcher=''
+      else
+        rm -f -- "$blackbird_prefix/bin/blackbird"
+      fi
+    fi
+    if [ -n "$blackbird_generation" ]; then rm -rf -- "$blackbird_generation"; fi
+  fi
+  if [ -n "$blackbird_previous_launcher" ]; then rm -f -- "$blackbird_previous_launcher"; fi
+  rmdir -- "$blackbird_home/install.lock"
+}
+trap blackbird_cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+if [ -e "$blackbird_prefix/bin/blackbird" ] || [ -L "$blackbird_prefix/bin/blackbird" ]; then
+  if [ -L "$blackbird_prefix/bin/blackbird" ] ||
+     [ "$(sed -n '2p' "$blackbird_prefix/bin/blackbird")" != '# blackbird managed launcher v1' ]; then
+    printf 'Refusing to replace unrelated launcher: %s/bin/blackbird\n' "$blackbird_prefix" >&2
+    exit 1
+  fi
+fi
+if [ -e "$blackbird_home/current" ] && [ ! -L "$blackbird_home/current" ]; then
+  printf 'Refusing to replace non-symlink: %s/current\n' "$blackbird_home" >&2
+  exit 1
+fi
+blackbird_generation=$(mktemp -d "$blackbird_home/releases/generation-XXXXXXXX")
+mkdir -p -- "$blackbird_generation/share/blackbird" "$blackbird_generation/scripts" "$blackbird_generation/build/release"
+cp -R -- "$blackbird_source/programs" "$blackbird_source/assets" "$blackbird_generation/share/blackbird/"
+cp -- "$blackbird_source/scripts/blackbird" "$blackbird_generation/scripts/blackbird"
+chmod 755 "$blackbird_generation/scripts/blackbird"
+# Build at the final path: compiled helper paths stay within this generation.
+"$blackbird_cmake" --preset release -S "$blackbird_source" -B "$blackbird_generation/build/release" \
+  "-DBLACKBIRD_RESOURCE_ROOT=$blackbird_generation/share/blackbird"
+"$blackbird_cmake" --build "$blackbird_generation/build/release" --parallel "$blackbird_jobs" \
+  --target blackbird blackbird-candidate blackbird-auth blackbird-workflow blackbird-colleague \
+  blackbird-resource-sampler blackbird-raw-reader blackbird-token-usage
+for blackbird_tool in blackbird blackbird-candidate blackbird-auth blackbird-workflow blackbird-colleague blackbird-job-runner blackbird-archive blackbird-resource-sampler blackbird-raw-reader blackbird-token-usage; do
+  [ -x "$blackbird_generation/build/release/$blackbird_tool" ] || { printf 'Missing executable: %s\n' "$blackbird_tool" >&2; exit 1; }
+done
+# All smoke state is private and offline. Do not consult the operator's accounts.
+mkdir -m 700 "$blackbird_generation/.smoke"
+"$blackbird_generation/build/release/blackbird" --help > "$blackbird_generation/.smoke/help"
+BLACKBIRD_AUTH_HOME="$blackbird_generation/.smoke/auth" \
+  "$blackbird_generation/build/release/blackbird" auth providers > "$blackbird_generation/.smoke/providers"
+cat > "$blackbird_generation/.smoke/local.lua" <<'LUA'
+local result = blackbird.call('exec', {argv={'/bin/sh', '-c', 'exit 0'}, pty=true})
+assert(result.exit_code == 0, 'Installed PTY helper failed')
+print('BLACKBIRD_INSTALL_SMOKE')
+LUA
+if BLACKBIRD_AUTH_HOME="$blackbird_generation/.smoke/auth" \
+  "$blackbird_generation/build/release/blackbird" --plain \
+  --session "$blackbird_generation/.smoke/session" \
+  --workflow "$blackbird_generation/.smoke/local.lua" --once offline-install-smoke \
+  > "$blackbird_generation/.smoke/local-output"; then
+  :
+else
+  cat "$blackbird_generation/.smoke/local-output" >&2
+  exit 1
+fi
+case "$(cat "$blackbird_generation/.smoke/local-output")" in
+  *BLACKBIRD_INSTALL_SMOKE*) ;;
+  *) printf 'Installed local workflow smoke did not complete.\n' >&2; exit 1 ;;
+esac
+rm -rf -- "$blackbird_generation/.smoke"
+# A quoted absolute prefix handles spaces and shell metacharacters literally.
+blackbird_quoted_home=$(printf '%s' "$blackbird_home" | sed "s/'/'\\\\''/g")
+blackbird_launcher=$(mktemp "$blackbird_prefix/bin/.blackbird-XXXXXXXX")
+{
+  printf '#!/bin/sh\n# blackbird managed launcher v1\nset -eu\n'
+  printf "blackbird_install_home='%s'\n" "$blackbird_quoted_home"
+  cat <<'LAUNCHER'
+blackbird_release=$(CDPATH= cd -- "$blackbird_install_home/current" && pwd -P)
+BLACKBIRD_SPRITE_ASSET=${BLACKBIRD_SPRITE_ASSET:-"$blackbird_release/share/blackbird/assets/sr71.png"}
+export BLACKBIRD_SPRITE_ASSET
+exec "$blackbird_release/scripts/blackbird" "$@"
+LAUNCHER
+} > "$blackbird_launcher"
+chmod 755 "$blackbird_launcher"
+# Publish the stable launcher before the final generation switch. On update it
+# remains compatible with the old current pointer if the final rename fails.
+if [ -f "$blackbird_prefix/bin/blackbird" ]; then
+  blackbird_previous_launcher=$(mktemp "$blackbird_prefix/bin/.blackbird-previous-XXXXXXXX")
+  cp -p -- "$blackbird_prefix/bin/blackbird" "$blackbird_previous_launcher"
+fi
+# Set before rename so signal cleanup can restore either side of publication.
+blackbird_launcher_published=true
+mv -f -- "$blackbird_launcher" "$blackbird_prefix/bin/blackbird"
+blackbird_launcher=''
+blackbird_link=$blackbird_home/.current-$$
+ln -s -- "$blackbird_generation" "$blackbird_link"
+# BSD and GNU mv need different flags to replace a symlink to a directory itself.
+case "$(uname -s)" in
+  Darwin) mv -fh -- "$blackbird_link" "$blackbird_home/current" ;;
+  Linux) mv -fT -- "$blackbird_link" "$blackbird_home/current" ;;
+  *) printf 'Atomic install currently supports macOS and Linux.\n' >&2; exit 1 ;;
+esac
+blackbird_link=''
+blackbird_activated=true
+printf 'Installed Blackbird: %s/bin/blackbird\nGeneration: %s\nUpdate: %s/scripts/install-blackbird --update --prefix %s\n' \
+  "$blackbird_prefix" "$blackbird_generation" "$blackbird_source" "$blackbird_prefix"
+case ":${PATH:-}:" in
+  *":$blackbird_prefix/bin:"*) ;;
+  *) printf 'Add %s/bin to PATH to invoke blackbird directly.\n' "$blackbird_prefix" ;;
+esac

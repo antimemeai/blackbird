@@ -51,6 +51,11 @@ Archival copies do not reset the current semantic session's capacity limit.
 
 ## Come aboard
 
+Install the configured local source with `./scripts/install-blackbird`, then run
+`blackbird` from any directory. Rebuild and activate an update with
+`./scripts/install-blackbird --update`. See [installation](docs/INSTALLING.md) for
+generation retention and existing-session behavior.
+
 From a configured checkout with the release executable built:
 
 ```sh
@@ -84,7 +89,9 @@ Blackbird owns provider account storage, selection and refresh. Explicit OpenAI
 sign-in uses browser OAuth; Kimi and Grok use device login; Anthropic has a
 PKCE/copy-code flow; MiMo and other providers accept keys. The main coding loop
 uses OpenAI by default, with explicit OpenRouter and registered Responses support,
-including Paper Instruments through the portable Responses dialect. See
+including Paper Instruments through the portable Responses dialect. Native Claude
+uses `--provider anthropic --model claude-sonnet-4-6`; see
+[Claude setup and limits](docs/USING_BLACKBIRD.md#native-claude-main-provider). See
 [provider routing, prompt caching and usage](docs/TOKENOMICS.md) for selection and
 limits. Direct context-only colleagues can use the wider provider registry.
 Installed Codex/Claude compatibility paths remain available until owned accounts

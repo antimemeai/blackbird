@@ -4265,7 +4265,7 @@ Value CodingEngine::request(Value options) {
     assembly.stage(12);
     drain_workflows();
     auto items = context_.items();
-    const auto origin = context_.head();
+    auto origin = context_.head();
     validate_protocol(items, assembly.reference());
     auto request = Value::object(
         {{"model", Value{string_field(program_config_, "model").empty()
@@ -4406,15 +4406,22 @@ Value CodingEngine::request(Value options) {
           "Neither target nor trigger is a token estimate, hard provider limit, or "
           "audit reclamation.";
     }
-    const auto reusable_input_items = field(request, "input").array().size();
-    if (!operational_state.empty())
+    auto reusable_input_items = field(request, "input").array().size();
+    if (!operational_state.empty()) {
+      auto state_item =
+          Value::object({{"role", Value{"developer"}},
+                         {"content", Value{std::move(operational_state)}}});
+      if (provider_.retain_request_state()) {
+        context_.append({state_item}, "provider.request-state");
+        origin = context_.head();
+        ++reusable_input_items;
+      }
       for (auto &[key, input] : request.object())
         if (key == "input") {
-          input.array().push_back(
-              Value::object({{"role", Value{"developer"}},
-                             {"content", Value{std::move(operational_state)}}}));
+          input.array().push_back(std::move(state_item));
           break;
         }
+    }
     assembly.stage(14);
     request_group_active_ = true;
     provider_.request_group_owned_ = true;

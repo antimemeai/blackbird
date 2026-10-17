@@ -454,6 +454,13 @@ Value export_provider_request(Value request) {
   for (auto &[key, input] : request.object())
     if (key == "input" && std::holds_alternative<Value::Array>(input.value()))
       for (auto &item : input.array()) {
+        if (item.find("type") && *item.find("type") == Value{"reasoning"} &&
+            item.find("anthropic_content"))
+          throw Error{ErrorCode::unsupported};
+        std::erase_if(item.object(), [](const auto &entry) {
+          return entry.first == "anthropic_message_id" ||
+                 entry.first == "anthropic_content";
+        });
         const auto *type = item.find("type");
         if (!type)
           continue;

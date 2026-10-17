@@ -95,6 +95,24 @@ int main() {
           enriched.size() - 2,
           R"(,{"id":"33000000000000000000000000000000.3","item":{"type":"reasoning","encrypted_content":"opaque-retained","summary":[]}})");
       ContextStore::validate_successor_seed(unwrap(parse_json(enriched)));
+      auto native = raw;
+      native.insert(
+          native.size() - 2,
+          R"(,{"id":"33000000000000000000000000000000.3","item":{"type":"reasoning","summary":[],"anthropic_message_id":"msg-original","anthropic_content":{"type":"thinking","thinking":"unchanged summary","signature":"opaque+/="}}},{"id":"33000000000000000000000000000000.4","item":{"type":"reasoning","summary":[],"anthropic_message_id":"msg-original","anthropic_content":{"type":"redacted_thinking","data":"opaque-redacted+/="}}})");
+      ContextStore::validate_successor_seed(unwrap(parse_json(native)));
+      for (const auto &[before, after] :
+           {std::pair{std::string{"\"signature\":\"opaque+/=\""},
+                      std::string{"\"signature\":\"\""}},
+            std::pair{std::string{"\"data\":\"opaque-redacted+/=\""},
+                      std::string{"\"data\":\"\""}},
+            std::pair{std::string{"\"anthropic_message_id\":\"msg-original\""},
+                      std::string{"\"anthropic_message_id\":\"\""}},
+            std::pair{std::string{"\"type\":\"thinking\""},
+                      std::string{"\"type\":\"text\""}}}) {
+        auto malformed = native;
+        malformed.replace(malformed.find(before), before.size(), after);
+        reject(unwrap(parse_json(malformed)));
+      }
       context.seed_successor(original);
       revision = context.head();
       check(root->committed_facts().size() == 2 && context.items().size() == 3);

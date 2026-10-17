@@ -62,6 +62,8 @@ public:
 
 private:
   std::string pending_, data_;
+  std::string anthropic_message_;
+  std::vector<bool> anthropic_text_;
   std::size_t bytes_ = 0;
 };
 Result<Value> completed_response(std::string_view event_stream, ValueLimits limits = {},

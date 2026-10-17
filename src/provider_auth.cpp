@@ -292,7 +292,7 @@ Value builtin(std::string_view id) {
   if (id == "anthropic")
     return make("https://api.anthropic.com/v1", "messages", "ANTHROPIC_API_KEY",
                 "browser", "9d1c250a-e61b-44d9-88ed-5944d1962f5e", "",
-                "https://platform.claude.com/v1/oauth/token",
+                "https://console.anthropic.com/v1/oauth/token",
                 "org:create_api_key user:profile user:inference");
   if (id == "kimi")
     return make("https://api.kimi.com/coding/v1", "messages", "KIMI_API_KEY", "device",

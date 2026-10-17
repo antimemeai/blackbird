@@ -26,7 +26,7 @@ group binding, and colleague Messages export. Current official source consulted:
 - [Thinking](https://platform.claude.com/docs/en/build-with-claude/thinking):
   adaptive and manual modes differ by model family. Complete thinking and
   redacted blocks must be replayed in original order with their tool use; opaque
-  signatures remain unchanged. They are not OpenAI encrypted reasoning.
+   signatures remain unchanged. They are not OpenAI encrypted reasoning.
 - [Tool calls](https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls):
   tool results are user content immediately following their assistant tool group.
 - [Effort](https://platform.claude.com/docs/en/build-with-claude/effort): native
@@ -46,8 +46,9 @@ remains the transport. Existing OAuth identity headers/system prefix are reused.
    orphan/duplicate/incomplete tool groups and foreign opaque reasoning before
    dispatch. Preserve authored schemas without inventing required arguments.
 2. Preserve native thinking/redacted blocks as native Values on tagged reasoning
-   entries, never JSON persistence or fake encrypted_content. Context validation
-   accepts exactly this native shape. Responses export refuses these entries.
+   entries, never JSON persistence or fake encrypted_content. Ordinary managed
+   context already preserves native entry Values. Successor-seed validation
+   additionally accepts exactly this native shape. Responses export refuses these entries.
    Managed context remains model authored; native adapters do not silently
    rewrite invalidated signed history after a destructive edit.
 3. A bounded SSE accumulator checks message and indexed block lifecycle, preserves

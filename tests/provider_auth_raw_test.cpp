@@ -585,7 +585,7 @@ void private_surfaces(const std::filesystem::path &directory) {
       const auto tokens = unwrap(parse_json(
           R"({"access_token":"private-access-sentinel","refresh_token":"private-refresh-sentinel","expires_in":120,"token_type":"Bearer"})"));
       auth.save_oauth("anthropic", "account", tokens, "private-client-sentinel",
-                      "https://platform.claude.com/v1/oauth/token",
+                      "https://console.anthropic.com/v1/oauth/token",
                       Value::object({{"id_token", Value{"private-jwt-sentinel"}}}));
       ProviderAuthConfig owned = config;
       owned.http = [](const ProviderHttpRequest &request,

@@ -590,7 +590,8 @@ void ProviderAuth::browser_login(std::string_view p, std::string_view account,
     trace.stage(RawAuthField::browser_revision);
     const auto expected = number(registration, "revision");
     trace.scalar(RawAuthField::browser_revision, expected);
-    const auto verifier = secure_nonce(), state = secure_nonce(),
+    const auto verifier = secure_nonce();
+    const auto state = p == "anthropic" ? verifier : secure_nonce(),
                nonce = secure_nonce();
     auto client = p == "openai" ? text(registration, "client_id", text(d, "client_id"))
                                 : text(d, "client_id");
@@ -602,7 +603,7 @@ void ProviderAuth::browser_login(std::string_view p, std::string_view account,
       callback = server->uri;
       authorize = "https://auth.openai.com/api/accounts/authorize";
     } else {
-      callback = "https://platform.claude.com/oauth/code/callback";
+      callback = "https://console.anthropic.com/oauth/code/callback";
       authorize = "https://claude.ai/oauth/authorize";
     }
     std::string challenge;
@@ -628,6 +629,8 @@ void ProviderAuth::browser_login(std::string_view p, std::string_view account,
                       "&redirect_uri=" + form(callback) +
                       "&scope=" + form(text(d, "scope")) + "&state=" + form(state) +
                       "&code_challenge_method=S256&code_challenge=" + challenge;
+    if (p == "anthropic")
+      url += "&code=true";
     Value metadata = Value::object({});
     if (p == "openai") {
       // Stable host identity is separate from account credentials; no provider cache.

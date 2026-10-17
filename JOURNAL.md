@@ -11169,3 +11169,61 @@ metadata must establish readiness before dispatch. Never read vendor caches.
 Installer research finds absolute compiled helper/resource paths: versioned
 generation build and atomic selection needed, not just copying one executable.
 Existing ~/.local/bin is on PATH, and no blackbird command currently exists.
+
+Operator paused implementation to challenge the auth reference comparison; all
+delegated work stopped with no active owned process. Three observed browser
+attempts did not save an account; dedicated CLI error line reports429, including
+the Pi-derived code=true/Accept correction. No callback/token values captured.
+Read published npm opencode-anthropic-auth0.0.13 rather than only core provider:
+its actual exchange uses console host/callback, verifier as state, JSON with
+Content-Type only, and JS fetch. Earlier comparison mixed reference versions.
+Operator explicitly resumes and directs alignment/send. Written bounded change
+papers/claude-auth-integration-2026-10-17/OPENCODE_ALIGNMENT.md; direct RED/GREEN
+must demand that published contract before one fresh native sign-in. Keep owned
+credential safeguards and transport, no dependency or automatic code replay.
+Native main owner resumes only current review/lint fixes and direct GREEN.
+
+Published OpenCode0.0.13 archive retained with npmSHA512 verification, archive
+SHA256946333f4 and sourceSHA256a220803e recorded in QUARANTINE.md. Study only.
+Exact owning RED fails0.78s at verifier/state mismatch; align console callback
+and token URL, verifier-as-state and ContentType-only JSON grants, retaining
+code=true. One bounded comparison catches a staleAccept fixture assertion;
+same auth/raw checks pass2/2 in1.95s after correction. Fresh native auth/main
+built. New dedicated sign-in exits1 and no account is saved; its window is
+closed before filtered error extraction, so do not label it another429.
+Answer operator's Anthropic-doc question from current primary pages: official
+Claude Code subscription automation uses setup-token/environment; native API
+auth docs describe API keys/federation/AppAttest. No hidden billing fallback.
+
+Native main unit completes10/10 focused Debug26.50s, all five review findings
+fixed with direct REDs/rechecks and clean targeted analysis. Seven affected
+ASan/UBSan checks pass19.70s; Linux Release targeted check running separately.
+Installer transaction review/final-switch rollback repair is green, including
+retained generations, exact cwd/argv and all production helpers. Stage the
+combined source for its required installed-hook gate, then publish/install
+the qualified generation. Real native OAuth service acceptance stays distinct
+from local source qualification. Keep artwork and AFL untouched.
+
+The current primary Agent SDK overview explicitly requires prior approval for
+third-party products offering claude.ai login/subscription limits and otherwise
+directs API-key authentication. Answer this distinction without inferring an
+OAuth error cause or changing billing. Separately incorporate current master
+c38a7de (qualified C++23/LLVM23/libc++ upgrade) before source qualification and
+installation. Preserve staged work via an owned tracked-only stash; new branch
+work/claude-main-install-cpp23-2026-10-17 keeps both journal/reference additions
+and both Linux archive-input lists. Supported Beads backup retains the closed
+C++23 issue and pending Claude/install issues. The old-branch source gate was
+interrupted deliberately before commit. Its focused Linux Release check passed
+9/9 in3.40s under the former C++20/Linux18 profile; final checks use C++23.
+
+Combined C++23 first source-gate suite passes261/263 in598.05s. The two
+pre-existing raw fixtures fail at source admission before its30ms wait deadline
+and at the five-second command output offer, during the six-worker native run.
+Exact unchanged binaries pass serially2/2 in9.68s (provider5.15s, command4.52s).
+Use CTest RUN_SERIAL for those two timing-sensitive process fixtures, consistent
+with the existing CLI/TUI scheduling; preserve every assertion and deadline.
+This repairs scheduling, not production behavior or a latency guarantee. Record
+the remaining clock-entry assumption for later deterministic fixture work. Full
+required source gate reruns on the final scheduler configuration. Current Linux
+LLVM23/libc++23 targeted Release10/10 passes2.41s and ASan/UBSan10/10 passes6.71s;
+actual native Anthropic Mac check passes6.13s in the first combined suite.

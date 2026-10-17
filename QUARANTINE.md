@@ -997,3 +997,24 @@ mkdir -p quarantine/cpp23-llvm-23.1.4
 curl --fail --location https://raw.githubusercontent.com/llvm/llvm-project/0cd28174a1f6/libcxx/include/fstream -o quarantine/cpp23-llvm-23.1.4/fstream
 curl --fail --location https://raw.githubusercontent.com/llvm/llvm-project/0cd28174a1f6/libcxx/src/filesystem/operations.cpp -o quarantine/cpp23-llvm-23.1.4/operations.cpp
 ```
+
+# Published Anthropic OAuth reference — 2026-10-17
+
+Study-only `opencode-anthropic-auth@0.0.13`, published npm artifact; no dependency
+adoption or execution. Source: <https://registry.npmjs.org/opencode-anthropic-auth/0.0.13>.
+Preserved archive: `../quarantine_proj/archives/opencode-anthropic-auth-0.0.13.tgz`,
+downloaded from <https://registry.npmjs.org/opencode-anthropic-auth/-/opencode-anthropic-auth-0.0.13.tgz>.
+Archive SHA256 `946333f4dc41b14d50ed94751409394b13a7986d900c160b8829c54a1b31f81d`;
+npm SHA512 integrity was checked. Extracted reference:
+`quarantine/opencode-anthropic-auth-0.0.13/package/index.mjs`, SHA256
+`a220803e7d8691d9f1d90ba902a837b3ee0c9498a497085e227f36626edf11b6`.
+The package declares no license or repository in package.json. The snapshot has
+no nested Git metadata. Restore from the intact archive with:
+
+```sh
+mkdir -p quarantine/opencode-anthropic-auth-0.0.13
+tar -xzf ../quarantine_proj/archives/opencode-anthropic-auth-0.0.13.tgz -C quarantine/opencode-anthropic-auth-0.0.13
+```
+
+Authorization, exchange and refresh fields ground the bounded alignment in
+`papers/claude-auth-integration-2026-10-17/OPENCODE_ALIGNMENT.md`.

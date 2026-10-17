@@ -37,6 +37,8 @@ def main():
     paths.append("scripts/check-tui-center")
     paths.append("scripts/check-tui-instrument")
     paths += ["scripts/check-terminal-edge", "scripts/check-tui-viewport", "scripts/check-main-input"]
+
+    paths += ["scripts/check-anthropic", "scripts/install-blackbird", "scripts/check-install-blackbird"]
     lua_archive = ROOT.parent / "quarantine_proj/archives/lua-5.4.8.tar.gz"
     if hashlib.sha256(lua_archive.read_bytes()).hexdigest() != "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae":
         raise RuntimeError("Lua 5.4.8 source archive checksum mismatch")

@@ -718,7 +718,9 @@ services, configure an explicit HTTPS origin and one of the three wire formats:
 
 Custom IDs cannot replace builtin origins. Supported protocols are `responses`,
 `responses-portable`, `chat` (chat/completions), and `messages` (Anthropic-style).
-The two Responses protocols also support the main coding loop. See
+The two Responses protocols support the main coding loop. Built-in `anthropic`
+also supports it through its native Messages adapter; other registered Messages
+providers remain context-only colleague routes. See
 [Paper Instruments setup](TOKENOMICS.md#paper-instruments-and-registered-responses).
 Credentials are sent
 through curl's private stdin configuration, not its argv; no redirects or HTTP
@@ -730,16 +732,47 @@ Admissions retain protocol/origin/account/revision, never token material; an
 account change before dispatch refuses that admission. Requested/observed models
 and provider usage remain separate. HTTP401/403,429 and transport timeout have
 distinct outcomes. The main coding loop supports OpenAI, explicit OpenRouter
-Responses and registered Responses routes. OpenAI can use its owned ChatGPT-plan login or key; existing Codex
+Responses, registered Responses routes and built-in Anthropic Messages.
+OpenAI can use its owned ChatGPT-plan login or key; existing Codex
 authentication remains the compatibility path when neither is selected.
 Provider `claude` remains the explicit Claude CLI
 bridge, while `anthropic` uses owned direct authentication. Both support
-context-only colleagues and participants. Claude as the main coding model still
-requires a Messages adapter; account login alone does not enable that route.
-Owned Anthropic OAuth has deterministic login/refresh checks but no recorded
-live subscription validation. See the [auth inventory](../papers/claude-auth-integration-2026-10-17/SOURCE_INVENTORY.md)
+context-only colleagues and participants. The `anthropic` route also supports
+the main coding loop described below. Owned Anthropic OAuth has deterministic
+login/refresh checks; the live token-exchange result is tracked separately from
+those checks. See the [auth inventory](../papers/claude-auth-integration-2026-10-17/SOURCE_INVENTORY.md)
 and [current primary-source notes](../papers/claude-auth-integration-2026-10-17/PRIMARY_SOURCES.md).
 Source integration does not activate a running session or install a release.
+
+### Native Claude main provider
+
+Sign in through the separate operator auth process, then select the provider and
+model explicitly for a fresh conversation:
+
+```sh
+blackbird auth login anthropic personal
+blackbird --provider anthropic --model claude-sonnet-4-6 --effort medium
+```
+
+An explicitly selected Anthropic API key also works with this route, using its
+issuer's API billing. Blackbird does not switch a failed subscription login to
+that route automatically. The installed Claude CLI bridge has its own account
+selection and is independent of owned Anthropic sign-in.
+
+Native Messages uses the retained Lua workflow and ordinary native tools. It
+streams text, preserves complete signed/redacted thinking and tool-result
+history across continuation/reopen, and refuses incomplete streams before tool
+execution. Provider-specific effort choices are checked before settings are
+saved. The initial adapter supports text and function tools; unsupported semantic
+content is refused. A context containing Anthropic's opaque thinking cannot be
+sent to a Responses provider; start a fresh conversation for that change.
+
+The owned sign-in uses browser consent plus a hidden pasted callback code. A
+successful browser page alone does not mean credentials were saved: confirm
+`Sign-in saved` in Terminal and an active account in `blackbird auth status`.
+The observed [token-exchange 429](../papers/claude-auth-integration-2026-10-17/LIVE_RATE_LIMIT.md)
+is a distinct live compatibility/service result. There is no automatic replay of
+an authorization code after an unknown exchange outcome.
 
 ## Trajectory inspection
 

@@ -1,4 +1,5 @@
 #include "blackbird/openai.hpp"
+#include "blackbird/context.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/provider_auth.hpp"
 #include "blackbird/raw_auth.hpp"
@@ -527,6 +528,37 @@ std::vector<TextPreview> ResponsePreview::feed(std::string_view bytes,
                 output.push_back({item->string(), required(packet.value(), "delta")});
               } else
                 event_phase.scalar(63, 0);
+            } else if (type && *type == Value{"message_start"}) {
+              anthropic_message_ = required(field(packet.value(), "message"), "id");
+              anthropic_text_.clear();
+            } else if (type && (*type == Value{"content_block_start"} ||
+                                *type == Value{"content_block_delta"})) {
+              const auto &number = field(packet.value(), "index").number().text();
+              std::size_t index = 0;
+              const auto parsed =
+                  std::from_chars(number.data(), number.data() + number.size(), index);
+              if (parsed.ec != std::errc{} ||
+                  parsed.ptr != number.data() + number.size() ||
+                  anthropic_message_.empty())
+                fail(ErrorCode::corrupt);
+              if (*type == Value{"content_block_start"}) {
+                if (index != anthropic_text_.size())
+                  fail(ErrorCode::corrupt);
+                const auto &block = field(packet.value(), "content_block");
+                const bool text = field(block, "type") == Value{"text"};
+                anthropic_text_.push_back(text);
+                if (text && !string_field(block, "text").empty())
+                  output.push_back({anthropic_message_ + ":" + std::to_string(index),
+                                    string_field(block, "text")});
+              } else {
+                if (index >= anthropic_text_.size())
+                  fail(ErrorCode::corrupt);
+                const auto &delta = field(packet.value(), "delta");
+                if (anthropic_text_[index] &&
+                    field(delta, "type") == Value{"text_delta"})
+                  output.push_back({anthropic_message_ + ":" + std::to_string(index),
+                                    string_field(delta, "text")});
+              }
             } else
               event_phase.scalar(63, 0);
             data_.clear();

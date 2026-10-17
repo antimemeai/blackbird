@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""Direct install transaction checks; no compiler, provider or user-home access."""
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+source = Path(__file__).resolve().parent.parent
+installer = source / 'scripts/install-blackbird'
+assert installer.is_file(), 'install/update entry point is missing'
+with tempfile.TemporaryDirectory(prefix='blackbird install ') as temporary:
+    root = Path(temporary).resolve()
+    prefix = root / "prefix with 'quote"
+    checkout = root / 'source'
+    checkout.mkdir()
+    for name in ('programs', 'assets', 'scripts'):
+        (checkout / name).mkdir()
+    (checkout / 'CMakeLists.txt').write_text('fixture')
+    (checkout / 'CMakePresets.json').write_text('fixture')
+    (checkout / 'programs/turn.lua').write_text('fixture workflow')
+    (checkout / 'programs/instruments').mkdir()
+    (checkout / 'programs/instruments/results.lua').write_text('fixture instrument')
+    (checkout / 'assets/sr71.png').write_bytes(b'fixture sprite')
+    (checkout / 'scripts/blackbird').write_text((source / 'scripts/blackbird').read_text())
+    (checkout / 'scripts/blackbird').chmod(0o755)
+    cmake = root / 'cmake'
+    cmake.write_text('''#!/bin/sh
+set -eu
+if [ "$1" = --build ]; then
+  if [ "${FAIL_BUILD:-}" = yes ]; then exit 23; fi
+  build=$2
+  cat > "$build/blackbird" <<'BINARY'
+#!/bin/sh
+set -eu
+case "${1:-}" in
+  --help) printf 'fixture help\\n'; exit 0 ;;
+  auth) printf 'fixture safe auth\\n'; exit 0 ;;
+esac
+if [ -n "${INSTALL_CAPTURE:-}" ]; then
+  printf '%s\\n' "$PWD" "$BLACKBIRD_SPRITE_ASSET" "$@" > "$INSTALL_CAPTURE"
+fi
+if [ "${FAIL_SMOKE:-}" = yes ]; then exit 31; fi
+printf 'BLACKBIRD_INSTALL_SMOKE\\n'
+BINARY
+  chmod +x "$build/blackbird"
+  for tool in blackbird-candidate blackbird-colleague blackbird-auth blackbird-job-runner blackbird-archive blackbird-workflow blackbird-resource-sampler blackbird-raw-reader blackbird-token-usage; do
+    if [ "${MISSING_HELPER:-}" != "$tool" ]; then cp "$build/blackbird" "$build/$tool"; fi
+  done
+else
+  printf '%s\\n' "$@" > "$CONFIG_CAPTURE"
+fi
+''')
+    cmake.chmod(0o755)
+    shim = root / 'shim'
+    shim.mkdir()
+    (shim / 'mv').write_text('''#!/bin/sh
+set -eu
+for destination in "$@"; do :; done
+case "$destination" in
+  */lib/blackbird/current) if [ "${FAIL_SWITCH:-}" = yes ]; then exit 29; fi ;;
+esac
+exec /bin/mv "$@"
+''')
+    (shim / 'mv').chmod(0o755)
+    env = dict(os.environ, PATH=str(shim) + os.pathsep + os.environ['PATH'], HOME=str(root / 'home'), CMAKE=str(cmake),
+               CONFIG_CAPTURE=str(root / 'configure'))
+    def install(*args, success=True, extra=None):
+        run = subprocess.run([str(installer), '--prefix', str(prefix), '--source',
+                              str(checkout), *args], env=dict(env, **(extra or {})),
+                             text=True, capture_output=True)
+        assert (run.returncode == 0) == success, (run.returncode, run.stdout, run.stderr)
+        return run
+    install(success=False, extra={'FAIL_SWITCH': 'yes'})
+    assert not (prefix / 'bin/blackbird').exists(), 'failed first switch left a broken launcher'
+    assert not (prefix / 'lib/blackbird/current').exists()
+    install()
+    current = prefix / 'lib/blackbird/current'
+    first = current.resolve(strict=True)
+    assert first.parent == prefix / 'lib/blackbird/releases'
+    assert (first / 'share/blackbird/programs/turn.lua').read_text() == 'fixture workflow'
+    assert (first / 'share/blackbird/programs/instruments/results.lua').is_file()
+    assert (first / 'share/blackbird/assets/sr71.png').is_file()
+    assert '-DBLACKBIRD_RESOURCE_ROOT=' + str(first / 'share/blackbird') in (root / 'configure').read_text()
+    assert str(first / 'build/release') in (root / 'configure').read_text()
+    capture = root / 'capture'
+    subprocess.run([str(prefix / 'bin/blackbird'), '--session', 'named session',
+                    '--once', "hello '$() world"], cwd=root, check=True,
+                   env=dict(env, INSTALL_CAPTURE=str(capture)), capture_output=True)
+    assert capture.read_text().splitlines() == [str(root), str(first / 'share/blackbird/assets/sr71.png'),
+                                                '--session', 'named session', '--once', "hello '$() world"]
+    previous_launcher = (prefix / 'bin/blackbird').read_bytes()
+    install('--update', success=False, extra={'FAIL_SWITCH': 'yes'})
+    assert current.resolve() == first, 'failed final switch changed active generation'
+    assert (prefix / 'bin/blackbird').read_bytes() == previous_launcher, 'failed update changed launcher'
+    install('--update', success=False, extra={'FAIL_BUILD': 'yes'})
+    assert current.resolve() == first, 'failed build changed active generation'
+    assert list((prefix / 'lib/blackbird/releases').iterdir()) == [first]
+    install('--update', success=False, extra={'FAIL_SMOKE': 'yes'})
+    assert current.resolve() == first, 'failed native smoke changed active generation'
+    install('--update', success=False, extra={'MISSING_HELPER': 'blackbird-job-runner'})
+    assert current.resolve() == first, 'missing helper changed active generation'
+    install('--update', success=False, extra={'MISSING_HELPER': 'blackbird-candidate'})
+    assert current.resolve() == first, 'missing production utility changed active generation'
+    lock = prefix / 'lib/blackbird/install.lock'
+    lock.mkdir()
+    install('--update', success=False)
+    assert lock.is_dir() and current.resolve() == first, 'concurrent installer stole lock'
+    lock.rmdir()
+    install('--update')
+    second = current.resolve(strict=True)
+    assert second != first and first.is_dir(), 'update removed old running generation'
+    assert not (prefix / 'lib/blackbird/install.lock').exists()
+    (prefix / 'bin/blackbird').write_text('#!/bin/sh\n# operator wrapper\n')
+    install(success=False)
+    assert (prefix / 'bin/blackbird').read_text() == '#!/bin/sh\n# operator wrapper\n'
+    assert current.resolve() == second
+print('Install/update: packaged resources, exact arguments/cwd, generation switch, rollback and unrelated launcher preservation pass')

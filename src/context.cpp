@@ -858,8 +858,20 @@ void ContextStore::validate_successor_seed(const Value &seed, RawContextOrigin o
       if (t != "message" && role)
         throw Error{ErrorCode::invalid_range};
       if (t == "reasoning") {
-        // store:false requires self-contained encrypted reasoning, not an old ID.
-        if (string_field(item, "encrypted_content").empty())
+        if (const auto *native = item.find("anthropic_content")) {
+          if (string_field(item, "anthropic_message_id").empty() ||
+              item.find("encrypted_content"))
+            throw Error{ErrorCode::invalid_range};
+          const auto &kind = string_field(*native, "type");
+          if (kind == "thinking") {
+            (void)string_field(*native, "thinking");
+            if (string_field(*native, "signature").empty())
+              throw Error{ErrorCode::invalid_range};
+          } else if (kind != "redacted_thinking" ||
+                     string_field(*native, "data").empty())
+            throw Error{ErrorCode::invalid_range};
+        } else if (string_field(item, "encrypted_content").empty())
+          // store:false requires self-contained reasoning, not an old ID.
           throw Error{ErrorCode::invalid_range};
         const auto &summary = field(item, "summary");
         if (!std::holds_alternative<Value::Array>(summary.value()))
