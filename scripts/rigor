@@ -118,6 +118,12 @@ def lua_check(workspace, output):
     return result.returncode, diagnostics
 
 
+def require_standard(args, file):
+    standards = [arg for arg in args if arg.startswith("-std=")]
+    if standards != ["-std=c++26"]:
+        raise RuntimeError(f"unqualified language standard {standards}: {file}")
+
+
 def lint():
     cpp = sources(CPP_UNITS | CPP_HEADERS)
     if cpp:
@@ -137,6 +143,7 @@ def lint():
         args = entry.get("arguments") or shlex.split(entry["command"])
         if not args or args[0] != str(LLVM / "clang++"):
             raise RuntimeError(f"unqualified compiler in database: {entry['file']}")
+        require_standard(args, entry["file"])
         flags = []
         index = 1
         while index < len(args):

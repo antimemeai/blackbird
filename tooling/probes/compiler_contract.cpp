@@ -9,6 +9,13 @@
 #include <stdexcept>
 #include <thread>
 
+#ifndef __STRICT_ANSI__
+#error "compiler contract requires ISO C++26 without GNU extensions"
+#endif
+#ifndef _LIBCPP_VERSION
+#error "compiler contract requires libc++"
+#endif
+
 static_assert(__cplusplus > 202302L); // Clang 23 reports 202400L for C++26.
 static_assert(std::saturating_add<std::int8_t>(100, 100) == 127);
 static_assert(std::saturating_sub<std::uint8_t>(3, 5) == 0);
