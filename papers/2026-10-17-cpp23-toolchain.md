@@ -109,6 +109,7 @@ Earlier interrupted runs are recorded as interrupted, not passes. Changed Linux
 fixtures were rebuilt incrementally in retained workspaces; their owning Python
 drivers were resumed afterward and both temporary workspaces were removed.
 
-Main integration follows qualification. The original checkout's separate Claude
-implementation branch and artwork are preserved. No live executable activation
-is part of this toolchain/source change. Tracking issue: `arconaut-34z`.
+Integrated and pushed to `master` at `186f878`, including source checkpoint
+`87c1116`. The original checkout continues its separate Claude implementation
+branch. The qualified worktree retains its builds/logs and releases the master
+checkout lease after publication. Tracking issue `arconaut-34z` is closed.

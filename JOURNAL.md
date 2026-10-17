@@ -11139,3 +11139,18 @@ profiling docs name C++23; historical handoff/toolchain decisions point to the
 new profiles. The LLVM18 AFL campaign remains at its recorded identities.
 Publish this qualified candidate and integrate into master while preserving the
 original checkout's separate ongoing Claude branch.
+
+## 2026-10-17 — C++23 merged into master
+
+Published `work/cpp23-toolchain-2026-10-17` at `186f878`, including qualified source
+`87c1116`, then fast-forwarded and pushed master. The original checkout remains
+on its separate ongoing Claude implementation branch. Close `arconaut-34z` and
+export the current issue backup. Keep the qualified builds/logs in the isolated
+worktree, detached after publication so master remains available to other work.
+
+During backup, Beads auto-started an empty worktree catalog on13308. Stop that
+worktree instance and restore the server using the primary project's existing
+`.beads/dolt` directory; the existing issues are available again. Worktree backup
+commands use `BEADS_DOLT_DATA_DIR` pointing to the primary directory. Source
+qualification remains unchanged; the final publication adds only documentation
+and issue backups.
