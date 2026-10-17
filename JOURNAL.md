@@ -11154,3 +11154,18 @@ worktree instance and restore the server using the primary project's existing
 commands use `BEADS_DOLT_DATA_DIR` pointing to the primary directory. Source
 qualification remains unchanged; the final publication adds only documentation
 and issue backups.
+
+## 2026-10-17 — native Claude main provider and host install/update
+
+Operator requests closing native Claude/live auth gaps, then making blackbird
+work directly on this host. Branch work/claude-main-install-2026-10-17 starts at
+d1a8634. Written root scope papers/claude-main-2026-10-17/CAMPAIGN.md. Delegate
+the main Messages adapter/retained context boundary as one owner, installer and
+coherent runtime packaging as another; root owns direct OAuth seam checks,
+live use and integration/review. No new dependency or TUI feature/perf tranche.
+Initial safe auth status shows only Paper; open dedicated auth browser login in
+Terminal, keeping callback input there. Operator reports completion; saved-account
+metadata must establish readiness before dispatch. Never read vendor caches.
+Installer research finds absolute compiled helper/resource paths: versioned
+generation build and atomic selection needed, not just copying one executable.
+Existing ~/.local/bin is on PATH, and no blackbird command currently exists.
