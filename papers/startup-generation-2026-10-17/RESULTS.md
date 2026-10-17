@@ -1,6 +1,7 @@
 # Startup repair: diagnosis and direct checks
 
-Work in progress on `work/startup-generation-2026-10-17`, based on `f4bd931`.
+Delivered on `work/startup-generation-2026-10-17`, based on `f4bd931`.
+Qualified source `9641ef7` is installed as `generation-IW1976SM` on this host.
 The [plan](PLAN.md) includes the operator's correction: ask about incompatible
 effort inside the opened harness instead of choosing an answer or aborting.
 
@@ -76,3 +77,48 @@ Scoped Linux Release8/8 passes2.70s and ASan/UBSan8/8 passes11.44s, under the
 qualified LLVM23.1.4/libc++23.1.4 profile. Original logs are in
 `context/linux/run-0ha1czgb/`. The full Mac gate reruns because its test sources
 changed; Linux separately checks the four newly reconciled integration oracles.
+
+Final source **`9641ef72cf4e0320dd5b0ebaf99694a9159182e7`** is committed and
+published on `work/startup-generation-2026-10-17`. The required installed Mac hook
+passes **263/263 tests in441.10s**, all256 compiled C++ units' analysis/format
+checks and owned Lua syntax/format/type checks. The two existing NOLINT sites
+are unchanged. Original final output: `source-gate-final.log` in the repair's
+ignored context directory. This is the required source gate, not a new review.
+
+The four updated integration cases also pass Linux Release4/4 in4.49s and
+ASan/UBSan4/4 in17.93s. Their original logs are in
+`context/linux/run-n51ux5wq/`. Together the two scoped Linux selections cover
+12 changed-path cases per profile. Neither run interacts with AFL.
+
+Host install/update succeeds and activates **`generation-IW1976SM`** with the
+qualified source, packaged Lua/assets and all production helpers. Installer
+help/catalog/local Lua+PTY smoke passes. Original installed `blackbird --help`
+also succeeds from `/tmp`. The old generation is retained.
+
+The operational PTY check runs the exact argv
+`./scripts/blackbird --provider paper --model ultramarine-1-flash` from this
+checkout. For private fixture state it copies the actual installed managed
+wrapper into an isolated HOME; that wrapper's absolute prefix still selects the
+real installed `current` generation. No executable, session or effort override.
+Native auth uses only its private synthetic Paper descriptor/key. One fresh
+private conversation opens with pending medium; choosing high saves high and
+clears pending. Normal quit returns0, terminal modes restore and the forbidden
+transport marker stays absent. Native SHA256 is
+`75f75f3429eb7ef45e428251c8fe2d7e3fe009cf4c7def967798a135734088f5`.
+Original result/terminal are in ignored `installed-check-bihjhn20/`; launcher
+output is `installed-check.log` in the repair context directory.
+
+Retain the first operational runner's failure separately: with
+`start_new_session=True`, its post-exit `tcgetattr(slave)` returns ENOTTY after
+the harness already answers and exits normally. Removing that fixture-only
+departure from the qualified startup driver's PTY lifetime lets the same mode
+assertion run and pass. No product change or relaxed mode comparison. First
+runner log/terminal remain intact; this is not a demonstrated product defect.
+
+The [matched performance round](performance/README.md) completes120/120 normal
+processes and960 observations with mixed deltas, all retained. It compares the
+actual old/new installed native Release binaries on this Mac, not historical
+Linux numbers or question latency. Close `arconaut-ebq`; leave `arconaut-k9r`
+queued for collective tooling work. No live provider inference is claimed.
+Qualified source is published on the work branch and installed; master remains
+unchanged under the explicit integration rule.

@@ -1,0 +1,11 @@
+{
+  "generation": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-z8hyFGNP",
+  "source": "9e9dad57377cf170854b7c2657b5f55853fc76cd",
+  "profile": "release",
+  "build_identity": "macos-arm64-clang23.1.2-system-libc++2000.67.0-C++23-lua5.4.8-DebugOFF-instrumentation-none",
+  "binary_sha256": "527969a901321fa225531a886b5744fff084ed349940b57f849269cec53091c5",
+  "cmake_cache_sha256": "477019200b852f60b4b6ee9caa2f7b22edd99ca56b3230ea4a72ba3df3dcf3f8",
+  "observer_source": "papers/tui-navigation-2026-10-17/performance/observer.py",
+  "observer_sha256": "f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377",
+  "dynamic_libraries": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-z8hyFGNP/build/release/blackbird:\n\t/opt/homebrew/opt/lua/lib/liblua.dylib (compatibility version 5.4.0, current version 5.4.8)\n\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2000.67.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n"
+}

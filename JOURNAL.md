@@ -11328,3 +11328,36 @@ relaxation or suppression. Preserve first gate log and rerun the required full
 hook on final staged tests. Linux original scoped checks pass8/8 Release2.70s
 and8/8 ASan/UBSan11.44s; run only the four newly changed integration oracles on
 those profiles. No new review campaign or source assurance layer is added.
+
+Final installed Mac hook passes all263 Debug tests in441.10s and the complete
+256-unit native C++ analysis/format pass plus owned Lua syntax/format/type checks.
+Two existing NOLINT sites are unchanged. Commit9641ef72cf4e0320dd5b0ebaf99694a9159182e7
+and publish the qualified source branch. The four newly updated integration
+oracles pass Linux Release4/4 in4.49s and ASan/UBSan4/4 in17.93s, completing12
+scoped changed-path cases per profile across both runs. Begin actual host
+install/update only after this qualification. Keep activation, exact pathless
+Paper question/answer verification and matched performance results distinct from
+source qualification; no provider account or real inference is needed.
+
+Actual update activates generation-IW1976SM from source9641ef7. Packaged
+help/catalog/local Lua and PTY smoke pass; original installed help works from
+/tmp. Operational exact Paper argv uses the actual managed wrapper bytes with
+its real absolute prefix and isolated HOME/auth fixture state. It opens one
+automatic conversation, asks about effort, saves a deliberate high answer,
+quits0, restores terminal modes and records zero provider dispatches. Preserve
+first runner ENOTTY separately: start_new_session made its post-exit slave ioctl
+unusable; use the already-qualified startup driver's lifetime instead. No native
+change or weakened mode assertion follows. Retain all runner originals.
+
+Run the retained paired native observer after all owned builds/checks end:
+smoke4/4 and finite round120/120 processes /960 endpoints, no failed or discarded
+samples. Same Mac Release/Clang23.1.2/C++23/Lua5.4.8/runtime libraries compare old
+source9e9dad5 and new9641ef7. Mixed deltas include slightly lower typing medians,
+higher wide paste median, lower wide paste p95 and higher narrow startup tail.
+Publish every sample/quantile and actual profile in the repair performance note;
+this is not question, launcher or physical-display latency. No retiming campaign.
+Close arconaut-ebq, label both findings for the collective queue and retain
+legacy benchmark metadata arconaut-k9r open. Supported backup and checked
+documentation/data publication finish delivery. Work branch is published and
+host runtime installed; master integration is not inferred. Artwork, recovery
+stash and the existing AFL campaign stay untouched.

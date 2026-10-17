@@ -1,0 +1,14 @@
+{
+  "before": {
+    "executable": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-z8hyFGNP/build/release/blackbird",
+    "source": "9e9dad57377cf170854b7c2657b5f55853fc76cd",
+    "profile": "release",
+    "build_identity": "macos-arm64-clang23.1.2-system-libc++2000.67.0-C++23-lua5.4.8-DebugOFF-instrumentation-none"
+  },
+  "after": {
+    "executable": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-IW1976SM/build/release/blackbird",
+    "source": "9641ef72cf4e0320dd5b0ebaf99694a9159182e7",
+    "profile": "release",
+    "build_identity": "macos-arm64-clang23.1.2-system-libc++2000.67.0-C++23-lua5.4.8-DebugOFF-instrumentation-none"
+  }
+}

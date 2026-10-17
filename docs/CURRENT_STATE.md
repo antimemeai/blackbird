@@ -188,6 +188,15 @@ attribution and a finite [reopen matrix](SESSION_REOPEN.md) are delivered. No
 under100ms readiness result is implied; final launcher outliers are retained.
 See [delivery and actual limits](../papers/2026-10-08-wrapup-delivery.md).
 
+The [2026-10-17 startup repair](../papers/startup-generation-2026-10-17/RESULTS.md)
+is qualified and installed on this host from published work-branch source9641ef7.
+Ordinary launch needs no session argument. An incompatible effort opens a quick
+in-harness question; its unanswered state persists and blocks inference until an
+intentional valid answer. Reopen and pending continuation keep their identities.
+Mac263/263 and full C++/Lua checks pass, plus scoped Linux Release/ASan checks.
+The matched120-process performance round retains mixed deltas. This delivery
+does not imply master integration or real provider-service inference.
+
 New provider diagnostics expire after30days and live in removable files. Reopen/
 capture cleanup is bounded; `--expire-diagnostics` cleans idle sessions explicitly.
 Older diagnostics embedded in finite audits remain there. Additional stream cost

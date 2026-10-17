@@ -1,0 +1,124 @@
+{
+  "schema": "blackbird-tui-observer-1",
+  "driver_sha256": "f19ae5fb117cf969836301d8002336aa642d2476bac3bdee6f2248d50fbde377",
+  "variants": {
+    "before": {
+      "executable": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-z8hyFGNP/build/release/blackbird",
+      "source": "9e9dad57377cf170854b7c2657b5f55853fc76cd",
+      "profile": "release",
+      "build_identity": "macos-arm64-clang23.1.2-system-libc++2000.67.0-C++23-lua5.4.8-DebugOFF-instrumentation-none",
+      "native_identity": {
+        "device": 16777233,
+        "inode": 151089090,
+        "size": 5093030,
+        "mtime_ns": 1792229437348684933
+      },
+      "native_sha256": "527969a901321fa225531a886b5744fff084ed349940b57f849269cec53091c5",
+      "final_native_sha256": "527969a901321fa225531a886b5744fff084ed349940b57f849269cec53091c5"
+    },
+    "after": {
+      "executable": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-IW1976SM/build/release/blackbird",
+      "source": "9641ef72cf4e0320dd5b0ebaf99694a9159182e7",
+      "profile": "release",
+      "build_identity": "macos-arm64-clang23.1.2-system-libc++2000.67.0-C++23-lua5.4.8-DebugOFF-instrumentation-none",
+      "native_identity": {
+        "device": 16777233,
+        "inode": 151909535,
+        "size": 5113062,
+        "mtime_ns": 1792238592897163715
+      },
+      "native_sha256": "75f75f3429eb7ef45e428251c8fe2d7e3fe009cf4c7def967798a135734088f5",
+      "final_native_sha256": "75f75f3429eb7ef45e428251c8fe2d7e3fe009cf4c7def967798a135734088f5"
+    }
+  },
+  "host": {
+    "hostname": "Patricks-MacBook-Pro.local",
+    "system": "Darwin",
+    "release": "25.6.0",
+    "machine": "arm64",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.5"
+  },
+  "scenarios": [
+    {
+      "cols": 110,
+      "rows": 35,
+      "session": "fresh",
+      "environment": {
+        "TERM": "xterm-256color",
+        "TERM_PROGRAM": "ghostty",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "BLACKBIRD_GRAPHICS": "off"
+      },
+      "frame_end": "CSI ?2026 l",
+      "startup": "spawn begin to newer committed frame containing Enter send, ECHO disabled",
+      "input": "BB_TUI_INPUT_0123456789, no Enter; committed row contains exact marker",
+      "paste": "Ctrl-U; bracketed paste 4080 x bytes plus newline and BB_PASTE_TAIL, no Enter; exact tail in committed row",
+      "palette_open": "Ctrl-U then /; committed selected > /help row",
+      "palette_next": "CSI B; committed selected > /keys row",
+      "resize": {
+        "to": [
+          96,
+          30
+        ],
+        "draft": "BB_RESIZE_DRAFT",
+        "endpoint": "new committed frame contains exact draft in third-last row and closing border in second-last row"
+      },
+      "resize_restore": "restore original size; exact draft in third-last row and closing border in second-last row",
+      "quit": "Ctrl-U then Ctrl-D, normal exit zero, no force",
+      "endpoint_clock": "parent monotonic_ns after parsing read block and observing newer committed frame",
+      "cache": "ordinary OS caches; all trials retained; no warmup exclusion"
+    },
+    {
+      "cols": 80,
+      "rows": 24,
+      "session": "fresh",
+      "environment": {
+        "TERM": "xterm-256color",
+        "TERM_PROGRAM": "ghostty",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "BLACKBIRD_GRAPHICS": "off"
+      },
+      "frame_end": "CSI ?2026 l",
+      "startup": "spawn begin to newer committed frame containing Enter send, ECHO disabled",
+      "input": "BB_TUI_INPUT_0123456789, no Enter; committed row contains exact marker",
+      "paste": "Ctrl-U; bracketed paste 4080 x bytes plus newline and BB_PASTE_TAIL, no Enter; exact tail in committed row",
+      "palette_open": "Ctrl-U then /; committed selected > /help row",
+      "palette_next": "CSI B; committed selected > /keys row",
+      "resize": {
+        "to": [
+          66,
+          19
+        ],
+        "draft": "BB_RESIZE_DRAFT",
+        "endpoint": "new committed frame contains exact draft in third-last row and closing border in second-last row"
+      },
+      "resize_restore": "restore original size; exact draft in third-last row and closing border in second-last row",
+      "quit": "Ctrl-U then Ctrl-D, normal exit zero, no force",
+      "endpoint_clock": "parent monotonic_ns after parsing read block and observing newer committed frame",
+      "cache": "ordinary OS caches; all trials retained; no warmup exclusion"
+    }
+  ],
+  "count_per_variant_and_size": 30,
+  "order": "trial, size, variant; serial round robin",
+  "clock": "time.monotonic_ns, parent process, integer nanoseconds",
+  "load_before": [
+    6.0244140625,
+    16.77685546875,
+    17.8349609375
+  ],
+  "started_utc": "2026-10-17T12:04:57Z",
+  "inference_prompts_submitted": 0,
+  "launcher": null,
+  "load_after": [
+    10.08154296875,
+    16.6328125,
+    17.740234375
+  ],
+  "failed": 0,
+  "interrupted": null,
+  "executable_changed": [],
+  "finished_utc": "2026-10-17T12:05:36Z"
+}

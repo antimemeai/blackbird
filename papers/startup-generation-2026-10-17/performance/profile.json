@@ -1,0 +1,20 @@
+{
+  "matched_cache_fields": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "BLACKBIRD_DEBUG": "OFF",
+    "BLACKBIRD_INSTRUMENTATION": "none",
+    "CMAKE_CXX_COMPILER": "/opt/homebrew/Cellar/llvm/23.1.2/bin/clang++",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+    "LUA_LIBRARY": "/opt/homebrew/lib/liblua5.4.dylib",
+    "LUA_INCLUDE_DIR": "/opt/homebrew/include/lua"
+  },
+  "dynamic_libraries": [
+    "\t/opt/homebrew/opt/lua/lib/liblua.dylib (compatibility version 5.4.0, current version 5.4.8)",
+    "\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2000.67.0)",
+    "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)"
+  ],
+  "before": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-z8hyFGNP",
+  "after": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-IW1976SM",
+  "compiled_standard": "C++23; both source CMakeLists.txt set CMAKE_CXX_STANDARD 23",
+  "owned_builds_and_checks": "complete before timing; existing AFL left untouched on other host"
+}

@@ -49,8 +49,8 @@ hidden-draft baseline; all21 earlier expectations remain unchanged. Independent
 native assertions verify that Enter emits an answer and preserves the draft.
 Final focused result: **4/4passed in10.00s** after the final source changes.
 The focused log is `context/startup-generation-2026-10-17/question-focused.log`.
-The root owner performs the single independent source review, full gate, scoped
-Linux qualification, matched common-path performance and installed activation.
+The root owner's single review, full gate, scoped Linux qualification, matched
+performance and installed activation are recorded in [the delivery results](RESULTS.md).
 These direct synthetic checks make no claim about live inference or service
 model-capability discovery.
 

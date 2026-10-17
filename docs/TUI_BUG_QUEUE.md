@@ -19,6 +19,13 @@ scope and severity. Keep unconfirmed timeouts, environment failures and actual
 product defects distinct. Several inputs may represent one bug; a crash count
 is not a count of distinct product defects.
 
+The [startup repair](../papers/startup-generation-2026-10-17/RESULTS.md) closes
+`arconaut-ebq` after actual installed pathless launch and effort-question checks.
+`arconaut-k9r` remains open: the legacy startup benchmark hashes an obsolete UI
+binary while launching a potentially different executable. Use the exact-native
+paired observer for the present campaign; preserve this ordinary tooling finding
+for collective action.
+
 ```sh
 bd list --label tui-campaign-bug --status open --json
 ```
