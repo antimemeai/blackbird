@@ -979,3 +979,21 @@ nested Git metadata was introduced; no acquired example or instruction executed.
 Existing Linux man-pages6.19 archive remains intact and supplies the named process
 manual files recorded in the root manifest. No library/rule/compiler adoption or
 AFL inspection follows from acquisition.
+
+## 2026-10-17 — LLVM23.1.4 C++23 behavior references
+Intact reference files from the LLVM Project, revision `0cd28174a1f6`, matching
+the installed Neuroses package. License: Apache-2.0 WITH LLVM-exception.
+Used to understand libc++ stream acquisition and filesystem behavior; these
+files are ignored reference material.
+| Retained file | SHA-256 |
+| --- | --- |
+| `quarantine/cpp23-llvm-23.1.4/fstream` | `eb3d4e323574046d891ce8ffa19dd637e09a62868554ec868905eaa8431c9108` |
+| `quarantine/cpp23-llvm-23.1.4/operations.cpp` | `8bee76f1ba91985a07e9e8eeb8e5e4804873841844e2dd10e757229933369b8a` |
+
+Restore exact original bytes:
+
+```sh
+mkdir -p quarantine/cpp23-llvm-23.1.4
+curl --fail --location https://raw.githubusercontent.com/llvm/llvm-project/0cd28174a1f6/libcxx/include/fstream -o quarantine/cpp23-llvm-23.1.4/fstream
+curl --fail --location https://raw.githubusercontent.com/llvm/llvm-project/0cd28174a1f6/libcxx/src/filesystem/operations.cpp -o quarantine/cpp23-llvm-23.1.4/operations.cpp
+```

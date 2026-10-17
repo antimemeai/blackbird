@@ -11120,3 +11120,22 @@ ASan guidance with Linux `-g -O1`, preserving sanitizer checks and all deadlines
 the unchanged caller case passes in7.84seconds. Its final Mac Release counterpart
 passes in2.04seconds. Run the complete optimized Linux sanitizer profile and the
 final Mac source gate against this now-complete migration change.
+
+## 2026-10-17 — C++23 qualification complete
+
+Source checkpoint `87c1116` passes the installed full source hook:260 Mac Debug
+tests and all owned C++/Lua formatting, syntax, type and static analysis. Linux
+Debug passes260/260 with its final calibrated caller also rechecked; Release
+passes259 original cases plus its corrected caller; optimized ASan+UBSan passes
+260/260 and still detects the intentional memory/overflow faults. Mac Release's
+two timed-out UI cases pass in isolation at unchanged deadlines; all changed
+fixtures and the final caller pass. The upgrade record now describes the final
+profiles, concrete compatibility repairs and precise verification scope.
+
+Both retained Linux workspace drivers resumed their normal cleanup; their
+temporary source/build trees are gone. Reference LLVM sources remain intact in
+ignored quarantine with source/license/hash/restoration entries. Current station/
+profiling docs name C++23; historical handoff/toolchain decisions point to the
+new profiles. The LLVM18 AFL campaign remains at its recorded identities.
+Publish this qualified candidate and integrate into master while preserving the
+original checkout's separate ongoing Claude branch.

@@ -1,5 +1,10 @@
 # Watch handoff — 2026-10-14
 
+2026-10-17 update: the operator authorized C++23 and Neuroses LLVM23.1.4/libc++23.1.4.
+Mac retains LLVM23.1.2. The earlier toolchain declarations below describe their
+original snapshot; current profiles and qualification are in the
+[C++23 upgrade record](../papers/2026-10-17-cpp23-toolchain.md).
+
 The operator ends this watch and asks for plausible performance notes, matching
 beads and a handoff. That work is complete; no optimization, source repair,
 merge, executable activation, new perf round or continuing campaign starts here.

@@ -1,5 +1,10 @@
 # Toolchain decision: retain pins; reconcile release tracking
 
+2026-10-17 update: the operator authorized C++23 and Neuroses LLVM23.1.4/libc++23.1.4.
+Mac retains LLVM23.1.2. The earlier toolchain declarations below describe their
+original snapshot; current profiles and qualification are in the
+[C++23 upgrade record](../papers/2026-10-17-cpp23-toolchain.md).
+
 **Decision:** Treat selected upstream [LLVM 23.1.3](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.3) as a maintenance-review signal, not an upgrade instruction. Leave compiler pins unchanged.
 
 ## Declared profiles versus upstream

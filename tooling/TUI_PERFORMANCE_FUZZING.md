@@ -36,6 +36,10 @@ mode against Clang/LLVM18, with outer make jobs1 and nested `nproc=2`; upstream'
 empty `nproc` otherwise expands a nested command to unbounded `-j`. No production
 library, cloud provisioning or system tool-policy change is selected.
 
+The commands below restore the recorded LLVM18 campaign. Ordinary Blackbird
+builds now use the [qualified LLVM23/C++23 profile](README.md); this upgrade
+does not rebuild or restart the existing campaign.
+
 From an owned Linux extraction of that pinned archive, the installation uses:
 
 ```sh

@@ -51,7 +51,7 @@ into a synthetic successful capture. The native fixture is terminated and reaped
 on exit. Attach captures never terminate the observed harness.
 
 The shipped `profile build` command follows the local macOS compiler preset.
-On Linux, configure the qualified linux-clang18/Lua5.4.8 build explicitly with
+On Linux, configure the qualified linux-llvm23/libc++23.1.4/Lua5.4.8 build explicitly with
 `BLACKBIRD_PROFILING=ON`; the wrapper does not substitute the macOS compiler path.
 Linux CPU capture uses `perf record` with `cpu-clock:u`, 199Hz and frame-pointer
 call graphs. `perf` must already be installed and permitted for the selected PID;

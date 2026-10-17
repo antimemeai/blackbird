@@ -1,58 +1,46 @@
 # C++23 and Neuroses LLVM upgrade
 
-Operator2026-10-17 requests the server toolchain upgrade, Blackbird C++23
-configuration, native build/test verification, then main integration. Work starts
-from master `74a42f4` in an isolated worktree because the main checkout is running
-another merge's source hook. Preserve that integration, artwork and running
-server programs. No server-wide OS upgrade, default-compiler alternatives change,
-new runtime dependency beyond the selected C++ standard library, or live
-Blackbird process activation belongs to this unit.
+2026-10-17. The operator requested the server toolchain upgrade, Blackbird C++23,
+native build/test verification, then main integration. Source checkpoint
+`87c1116` passes the full installed Mac source hook:260 Debug tests, owned C++
+formatting/analysis and Lua formatting/syntax/type checks.
 
-The concrete mismatch is the C++20 baseline and Linux Clang18/libstdc++13 profile.
-Install versioned LLVM23 compiler, formatting/analysis/editor tools, debugger,
-linker, sanitizer runtime, libc++/libc++abi and unwind development packages on
-Ubuntu24.04 x86_64. The [official LLVM APT repository](https://apt.llvm.org/)
-provides the release suite `llvm-toolchain-noble-23`; its package metadata reports
-23.1.4. Verify signing-key fingerprint
-`6084F3CF814B57C1CF12EFD515CF4D18AF4F7421` and use a repository-scoped signed-by
-key. Retain Clang18, and leave existing command alternatives alone. Package
-installation replaces Ubuntu's older libc++18/unwind development/runtime packages
-with the current LLVM packages; Blackbird's old Linux build used libstdc++13.
-Keep the installation log under ignored `context/cpp23-upgrade` in the main checkout.
+## Selected profiles
 
-CMake requires C++23, Clang23.1.2 on Mac and Clang23.1.4/libc++23.1.4 on Linux.
-Update diagnostic probes and the Linux check launcher together. Extend the existing
-compiler contract with the C++23 language macro, constexpr byteswap and expected
-success/error behavior; retain its byte/span and synchronized-thread assertions.
-[Clang's language support](https://clang.llvm.org/cxx_status.html) and
-[libc++'s C++23 support](https://libcxx.llvm.org/Status/Cxx23.html) are feature-level;
-selecting C++23 does not claim every facility is implemented.
+| Host | Compiler | Standard library | Language |
+| --- | --- | --- | --- |
+| Mac arm64 | Existing pinned LLVM Clang23.1.2 | Existing configured libc++/Xcode SDK | C++23 |
+| Neuroses, Ubuntu24.04.5 x86_64 | LLVM Clang23.1.4 | libc++/libc++abi23.1.4 | C++23 |
 
-Verification uses the existing direct tests across Linux Debug, Release and
-ASan+UBSan, plus the Mac debug source hook (tests and owned C++/Lua analysis),
-Mac release build/tests, and direct sanitizer diagnostics on Linux. CTest retains
-each test's watchdog. Drop the old whole-suite 600second ceiling, which includes
-three fresh builds and is unrelated to individual behavior. Use at most16
-compilation jobs on the server. No tests or source repairs outside consequences
-of this toolchain change; handle findings in the existing two-layer bound.
+CMake requires the language version and exact compiler identity. Linux's profile
+is now `linux-llvm23`; all its C++ targets select libc++. The compiler contract
+checks the C++23 language macro, constexpr `std::byteswap`, `std::expected`
+success/error behavior, byte/span access and synchronized threads. Diagnostic
+probes use the same language version. Individual C++23 facilities still depend
+on [Clang](https://clang.llvm.org/cxx_status.html) and
+[libc++](https://libcxx.llvm.org/Status/Cxx23.html) implementation support.
 
-## Installed server profile
+The Linux runner includes the previously omitted physical-terminal/input scripts
+and Lua packages, builds with at most16 jobs, and runs CTest with6 jobs while
+respecting RUN_SERIAL. Each test keeps its existing watchdog; the obsolete
+600second ceiling for three complete fresh builds/tests is removed.
 
-The signed release metadata resolved the following package version:
-`1:23.1.4~++20261014053933+0cd28174a1f6-1~exp1~20261014053943.82`.
-`clang++-23`, `clang-format-23`, `clang-tidy-23`, `clangd-23`, `llvm-config-23`,
-`ld.lld-23` and `lldb-23` all report23.1.4. `<version>` preprocessing with
-`-std=c++23 -stdlib=libc++` reports `__cplusplus=202302L` and
-`_LIBCPP_VERSION=230104`. Existing Clang18.1.3 remains installed; CMake3.28.3
-and Ninja1.11.1 already support this build and remain unchanged.
+## Server provisioning
 
-APT source `/etc/apt/sources.list.d/blackbird-llvm23.list`:
+Install versioned LLVM23 compiler/tools, formatter, analyzer, language server,
+linker, debugger, sanitizer runtime, libc++/libc++abi and unwind packages from the
+[signed official LLVM APT repository](https://apt.llvm.org/). The resolved version
+is `1:23.1.4~++20261014053933+0cd28174a1f6-1~exp1~20261014053943.82`.
+The signing key was checked against fingerprint
+`6084F3CF814B57C1CF12EFD515CF4D18AF4F7421` before installation.
+
+`/etc/apt/sources.list.d/blackbird-llvm23.list` contains:
 
 ```text
 deb [arch=amd64 signed-by=/usr/share/keyrings/blackbird-llvm.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-23 main
 ```
 
-Versioned package set:
+Package set:
 
 ```sh
 sudo apt-get install --no-install-recommends clang-23 clang-tools-23 \
@@ -60,109 +48,67 @@ sudo apt-get install --no-install-recommends clang-23 clang-tools-23 \
   libclang-rt-23-dev libc++-23-dev libc++abi-23-dev libunwind-23-dev
 ```
 
-A direct ASan+UBSan build of the owned intentional fault fixture using C++23 and
-libc++ detects its heap overrun and signed overflow with nonzero exits and the
-expected diagnostic markers. Log: `context/cpp23-upgrade/linux-diagnostics.log`
-in the candidate worktree. The compiler/library contract also passes on Mac
-using the selected Xcode SDK; bare invocation inherits a stale Homebrew sysroot,
-so the standalone probe explicitly uses `xcrun --show-sdk-path`, like CMake.
+All installed LLVM executables report23.1.4; libc++ reports `_LIBCPP_VERSION=230104`.
+Existing Clang18/libstdc++13 remain available. APT replaces the older libc++18/
+unwind packages; default compiler alternatives are unchanged. Existing CMake3.28.3
+and Ninja1.11.1 already support this build. Installation log is retained under
+`context/cpp23-upgrade/server-install.log` in the original project checkout.
+The existing LLVM18 AFL campaign retains its recorded tool/target identities.
 
-Record full build/test results, findings and integration below once observed.
+## Compatibility repairs
 
-## Compatibility finding and repair
+- File helpers and their oracles previously used the OS to select C++ library
+  behavior. Select libstdc++ behavior with `__GLIBCXX__` instead. Linux now follows
+  its selected libc++ stream error/EOF and path behavior, like the plain helper
+  used as its reference. Actual negative native returns and errno remain captured.
+- The actual-stdio fixture uses dyld interposition on Mac and scoped LD_PRELOAD
+  on Linux. A shortened positive acquisition is followed by a genuinely failing
+  libc read within the same requested stream operation, so bulk-reading libc++
+  observes the intended positive prefix and real descriptor failure.
+- Eight test replacement allocators allocated with malloc but omitted matching
+  sized delete overloads. Complete their scalar/array overloads, forwarding to
+  the existing matching deletes. ASan's mismatch detector stays enabled.
+- libc++ hides template helper frames and rounds string allocations differently.
+  Identify SavedState staging by the actual object extent and exported owning
+  save operation when its template helper is hidden. Calibrate the exact Lua
+  result allocation through the selected string library before arming the cut;
+  retain owning-frame, real cancellation, disk-generation and originals assertions.
 
-The first Linux Debug build fails `-Wunused-but-set-global` for `stdio_error`
-in the existing file test. Its read is guarded by `__APPLE__`, although it
-observes libc++'s stdio implementation. Source inspection also finds production
-file-helper branches using `__linux__` to select libstdc++ behavior. Those
-conditions conflate the OS with the selected C++ library.
+Grounding uses LLVM package revision `0cd28174a1f6`:
+[fstream](https://github.com/llvm/llvm-project/blob/0cd28174a1f6/libcxx/include/fstream)
+and [filesystem operations](https://github.com/llvm/llvm-project/blob/0cd28174a1f6/libcxx/src/filesystem/operations.cpp).
+Intact sources and restoration are recorded in [QUARANTINE](../QUARANTINE.md).
 
-Grounding uses the installed LLVM package's revision `0cd28174a1f6`:
-[libc++ fstream](https://github.com/llvm/llvm-project/blob/0cd28174a1f6/libcxx/include/fstream)
-acquires bytes through `fread`;
-[filesystem operations](https://github.com/llvm/llvm-project/blob/0cd28174a1f6/libcxx/src/filesystem/operations.cpp)
-constructs absolute and weakly-canonical paths using the same libc++ algorithms
-on these two hosts. The relevant error mapping, empty path, weak canonical and
-GCC canonical-fallback branches now select `__GLIBCXX__`, preserving the
-libc++ path on Linux as well as Mac. Genuine OS process/status checks stay OS
-checks. Existing GCC-specific fallback cases remain conditional on that library.
+## Sanitizer profile
 
-The stdio failure fixture now selects its assertion by `_LIBCPP_VERSION` and
-uses its existing dyld shim on Mac or an ELF `LD_PRELOAD` shim on Linux. Both
-forward to actual libc `fread`, really close the selected descriptor and retain
-its actual returned bytes/errno. No diagnostic suppression or weakened expected
-outcome is introduced. Full Linux profiles and the Mac source gate recheck this
-consequential change as part of the upgrade.
+The unoptimized Linux sanitizer build timed out in large native cases. LLDB
+showed active CRC32C work over large journal payloads, not a blocked cancellation.
+Use `-g -O1` for the Linux ASan+UBSan profile, following
+[Clang's guidance](https://clang.llvm.org/docs/AddressSanitizer.html).
+Both sanitizers, frame pointers, no-recovery settings, allocation-mismatch checks,
+assertions and watchdogs remain enabled. The same caller case passes in7.84seconds
+inside its unchanged60second watchdog; the complete profile passes260/260.
+The deliberately faulty memory and signed-overflow probes still produce their
+expected diagnostics with these flags. No product checksum optimization is included.
 
-Main's independent TUI merge completed at `a8a28fb`, followed by the text-only
-Claude-auth inventory at `d1a8634`. Save the candidate diff, advance its branch
-to `d1a8634`, then reapply only this unit's changes and appended journal entry.
-The two partial Mac builds were interrupted deliberately at that transition;
-their incremental outputs will be reused by the combined-tree build. No test
-pass is claimed for those interrupted invocations.
+## Observed verification
 
-The first complete Linux Debug run passes254/260 cases. Four failures are missing
-remote-bundle inputs: edge/viewport/input scripts and the Lua packages directory.
-Add those inputs and compare all CMake script references with the bundle's list.
-The other two are ABI-sensitive test mechanisms: libc++ hides `make_unique` frames,
-and its bulk stream read treats an artificially shortened `fread` as EOF before
-the intended descriptor loss. Identify the SavedState staging allocation by its
-actual object extent plus exported owning save operation when the template frame
-is hidden. The stdio shim now performs the positive prefix and a genuinely failing
-second libc acquisition within the same requested stream read, preserving actual
-returned counts and errno. Keep all original byte/disk/atomicity assertions.
-Both corrected direct fixtures pass on Mac. No additional production behavior
-change follows from these test repairs.
+| Profile | Result |
+| --- | --- |
+| Linux Debug |260/260 full suite; final calibrated caller rebuilt/rechecked1/1 in20.36s |
+| Linux Release |259/260 initial suite; corrected allocation-projection case1/1 in1.85s; all cases covered |
+| Linux ASan+UBSan, `-g -O1` |260/260 full suite in307.04s; intentional memory/overflow diagnostics detected |
+| Mac Debug/source gate |260/260 in464.79s; full owned C++/Lua lint passes |
+| Mac Release |258/260 initial suite; two UI cases pass alone at unchanged deadlines; repaired fixtures28/28 and final calibrated caller1/1 |
 
-Interrupt the first Mac source hook before analysis to include these repairs in
-one final source gate. The prior partial Mac debug invocation is not a pass.
-Linux uses16 compilation jobs per build and6 CTest jobs, respecting RUN_SERIAL.
-Release and ASan may overlap on the48CPU server, with at most32 compilation jobs.
-Retain the already compiled ASan workspace while its driver is stopped, interrupt
-its old CTest, rebuild only the changed fixture targets, then run its complete
-suite with the final fixtures. The driver will be resumed for its normal cleanup
-after that result is captured. Run fresh Debug/Release with the corrected bundle.
+The two Mac UI cases first hit watchdogs during concurrent host activity, then
+pass alone in22.92/51.02seconds. No screen expectation, UI implementation or
+timeout was changed. The final Mac Release caller passes in2.04seconds.
+Logs are retained in the qualified worktree's ignored `context/cpp23-upgrade/`.
+Earlier interrupted runs are recorded as interrupted, not passes. Changed Linux
+fixtures were rebuilt incrementally in retained workspaces; their owning Python
+drivers were resumed afterward and both temporary workspaces were removed.
 
-The updated Linux libc++ allocator uses sized deallocation. ASan exposes a real
-mismatch in test-only replacement allocators that allocate with `malloc` but
-omit matching sized delete overloads. Complete scalar/array sized deletes in the
-eight affected fault-injection fixtures (foundation, journal batch, retained state,
-command delivery/observation, participant observation, task observation/publication),
-forwarding to their existing matching unsized deletes. Do not disable ASan's
-allocation/deallocation mismatch checks. The26 owning ASan cases pass after this
-repair, including all four initially failing cases.
-
-Reuse the compiled Linux workspaces for these fixture repairs: hold the owning
-Python driver, finish/interrupt its old child as appropriate, atomically replace
-only the changed fixture sources, force their incremental rebuild, and resume
-Debug's ordinary driver. The ASan driver remains held until its final complete
-CTest run is captured, then resumes its normal temporary-directory cleanup.
-This avoids recompiling unchanged production sources or overlapping two CTest
-runs in the same build directory. Mainline remains unchanged pending qualification.
-
-The optimized Linux run passes259/260 cases; its remaining Lua projection cut
-assumes libstdc++'s32769byte string allocation. Calibrate the allocation extent
-for the exact32768byte result through the selected library's `string::capacity`
-before arming the existing cut. Keep the direct owning `Runtime::eval` frame
-requirement, later-caller exclusion, actual cancellation EOF and captured-record
-assertions. The corrected Release case passes in1.85seconds.
-
-Two Mac Release physical UI cases time out during overlapping host checks, then
-pass alone at the original deadlines (22.92/51.02seconds). No UI implementation,
-expected screen, or timeout was changed. The full Release run's other258 cases
-pass, and all28 changed-fixture cases pass after their final rebuild. Linux's
-full ASan run passes256/260 cases, with three native process watchdogs and the
-PTY saturation deadline requiring an isolated recheck after concurrent work.
-Do not claim those four passed until their original unchanged cases complete.
-
-Debugger inspection of the slow sanitized caller finds active CRC32C work over
-large journal payloads, not a blocked cancellation or missing event. The previous
-Linux sanitizer profile compiled libc++23's heavily exercised span operations
-without optimization. Select `-g -O1` for this Linux ASan+UBSan profile, following
-[Clang's documented instrumentation guidance](https://clang.llvm.org/docs/AddressSanitizer.html).
-Keep both sanitizers, frame pointers, no-recovery settings, allocator mismatch
-checks, every assertion and existing CTest watchdogs. The same complete caller
-case now passes in7.84seconds inside its unchanged60second watchdog. Rebuild and
-run the complete sanitized profile with these declared flags. This is a toolchain
-profile correction, not a product checksum optimization or relaxed timeout.
-The final calibrated Mac Release caller also passes in2.04seconds.
+Main integration follows qualification. The original checkout's separate Claude
+implementation branch and artwork are preserved. No live executable activation
+is part of this toolchain/source change. Tracking issue: `arconaut-34z`.
