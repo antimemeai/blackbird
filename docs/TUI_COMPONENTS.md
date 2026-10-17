@@ -9,10 +9,17 @@ wide/narrow rendering and independent detail reading anchors. The conversation
 command-results adapter uses it with bounded owner observations and nonblocking
 recording admission; see the [tranche plan](../papers/tui-command-inspector-2026-10-16/PLAN.md)
 and [component results](../papers/tui-command-inspector-2026-10-16/COMPONENT_REPORT.md).
-The separate Lua composition owner, invocation bridge and reuse across command
-center remain design scope.
-See [delivered source results](../papers/mac-link-repair-2026-10-15/RESULTS.md) and
-the [next-slice source map](../papers/tui-next-components-2026-10-15/SOURCE_MAP.md).
+The [current-session center](../papers/tui-command-center-2026-10-16/RESULTS.md)
+reuses those controls across actual task, participant and command observations.
+The [isolated Lua composition owner/action bridge](../papers/tui-lua-composition-2026-10-16/README.md)
+and authored retained-result comparison instrument are also delivered. The
+[physical viewport integration](../papers/tui-full-viewport-2026-10-16/README.md)
+owns the final column and explicit resize/image recovery. These are qualified
+slices, not the whole component inventory below: forms, common routes/layout,
+binding inspection and wider composition still need implementation. Cross-path
+semantic operation references and catalog continuation remain open. See the
+[current delivery scope](TUI_IMPLEMENTATION_PLAN.md#present-state-relative-to-the-original-program)
+for source/branch status; earlier source maps describe their own checkpoints.
 
 ## Boundary and data flow
 

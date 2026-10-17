@@ -151,3 +151,8 @@ retains all16 endpoint rows and960 observations. Wide resize/restore and narrow
 restore costs rise, while typing and other tails are mixed; retain these in
 `arconaut-f8f` without a source-causal claim. Source is on the work branch; no
 master merge or running-user activation follows from qualification.
+
+`arconaut-8zx` parks the requested deeper resize-latency investigation, related
+to `arconaut-f8f`. It must separate parent request/observer parsing time from
+native layout/paint/output and wakeup costs;5.745ms is the observed wide-shrink
+median, not measured painter CPU. It does not block the original TUI redesign.

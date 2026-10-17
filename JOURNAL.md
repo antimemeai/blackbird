@@ -10929,3 +10929,23 @@ patch contains two required single-space context lines; preserve its bytes and
 exclude only that patch from authored whitespace checks. All other authored
 changes pass. Close arw, retain f8f/igs open, and publish/push this checked
 text/data result without repeating the settled source gate.
+
+
+2026-10-16 operator parks deeper resize latency work and returns to original TUI
+upgrade/redesign status. Create arconaut-8zx (P2 task), relate it to f8f without
+blocking the TUI program; record exact matched endpoints, raw-timestamp-only
+instrumentation rule and future stage decomposition. No investigation/benchmark
+rerun is started. Reconcile original six-unit plan against delivered sources,
+current public headers/adapters and Beads. Correct stale component/plan claims
+that Lua bridge and center reuse are still unimplemented. Units1–2 have real
+presenter/collection/inspector/center/Lua/result-lab deliveries, with remaining
+semantic operation reference, first8 catalog and general shell/binding/component
+scope. Units3–6 broader settings/Context/team, action fabric, capabilities/reuse
+and metrics views remain implementation work; MIDI/haptics remain later designs.
+Local master74a42f4 contains the earlier TUI integration, but not Lua3e3a561 or
+viewport7523da7; preserve that source/main/live distinction. Record product-facing
+shared shell/navigation/control work as the return direction, with original
+settings/Context/team sequence following it. Documentation/issue updates only;
+apply relevant link/diff checks and supported backup, then checkpoint/push under
+the text-only hook exception. No production source, master merge, live activation,
+AFL or user artwork action.
