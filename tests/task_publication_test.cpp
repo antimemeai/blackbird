@@ -31,7 +31,13 @@ void require(bool good, const char *message) {
 void *operator new(std::size_t size) { return allocate(size); }
 void *operator new[](std::size_t size) { return allocate(size); }
 void operator delete(void *pointer) noexcept { std::free(pointer); }
+void operator delete(void *pointer, std::size_t) noexcept {
+  ::operator delete(pointer);
+}
 void operator delete[](void *pointer) noexcept { std::free(pointer); }
+void operator delete[](void *pointer, std::size_t) noexcept {
+  ::operator delete[](pointer);
+}
 int main() {
   try {
     TerminalUI ui{"Publication contention"};

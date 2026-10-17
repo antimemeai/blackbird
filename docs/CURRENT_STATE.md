@@ -131,7 +131,7 @@ further trajectory views remain separate.
 
 | Area | Current behavior | Material limit |
 | --- | --- | --- |
-| Native harness | C++20/Lua, terminal composer, command palette and external editor; retained sessions; `/new`, bounded retained names, searchable `/sessions` and `/resume`; independent task/draft/context restoration; restart/resume/continue. | Owned OpenAI auth available; installed Codex remains a compatibility route. |
+| Native harness | C++23/Lua, terminal composer, command palette and external editor; retained sessions; `/new`, bounded retained names, searchable `/sessions` and `/resume`; independent task/draft/context restoration; restart/resume/continue. | Owned OpenAI auth available; installed Codex remains a compatibility route. |
 | Context | CLM edits, managed compaction, archived original recovery and context budget policy. | Read selector now has one lines/bytes mode; malformed calls return correction guidance. Historical Lua ranges stay compatible. |
 | Recovery | Cooperative backstop, bounded provider recovery, workflow repair, retained unknown effects and explicit native unknown-effect recovery without replay. | Arbitrary exec and escaped/remote effects prevent automatic claims of containment; general crash recovery unfinished. |
 | Command jobs | Shared operator/model/Lua background/foreground waits, stable job IDs, bounded output, ordered input, signals, resize and stop; native pipes/private PTYs. | Text PTY interface; active/unsettled commands block restart/session switching; crash recovery never adopts old PIDs. |

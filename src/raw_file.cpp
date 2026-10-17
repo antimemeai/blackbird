@@ -494,7 +494,7 @@ std::filesystem::path absolute(Helper &owner, const std::filesystem::path &path,
     error.clear();
     return path;
   }
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
   if (path.empty()) {
     error.assign(EINVAL, std::generic_category());
     return {};
@@ -565,7 +565,7 @@ std::filesystem::path canonical(Helper &owner, const std::filesystem::path &path
   call.body(3, std::as_bytes(std::span{output}), {}, true);
   call.pointer(false, native_error);
   call.check();
-#if !defined(__linux__)
+#if !defined(__GLIBCXX__)
   error.assign(native_error, std::generic_category());
   return {};
 #else
@@ -861,7 +861,7 @@ std::string raw_file_read(const std::filesystem::path &path, std::size_t limit,
                                                 static_cast<std::size_t>(count)}));
       reading.returned(count, native_error);
       reading.check();
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
       if (count < 0 && native_error == EINTR)
         continue;
       if (count < 0)
@@ -1135,7 +1135,7 @@ std::filesystem::path raw_file_weak_canonical(const std::filesystem::path &path,
         error.clear();
         return false;
       }
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
       // GCC status returns file_type::unknown (a known existing status) here.
       if (native_error == EOVERFLOW) {
         error.clear();
@@ -1147,7 +1147,7 @@ std::filesystem::path raw_file_weak_canonical(const std::filesystem::path &path,
     };
     std::filesystem::path prefix;
     std::vector<std::filesystem::path> suffix;
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
     if (known_exists(path))
       prefix = path;
     else if (!error) {
@@ -1176,7 +1176,7 @@ std::filesystem::path raw_file_weak_canonical(const std::filesystem::path &path,
       helper.error_code(error);
       return std::filesystem::path{};
     }
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
     if (!prefix.empty())
 #endif
       prefix = canonical(helper, prefix, error);

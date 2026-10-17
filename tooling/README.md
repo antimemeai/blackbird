@@ -60,15 +60,15 @@ No global shell or editor configuration is required.
 
 | Tool | Local version | Purpose |
 | --- | --- | --- |
-| LLVM Clang, clang-format, clang-tidy, clangd | 23.1.2 | Coherent C++20 compiler, formatting, focused analysis and editor diagnostics |
+| LLVM Clang, clang-format, clang-tidy, clangd | 23.1.2 | Coherent C++23 compiler, formatting, focused analysis and editor diagnostics |
 | CMake / CTest | 4.3.0 | Owned target/test orchestration |
 | Ninja | 1.13.0.git.kitware.jobserver-pipe-1 | Existing pinned build driver |
 | Lua / luac | 5.4.8 | Compatibility execution and syntax checks |
 | Lua Language Server | 3.19.1 | Annotation/type diagnostics with fresh JSON reports |
 | StyLua | 2.5.2 | Lua 5.4 formatting |
 
-Debug and optimized profiles pass a C++20 byte/span and synchronized-thread
-fixture with exact expected results. The ASan+UBSan profile separately detects a
+Debug and optimized profiles exercise C++23 `std::expected` and constexpr
+`std::byteswap`, byte/span access, and synchronized threads with exact results. The ASan+UBSan profile separately detects a
 heap overrun and signed overflow. TSan detects the deliberately unsynchronized
 counter in its own profile. The libFuzzer profile executes 1,000 bounded inputs
 against a double-reversal byte property. These establish tool capability; none
@@ -132,11 +132,16 @@ under `context/linux/`.
 Use `--test-regex REGEX` to exercise only changed CTest cases in all three profiles;
 an empty selection fails instead of passing silently. Native process-crash suites
 have a 60-second watchdog for host scheduling/storage delays; their oracles assert
-bytes, signals and effects, not a production latency guarantee. The remote check
-has a separate finite 600-second overall watchdog.
+bytes, signals and effects, not a production latency guarantee. CTest owns each
+test's watchdog; a complete three-profile build/test run has no fixed overall
+deadline.
+Compilation uses at most 16 parallel jobs on Neuroses.
 
-Its explicit profile is Ubuntu 24.04 x86_64, Clang 18.1.3, libstdc++ 13,
-CMake 3.28.3 and Ninja 1.11.1. The first native foundation cases pass.
+Its explicit profile is Ubuntu 24.04 x86_64, Clang 23.1.4, libc++/libc++abi 23.1.4,
+CMake 3.28.3 and Ninja 1.11.1. The Linux ASan+UBSan profile keeps debug
+symbols and uses `-O1`, following [Clang guidance](https://clang.llvm.org/docs/AddressSanitizer.html),
+so unoptimized library calls do not dominate large-payload diagnostic cases.
+The first native foundation cases pass.
 This is behavioral execution, not qualification of every Linux diagnostic tool.
 **Mutants run on the fleet, never this laptop.** Operator steering postpones mutation
 campaigns until a working agent and mature suite; Runpod provisioning is not a gate.
@@ -154,9 +159,12 @@ but no EDG build, test suite or integration has been executed. It remains a
 candidate; it does not replace native sanitizers or qualify native reload.
 
 The Linux runner builds the selected Lua5.4.8 from the digest-pinned source archive
-listed in QUARANTINE.md inside each disposable remote workspace. It changes no
-server system package. Current session/RRC/coding/recovery/terminal checks passed
-in Neuroses debug/release/ASan+UBSan profiles on 2026-10-03.
+listed in QUARANTINE.md inside each disposable remote workspace. Ordinary checks
+change no server system package. The operator-authorized C++23 upgrade installed versioned
+LLVM 23 packages from the signed official LLVM APT release repository; see
+[the upgrade record](../papers/2026-10-17-cpp23-toolchain.md). Historical
+session/RRC/coding/recovery/terminal checks passed in the former Neuroses
+Clang18/libstdc++13 debug/release/ASan+UBSan profiles on 2026-10-03.
 
 ## Native performance
 

@@ -23,7 +23,7 @@ def main():
     args = parser.parse_args()
     # Explicit current native unit source scope, excluding history, credentials and captures.
     paths = ["CMakeLists.txt", "include", "src", "tests", "programs", "tooling/probes",
-             "assets", "scripts/check-foundation-api", "scripts/check-terminal-pty", "scripts/check-new-session-pty", "scripts/check-participants-pty", "scripts/check-tiny-terminal-pty", "scripts/check-provider-auth", "scripts/check-trajectory", "scripts/check-observations", "scripts/check-tasks-pty", "scripts/check-command-jobs-pty", "scripts/check-command-jobs-station", "scripts/check-rrc", "scripts/arco", "scripts/blackbird", "scripts/terminal-screen-oracle.py", "scripts/native-packet.py"]
+             "assets", "packages", "scripts/check-foundation-api", "scripts/check-terminal-pty", "scripts/check-new-session-pty", "scripts/check-participants-pty", "scripts/check-tiny-terminal-pty", "scripts/check-provider-auth", "scripts/check-trajectory", "scripts/check-observations", "scripts/check-tasks-pty", "scripts/check-command-jobs-pty", "scripts/check-command-jobs-station", "scripts/check-rrc", "scripts/arco", "scripts/blackbird", "scripts/terminal-screen-oracle.py", "scripts/native-packet.py"]
     paths.append("scripts/check-raw-capture")
     paths.append("scripts/check-trace-archive")
     paths.append("scripts/check-openrouter")
@@ -36,6 +36,7 @@ def main():
     paths.append("scripts/check-tui-inspector")
     paths.append("scripts/check-tui-center")
     paths.append("scripts/check-tui-instrument")
+    paths += ["scripts/check-terminal-edge", "scripts/check-tui-viewport", "scripts/check-main-input"]
     lua_archive = ROOT.parent / "quarantine_proj/archives/lua-5.4.8.tar.gz"
     if hashlib.sha256(lua_archive.read_bytes()).hexdigest() != "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae":
         raise RuntimeError("Lua 5.4.8 source archive checksum mismatch")
@@ -65,35 +66,38 @@ if test_regex is None or any(re.search(test_regex, name) for name in
     subprocess.run(['python3', str(root / 'scripts/tui-test'), '--install'], check=True)
     subprocess.run(['python3', str(root / 'scripts/tui-test'), '--check'], check=True)
 print(platform.platform(), flush=True)
-for tool in ('/usr/bin/clang++-18', '/usr/bin/cmake', '/usr/bin/ninja'):
+for tool in ('/usr/bin/clang++-23', '/usr/bin/cmake', '/usr/bin/ninja'):
     subprocess.run([tool, '--version'], check=True)
-macros = subprocess.check_output(['/usr/bin/clang++-18', '-stdlib=libstdc++', '-std=c++20', '-dM', '-E', '-x', 'c++', '-include', 'version', '/dev/null'], text=True)
-if '#define _GLIBCXX_RELEASE 13\\n' not in macros:
-    raise RuntimeError('Linux profile requires installed libstdc++ 13')
-print('Linux standard library: libstdc++ 13', flush=True)
+macros = subprocess.check_output(['/usr/bin/clang++-23', '-stdlib=libc++', '-std=c++23', '-dM', '-E', '-x', 'c++', '-include', 'version', '/dev/null'], text=True)
+if '#define _LIBCPP_VERSION 230104\\n' not in macros:
+    raise RuntimeError('Linux profile requires installed libc++ 23.1.4')
+print('Linux standard library: libc++ 23.1.4', flush=True)
 print('CTest selection:', test_regex if test_regex is not None else 'all', flush=True)
 with tarfile.open(root / 'tooling/dependencies/lua-5.4.8.tar.gz', 'r:gz') as archive:
     archive.extractall(root / 'tooling/dependencies', filter='data')
 lua = root / 'tooling/dependencies/lua-5.4.8/src'
-subprocess.run(['make', '-C', str(lua), 'liblua.a', 'CC=/usr/bin/clang-18', 'MYCFLAGS=-DLUA_USE_LINUX -fPIC'], check=True)
+subprocess.run(['make', '-C', str(lua), 'liblua.a', 'CC=/usr/bin/clang-23', 'MYCFLAGS=-DLUA_USE_LINUX -fPIC'], check=True)
 
 for name, mode, instrumentation in [('debug', 'Debug', 'none'), ('release', 'Release', 'none'), ('asan', 'Debug', 'address')]:
     if selected_profiles and name not in selected_profiles:
         continue
     build = root / 'build' / name
-    subprocess.run(['/usr/bin/cmake', '-S', str(root), '-B', str(build), '-G', 'Ninja', '-DCMAKE_CXX_COMPILER=/usr/bin/clang++-18', '-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja', '-DBLACKBIRD_COMPILER_PROFILE=linux-clang18', '-DCMAKE_BUILD_TYPE='+mode, '-DBLACKBIRD_DEBUG='+('OFF' if mode == 'Release' else 'ON'), '-DBLACKBIRD_INSTRUMENTATION='+instrumentation, '-DLUA_INCLUDE_DIR='+str(lua), '-DLUA_LIBRARY='+str(lua / 'liblua.a')], check=True)
-    build_command = ['/usr/bin/cmake', '--build', str(build), '--parallel', '4']
+    configure = ['/usr/bin/cmake', '-S', str(root), '-B', str(build), '-G', 'Ninja', '-DCMAKE_CXX_COMPILER=/usr/bin/clang++-23', '-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja', '-DBLACKBIRD_COMPILER_PROFILE=linux-llvm23', '-DCMAKE_BUILD_TYPE='+mode, '-DBLACKBIRD_DEBUG='+('OFF' if mode == 'Release' else 'ON'), '-DBLACKBIRD_INSTRUMENTATION='+instrumentation, '-DLUA_INCLUDE_DIR='+str(lua), '-DLUA_LIBRARY='+str(lua / 'liblua.a')]
+    if instrumentation == 'address':
+        configure.append('-DCMAKE_CXX_FLAGS_DEBUG=-g -O1')
+    subprocess.run(configure, check=True)
+    build_command = ['/usr/bin/cmake', '--build', str(build), '--parallel', '16']
     if build_targets:
         build_command += ['--target', *build_targets]
     subprocess.run(build_command, check=True)
-    tests = ['/usr/bin/ctest', '--test-dir', str(build), '--output-on-failure', '--no-tests=error']
+    tests = ['/usr/bin/ctest', '--test-dir', str(build), '--output-on-failure', '--no-tests=error', '--parallel', '6']
     if test_regex is not None:
         tests += ['-R', test_regex]
     subprocess.run(tests, check=True)
 '''
         commands = "test_regex = " + repr(args.test_regex) + "\nbuild_targets = " + repr(args.targets) + "\nselected_profiles = " + repr(args.profiles) + "\n" + commands
         with (capture / "checks.log").open("wb") as output:
-            result = subprocess.run([*SSH, "cd " + shlex.quote(remote) + " && timeout --kill-after=5 600 python3 -"], input=commands.encode(), stdout=output, stderr=subprocess.STDOUT, timeout=620)
+            result = subprocess.run([*SSH, "cd " + shlex.quote(remote) + " && python3 -"], input=commands.encode(), stdout=output, stderr=subprocess.STDOUT)
         if result.returncode:
             raise RuntimeError(f"Linux checks failed ({result.returncode}); inspect {capture / 'checks.log'}")
         selection = f" (CTest filter: {args.test_regex})" if args.test_regex is not None else ""

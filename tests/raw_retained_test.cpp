@@ -47,6 +47,7 @@ thread_local void *cut_caller = nullptr;
 thread_local bool cut_hit = false;
 struct ProjectionCancellation {
   int writer = -1;
+  std::size_t result_allocation_size = 0;
   bool armed = false, hit = false, failed = false, busy = false;
   std::vector<RawControlToken> pressure;
 };
@@ -83,12 +84,11 @@ void cancel_projection(std::size_t size) noexcept {
         string_storage = true;
     }
   }
-  // Optimized libstdc++ inlines the string helpers: the measured 32769-byte
-  // allocation's first exported caller is Runtime::eval itself. Its source
-  // copies this Lua result through read_value; later codec/journal allocations
-  // have their own intervening callers and cannot select this branch.
+  // Optimized libraries inline the string helpers. Match the direct eval
+  // allocation against this library's measured extent for the exact Lua result;
+  // later codec/journal allocations have their own intervening callers.
   if (actual_eval && ((actual_string && actual_read) || string_storage ||
-                      (direct_eval && size == 32769))) {
+                      (direct_eval && size == projection.result_allocation_size))) {
     projection.armed = false;
     projection.hit = true;
     for (std::uint64_t bytes = 1024 * 1024; bytes; bytes /= 2) {
@@ -100,7 +100,7 @@ void cancel_projection(std::size_t size) noexcept {
   }
   projection.busy = false;
 }
-bool saved_stack() {
+bool saved_stack(std::size_t size = 0) {
   if (stack_busy)
     return false;
   stack_busy = true;
@@ -109,10 +109,17 @@ bool saved_stack() {
   bool found = false;
   for (int i = 0; i < n; ++i) {
     Dl_info info{};
-    if (::dladdr(frames[static_cast<std::size_t>(i)], &info) && info.dli_sname &&
-        std::strstr(info.dli_sname, "make_unique") &&
-        std::strstr(info.dli_sname, "SavedState"))
-      found = true;
+    if (::dladdr(frames[static_cast<std::size_t>(i)], &info) && info.dli_sname) {
+      const bool named_allocation = std::strstr(info.dli_sname, "make_unique") &&
+                                    std::strstr(info.dli_sname, "SavedState");
+      // libc++ hides its template helpers; identify the actual staged object
+      // by its allocation extent and the owning native save operation instead.
+      const bool owned_allocation = size == sizeof(SavedState) &&
+                                    std::strstr(info.dli_sname, "RetainedState") &&
+                                    std::strstr(info.dli_sname, "save_current_state");
+      if (named_allocation || owned_allocation)
+        found = true;
+    }
   }
   stack_busy = false;
   return found;
@@ -1061,6 +1068,7 @@ void generic_projection_cancellation() {
     (void)::backtrace(warm.data(), static_cast<int>(warm.size()));
     projection.pressure.reserve(32);
     projection.writer = cancellation[1];
+    projection.result_allocation_size = std::string(32768, 'Q').capacity() + 1;
     projection.armed = true;
     projection.hit = false;
     projection.failed = false;
@@ -1664,7 +1672,7 @@ void native_exec_caller() {
 void *operator new(std::size_t size) {
   void *caller = __builtin_return_address(0);
   if ((after_ack || before_ack) && !stack_busy && (measuring || cutting)) {
-    const bool stack = saved_stack();
+    const bool stack = saved_stack(size);
     if (measuring && (!before_ack || stack) && allocation_count < allocations.size())
       allocations[allocation_count++] = {caller, size, stack};
     if (cutting && caller == cut_caller && stack) {

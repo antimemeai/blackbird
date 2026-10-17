@@ -53,7 +53,7 @@ struct CwdFact {
 };
 bool tracking_cwd = false;
 std::vector<CwdFact> cwd_facts;
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
 using NativeStat = int (*)(const char *, struct stat *);
 using NativeRealpath = char *(*)(const char *, char *);
 using NativeReadlink = ssize_t (*)(const char *, char *, std::size_t);
@@ -355,7 +355,7 @@ void read_faults() {
               "positive short prefix followed by actual EOF returns original prefix");
     } else if (fault == Cut::first_error || fault == Cut::partial_error ||
                fault == Cut::interrupted) {
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
       if (fault == Cut::interrupted)
         require(!io && answer == source && read_calls == 4,
                 "GNU stream EINTR retries preserve business bytes");
@@ -365,7 +365,7 @@ void read_faults() {
 #else
       require(!io && answer == (fault == Cut::partial_error ? source.substr(0, 7)
                                                             : std::string{}),
-              "Darwin char-filebuf native error remains EOF/prefix business result");
+              "libc++ char-filebuf native error remains EOF/prefix business result");
 #endif
       bool failure = false;
       for (const auto &event : events) {
@@ -919,7 +919,7 @@ void old_stdio_contract() {
       old_error = error;
     }
     const auto old_acquired = acquired;
-#if defined(__APPLE__)
+#if defined(_LIBCPP_VERSION)
     require(stdio_calls > 0 && stdio_error == EBADF,
             "actual old libc fread forwards a genuine lost-descriptor failure, not a "
             "mocked EOF");
@@ -951,16 +951,16 @@ void old_stdio_contract() {
     const auto expected = fault == Cut::partial_closed ? 4096u : 0u;
     require(acquired.size() == expected,
             "independently selected actual first/positive-prefix failure extent");
-#if defined(__APPLE__)
+#if defined(_LIBCPP_VERSION)
     require(!new_error && new_answer == source.substr(0, expected),
-            "Darwin fread error remains existing EOF/prefix business outcome");
+            "libc++ fread error remains existing EOF/prefix business outcome");
 #else
     require(new_error == Error{ErrorCode::io},
             "GNU native acquisition error remains original stream exception mapping");
 #endif
   }
 }
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
 void linux_fallback() {
   for (const auto size : {off_t{4094}, off_t{4095}, off_t{4096}}) {
     Directory directory;
@@ -1615,7 +1615,7 @@ void limit_prefix() {
           "each native acquired prefix is already on disk before read limit refusal");
 }
 } // namespace
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
 extern "C" char *realpath(const char *name, char *output) {
   if (!fallback_path.empty() && fallback_path == name) {
     std::memcpy(output, "/failed", 8);
@@ -1865,7 +1865,7 @@ extern "C" void bb_file_observed_stdio(int fd, void *bytes, std::size_t size) {
     preserved(bytes, size);
 }
 int main(int argc, char **argv) {
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
   native_stat = reinterpret_cast<NativeStat>(::dlsym(RTLD_NEXT, "stat"));
   native_lstat = reinterpret_cast<NativeStat>(::dlsym(RTLD_NEXT, "lstat"));
   native_realpath = reinterpret_cast<NativeRealpath>(::dlsym(RTLD_NEXT, "realpath"));
@@ -1903,7 +1903,7 @@ int main(int argc, char **argv) {
     paths_and_tools();
     optout_and_capacity();
     exact_admission();
-#if defined(__linux__)
+#if defined(__GLIBCXX__)
     linux_fallback();
 #endif
     capture_failures();

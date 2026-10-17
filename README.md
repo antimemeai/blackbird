@@ -27,7 +27,7 @@ management, expressive controls and multiple metrics instruments. These are desi
 the current implementation remains described below.
 
 
-This repository contains a **C++20 core, Lua 5.4.8 turn programs, a terminal interface, and an operating self-development loop**. It is an early system in active use and reconstruction. Its ambitions exceed its present implementation; the distinctions below are part of the description, rather than small print.
+This repository contains a **C++23 core, Lua 5.4.8 turn programs, a terminal interface, and an operating self-development loop**. It is an early system in active use and reconstruction. Its ambitions exceed its present implementation; the distinctions below are part of the description, rather than small print.
 
 For current accepted capabilities, unfinished work and the development
 cycle, see [the project stock](docs/CURRENT_STATE.md).
@@ -98,7 +98,7 @@ operator objective. See the [application interface](docs/APPLICATION_INTERFACE.m
 
 ### Building this checkout
 
-The build is deliberately tied to qualified development profiles. The local macOS profile uses Clang 23.1.2 and Lua 5.4.8; the Linux profile uses Clang 18.1.3 and libstdc++ 13. CMake presets contain host-specific tool paths. A fresh machine needs its profile configured deliberately, rather than assuming these paths will exist.
+The build is deliberately tied to qualified development profiles. The local macOS profile uses Clang 23.1.2 and Lua 5.4.8; the Linux profile uses Clang 23.1.4 and libc++ 23.1.4. CMake presets contain host-specific tool paths. A fresh machine needs its profile configured deliberately, rather than assuming these paths will exist.
 
 ```sh
 scripts/rigor doctor

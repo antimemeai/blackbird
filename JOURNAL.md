@@ -11082,3 +11082,41 @@ open for outstanding auth work. Supported backup retains177 current issues,
 808 events,128 dependencies and27 labels. Publish integration results and backup
 as a checked text/data-only checkpoint with the authorized hook exception;
 the settled combined source gate is not repeated. Artwork/AFL remain untouched.
+
+## 2026-10-17 — C++23 toolchain upgrade begins
+
+Operator requests updated Neuroses LLVM/standard-library tooling, Blackbird C++23,
+native build checks and merge. Mainline's unrelated TUI integration hook is still
+running, so use `work/cpp23-toolchain-2026-10-17` in an isolated worktree from
+`74a42f4`. Plan/source links and direct verification scope:
+[papers/2026-10-17-cpp23-toolchain.md](papers/2026-10-17-cpp23-toolchain.md).
+Issue `arconaut-34z`. Install LLVM23.1.4 and libc++/libc++abi23.1.4 on Ubuntu24.04
+from the signed official release suite; retain old Clang and default alternatives.
+Mac retains its existing pinned LLVM23.1.2. CMake/probes/runner now select C++23;
+verification and integration are pending.
+
+C++23 compatibility recheck finds Linux-specific test setup assumptions: missing
+remote fixture inputs, libc++ hidden allocation helpers, and bulk-stdio acquisition
+shortcuts. The upgrade note records each failure and repair. The existing file
+and staging assertions are preserved; both corrected direct fixtures pass on Mac.
+The final source gate and Linux profiles now include these concrete repairs.
+
+LLVM23/libc++23 ASan finds missing sized deletes in eight test-only replacement
+allocators. Complete the matching overloads rather than suppress mismatch detection;
+all26 owning ASan cases pass. Final full Linux suites and the Mac source hook
+include those repairs. Reuse the already compiled Linux production objects and
+incrementally rebuild the changed fixture targets; no live process activation.
+
+The optimized Linux Lua projection cut also assumed libstdc++'s exact string
+allocation size. Calibrate that size from the selected library before arming;
+retain owning-frame and actual EOF/originals assertions. The Release case passes.
+Two timed-out Mac Release UI cases pass in isolation without changed deadlines;
+all28 repaired-fixture Release cases also pass. Remaining Linux sanitizer timeout/
+PTY cases are being rechecked without concurrent native suites; no suppression,
+assertion weakening or new TUI implementation is part of this unit.
+
+LLDB shows the slow sanitized caller computing large journal CRCs. Follow Clang's
+ASan guidance with Linux `-g -O1`, preserving sanitizer checks and all deadlines;
+the unchanged caller case passes in7.84seconds. Its final Mac Release counterpart
+passes in2.04seconds. Run the complete optimized Linux sanitizer profile and the
+final Mac source gate against this now-complete migration change.
