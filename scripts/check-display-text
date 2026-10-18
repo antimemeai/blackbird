@@ -8,6 +8,8 @@ import signal
 import tempfile
 import uuid
 
+from tui_session import stop_session
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -87,6 +89,16 @@ def main():
                 else:
                     failure.add_note(f"Driver cleanup failed: {error!r}")
             finally:
+                if opened:
+                    try:
+                        left = stop_session(session)
+                        if left:
+                            raise AssertionError(f"tui-test session outlived close: {left}")
+                    except BaseException as error:
+                        if failure is None:
+                            failure = error
+                        else:
+                            failure.add_note(f"Driver cleanup failed: {error!r}")
                 (artifacts / "commands.json").write_text(json.dumps(history, indent=2) + "\n")
                 for number, handler in prior.items():
                     signal.signal(number, handler)

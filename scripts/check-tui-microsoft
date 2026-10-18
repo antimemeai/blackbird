@@ -8,6 +8,8 @@ import signal
 import tempfile
 import uuid
 
+from tui_session import stop_session
+
 ROOT = Path(__file__).resolve().parent.parent
 TOOL = ROOT / "scripts/tui-test"
 
@@ -170,6 +172,13 @@ def main():
             except BaseException as error:
                 cleanup_error = error
             finally:
+                if opened:
+                    try:
+                        left = stop_session(session)
+                        if left:
+                            raise AssertionError(f"tui-test session outlived close: {left}")
+                    except BaseException as error:
+                        cleanup_error = cleanup_error or error
                 try:
                     (artifacts / "commands.json").write_text(json.dumps(history, indent=2) + "\n")
                 except BaseException as error:
