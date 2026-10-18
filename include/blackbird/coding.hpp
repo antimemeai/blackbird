@@ -45,6 +45,15 @@ public:
                         const RawProviderOwner *owner, const RawAdapterContext *) {
     return respond(request, capture, owner);
   }
+
+protected:
+  // Concrete providers copy and move as whole objects; the protected interface
+  // keeps a provider from being sliced through a CodingProvider reference.
+  CodingProvider() = default;
+  CodingProvider(const CodingProvider &) = default;
+  CodingProvider(CodingProvider &&) = default;
+  CodingProvider &operator=(const CodingProvider &) = default;
+  CodingProvider &operator=(CodingProvider &&) = default;
 };
 class OpenAiCodingProvider final : public CodingProvider {
 public:
