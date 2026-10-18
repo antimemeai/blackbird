@@ -4,7 +4,7 @@
 namespace blackbird {
 struct AnthropicConfig {
   ProviderAuthConfig auth;
-  int timeout_seconds = 180;
+  ProviderTimeouts timeouts; // stall retried; total ceiling final
   std::uint64_t max_tokens = 16384;
 };
 // Stateless native Messages route over the existing owned account/HTTP machinery.

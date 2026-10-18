@@ -468,8 +468,9 @@ void source_extent(bool unknown, bool retain_failure) {
                [&](const Value &, const ColleagueCapture &,
                    const std::function<bool()> &,
                    const RawAdapterContext *context) -> Value {
-                 (void)auth.request("openai", "responses", Value::object({}), 3, {},
-                                    nullptr, context->owner, context);
+                 (void)auth.request("openai", "responses", Value::object({}),
+                                    ProviderTimeouts{.request_seconds = 3}, {}, nullptr,
+                                    context->owner, context);
                  throw Error{ErrorCode::corrupt};
                });
     {

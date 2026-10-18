@@ -4,6 +4,7 @@ namespace {
 unsigned provider_calls = 0;
 class StationFixtureProvider final : public blackbird::CodingProvider {
 public:
+  explicit StationFixtureProvider(const blackbird::OpenAiConfig & = {}) {}
   blackbird::Value respond(const blackbird::Value &,
                            const std::function<void(std::string_view)> &) override {
     ++provider_calls;

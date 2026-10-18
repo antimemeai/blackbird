@@ -540,7 +540,8 @@ void run(const std::filesystem::path &directory, const std::string &executable,
       owner.dispatch.lane = epoch;
       owner.dispatch.ordinal = 43;
       const auto result = auth.request(
-          "openai", "responses", Value::object({{"prompt", Value{"fixture"}}}), 10,
+          "openai", "responses", Value::object({{"prompt", Value{"fixture"}}}),
+          ProviderTimeouts{.request_seconds = 10},
           [&](std::string_view bytes) {
             const auto before = records(channel);
             std::string retained;
@@ -615,7 +616,9 @@ void run(const std::filesystem::path &directory, const std::string &executable,
       body = body.subspan(16);
     }
     ref(body, epoch, 43);
-    check(native<int>(body) == 10 && body.empty(), "request begin layout changed");
+    check(native<int>(body) == 10 &&
+              native<int>(body) == provider_stall_timeout_default && body.empty(),
+          "request begin layout changed");
   }
   std::string raw;
   unsigned request_bodies = 0, terminal = 0, child_release = 0;
@@ -687,8 +690,9 @@ void preserved_originals(const std::filesystem::path &directory,
         RawRuntime::open(session, environment, {owned_provider_capacities, 4096}));
     auto handle = unwrap(runtime->prepare_thread());
     RawThreadBinding binding{handle};
-    const auto returned = auth.request(
-        "openai", "responses", Value::object({{"prompt", Value{"fixture"}}}), 10);
+    const auto returned = auth.request("openai", "responses",
+                                       Value::object({{"prompt", Value{"fixture"}}}),
+                                       ProviderTimeouts{.request_seconds = 10});
     check(returned.status == 200, "preserved provider status changed");
   }
   const auto runs = unwrap(discover_raw_runs(session));
@@ -767,8 +771,8 @@ void producer_death(const std::filesystem::path &directory,
       config.curl_executable = executable;
       ProviderAuth auth{config};
       (void)auth.request(
-          "openai", "responses", Value::object({{"prompt", Value{"fixture"}}}), 10,
-          [&](std::string_view original) {
+          "openai", "responses", Value::object({{"prompt", Value{"fixture"}}}),
+          ProviderTimeouts{.request_seconds = 10}, [&](std::string_view original) {
             check(original == normal_wire, "unexpected acquired death original");
             check(::write(reports[1], "p", 1) == 1, "report raw original publication");
             // The hook has published the native bytes before this business

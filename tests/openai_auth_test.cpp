@@ -2,6 +2,7 @@
 #include "blackbird/openai.hpp"
 #include "blackbird/provider_auth.hpp"
 #include "blackbird/tools.hpp"
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -157,15 +158,24 @@ int main(int argc, char **argv) {
     check(!dropped.has_value() &&
           dropped.error().code == ErrorCode::provider_transport &&
           dropped.error().detail == 92 && partial == "data: partial stream\n");
-    config.timeout_seconds = 1;
+    // The silent stream reaches the total ceiling first: final, not a stall.
+    config.timeouts = {.stall_seconds = 120, .request_seconds = 1};
     auto deadline_request = Value::object({{"triggerTimeout", Value{true}}});
     auto deadline_failure =
         openai_http(config, login.value(), "responses", &deadline_request);
     check(!deadline_failure.has_value() &&
-          deadline_failure.error().code == ErrorCode::provider_transport &&
-          deadline_failure.error().detail == 28 &&
+          deadline_failure.error() == provider_ceiling_error &&
           partial.ends_with("data: before timeout\n"));
-    config.timeout_seconds = 120;
+    // The same silence under a 1 s stall timeout is a retryable stall.
+    partial.clear();
+    config.timeouts = {.stall_seconds = 1, .request_seconds = 120};
+    const auto stall_started = std::chrono::steady_clock::now();
+    auto stalled = openai_http(config, login.value(), "responses", &deadline_request);
+    const auto stall_elapsed = std::chrono::steady_clock::now() - stall_started;
+    check(!stalled.has_value() && stalled.error() == provider_stall_error &&
+          partial == "data: before timeout\n" &&
+          stall_elapsed < std::chrono::milliseconds{2500});
+    config.timeouts = {};
     config.response_observer = {};
     auto failure = Value::object({{"trigger401", Value{true}}});
     auto refused = openai_http(config, login.value(), "responses", &failure);

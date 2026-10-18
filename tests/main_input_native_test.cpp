@@ -4,6 +4,7 @@ namespace {
 unsigned fixture_provider_calls = 0;
 class FixtureMainProvider final : public blackbird::CodingProvider {
 public:
+  explicit FixtureMainProvider(const blackbird::OpenAiConfig & = {}) {}
   blackbird::Value respond(const blackbird::Value &,
                            const std::function<void(std::string_view)> &) override {
     ++fixture_provider_calls;
@@ -367,6 +368,23 @@ void main_refusal() {
   }
 }
 
+// Provider deadline options take whole seconds 1..86400; the stall timeout may not
+// exceed the request ceiling. Refusal happens before any session is opened.
+void main_timeout_options() {
+  Temporary temporary;
+  const auto session = temporary.path / "refused";
+  for (const auto &options : std::vector<std::vector<std::string>>{
+           {"--stall-timeout", "0"},
+           {"--request-timeout", "86401"},
+           {"--stall-timeout", "12s"},
+           {"--stall-timeout", "100", "--request-timeout", "50"}}) {
+    std::vector<std::string> words{"fixture-blackbird", "--session", session.native(),
+                                   "--once", "/name refused"};
+    words.insert(words.end(), options.begin(), options.end());
+    require_native(invoke(words) == 1 && !std::filesystem::exists(session),
+                   "invalid provider deadline option accepted");
+  }
+}
 void main_handoff_selection() {
   Temporary temporary;
   const auto destination = temporary.path / "destination";
@@ -398,6 +416,8 @@ void main_handoff_selection() {
     if (scenario == "new")
       words.insert(words.end(),
                    {"--provider", "openrouter", "--model", "openai/gpt-6.1-sol"});
+    // Launch-only provider deadlines carry into the successor session.
+    words.insert(words.end(), {"--stall-timeout", "60", "--request-timeout", "900"});
     std::vector<char *> args;
     for (auto &word : words)
       args.push_back(word.data());
@@ -414,7 +434,18 @@ void main_handoff_selection() {
       require_native(next.empty() && fallback.empty(),
                      "missing audit changed successor arguments");
     else {
-      require_native(next.size() == (scenario == "new" ? 13U : 5U) &&
+      const auto carried = [](const std::vector<std::string> &arguments) {
+        const auto stall =
+            std::find(arguments.begin(), arguments.end(), "--stall-timeout");
+        const auto ceiling =
+            std::find(arguments.begin(), arguments.end(), "--request-timeout");
+        return stall != arguments.end() && std::next(stall) != arguments.end() &&
+               *std::next(stall) == "60" && ceiling != arguments.end() &&
+               std::next(ceiling) != arguments.end() && *std::next(ceiling) == "900";
+      };
+      require_native(carried(next) && (scenario == "new" || carried(fallback)),
+                     "successor dropped the launch provider deadlines");
+      require_native(next.size() == (scenario == "new" ? 17U : 9U) &&
                          next[0] == "fixture-blackbird" && next[1] == "--session" &&
                          std::filesystem::is_directory(next[2]) &&
                          std::find(next.begin(), next.end(), "--plain") != next.end() &&
@@ -427,7 +458,7 @@ void main_handoff_selection() {
                        "new session must preserve selected provider and model");
       if (scenario == "resume")
         require_native(next[2] == std::filesystem::canonical(destination).native() &&
-                           fallback.size() == 5 && fallback[2] == session.native(),
+                           fallback.size() == 9 && fallback[2] == session.native(),
                        "actual resume selected/fallback operands");
     }
     handoff.consume();
@@ -857,6 +888,7 @@ int main() {
     main_idle_interrupt();
     main_acquired_prefix();
     main_branch_refusal();
+    main_timeout_options();
     main_handoff_selection();
     std::cout
         << "Main native refusal prevents read and backstop; business error preserved\n";

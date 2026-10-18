@@ -4,7 +4,7 @@
 namespace blackbird {
 struct OpenRouterConfig {
   ProviderAuthConfig auth;
-  int timeout_seconds = 180;
+  ProviderTimeouts timeouts; // stall retried; total ceiling final
 };
 // OpenRouter's main coding path uses stateless Responses; colleague Chat is separate.
 class OpenRouterCodingProvider final : public CodingProvider {

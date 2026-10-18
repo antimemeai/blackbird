@@ -79,7 +79,8 @@ int main() {
           "directory mode");
     const auto status = unwrap(dump_json(auth.status()));
     check(status.find("secret") == std::string::npos, "status secret leak");
-    (void)auth.request("openai", "responses", Value::object({}), 10);
+    (void)auth.request("openai", "responses", Value::object({}),
+                       ProviderTimeouts{.request_seconds = 10});
     check(requests == 1, "request absent");
     rejects([&] { auth.set_key("openai", "bad", "key\nInjected: yes"); },
             ErrorCode::invalid_range);
@@ -96,11 +97,14 @@ int main() {
     auth.save_oauth("openai", "personal", tokens(), "issued-client",
                     d.find("token_url")->string());
     clock = 4550;
-    std::thread a{
-        [&] { (void)auth.request("openai", "responses", Value::object({}), 10); }};
+    std::thread a{[&] {
+      (void)auth.request("openai", "responses", Value::object({}),
+                         ProviderTimeouts{.request_seconds = 10});
+    }};
     std::thread b{[&] {
       ProviderAuth other{config};
-      (void)other.request("openai", "responses", Value::object({}), 10);
+      (void)other.request("openai", "responses", Value::object({}),
+                          ProviderTimeouts{.request_seconds = 10});
     }};
     a.join();
     b.join();
@@ -108,10 +112,15 @@ int main() {
     auth.set_key("openai", "logged_out", "api-secret");
     auth.use("openai", "personal");
     auth.logout("openai", "personal");
-    rejects([&] { (void)auth.request("openai", "responses", Value::object({}), 10); },
-            ErrorCode::provider_auth);
+    rejects(
+        [&] {
+          (void)auth.request("openai", "responses", Value::object({}),
+                             ProviderTimeouts{.request_seconds = 10});
+        },
+        ErrorCode::provider_auth);
     auth.use("openai", "work");
-    (void)auth.request("openai", "responses", Value::object({}), 10);
+    (void)auth.request("openai", "responses", Value::object({}),
+                       ProviderTimeouts{.request_seconds = 10});
     auto broken = tokens();
     for (auto &[k, v] : broken.object())
       if (k == "expires_in")
@@ -194,7 +203,8 @@ int main() {
           ::_exit(2);
         try {
           ProviderAuth child_auth{process_config};
-          (void)child_auth.request("openai", "responses", Value::object({}), 10);
+          (void)child_auth.request("openai", "responses", Value::object({}),
+                                   ProviderTimeouts{.request_seconds = 10});
           ::_exit(0);
         } catch (...) {
           ::_exit(3);
@@ -237,8 +247,10 @@ int main() {
       ProviderAuth headers{header_config};
       headers.set_key("openai", "fixture", "api-secret");
       headers.set_key("openrouter", "fixture", "api-secret");
-      (void)headers.request("openai", "responses", Value::object({}), 10);
-      (void)headers.request("openrouter", "responses", Value::object({}), 10);
+      (void)headers.request("openai", "responses", Value::object({}),
+                            ProviderTimeouts{.request_seconds = 10});
+      (void)headers.request("openrouter", "responses", Value::object({}),
+                            ProviderTimeouts{.request_seconds = 10});
     }
     // Owner-only mode and symlink policy are enforced before reading secrets.
     check(::chmod((root / "credentials.bbm").c_str(), 0644) == 0, "chmod");

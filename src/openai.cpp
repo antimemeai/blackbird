@@ -342,14 +342,10 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
       config.raw_context ? *config.raw_context : RawAdapterContext{};
   if (config.raw_owner)
     call.owner = config.raw_owner;
-  std::optional<RawWaitScope> wait_scope;
+  std::optional<ProviderDeadline> ceiling;
   try {
-    const auto deadline = Clock::now() + std::chrono::seconds{config.timeout_seconds};
-    if (config.timeout_seconds >= 1 && config.timeout_seconds <= 3600) {
-      auto control = raw_wait_control();
-      control.deadline = deadline;
-      wait_scope.emplace(control);
-    }
+    if (valid_provider_timeouts(config.timeouts))
+      ceiling.emplace(config.timeouts.request_seconds);
     adapter.emplace(provider_adapter_extra);
     adapter->start(5, &call);
     if (login.owned_auth_) {
@@ -362,16 +358,15 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
       const auto response =
           auth.request("openai", route,
                        request ? export_provider_request(*request) : Value::object({}),
-                       config.timeout_seconds, config.response_observer,
-                       &login.binding_, call.owner, &call);
+                       config.timeouts, config.response_observer, &login.binding_,
+                       call.owner, &call);
       adapter->finish(1);
       return Result<std::string>::success(response.body);
     }
-    if (config.timeout_seconds <= 0 || config.timeout_seconds > 3600) {
-      trace.emplace(call.owner, config.timeout_seconds, &login.resolution_);
+    trace.emplace(call.owner, config.timeouts, &login.resolution_);
+    if (!ceiling)
       fail(ErrorCode::invalid_range);
-    }
-    trace.emplace(call.owner, config.timeout_seconds, &login.resolution_);
+    const auto deadline = ceiling->at();
     adapter->link(trace->reference());
     if (call.receipt && trace->reference().ordinal)
       call.receipt->request = trace->reference();
@@ -405,16 +400,21 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
     if (request)
       input += "data-binary = " + config_quote(encoded_body) + "\n";
     Child child;
-    child.deadline_error = {ErrorCode::provider_transport, 28};
+    child.deadline_error = provider_ceiling_error;
+    if (config.timeouts.stall_seconds > 0)
+      child.stall_timeout = std::chrono::seconds{config.timeouts.stall_seconds};
+    child.stall_error = provider_stall_error;
     child.raw_capture(trace->reference());
     child.output_observer = config.response_observer;
     child.original_capture = call.originals;
     child.cancelled = config.cancelled;
     // --disable is first: do not load curlrc; no redirects, retries or verbose secret
-    // output.
+    // output. curl's own limit is only a backstop beyond Blackbird's ceiling.
     child.start({config.curl_executable, "--disable", "--silent", "--no-buffer",
-                 "--max-time", std::to_string(config.timeout_seconds), "--write-out",
-                 "\n%{http_code}", "--config", "-"});
+                 "--max-time",
+                 std::to_string(config.timeouts.request_seconds +
+                                provider_curl_backstop_seconds),
+                 "--write-out", "\n%{http_code}", "--config", "-"});
     child.send(input, deadline);
     child.close_input();
     int curl_exit = 0;
@@ -443,9 +443,7 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
     adapter->finish(1);
     return Result<std::string>::success(std::move(output));
   } catch (const Error &e) {
-    const Error returned = e.code == ErrorCode::interrupted && e.detail == ETIMEDOUT
-                               ? Error{ErrorCode::provider_transport, 28}
-                               : e;
+    const Error returned = ceiling ? ceiling->business(e) : e;
     if (acquisition)
       acquisition->finish(2, &e);
     if (adapter)

@@ -269,6 +269,9 @@ struct Fixture {
     append(body, identity(attempt + 80));
     ref(body, parent);
     append(body, int{30});
+    // Odd attempts keep the layout of runs recorded before the stall timeout field.
+    if (attempt % 2 == 0)
+      append(body, int{120});
     const auto request = row(1300, std::move(body));
     body.clear();
     ref(body, parent);

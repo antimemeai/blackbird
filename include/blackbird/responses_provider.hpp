@@ -5,7 +5,7 @@ namespace blackbird {
 struct RegisteredResponsesConfig {
   std::string provider;
   ProviderAuthConfig auth;
-  int timeout_seconds = 180;
+  ProviderTimeouts timeouts; // stall retried; total ceiling final
 };
 // Registered stateless Responses routes; builtin OpenAI/OpenRouter keep their adapters.
 class RegisteredResponsesCodingProvider final : public CodingProvider {

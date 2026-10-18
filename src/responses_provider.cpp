@@ -132,27 +132,28 @@ Value RegisteredResponsesCodingProvider::respond(
     }
   } end{temporary ? this : nullptr, responding_};
   responding_ = true;
-  if (config_.timeout_seconds < 1 || config_.timeout_seconds > 3600)
+  if (!valid_provider_timeouts(config_.timeouts))
     throw Error{ErrorCode::invalid_range};
-  auto control = raw_wait_control();
-  control.deadline =
-      std::chrono::steady_clock::now() + std::chrono::seconds{config_.timeout_seconds};
-  RawWaitScope deadline{control};
-  RawProviderPhase phase;
-  return phase.run([&] {
-    phase.start(5, context);
-    auto config = config_.auth;
-    config.cancelled = cancelled;
-    ProviderAuth auth{std::move(config)};
-    const auto wire = export_registered_responses_request(
-        request, string_field(binding_, "protocol") == "responses-portable");
-    const auto response =
-        auth.request(config_.provider, "responses", wire, config_.timeout_seconds,
-                     capture, &binding_, owner, context);
-    auto result =
-        unwrap(registered_responses_completed_response(response.body, context));
-    phase.finish(1);
-    return result;
-  });
+  ProviderDeadline deadline{config_.timeouts.request_seconds};
+  try {
+    RawProviderPhase phase;
+    return phase.run([&] {
+      phase.start(5, context);
+      auto config = config_.auth;
+      config.cancelled = cancelled;
+      ProviderAuth auth{std::move(config)};
+      const auto wire = export_registered_responses_request(
+          request, string_field(binding_, "protocol") == "responses-portable");
+      const auto response =
+          auth.request(config_.provider, "responses", wire, config_.timeouts, capture,
+                       &binding_, owner, context);
+      auto result =
+          unwrap(registered_responses_completed_response(response.body, context));
+      phase.finish(1);
+      return result;
+    });
+  } catch (const Error &error) {
+    throw deadline.business(error);
+  }
 }
 } // namespace blackbird

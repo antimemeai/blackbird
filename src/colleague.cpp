@@ -477,7 +477,7 @@ Value native_colleague_transport(const Value &prepared, const ColleagueCapture &
                                                   : "chat/completions";
       auto wire = auth.request(
           text(request, "provider"), route, required_field(prepared, "upstream"),
-          timeout(request),
+          ProviderTimeouts{.request_seconds = timeout(request)},
           [&](std::string_view bytes) {
             if (!call.originals && capture)
               capture("raw", bytes);
@@ -540,7 +540,7 @@ Value native_colleague_transport(const Value &prepared, const ColleagueCapture &
     }
     if (text(request, "provider") == "openai") {
       OpenAiConfig config;
-      config.timeout_seconds = timeout(request);
+      config.timeouts.request_seconds = timeout(request);
       config.cancelled = cancelled;
       config.raw_context = &call;
       config.raw_owner = call.owner;

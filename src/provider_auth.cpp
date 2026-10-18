@@ -437,20 +437,15 @@ provider_http_impl(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
   std::optional<RawProviderTrace> owned_trace;
   RawProviderTrace *trace = bound_trace;
   std::optional<RawProviderAcquisition> acquisition;
-  std::optional<RawWaitScope> wait_scope;
-  std::optional<detail::Clock::time_point> initial_deadline;
+  const ProviderTimeouts timeouts{r.stall_seconds, r.timeout_seconds};
+  // The application request owns its ceiling; its own expiry becomes the business
+  // ceiling error and consumes exactly that capture marker (arconaut-3nx).
+  std::optional<ProviderDeadline> deadline;
   try {
-    if (application && r.timeout_seconds >= 1 && r.timeout_seconds <= 3600) {
-      initial_deadline = detail::Clock::now() + std::chrono::seconds{r.timeout_seconds};
-      const auto inherited = raw_wait_control().deadline;
-      if (inherited && *inherited < *initial_deadline)
-        initial_deadline = inherited;
-      auto control = raw_wait_control();
-      control.deadline = initial_deadline;
-      wait_scope.emplace(control);
-    }
+    if (application && valid_provider_timeouts(timeouts))
+      deadline.emplace(r.timeout_seconds);
     if (application && !trace) {
-      owned_trace.emplace(raw_owner, r.timeout_seconds, auth_resolution);
+      owned_trace.emplace(raw_owner, timeouts, auth_resolution);
       trace = &*owned_trace;
     }
     if (!bound_trace && trace && raw_context && raw_context->receipt &&
@@ -459,8 +454,8 @@ provider_http_impl(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
     if (!bound_trace && trace && phase)
       phase->link(trace->reference());
     https_url(r.url);
-    if (r.timeout_seconds < 1 || r.timeout_seconds > 3600 ||
-        r.body.size() > 16 * 1024 * 1024 || (r.method != "GET" && r.method != "POST"))
+    if (!valid_provider_timeouts(timeouts) || r.body.size() > 16 * 1024 * 1024 ||
+        (r.method != "GET" && r.method != "POST"))
       throw Error{ErrorCode::invalid_range};
     if (!bound_trace && trace)
       trace->body(r.method, r.url,
@@ -503,20 +498,24 @@ provider_http_impl(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
       input += "data-binary = " + quote(r.body) + "\n";
     detail::Child child;
     child.cancelled = c.cancelled;
-    child.deadline_error = {ErrorCode::provider_transport, 28};
+    child.deadline_error = provider_ceiling_error;
+    if (r.stall_seconds > 0)
+      child.stall_timeout = std::chrono::seconds{r.stall_seconds};
+    child.stall_error = provider_stall_error;
     if (trace)
       child.raw_capture(trace->reference());
     child.output_observer = observer;
     child.original_capture =
         application && raw_context ? raw_context->originals : nullptr;
+    // curl's own limit is only a backstop beyond Blackbird's ceiling.
     child.start({c.curl_executable, "--disable", "--silent", "--no-buffer", "--proto",
-                 "=https", "--max-time", std::to_string(r.timeout_seconds),
+                 "=https", "--max-time",
+                 std::to_string(r.timeout_seconds + provider_curl_backstop_seconds),
                  "--write-out", "\n%{http_code}", "--config", "-"});
-    const auto deadline =
-        initial_deadline
-            ? *initial_deadline
-            : detail::Clock::now() + std::chrono::seconds{r.timeout_seconds};
-    child.send(input, deadline);
+    const auto ceiling =
+        deadline ? deadline->at()
+                 : detail::Clock::now() + std::chrono::seconds{r.timeout_seconds};
+    child.send(input, ceiling);
     child.close_input();
     int code = 0;
     if (phase && trace) {
@@ -525,7 +524,7 @@ provider_http_impl(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
       if (raw_context && raw_context->receipt && acquisition->reference().ordinal)
         raw_context->receipt->response = acquisition->reference();
     }
-    auto output = child.collect(deadline, 16 * 1024 * 1024, &code);
+    auto output = child.collect(ceiling, 16 * 1024 * 1024, &code);
     if (acquisition)
       acquisition->finish(1);
     if (code != 0)
@@ -546,10 +545,7 @@ provider_http_impl(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
       trace->finish(1);
     return {status, std::move(output)};
   } catch (const Error &error) {
-    const Error returned =
-        error.code == ErrorCode::interrupted && error.detail == ETIMEDOUT
-            ? Error{ErrorCode::provider_transport, 28}
-            : error;
+    const Error returned = deadline ? deadline->business(error) : error;
     if (acquisition)
       acquisition->finish(2, &error);
     if (trace)
@@ -580,13 +576,10 @@ provider_http(const ProviderHttpRequest &request, const ProviderAuthConfig &conf
               const std::function<void(std::string_view)> &observer,
               const RawProviderOwner *raw_owner, bool application,
               const RawEventRef *auth_resolution, const RawAdapterContext *context) {
-  std::optional<RawWaitScope> deadline_scope;
-  if (application && request.timeout_seconds >= 1 && request.timeout_seconds <= 3600) {
-    auto control = raw_wait_control();
-    control.deadline =
-        detail::Clock::now() + std::chrono::seconds{request.timeout_seconds};
-    deadline_scope.emplace(control);
-  }
+  std::optional<ProviderDeadline> deadline;
+  if (application &&
+      valid_provider_timeouts({request.stall_seconds, request.timeout_seconds}))
+    deadline.emplace(request.timeout_seconds);
   std::optional<RawProviderPhase> phase;
   if (application)
     phase.emplace(provider_adapter_extra);
@@ -603,9 +596,10 @@ provider_http(const ProviderHttpRequest &request, const ProviderAuthConfig &conf
       phase->finish(1);
     return response;
   } catch (const Error &error) {
+    const Error returned = deadline ? deadline->business(error) : error;
     if (phase)
-      phase->finish(2, &error);
-    throw;
+      phase->finish(2, &returned);
+    throw returned;
   } catch (const std::bad_alloc &) {
     if (phase)
       phase->finish(3);
@@ -1343,16 +1337,13 @@ Value ProviderAuth::device_poll(std::string_view p, std::string_view a,
 }
 ProviderHttpResponse
 ProviderAuth::request(std::string_view p, std::string_view route, const Value &body,
-                      int timeout_seconds,
+                      ProviderTimeouts timeouts,
                       const std::function<void(std::string_view)> &observer,
                       const Value *expected_binding, const RawProviderOwner *raw_owner,
                       const RawAdapterContext *raw_context) {
-  std::optional<RawWaitScope> deadline_scope;
-  if (timeout_seconds >= 1 && timeout_seconds <= 3600) {
-    auto control = raw_wait_control();
-    control.deadline = detail::Clock::now() + std::chrono::seconds{timeout_seconds};
-    deadline_scope.emplace(control);
-  }
+  std::optional<ProviderDeadline> deadline;
+  if (valid_provider_timeouts(timeouts))
+    deadline.emplace(timeouts.request_seconds);
   RawProviderPhase adapter{provider_adapter_extra};
   std::optional<RawProviderTrace> http_trace;
   RawAdapterContext call = raw_context ? *raw_context : RawAdapterContext{};
@@ -1520,7 +1511,7 @@ ProviderAuth::request(std::string_view p, std::string_view route, const Value &b
     }
     const std::string target = base + "/" + std::string{route};
     const std::string method = route == "models" ? "GET" : "POST";
-    http_trace.emplace(call.owner, timeout_seconds, &resolution);
+    http_trace.emplace(call.owner, timeouts, &resolution);
     adapter.link(http_trace->reference());
     adapter.link(resolution);
     if (call.receipt && http_trace->reference().ordinal)
@@ -1537,7 +1528,8 @@ ProviderAuth::request(std::string_view p, std::string_view route, const Value &b
                           method,
                           std::move(encoded),
                           {{"Content-Type", "application/json"}},
-                          timeout_seconds};
+                          timeouts.request_seconds,
+                          timeouts.stall_seconds};
     if (p == "openrouter" && config_.openrouter_metadata)
       r.headers.emplace_back("X-OpenRouter-Metadata", "enabled");
     if (p == "openrouter" && config_.openrouter_no_response_cache)
@@ -1565,10 +1557,11 @@ ProviderAuth::request(std::string_view p, std::string_view route, const Value &b
     adapter.finish(1);
     return result;
   } catch (const Error &error) {
+    const Error returned = deadline ? deadline->business(error) : error;
     if (http_trace)
-      http_trace->finish(2, 1, error);
-    adapter.finish(2, &error);
-    throw;
+      http_trace->finish(2, 1, returned);
+    adapter.finish(2, &returned);
+    throw returned;
   } catch (const std::bad_alloc &) {
     if (http_trace)
       http_trace->finish(3, 1, {ErrorCode::allocation});

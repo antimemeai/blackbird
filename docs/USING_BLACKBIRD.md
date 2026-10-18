@@ -20,7 +20,18 @@ The working directory is the tool working
 directory. Only one process may hold a session. `--once 'prompt'` runs one turn.
 `--provider ID` selects OpenAI, OpenRouter or a registered Responses route; switching
 providers requires an explicit `--model NAME`. `--effort low|medium|high|xhigh|max` selects reasoning
-(initial default `medium`). Provider, model, effort and absolute workflow path persist with
+(initial default `medium`). Every provider request has two deadlines, set for any
+provider with `--stall-timeout SECONDS` (default 120) and `--request-timeout SECONDS`
+(default 3600), whole seconds 1..86400. A stall (no response bytes for the stall
+timeout while Blackbird waits on the stream; time to first byte counts, Blackbird's
+own capture backpressure does not) is retried like other transient transport faults.
+Reaching the request timeout is a total ceiling: the attempt fails with
+`incomplete (60)` and is not retried, because the identical request would reach it
+again. curl's own limit is 30 s beyond the ceiling. The stall timeout may not exceed
+the request timeout. These are launch options: they do not persist with the session,
+but `/new`, `/resume` and restart carry them to the successor process. Colleague and
+participant profiles keep their own `timeout_seconds` as the ceiling, with the
+default stall check. Provider, model, effort and absolute workflow path persist with
 the session; explicit launch options override and save them. Actor/conversation/
 workflow identities also survive restart. Lua request options can override model
 request defaults for a particular call. `/session` shows configuration and identities;
@@ -604,7 +615,8 @@ DIRECTORY` directly, including paths with spaces. It waits for current work to
 conclude and does not send a model request. Destination model/effort/workflow,
 context, tasks and drafts are restored independently. A failed open returns once
 to the old session; uncertain operations are never silently retried. `/new` still
-creates a fresh session and inherits only model, effort and workflow.
+creates a fresh session and inherits only model, effort, workflow and any launch
+`--stall-timeout`/`--request-timeout`.
 
 ### Shared colleague requests
 

@@ -604,7 +604,8 @@ void private_surfaces(const std::filesystem::path &directory) {
       ProviderAuth selected{owned};
       const auto expected_binding = selected.binding("anthropic");
       clock = 220;
-      check(selected.request("anthropic", "models", Value::object({}), 30, {},
+      check(selected.request("anthropic", "models", Value::object({}),
+                             ProviderTimeouts{.request_seconds = 30}, {},
                              &expected_binding)
                     .body == "{}",
             "owned native resolution result changed");

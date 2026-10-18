@@ -60,7 +60,8 @@ constexpr std::uint64_t read_bytes = raw_envelope_size + ref_bytes + 1 +
                                      sizeof(int);
 } // namespace
 
-RawProviderTrace::RawProviderTrace(const RawProviderOwner *owner, int timeout_seconds,
+RawProviderTrace::RawProviderTrace(const RawProviderOwner *owner,
+                                   ProviderTimeouts timeouts,
                                    const RawEventRef *auth_resolution) {
   const ErrnoGuard guard;
   if (!raw_enabled())
@@ -74,7 +75,7 @@ RawProviderTrace::RawProviderTrace(const RawProviderOwner *owner, int timeout_se
   if (owner && !owner->dispatch.ordinal)
     owner = nullptr;
   const auto present = static_cast<std::uint8_t>(owner != nullptr);
-  std::array<ByteView, 8> fields{};
+  std::array<ByteView, 9> fields{};
   fields[0] = raw_native_field(present);
   std::size_t count = 1;
   if (owner) {
@@ -84,7 +85,8 @@ RawProviderTrace::RawProviderTrace(const RawProviderOwner *owner, int timeout_se
     fields[count++] = owner->dispatch.lane;
     fields[count++] = raw_native_field(owner->dispatch.ordinal);
   }
-  fields[count++] = raw_native_field(timeout_seconds);
+  fields[count++] = raw_native_field(timeouts.request_seconds);
+  fields[count++] = raw_native_field(timeouts.stall_seconds);
   request_ = {raw_lane_epoch(), data(1300, std::span{fields}.first(count))};
   if (link) {
     const std::array linked{
@@ -137,6 +139,30 @@ void RawProviderTrace::finish(std::uint8_t branch, std::uint8_t stage,
   terminal_.reset();
 }
 
+namespace {
+std::chrono::steady_clock::time_point
+provider_deadline_at(int request_seconds) noexcept {
+  auto at = std::chrono::steady_clock::now() + std::chrono::seconds{request_seconds};
+  if (const auto inherited = raw_wait_control().deadline; inherited && *inherited < at)
+    at = *inherited;
+  return at;
+}
+RawWaitControl provider_deadline_control(std::chrono::steady_clock::time_point at) {
+  auto control = raw_wait_control();
+  control.deadline = at;
+  return control;
+}
+} // namespace
+ProviderDeadline::ProviderDeadline(int request_seconds)
+    : admission_(raw_enabled()), at_(provider_deadline_at(request_seconds)),
+      wait_(provider_deadline_control(at_)) {}
+Error ProviderDeadline::business(Error error) noexcept {
+  if (error != Error{ErrorCode::interrupted, ETIMEDOUT} ||
+      std::chrono::steady_clock::now() < at_)
+    return error;
+  (void)admission_.consume(error);
+  return provider_ceiling_error;
+}
 namespace detail {
 RawChildTrace::RawChildTrace(RawEventRef request, bool capture_stdout,
                              bool capture_stderr, bool merge_error, bool separate_error,
@@ -336,7 +362,9 @@ void RawChildTrace::refuse(std::uint8_t operation, std::uint8_t stage,
 
 std::string_view raw_provider_description() noexcept {
   return "1300 application request begin=u8 "
-         "owner_present,[attempt16,invocation16,generation16,dispatch Ref],int timeout;"
+         "owner_present,[attempt16,invocation16,generation16,dispatch Ref],int "
+         "request_timeout_seconds(total ceiling),int stall_timeout_seconds(longest "
+         "response-stream silence while waiting,0 none);"
          "1301 application external body=Ref,size_t method_length,method,size_t "
          "url_length,url,size_t body_length,body;"
          "1302 existing HTTP parse=Ref request,Ref child,int status;"

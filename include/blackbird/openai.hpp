@@ -13,7 +13,7 @@ struct OpenAiConfig {
   std::string curl_executable = "/usr/bin/curl";
   std::filesystem::path codex_home;
   std::size_t response_limit = 16 * 1024 * 1024;
-  int timeout_seconds = 180;
+  ProviderTimeouts timeouts; // stall retried; total ceiling final
   std::function<void(std::string_view)> response_observer;
   std::function<bool()> cancelled;
   const RawProviderOwner *raw_owner = nullptr;

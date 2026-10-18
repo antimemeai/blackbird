@@ -360,7 +360,9 @@ public:
         node.generation = input.get<IdentityBytes>();
         (void)input.key();
       }
-      (void)input.get<int>();
+      (void)input.get<int>(); // request timeout
+      if (!input.remaining().empty())
+        (void)input.get<int>(); // stall timeout; absent from runs before 2026-10-18
       input.end();
     } else if (site == 3600 || site == 1400 || site == 1310) {
       auto &node = define();

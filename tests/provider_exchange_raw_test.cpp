@@ -2,7 +2,9 @@
 #include "blackbird/coding.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/provider_original.hpp"
+#include "blackbird/provider_timeouts.hpp"
 #include "blackbird/raw_reader.hpp"
+#include "blackbird/responses_provider.hpp"
 #include "blackbird/tools.hpp"
 
 #include <algorithm>
@@ -602,7 +604,7 @@ void bounded_admission(const Directory &directory, bool expire) {
         try {
           (void)provider_http(request(), config, {}, nullptr, true, nullptr, &context);
         } catch (const Error &error) {
-          refused = error == (expire ? Error{ErrorCode::provider_transport, 28}
+          refused = error == (expire ? provider_ceiling_error
                                      : Error{ErrorCode::interrupted, ECANCELED});
         }
       }
@@ -1150,6 +1152,172 @@ void coding_retry(const Directory &directory) {
             presented == 2 && results == 2,
         "assembly/retry/presentation/result acquisition missing");
 }
+// The real registered Responses provider; only a failed respond releases the held
+// control lane, after every provider layer has finished its own terminals.
+class HeldProvider final : public CodingProvider {
+public:
+  explicit HeldProvider(RegisteredResponsesConfig config) : inner(std::move(config)) {}
+  RegisteredResponsesCodingProvider inner;
+  std::function<void()> after_failure;
+  std::string_view provider_identity() const noexcept override {
+    return inner.provider_identity();
+  }
+  void begin_request_group(const Value &request,
+                           const RawAdapterContext *context) override {
+    inner.begin_request_group(request, context);
+  }
+  void end_request_group() noexcept override { inner.end_request_group(); }
+  Value respond(const Value &, const std::function<void(std::string_view)> &) override {
+    throw std::runtime_error{"held provider lost its native owner"};
+  }
+  Value respond(const Value &, const std::function<void(std::string_view)> &,
+                const RawProviderOwner *) override {
+    throw std::runtime_error{"held provider lost its native context"};
+  }
+  Value respond(const Value &request,
+                const std::function<void(std::string_view)> &capture,
+                const RawProviderOwner *owner,
+                const RawAdapterContext *context) override {
+    inner.cancelled = cancelled;
+    try {
+      return inner.respond(request, capture, owner, context);
+    } catch (...) {
+      if (after_failure)
+        after_failure();
+      throw;
+    }
+  }
+};
+// arconaut-3nx: the provider's own deadline expires while the stream observer's
+// capture claim waits on a full control lane. The provider reports its deadline
+// as its business error and consumes exactly that capture marker, so the workflow's
+// next request runs, its tool call dispatches and the raw terminals say what
+// happened. Before the fix the stale interrupted/ETIMEDOUT marker failed the frame.
+void observer_deadline(const Directory &directory) {
+  const auto session = directory.child("observer-deadline");
+  const JournalHeader header{id<EnvironmentId>(70),
+                             id<AuditStreamId>(71),
+                             3,
+                             {4 * 1024 * 1024, 16 * 1024 * 1024},
+                             std::nullopt};
+  auto root =
+      unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(unwrap(
+                                       NativeJournalDirectory::open(session.string()))),
+                                   "audit", header, {64 * 1024 * 1024, 10000}));
+  RegisteredResponsesConfig config;
+  config.provider = "paper";
+  config.auth.directory = directory.child("observer-deadline-auth");
+  config.timeouts.request_seconds = 1;
+  {
+    ProviderAuth auth{config.auth};
+    auth.add_provider("paper", "https://api.paperinstruments.com/v1", "responses",
+                      "PAPER_TEST_KEY");
+    auth.set_key("paper", "fixture", "fixture-secret");
+  }
+  const std::string held_stream =
+      "data: {\"type\":\"response.output_text.delta\",\"item_id\":\"m\","
+      "\"delta\":\"held\"}\n\n";
+  const std::string completed_stream =
+      "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\","
+      "\"model\":\"fixture-model\",\"output\":[{\"type\":\"function_call\","
+      "\"status\":\"completed\",\"call_id\":\"c1\",\"name\":\"context_stats\","
+      "\"arguments\":\"{}\"}]}}\n\n";
+  unsigned calls = 0, tools = 0;
+  std::vector<RawControlToken> grants;
+  pid_t recorder = -1;
+  bool stopped = false;
+  const auto release = [&] {
+    grants.clear();
+    if (stopped)
+      check(::kill(recorder, SIGCONT) == 0, "resume held recorder");
+    stopped = false;
+  };
+  config.auth.http = [&](const ProviderHttpRequest &,
+                         ProviderHttpResponseLease &response) {
+    const auto &wire = ++calls == 1 ? held_stream : completed_stream;
+    auto extent = response.prepare(wire.size());
+    std::copy(wire.begin(), wire.end(), extent.begin());
+    response.commit(wire.size());
+    if (calls == 1) {
+      // Stop the lane's recorder and publish unacknowledged filler into all free
+      // control space: the observer's next claim can only wait (a held claim would
+      // refuse at once), and only the provider's own deadline ends that wait.
+      check(::kill(recorder, SIGSTOP) == 0, "stop observer recorder");
+      stopped = true;
+      const std::string filler(65536, 'F');
+      for (const std::uint64_t size : {65536ULL, 4096ULL, 256ULL, 32ULL})
+        for (;;) {
+          auto held = raw_try_claim_control(size);
+          if (!held.has_value()) {
+            check(held.error() == Error{ErrorCode::capacity}, "control fill error");
+            break;
+          }
+          const std::array parts{detail::raw_string_field(
+              std::string_view{filler}.substr(0, size - raw_envelope_size))};
+          unwrap(raw_emit(1399, parts, RawPartition::control, &held.value()));
+          grants.push_back(std::move(held).value());
+        }
+    }
+    return 200;
+  };
+  HeldProvider provider{config};
+  provider.after_failure = release;
+  {
+    auto runtime = unwrap(RawRuntime::open(session.string(), header.environment));
+    recorder = unwrap(runtime->status()).recorder;
+    struct Resume {
+      const std::function<void()> &release;
+      ~Resume() { release(); }
+    } resume{provider.after_failure};
+    auto handle = unwrap(runtime->prepare_thread());
+    {
+      RawThreadBinding binding{handle};
+      AuditLog log{*root};
+      ContextStore context{log};
+      CodingEngine engine{log, context, provider, "fixture-model"};
+      engine.operation_completed = [&](std::string_view event) {
+        if (event.starts_with("context_stats completed"))
+          ++tools;
+      };
+      engine.turn({"observer deadline",
+                   R"(local policy={retry_policy={max_attempts=2,base_ms=0,cap_ms=0}}
+local ok,r=pcall(arco.request,policy)
+if ok then error('held attempt returned') end
+if not string.find(tostring(r),'incomplete',1,true) then
+  error('held attempt reported '..tostring(r))
+end
+r=arco.request(policy)
+for _,v in ipairs(r.output) do
+  if v.type=='function_call' then
+    local out=arco.call(v.name,{})
+    arco.append({{type='function_call_output',call_id=v.call_id,
+      output=arco.json.encode(out)}})
+  end
+end)"});
+    }
+    handle.reset();
+  }
+  check(calls == 2 && tools == 1,
+        "deadline attempt was retried or its successor did not dispatch the call");
+  const auto all = records(session);
+  std::vector<RawEventRef> requests;
+  for (const auto &record : all)
+    if (record.site == 1300)
+      requests.push_back(record.reference());
+  check(requests.size() == 2, "provider request begins changed");
+  for (std::size_t index = 0; index < requests.size(); ++index) {
+    ByteView terminal{only(all, 1303, requests[index]).body};
+    (void)read_ref(terminal);
+    const auto branch = read_native<std::uint8_t>(terminal);
+    (void)read_native<std::uint8_t>(terminal);
+    const Error recorded{read_native<ErrorCode>(terminal),
+                         read_native<std::int64_t>(terminal)};
+    check(terminal.empty() &&
+              (index == 0 ? branch == 2 && recorded == provider_ceiling_error
+                          : branch == 1),
+          "provider terminal does not record the deadline outcome");
+  }
+}
 void wire_allocation(const Directory &directory, unsigned mode,
                      const std::string &executable) {
   const auto session = directory.child("wire-cut-" + std::to_string(mode));
@@ -1212,8 +1380,9 @@ void wire_allocation(const Directory &directory, unsigned mode,
           allocation =
               !result.has_value() && result.error().code == ErrorCode::allocation;
         } else if (mode == 1)
-          (void)auth.request("openai", "responses", value, 30, {}, nullptr, nullptr,
-                             &context);
+          (void)auth.request("openai", "responses", value,
+                             ProviderTimeouts{.request_seconds = 30}, {}, nullptr,
+                             nullptr, &context);
         else
           (void)provider_http(existing, native, {}, nullptr, true, nullptr, &context);
       } catch (const std::bad_alloc &) {
@@ -1381,6 +1550,8 @@ int main(int argc, char **argv) {
     decoder_and_codec(directory);
     std::cerr << "coding retry\n";
     coding_retry(directory);
+    std::cerr << "observer deadline\n";
+    observer_deadline(directory);
     std::cerr << "preparation refusal\n";
     preparation_refusal(directory);
     for (unsigned mode = 0; mode < 3; ++mode)

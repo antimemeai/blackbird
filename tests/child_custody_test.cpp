@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
+#include <thread>
+#include <utility>
 
 using namespace blackbird;
 namespace {
@@ -55,6 +57,55 @@ void default_child() {
   require(waitpid(leader, &status, WNOHANG) == -1 && errno == ECHILD,
           "normal cleanup really reaped its leader");
   require(detail::locally_quiescent(), "normal cleanup releases custody");
+}
+// The stall clock counts only time spent waiting for the child's output since its
+// last stdout byte: time to first byte counts, Blackbird's own observer work
+// between reads does not (arconaut-pyg).
+std::string stalled_collect(const char *script, int observer_ms, bool &stalled,
+                            detail::Clock::duration &elapsed) {
+  detail::Child child;
+  child.stall_timeout = std::chrono::milliseconds{1500};
+  child.deadline_error = {ErrorCode::incomplete, ETIMEDOUT};
+  bool first = true;
+  child.output_observer = [&](std::string_view) {
+    if (std::exchange(first, false))
+      std::this_thread::sleep_for(std::chrono::milliseconds{observer_ms});
+  };
+  child.start({"/bin/sh", "-c", script});
+  child.close_input();
+  stalled = false;
+  const auto started = detail::Clock::now();
+  std::string output;
+  try {
+    int status = -1;
+    output =
+        child.collect(detail::Clock::now() + std::chrono::seconds(8), 4096, &status);
+    require(status == 0, "stall fixture exits cleanly");
+  } catch (const Error &error) {
+    require(error == child.stall_error, "silence fails as the configured stall");
+    stalled = true;
+  }
+  elapsed = detail::Clock::now() - started;
+  return output;
+}
+void stall_accounting() {
+  using std::chrono::milliseconds;
+  bool stalled = false;
+  detail::Clock::duration elapsed{};
+  // 3 s of wall-clock silence after the first byte, 2 s of it spent in the
+  // observer: only about 1 s was waiting, under the 1.5 s stall timeout.
+  require(stalled_collect("printf a; sleep 3; printf b", 2000, stalled, elapsed) ==
+                  "ab" &&
+              !stalled,
+          "observer time counted as stream silence");
+  // The same silence with no observer work stalls at 1.5 s.
+  (void)stalled_collect("printf a; sleep 3; printf b", 0, stalled, elapsed);
+  require(stalled && elapsed >= milliseconds{1500} && elapsed < milliseconds{2900},
+          "mid-stream silence did not stall at its timeout");
+  // Waiting for the first byte is stall time.
+  (void)stalled_collect("sleep 3; printf a", 0, stalled, elapsed);
+  require(stalled && elapsed >= milliseconds{1500} && elapsed < milliseconds{2900},
+          "time to first byte did not count as stall time");
 }
 void refused_policy(bool ignored) {
   policy(ignored ? 0 : SA_NOCLDWAIT, ignored ? SIG_IGN : SIG_DFL);
@@ -256,6 +307,8 @@ int main(int argc, char **argv) {
     cleanup_error();
   else if (std::strcmp(argv[1], "raw-cleanup") == 0)
     raw_cleanup();
+  else if (std::strcmp(argv[1], "stall") == 0)
+    stall_accounting();
   else
     require(false, "known mode required");
   std::printf("PASS: %s\n", argv[1]);

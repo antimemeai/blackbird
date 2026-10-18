@@ -1,5 +1,6 @@
 #pragma once
 
+#include "blackbird/provider_timeouts.hpp"
 #include "blackbird/raw_runtime.hpp"
 
 #include <optional>
@@ -19,7 +20,7 @@ struct RawProviderOwner {
 
 class RawProviderTrace {
 public:
-  RawProviderTrace(const RawProviderOwner *owner, int timeout_seconds,
+  RawProviderTrace(const RawProviderOwner *owner, ProviderTimeouts timeouts,
                    const RawEventRef *auth_resolution = nullptr);
   ~RawProviderTrace();
   RawProviderTrace(const RawProviderTrace &) = delete;

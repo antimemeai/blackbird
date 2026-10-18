@@ -70,6 +70,12 @@ public:
   bool separate_error = false;
   bool spawned() const noexcept { return custody != Custody::never_started; }
   Error deadline_error{ErrorCode::io, ETIMEDOUT};
+  // Optional stall check on the output stream: the child fails with stall_error once
+  // the time spent waiting for its output since the last stdout byte reaches
+  // stall_timeout. Time to first byte counts; Blackbird's own processing, observer
+  // and capture admission between reads (its backpressure) do not.
+  std::optional<Clock::duration> stall_timeout;
+  Error stall_error{ErrorCode::provider_transport, 28};
   Child() = default;
   void raw_capture(RawEventRef request, bool stdout_bytes = true,
                    bool stderr_bytes = false) {
@@ -439,15 +445,25 @@ private:
   }
   int input = -1, output = -1, error_output = -1;
   bool stdout_done = false;
+  Clock::duration silence{};
   std::string pending;
   void wait(int fd, short events, Clock::time_point deadline) {
     if (cancelled && cancelled())
       fail(ErrorCode::interrupted);
-    const auto remaining =
+    auto remaining =
         std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now())
             .count();
     if (remaining <= 0)
       throw deadline_error;
+    // Only waits for the child's output count toward a stall, never stdin writes.
+    const bool stream = stall_timeout && fd != input;
+    if (stream) {
+      const auto left = *stall_timeout - silence;
+      if (left <= Clock::duration::zero())
+        throw stall_error;
+      remaining = std::min<std::int64_t>(
+          remaining, std::chrono::ceil<std::chrono::milliseconds>(left).count());
+    }
     pollfd descriptor{fd, events, 0};
     RawWaitControl control = raw_wait_control();
     control.deadline = deadline;
@@ -456,8 +472,11 @@ private:
     auto permit = trace ? trace->permit(raw_envelope_size + 24 + 1 + 4 * sizeof(int) +
                                         2 * sizeof(short))
                         : RawNativePermit{};
+    const auto polled = stream ? Clock::now() : Clock::time_point{};
     const int rc = ::poll(&descriptor, 1, timeout);
     const int error = errno;
+    if (stream)
+      silence += Clock::now() - polled;
     if (trace)
       trace->poll(permit,
                   fd == input    ? 0
@@ -564,6 +583,7 @@ private:
       return true;
     }
     const auto count = static_cast<std::size_t>(n);
+    silence = {};
     if (output_observer)
       output_observer(std::string_view{bytes, count});
     if (pending.size() > limit || count > limit - pending.size())

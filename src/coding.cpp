@@ -350,45 +350,45 @@ Value OpenAiCodingProvider::respond(
 Value OpenAiCodingProvider::respond(
     const Value &request, const std::function<void(std::string_view)> &capture,
     const RawProviderOwner *owner, const RawAdapterContext *context) {
-  std::optional<RawWaitScope> deadline_scope;
-  if (config_.timeout_seconds >= 1 && config_.timeout_seconds <= 3600) {
-    auto control = raw_wait_control();
-    control.deadline = std::chrono::steady_clock::now() +
-                       std::chrono::seconds{config_.timeout_seconds};
-    deadline_scope.emplace(control);
+  std::optional<ProviderDeadline> deadline;
+  if (valid_provider_timeouts(config_.timeouts))
+    deadline.emplace(config_.timeouts.request_seconds);
+  try {
+    RawProviderPhase adapter;
+    return adapter.run([&] {
+      adapter.start(5, context);
+      if (responding_)
+        throw Error{ErrorCode::busy};
+      responding_ = true;
+      struct Responding {
+        bool &active;
+        ~Responding() { active = false; }
+      } responding{responding_};
+      auto config = config_;
+      config.raw_owner = owner;
+      config.raw_context = context;
+      config.response_observer = capture;
+      config.cancelled = cancelled;
+      const bool temporary_group = !request_binding_;
+      if (temporary_group)
+        begin_request_group(request, context);
+      struct End {
+        OpenAiCodingProvider &provider;
+        bool temporary;
+        ~End() {
+          if (temporary)
+            provider.end_request_group();
+        }
+      } end{*this, temporary_group};
+      if (!request_binding_)
+        throw Error{ErrorCode::corrupt};
+      auto login = unwrap(codex_login(config, false, &*request_binding_));
+      auto raw = unwrap(openai_http(config, login, "responses", &request));
+      return unwrap(completed_response(raw, {}, context));
+    });
+  } catch (const Error &error) {
+    throw deadline ? deadline->business(error) : error;
   }
-  RawProviderPhase adapter;
-  return adapter.run([&] {
-    adapter.start(5, context);
-    if (responding_)
-      throw Error{ErrorCode::busy};
-    responding_ = true;
-    struct Responding {
-      bool &active;
-      ~Responding() { active = false; }
-    } responding{responding_};
-    auto config = config_;
-    config.raw_owner = owner;
-    config.raw_context = context;
-    config.response_observer = capture;
-    config.cancelled = cancelled;
-    const bool temporary_group = !request_binding_;
-    if (temporary_group)
-      begin_request_group(request, context);
-    struct End {
-      OpenAiCodingProvider &provider;
-      bool temporary;
-      ~End() {
-        if (temporary)
-          provider.end_request_group();
-      }
-    } end{*this, temporary_group};
-    if (!request_binding_)
-      throw Error{ErrorCode::corrupt};
-    auto login = unwrap(codex_login(config, false, &*request_binding_));
-    auto raw = unwrap(openai_http(config, login, "responses", &request));
-    return unwrap(completed_response(raw, {}, context));
-  });
 }
 struct CodingEngine::CommandTaskActivity {
   RawThreadHandle owner;
@@ -4674,14 +4674,29 @@ Value CodingEngine::request(Value options) {
           // No attempt begin exists if native retained admission itself refused.
           if (attempt_ref.ordinal)
             group.emit(1326, decision_fields);
-          if (!eligible)
+          const auto outcome =
+              "provider attempt " + std::to_string(ordinal) +
+              (e == provider_stall_error
+                   ? " stalled: no response bytes within the stall "
+                     "timeout"
+               : e == provider_ceiling_error ? " reached the total request ceiling"
+                                             : " stopped") +
+              " (" + error_name(e.code) + ":" + std::to_string(e.detail) + ")";
+          if (!eligible) {
+            // The identical request would reach the same ceiling: say so, never retry.
+            if (e == provider_ceiling_error) {
+              const auto final_message = outcome + "; not retried";
+              if (status)
+                status(final_message);
+              if (notice || display)
+                (notice ? notice : display)("\n[" + final_message + "]\n");
+            }
             throw;
-          const auto message =
-              "provider attempt " + std::to_string(ordinal) + " stopped (" +
-              error_name(e.code) + ":" + std::to_string(e.detail) +
-              "); partial output not accepted; retry " + std::to_string(ordinal + 1) +
-              "/" + std::to_string(max_attempts) + " in " + std::to_string(delay_ms) +
-              "ms";
+          }
+          const auto message = outcome + "; partial output not accepted; retry " +
+                               std::to_string(ordinal + 1) + "/" +
+                               std::to_string(max_attempts) + " in " +
+                               std::to_string(delay_ms) + "ms";
           log_.original({"provider.retry", message,
                          Value::object({{"retry_group", Value{retry_group}}})});
           if (status)

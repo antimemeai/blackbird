@@ -1,5 +1,6 @@
 #pragma once
 #include "blackbird/provider_original.hpp"
+#include "blackbird/provider_timeouts.hpp"
 #include "blackbird/value.hpp"
 #include <filesystem>
 #include <functional>
@@ -12,7 +13,8 @@ struct RawEventRef;
 struct ProviderHttpRequest {
   std::string url, method = "POST", body;
   std::vector<std::pair<std::string, std::string>> headers;
-  int timeout_seconds = 30;
+  int timeout_seconds = 30; // total ceiling; curl --max-time adds the backstop
+  int stall_seconds = 0;    // longest response-stream silence; 0 none
 };
 struct ProviderHttpResponse {
   int status = 0;
@@ -86,7 +88,7 @@ public:
                   const RawAuthParent *parent = nullptr);
   ProviderHttpResponse
   request(std::string_view provider, std::string_view route, const Value &body,
-          int timeout_seconds,
+          ProviderTimeouts timeouts,
           const std::function<void(std::string_view)> &observer = {},
           const Value *expected_binding = nullptr,
           const RawProviderOwner *raw_owner = nullptr,

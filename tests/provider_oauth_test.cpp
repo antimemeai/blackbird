@@ -216,7 +216,8 @@ void anthropic_checks(const std::filesystem::path &directory) {
             exchanges == 1 && requests == 0,
         "Anthropic browser account not ready");
   const auto send = [&] {
-    const auto response = auth.request("anthropic", "messages", body, 10);
+    const auto response = auth.request("anthropic", "messages", body,
+                                       ProviderTimeouts{.request_seconds = 10});
     check(response.status == 200 && response.body == R"({"fixture":"messages reply"})",
           "Anthropic Messages reply changed");
   };
@@ -295,7 +296,8 @@ void anthropic_checks(const std::filesystem::path &directory) {
         std::string{client}, std::string{token_url});
     clock = 1060;
     const auto request = [&] {
-      (void)failed.request("anthropic", "messages", body, 10);
+      (void)failed.request("anthropic", "messages", body,
+                           ProviderTimeouts{.request_seconds = 10});
     };
     const bool transient = outcome == 429 || outcome == 503;
     const auto code = transient        ? ErrorCode::provider_rate_limit

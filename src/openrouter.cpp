@@ -236,24 +236,25 @@ Value OpenRouterCodingProvider::respond(
     }
   } end{temporary ? this : nullptr, responding_};
   responding_ = true;
-  auto control = raw_wait_control();
-  if (config_.timeout_seconds < 1 || config_.timeout_seconds > 3600)
+  if (!valid_provider_timeouts(config_.timeouts))
     throw Error{ErrorCode::invalid_range};
-  control.deadline =
-      std::chrono::steady_clock::now() + std::chrono::seconds{config_.timeout_seconds};
-  RawWaitScope deadline{control};
-  RawProviderPhase phase;
-  return phase.run([&] {
-    phase.start(5, context);
-    auto config = config_.auth;
-    config.cancelled = cancelled;
-    ProviderAuth auth{std::move(config)};
-    const auto response =
-        auth.request("openrouter", "responses", export_openrouter_request(request),
-                     config_.timeout_seconds, capture, &binding_, owner, context);
-    auto result = unwrap(openrouter_completed_response(response.body, context));
-    phase.finish(1);
-    return result;
-  });
+  ProviderDeadline deadline{config_.timeouts.request_seconds};
+  try {
+    RawProviderPhase phase;
+    return phase.run([&] {
+      phase.start(5, context);
+      auto config = config_.auth;
+      config.cancelled = cancelled;
+      ProviderAuth auth{std::move(config)};
+      const auto response =
+          auth.request("openrouter", "responses", export_openrouter_request(request),
+                       config_.timeouts, capture, &binding_, owner, context);
+      auto result = unwrap(openrouter_completed_response(response.body, context));
+      phase.finish(1);
+      return result;
+    });
+  } catch (const Error &error) {
+    throw deadline.business(error);
+  }
 }
 } // namespace blackbird

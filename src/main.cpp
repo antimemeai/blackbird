@@ -21,6 +21,7 @@
 #include "blackbird/terminal.hpp"
 #include "blackbird/trace_archive.hpp"
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -66,6 +67,18 @@ std::string safe(std::string_view text) {
   }
   return out;
 }
+// Provider deadline options take whole seconds, 1..provider_timeout_limit.
+int timeout_option(std::string_view text) {
+  int seconds = 0;
+  const auto parsed = std::from_chars(text.data(), text.data() + text.size(), seconds);
+  if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() ||
+      seconds < 1 || seconds > provider_timeout_limit) {
+    std::cerr << "--stall-timeout and --request-timeout take whole seconds 1.."
+              << provider_timeout_limit << ".\n";
+    throw Error{ErrorCode::invalid_range};
+  }
+  return seconds;
+}
 struct SessionSuccessorOutputs {
   std::vector<std::string> &next;
   std::vector<std::string> &fallback;
@@ -95,6 +108,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     bool provider_option = false, session_option = false;
     bool model_option = false, effort_option = false, workflow_option = false;
     bool resume_requested = false, discovery = false, switched_session = false;
+    ProviderTimeouts timeouts;
+    bool stall_option = false, request_option = false;
     auto discovery_root = session_root;
     for (int i = 1; i < argc; ++i) {
       const std::string_view arg = argv[i];
@@ -111,7 +126,15 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                      "[--plain] [--list-sessions [ROOT]] [--seed-session JSON] "
                      "[--backstop MISSION_JSON (requires --once)] "
                      "[--resume-continue|--resume-once] [--rebuild-session] "
-                     "[--expire-diagnostics] [--recover-unknown-effects]\n"
+                     "[--expire-diagnostics] [--recover-unknown-effects] "
+                     "[--stall-timeout SECONDS] [--request-timeout SECONDS]\n"
+                     "Provider requests fail as a retried stall after "
+                     "--stall-timeout seconds without response bytes (default "
+                  << provider_stall_timeout_default
+                  << ") and finally, without retry, at the --request-timeout total "
+                     "ceiling (default "
+                  << provider_request_timeout_default
+                  << ").\n"
                      "Without --session, start a fresh conversation. Reopen an "
                      "existing conversation with --session DIRECTORY.\nInteractive: "
                      "/context, "
@@ -179,9 +202,30 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       } else if (arg == "--once") {
         once = argv[++i];
         one = true;
+      } else if (arg == "--stall-timeout") {
+        timeouts.stall_seconds = timeout_option(argv[++i]);
+        stall_option = true;
+      } else if (arg == "--request-timeout") {
+        timeouts.request_seconds = timeout_option(argv[++i]);
+        request_option = true;
       } else
         throw Error{ErrorCode::invalid_range};
     }
+    if (stall_option && timeouts.stall_seconds > timeouts.request_seconds) {
+      std::cerr << "--stall-timeout must not exceed the request timeout ("
+                << timeouts.request_seconds << " seconds).\n";
+      throw Error{ErrorCode::invalid_range};
+    }
+    // Launch-only settings that a session switch or restart carries forward.
+    std::vector<std::string> timeout_arguments;
+    if (stall_option)
+      timeout_arguments.insert(
+          timeout_arguments.end(),
+          {"--stall-timeout", std::to_string(timeouts.stall_seconds)});
+    if (request_option)
+      timeout_arguments.insert(
+          timeout_arguments.end(),
+          {"--request-timeout", std::to_string(timeouts.request_seconds)});
     if (!station_path.empty() &&
         (one || inspect || discovery || !backstop_path.empty() || !seed_path.empty()))
       throw Error{ErrorCode::conflict};
@@ -495,22 +539,28 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     std::unique_ptr<CodingProvider> provider;
     if (provider_name == "openrouter") {
       OpenRouterConfig config;
+      config.timeouts = timeouts;
       if (const auto *curl = std::getenv("BLACKBIRD_OPENROUTER_CURL"); curl && *curl)
         config.auth.curl_executable = curl;
       provider = std::make_unique<OpenRouterCodingProvider>(std::move(config));
     } else if (provider_name == "anthropic") {
       AnthropicConfig config;
+      config.timeouts = timeouts;
       if (const auto *curl = std::getenv("BLACKBIRD_ANTHROPIC_CURL"); curl && *curl)
         config.auth.curl_executable = curl;
       provider = std::make_unique<AnthropicCodingProvider>(std::move(config));
     } else if (provider_name != "openai") {
       RegisteredResponsesConfig config;
       config.provider = provider_name;
+      config.timeouts = timeouts;
       if (const auto *curl = std::getenv("BLACKBIRD_RESPONSES_CURL"); curl && *curl)
         config.auth.curl_executable = curl;
       provider = std::make_unique<RegisteredResponsesCodingProvider>(std::move(config));
-    } else
-      provider = std::make_unique<OpenAiCodingProvider>();
+    } else {
+      OpenAiConfig config;
+      config.timeouts = timeouts;
+      provider = std::make_unique<OpenAiCodingProvider>(std::move(config));
+    }
     CodingEngine engine{log, context, *provider, model};
     if (engine.uncontained_command_custody())
       warning("Prior command custody remains unknown; restart and automatic "
@@ -942,19 +992,18 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                     arguments.emplace_back(
                         raw_restart_argument(selection, arguments.size(), value));
                   };
-                  for (const auto value :
-                       {std::string_view{argv[0]}, std::string_view{"--session"},
-                        std::string_view{destination_text},
-                        std::string_view{"--new-session-instance"}})
-                    add(selected, value);
-                  for (const auto value :
-                       {std::string_view{argv[0]}, std::string_view{"--session"},
-                        std::string_view{previous_text},
-                        std::string_view{"--new-session-instance"}})
-                    add(fallback, value);
-                  if (plain) {
-                    add(selected, "--plain");
-                    add(fallback, "--plain");
+                  // Each list is recorded whole, the selected one first.
+                  for (auto *arguments : {&selected, &fallback}) {
+                    for (const auto value :
+                         {std::string_view{argv[0]}, std::string_view{"--session"},
+                          std::string_view{arguments == &selected ? destination_text
+                                                                  : previous_text},
+                          std::string_view{"--new-session-instance"}})
+                      add(*arguments, value);
+                    if (plain)
+                      add(*arguments, "--plain");
+                    for (const auto &value : timeout_arguments)
+                      add(*arguments, value);
                   }
                   auto mutation = selection.control(50);
                   next_session = std::move(selected);
@@ -1005,6 +1054,9 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                 if (plain)
                   arguments.emplace_back(
                       raw_restart_argument(selection, arguments.size(), "--plain"));
+                for (const auto &value : timeout_arguments)
+                  arguments.emplace_back(
+                      raw_restart_argument(selection, arguments.size(), value));
                 arguments.emplace_back(raw_restart_argument(selection, arguments.size(),
                                                             "--new-session-instance"));
                 auto mutation = selection.control(50);
@@ -1215,6 +1267,9 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         if (plain)
           arguments.emplace_back(
               raw_restart_argument(selection, arguments.size(), "--plain"));
+        for (const auto &value : timeout_arguments)
+          arguments.emplace_back(
+              raw_restart_argument(selection, arguments.size(), value));
         auto mutation = selection.control(50);
         next_session = std::move(arguments);
         const auto count = next_session.size();
