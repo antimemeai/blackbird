@@ -11,6 +11,8 @@ import tempfile
 import time
 import uuid
 
+from tui_session import stop_session
+
 ROOT = Path(__file__).resolve().parent.parent
 TOOL = ROOT / 'scripts/tui-test'
 POLICIES = ('addressed', 'erase', 'corner', 'full')
@@ -216,6 +218,12 @@ def episode(executable, artifacts, backend, strategy, legacy, case):
                             assert history[-1]['returncode'] in (0, 3), history[-1]
                     except BaseException as error:
                         cleanup_error = cleanup_error or error
+                try:
+                    left = stop_session(session)
+                    if left:
+                        raise AssertionError(f'tui-test session outlived close: {left}')
+                except BaseException as error:
+                    cleanup_error = cleanup_error or error
             for number, handler in prior.items():
                 signal.signal(number, handler)
             (directory / 'history.json').write_text(json.dumps(history, indent=2) + '\n')

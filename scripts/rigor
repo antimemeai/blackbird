@@ -11,6 +11,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
 PROFILE = json.loads((ROOT / "tooling/local-profile.json").read_text())
@@ -79,6 +80,32 @@ def verify_tools():
 def build(profile):
     run([PROFILE["cmake"]["path"], "--preset", profile])
     run([PROFILE["cmake"]["path"], "--build", "--preset", profile], timeout=None)
+
+
+def ctest(profile, *options):
+    """Run a profile's suite, then end and report anything it left running.
+
+    case_launcher ends each case's process tree (cmake/BlackbirdTests.cmake).
+    Every process the suite starts inherits this run's BLACKBIRD_TEST_RUN entry;
+    one still alive after CTest returns escaped its case, fails the gate, and is
+    named and ended. Processes of other runs never carry this entry."""
+    token = uuid.uuid4().hex
+    env = dict(os.environ, BLACKBIRD_TEST_RUN=token)
+    failure = None
+    try:
+        # CTest owns each test's watchdog. A suite is many commands,
+        # not one command that must finish within the same 120 seconds.
+        run([PROFILE["ctest"]["path"], "--preset", profile, *options], timeout=None, env=env)
+    except RuntimeError as error:
+        failure = error
+    left = run([ROOT / "build" / profile / "case_launcher", "--orphans",
+                f"BLACKBIRD_TEST_RUN={token}"], check=False)
+    if left.returncode:
+        problem = ("suite left processes running (named above, now ended)"
+                   if left.returncode == 1 else "orphan check failed")
+        raise RuntimeError(f"{failure}; {problem}" if failure else problem)
+    if failure:
+        raise failure
 
 
 def sources(extension):
@@ -209,8 +236,7 @@ def qualify():
     for profile in PROFILES:
         build(profile)
         if profile != "fuzz":
-            run([PROFILE["ctest"]["path"], "--preset", profile, "--timeout", "120"],
-                timeout=None)
+            ctest(profile, "--timeout", "120")
     expect_fault([ROOT / "build/asan/instrumentation_fault", "memory"], "AddressSanitizer")
     expect_fault([ROOT / "build/asan/instrumentation_fault", "undefined"], "signed integer overflow")
     env = dict(os.environ, TSAN_OPTIONS="halt_on_error=1:exitcode=66")
@@ -268,10 +294,7 @@ def main():
             if args.profile == "fuzz":
                 run([ROOT / "build/fuzz/bytes_fuzz", "-runs=1000", "-max_len=4096", "-seed=1"])
             else:
-                # CTest owns each test's watchdog. A suite is many commands,
-                # not one command that must finish within the same 120 seconds.
-                run([PROFILE["ctest"]["path"], "--preset", args.profile, "--parallel", "6",
-                     "--timeout", "120"], timeout=None)
+                ctest(args.profile, "--parallel", "6", "--timeout", "120")
             if args.profile != "debug":
                 build("debug")
             lint()

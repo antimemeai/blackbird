@@ -37,6 +37,10 @@ effect and exit. It keeps native Microsoft failure traces and selected final
 state/SVG captures under its build artifact directory. Session names are unique
 and only that session is closed. Signal/body watchdog handling reserves cleanup
 time before CTest termination; command traces survive primary and cleanup failures.
+After `close`, every tui-test fixture calls `scripts/tui_session.py`, which waits
+briefly for that session's own daemon (exact `__daemon --session NAME` argv) and
+kills it and its terminal target if it is still running, failing the fixture.
+At a CTest timeout the [case launcher](README.md) ends any remaining tree.
 The single-effect count is read after observed exit and closure. Target arguments follow an explicit `--` so
 Blackbird's `--session` cannot override the driver's own session selection.
 

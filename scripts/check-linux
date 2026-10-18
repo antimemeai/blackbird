@@ -37,6 +37,7 @@ def main():
     paths.append("scripts/check-tui-center")
     paths.append("scripts/check-tui-instrument")
     paths += ["scripts/check-terminal-edge", "scripts/check-tui-viewport", "scripts/check-main-input"]
+    paths += ["cmake", "scripts/check-case-containment", "scripts/tui_session.py", "scripts/process_table.py"]
 
     paths += ["scripts/check-anthropic", "scripts/install-blackbird", "scripts/check-install-blackbird"]
     lua_archive = ROOT.parent / "quarantine_proj/archives/lua-5.4.8.tar.gz"
@@ -59,7 +60,7 @@ def main():
         raise RuntimeError("unexpected remote workspace")
     try:
         subprocess.run([*SSH, "tar -xzf - -C " + shlex.quote(remote)], input=archive.getvalue(), check=True, timeout=30)
-        commands = '''import platform, subprocess, tarfile, re
+        commands = '''import os, platform, subprocess, tarfile, re, uuid
 from pathlib import Path
 root = Path.cwd()
 # Explicit development-tool provisioning precedes configuration/testing.
@@ -90,12 +91,19 @@ for name, mode, instrumentation in [('debug', 'Debug', 'none'), ('release', 'Rel
     subprocess.run(configure, check=True)
     build_command = ['/usr/bin/cmake', '--build', str(build), '--parallel', '16']
     if build_targets:
-        build_command += ['--target', *build_targets]
+        # Every registered case runs under the case launcher.
+        build_command += ['--target', *build_targets, 'case_launcher']
     subprocess.run(build_command, check=True)
     tests = ['/usr/bin/ctest', '--test-dir', str(build), '--output-on-failure', '--no-tests=error', '--parallel', '6']
     if test_regex is not None:
         tests += ['-R', test_regex]
-    subprocess.run(tests, check=True)
+    # Each case's launcher ends its tree; anything still carrying this run's
+    # entry afterwards escaped its case and fails the check (named, then ended).
+    token = uuid.uuid4().hex
+    completed = subprocess.run(tests, env=dict(os.environ, BLACKBIRD_TEST_RUN=token))
+    orphans = subprocess.run([str(build / 'case_launcher'), '--orphans', 'BLACKBIRD_TEST_RUN=' + token])
+    if completed.returncode or orphans.returncode:
+        raise RuntimeError(f'{name}: ctest {completed.returncode}, orphan check {orphans.returncode}')
 '''
         commands = "test_regex = " + repr(args.test_regex) + "\nbuild_targets = " + repr(args.targets) + "\nselected_profiles = " + repr(args.profiles) + "\n" + commands
         with (capture / "checks.log").open("wb") as output:

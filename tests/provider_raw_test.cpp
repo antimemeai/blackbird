@@ -730,6 +730,26 @@ void preserved_originals(const std::filesystem::path &directory,
         "provider source-to-preserved-disk originals changed");
 }
 
+// A failed check must not leave the producer and its stopped recorder holders
+// running: they would hold the test's output pipe and outlive it.
+struct ProducerReaper {
+  pid_t producer = -1;
+  std::array<pid_t, 2> holders{};
+  bool armed = true;
+  ~ProducerReaper() {
+    if (!armed)
+      return;
+    for (const auto holder : holders)
+      if (holder > 0) {
+        (void)::kill(holder, SIGKILL);
+        (void)::kill(holder, SIGCONT);
+      }
+    (void)::kill(producer, SIGKILL);
+    int status = 0;
+    (void)::waitpid(producer, &status, 0);
+  }
+};
+
 void producer_death(const std::filesystem::path &directory,
                     const std::string &executable) {
   check(::setenv("BB_RAW_PROVIDER_MODE", "normal", 1) == 0, "death mode env");
@@ -780,12 +800,14 @@ void producer_death(const std::filesystem::path &directory,
     }
     ::_exit(99);
   }
+  ProducerReaper reaper{producer};
   (void)::close(reports[1]);
   (void)::close(commands[0]);
   std::array<pid_t, 2> holders{};
   check(::read(reports[0], holders.data(), sizeof(holders)) ==
             static_cast<ssize_t>(sizeof(holders)),
         "read actual recorder identities");
+  reaper.holders = holders;
   IdentityBytes epoch{};
   check(::read(reports[0], epoch.data(), epoch.size()) ==
             static_cast<ssize_t>(epoch.size()),
@@ -826,6 +848,7 @@ void producer_death(const std::filesystem::path &directory,
   check(::waitpid(producer, &status, 0) == producer && WIFSIGNALED(status) &&
             WTERMSIG(status) == SIGKILL,
         "provider producer did not die at selected cut");
+  reaper.armed = false;
   check(::close(reports[0]) == 0 && ::close(commands[1]) == 0,
         "close producer death pipes");
   std::filesystem::path old_path;

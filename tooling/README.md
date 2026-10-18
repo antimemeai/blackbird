@@ -40,7 +40,31 @@ analysis operations. Interrupt handling still terminates their process groups.
 CTest owns each
 test's watchdog, using its existing TIMEOUT or a 120-second default; the complete
 suite does not share one test's allowance. No fixture assertion or existing
-deadline is relaxed. A failed command fails the gate. A missing tool, report,
+deadline is relaxed.
+
+Every case is registered with `blackbird_add_test` ([cmake/BlackbirdTests.cmake](../cmake/BlackbirdTests.cmake));
+configuration fails if a plain `add_test` case appears. It runs the case under the
+owned [case_launcher](../tests/case_launcher.cpp). CTest's own timeout kill stops
+only processes it finds through parent links at that moment, so a daemon already
+reparented to init (tui-test's session daemon, with its Blackbird target) survives,
+and a case whose own process has exited is not killed at all: CTest waits out the
+TIMEOUT on the output pipe a surviving child holds (the provider_raw orphans of
+2026-10-17). The launcher starts the case in its own process group with a unique
+`BLACKBIRD_TEST_CASE` environment entry, and identifies the case's processes by
+that entry, by that process group, or by parent/group/session links to either. At
+TIMEOUT CTest sends it SIGTERM (`TIMEOUT_SIGNAL_NAME`; the case is still reported
+as a timeout at its unchanged deadline); it passes SIGTERM to the case, allows
+4 seconds, then kills every identified process. It does the same on a terminal
+interrupt and when its runner dies. When the case exits but processes it started
+remain after 5 seconds, it names them, kills them and fails the case. A
+descendant that both clears its environment and leaves the case's process group
+before its parent exits is not identified. `case_containment` runs these paths
+through real CTest. After a suite, `rigor check`/`qualify` names, ends and fails on
+any process still carrying that run's `BLACKBIRD_TEST_RUN` entry. On this host
+under heavy load, `sysctl(KERN_PROC)` (used by `ps` and by CTest's own kill) was
+measured blocking uninterruptibly for 1-10 minutes while libproc answered in
+milliseconds, so the launcher and the fixture helpers read libproc; the cleanup
+grace period is CTest's maximum, 60 s. A failed command fails the gate. A missing tool, report,
 translation unit, header analysis
 path, mismatched compiler or preset/profile pin is an error. Owned directory
 symlinks are rejected until an explicit source policy is designed; research,
