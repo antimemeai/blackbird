@@ -27,7 +27,7 @@ management, expressive controls and multiple metrics instruments. These are desi
 the current implementation remains described below.
 
 
-This repository contains a **C++23 core, Lua 5.4.8 turn programs, a terminal interface, and an operating self-development loop**. It is an early system in active use and reconstruction. Its ambitions exceed its present implementation; the distinctions below are part of the description, rather than small print.
+This repository contains a **C++26 core, Lua 5.4.8 turn programs, a terminal interface, and an operating self-development loop**. It is an early system in active use and reconstruction. Its ambitions exceed its present implementation; the distinctions below are part of the description, rather than small print.
 
 For current accepted capabilities, unfinished work and the development
 cycle, see [the project stock](docs/CURRENT_STATE.md).

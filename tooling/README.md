@@ -60,15 +60,17 @@ No global shell or editor configuration is required.
 
 | Tool | Local version | Purpose |
 | --- | --- | --- |
-| LLVM Clang, clang-format, clang-tidy, clangd | 23.1.2 | Coherent C++23 compiler, formatting, focused analysis and editor diagnostics |
+| LLVM Clang, clang-format, clang-tidy, clangd | 23.1.2 | Coherent C++26 compiler, formatting, focused analysis and editor diagnostics |
 | CMake / CTest | 4.3.0 | Owned target/test orchestration |
 | Ninja | 1.13.0.git.kitware.jobserver-pipe-1 | Existing pinned build driver |
 | Lua / luac | 5.4.8 | Compatibility execution and syntax checks |
 | Lua Language Server | 3.19.1 | Annotation/type diagnostics with fresh JSON reports |
 | StyLua | 2.5.2 | Lua 5.4 formatting |
 
-Debug and optimized profiles exercise C++23 `std::expected` and constexpr
-`std::byteswap`, byte/span access, and synchronized threads with exact results. The ASan+UBSan profile separately detects a
+Debug and optimized profiles exercise ISO C++26 mode with libc++ (no GNU dialect), C++26
+`std::saturating_*` arithmetic and throwing `std::span::at`, C++23 `std::expected` and constexpr
+`std::byteswap`, byte/span access, and synchronized threads with exact results. Lint
+requires every compile command to carry exactly `-std=c++26`. The ASan+UBSan profile separately detects a
 heap overrun and signed overflow. TSan detects the deliberately unsynchronized
 counter in its own profile. The libFuzzer profile executes 1,000 bounded inputs
 against a double-reversal byte property. These establish tool capability; none

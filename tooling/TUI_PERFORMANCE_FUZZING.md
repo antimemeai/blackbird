@@ -37,7 +37,7 @@ empty `nproc` otherwise expands a nested command to unbounded `-j`. No productio
 library, cloud provisioning or system tool-policy change is selected.
 
 The commands below restore the recorded LLVM18 campaign. Ordinary Blackbird
-builds now use the [qualified LLVM23/C++23 profile](README.md); this upgrade
+builds now use the [qualified LLVM23/C++26 profile](README.md); this upgrade
 does not rebuild or restart the existing campaign.
 
 From an owned Linux extraction of that pinned archive, the installation uses:

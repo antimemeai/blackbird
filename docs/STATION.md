@@ -1,7 +1,7 @@
 # Local-file station and boundary operator control
 
 G7's scoped station uses the same native session lock, participant/context and
-ordinary Lua turn engine as campaign mode. Production is owned C++23/Lua5.4.8;
+ordinary Lua turn engine as campaign mode. Production is owned C++26/Lua5.4.8;
 the adapter is local files, not a new service/framework. No inference while idle.
 
 Create a trusted local adapter directory and atomically replace its files (write

@@ -11296,3 +11296,40 @@ with an explicit completion rule for pre-existing failures and serial
 papers/cpp26-toolchain-2026-10-17/. Review cut the performance observation as
 ceremony and corrected the verbs citation. Bead arconaut-9xx. Execution awaits the
 operator's look; no source change yet.
+
+## 2026-10-17 — C++26 upgrade executed, qualified, and exercised by autonomous runs
+
+Operator: tag master as the revert point, then execute aggressively, test hard, and
+fire up autonomous Blackbirds on luna, MiMo and Paper (ultramarine), keeping all
+their traces. Tag `pre-cpp26-2026-10-17` -> f4bd931 is pushed. Running bd from the
+worktree started a Dolt server over the worktree's empty .beads; it was stopped and
+its runtime files removed. Run bd only from the main checkout.
+
+Commit fd19b5d sets C++26 (CMAKE_CXX_STANDARD 26, the compiler contract, rigor and
+check-linux at -std=c++26); the contract was observed RED at C++23 first.
+Commit 48b9469 adds dialect and libc++ guards plus a lint check of -std on every
+TU, from findings by the three agent reviewers. Results:
+- Neuroses: debug/release/asan 263/263 on the first attempt.
+- Mac debug and lint (both hooks): 263/263; profile 263/263.
+- Mac release 262/263 and asan 262/263: each failing case passes alone at an
+  unchanged deadline.
+- Mac TSan: 9 cases fail identically at C++23 and C++26 (arconaut-0zi; not
+  qualified, pre-existing).
+- Fuzz passes once Apple ld is used (arconaut-e5g).
+- Paired A/B of all 30 Mac failures: no C++26-only failure.
+
+Record: papers/2026-10-17-cpp26-toolchain.md.
+
+The campaign of roughly 40 runs is archived at
+~/projects/blackbird_runs/2026-10-17-cpp26 with REPORT.md and VERIFICATION.md.
+Every completed result is correct. Pre-existing beads filed:
+- 3nx: stale capture marker kills a retry.
+- pyg: 180 s total cap. Replays need 412 s for Paper max and 435 s for MiMo.
+- 3o2: 9.5 GB of raw capture from one command.
+- j1l: timed-out tests leak their process trees.
+- 5st: provider settings per plan.
+- vv6: deprecated implicit copy.
+
+MiMo's first run, before confinement, edited a global Homebrew clang cfg. It was
+restored byte for byte, and later runs ran under sandbox-exec. Not merged into
+master; awaiting the operator's go.

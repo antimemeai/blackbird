@@ -1,5 +1,8 @@
 # Toolchain decision: retain pins; reconcile release tracking
 
+2026-10-17 later update: Blackbird is C++26 (`CMAKE_CXX_STANDARD 26`) on the same
+pinned compilers; see the [C++26 upgrade record](../papers/2026-10-17-cpp26-toolchain.md).
+
 2026-10-17 update: the operator authorized C++23 and Neuroses LLVM23.1.4/libc++23.1.4.
 Mac retains LLVM23.1.2. The earlier toolchain declarations below describe their
 original snapshot; current profiles and qualification are in the
