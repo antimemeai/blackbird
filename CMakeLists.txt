@@ -45,7 +45,7 @@ endif()
 target_compile_options(blackbird_build INTERFACE
   -Wall -Wextra -Wpedantic -Werror -Wconversion -Wsign-conversion -Wshadow
   -Wnon-virtual-dtor -Wold-style-cast -Woverloaded-virtual -Wformat=2
-  -Wundef -Wimplicit-fallthrough -Werror=unknown-warning-option)
+  -Wundef -Wimplicit-fallthrough -Wdeprecated -Werror=unknown-warning-option)
 if(BLACKBIRD_INSTRUMENTATION STREQUAL "address")
   target_compile_options(blackbird_build INTERFACE
     -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
