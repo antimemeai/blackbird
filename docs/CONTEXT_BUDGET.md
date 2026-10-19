@@ -20,8 +20,8 @@ This documentation session instead has an enabled **9000/4500-byte** policy;
 those are session choices, not defaults.
 
 When enabled, `input_bytes >= trigger_bytes` invites the model to inspect its
-working map and propose managed compaction. Measurement is **serialized input
-UTF-8 JSON bytes**, not tokens, total request/wire bytes, or a provider context
+working map and propose managed compaction. Measurement is **encoded native
+packet bytes of the request input** (`coding.cpp` `encode_packet_string`), not tokens, total request/wire bytes, or a provider context
 limit. The trigger does not reject requests or force shrinking. The target is
 advisory: retaining instructions and repairing omissions may require growth.
 Compaction changes presentation; it performs **no physical audit reclamation**.

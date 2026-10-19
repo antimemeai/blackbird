@@ -168,3 +168,47 @@ Operator decisions:
 
 C6 follows the doctrine: a written design from source reading, one review, a plan,
 then tests that fail on the old code before implementation.
+
+## Operator decision: Blackbird owns compaction through context generations (2026-10-19)
+
+The research found that Anthropic's newest models reject a client-shortened earlier tool_result for every later
+thinking block. The operator rejects any reading of that which leaves compaction to providers alone.
+
+The resolution is **context generations**. A model-authored CLM compaction starts a new provider-side conversation
+from the compacted context: a new context generation ID, grouped under the same Blackbird session with lineage and
+audit links. Earlier generations' thinking and reasoning blocks are not carried forward, so no provider's prefix
+binding is violated.
+- **Cost:** the prompt cache and prior hidden reasoning are lost once per cut.
+- **Fit:** this matches "compact rarely, in batches".
+- **Provider assists:** server-side clearing remains optional, never the authority.
+- **Reuse:** the same mechanism serves C4 overflow recovery and mid-session model switches.
+
+## Operator correction: compaction is selective archival (2026-10-19)
+
+Compaction is **selective archival of roughly 5–30% of hot context**, not summarisation:
+- whole response rounds leave the live context (round atomicity is already enforced);
+- their originals are retained and fetchable by locator;
+- no prose summary replaces them.
+
+A context-generation cut carries the retained rounds verbatim plus a compact archive index (IDs, kinds, sizes,
+locators). Whether the retained rounds' reasoning is kept, dropped or required at a cut is a per-provider profile rule:
+- Anthropic's newest models: drop, because thinking is bound to its prefix;
+- Gemini: keep (it validates only the current turn);
+- DeepSeek-with-tools: must resend;
+- OpenAI: pending a live probe.
+
+Summarisation is at most optional and secondary. This supersedes the "summary" framing in C6_DESIGN.md: the C6
+step's model proposal becomes an archival selection.
+
+## Operator definition: compaction is a failure mode (2026-10-19)
+
+**Compaction as traditionally understood is a failure mode for Blackbird.** That means replacing history
+with a summary, whether a harness or a provider does it. When it fires, as in the C4 overflow backstop, it is
+audited as a critical error that needs investigation. The nominal mechanism is **selective archival**, and a
+context-generation cut that applies one is an **archival cut**. "Compaction" names only the failure, in
+documents, designs, code names and UI. Existing uses to rename, each proposed for operator decision rather
+than done:
+- the C6 "compaction step" becomes an archival step;
+- the `ContextChangeKind` "compacted" kind and the badge text "◆ CONTEXT compacted" become archived;
+- the report's "compaction cut" becomes an archival cut;
+- `compaction_campaign_test` keeps its name, since it tests the failure path.

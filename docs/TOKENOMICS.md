@@ -124,8 +124,11 @@ policy. Request-local `cache_policy` overrides the retained default. Main provid
 selection stays in session settings; it is not an unannounced program override.
 
 Task/budget facts now appear in one request-local trailing developer message,
-after complete selected input and tool groups. They do not accumulate in retained
-context. `state_context=auto` is the default; `omit` is explicit model policy.
+after complete selected input and tool groups. For most providers they do not
+accumulate in retained context. A provider whose signed native history must replay
+operational input at its original place (`retain_request_state()`, currently
+Anthropic) appends each state message to context as `provider.request-state`, so
+there it does accumulate (`coding.cpp` request assembly). `state_context=auto` is the default; `omit` is explicit model policy.
 Budget bytes still describe selected native input before adding that message,
 including any Lua input override. They are neither tokens nor final wire bytes.
 Retries retain one assembled request; the next request/restart derives fresh

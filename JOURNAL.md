@@ -11670,3 +11670,51 @@ never reaches `context_manage`. Filed as `arconaut-a1v.4` (P1). It blocks the C6
 step's working map. The operator notes Jev may not fit this particular job but is
 very useful generally, and wants it used much more, in Claude Code too (memory
 saved).
+
+## 2026-10-19 — correction: 5st stays in campaign-defects
+
+I wrongly recorded 5st as excluded from the campaign-defects merge. The operator
+corrects this: 5st stays in that phase, campaign-defects does not move until 5st is
+complete (reworked on the arconaut-rd7 provider-profile mechanism), and nothing is
+moving campaign-defects now. Phase membership is the operator's decision, not mine.
+
+## 2026-10-19 — archival, not compaction; tool-output research; context surfaces
+
+Two operator definitions govern context work from here on.
+- **Compaction in the traditional sense is a failure mode.** Replacing history with a summary is something
+  Blackbird refuses to delegate to providers, and when its own backstop does it (C4), that is audited as a
+  critical error.
+- **The nominal mechanism is selective archival.** Whole rounds, about 5–30% of hot context, are removed,
+  their originals stay fetchable by locator, the rest carries verbatim, and a compact archive index lists what
+  was removed.
+
+Renames of existing "compaction" names are proposed in PLAN.md for the operator to decide.
+
+**The tool-output lifecycle report** is in `papers/tool-output-lifecycle-2026-10-19/reports/`. It draws on
+eight notes files covering the harnesses, the literature and all major providers, including xAI, Mistral,
+Bedrock, Azure, Meta and the open-weight hosts. Its conclusions:
+- shape each tool output at creation and keep the original outside the context;
+- start a context generation at each archival cut;
+- treat the handling of retained reasoning at a cut as shipped profile data;
+- refuse every provider's server compaction.
+
+It raises two questions for the operator:
+- C4's option A versus option B under archival;
+- C1's 384→192 KiB target, which halves the context and so exceeds the 5–30% range.
+
+The cache arithmetic favours later or larger cuts, or cutting once the cache is cold.
+
+**Context-surface catalogue:** three of six sweeps are written under `papers/clm-a1v-2026-10-19/context-surfaces/`.
+- `a1v.4` is wider than `context_view`: `context_restore`, `context_originals` and `context_edit` also copy
+  the whole context into context.
+- Anthropic gets no prompt caching at all (`arconaut-bvu`).
+- No route classifies a context overflow, and Anthropic 529 errors are not retried (noted on `nls.16`).
+- Three docs were stale and are now fixed: CONTEXT_BUDGET measures native packet bytes, not JSON;
+  USING_BLACKBIRD's "no automatic thresholds" predates the default budget; and TOKENOMICS missed that
+  Anthropic accumulates request-state items in context.
+
+**Replay** means playing back recorded frames. I checked that it never fires commands again: restart records
+abandoned operations as outcome-unknown, and interrupted calls get placeholders that say "no automatic retry".
+The operator considers replay reconstruction a safe mode after a bad problem, so a normal resume should
+restore directly from the snapshot. A clean `/quit` currently takes no snapshot (`arconaut-7c8`). The
+proposed durable-workflow design, which resumes by re-running Lua, needs the operator's decision.

@@ -366,7 +366,9 @@ Use `/context` for entry IDs/revision. Complete call/result intervals are atomic
 all live user/system/developer instructions are mandatory. Restore merges exact
 originals in capture order and repairs selected edited/reordered presentations.
 Archive only changes presentation. Summaries have fresh IDs and source ancestry;
-structural acceptance cannot establish fact accuracy. No automatic thresholds.
+structural acceptance cannot establish fact accuracy. Management never runs
+automatically. The default context budget (trigger 393216 bytes, target 196608)
+only invites the model to act; see [CONTEXT_BUDGET](CONTEXT_BUDGET.md).
 
 Lua uses `blackbird.manage(proposal)` and `blackbird.inspect(query)`. Model tools are
 `context_manage {proposal}` and `context_inspect {query}`. A supplied base is strict
