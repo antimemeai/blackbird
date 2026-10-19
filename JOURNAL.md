@@ -11622,3 +11622,27 @@ Provider errors are to be consumed and audited in full (`nls.16`, P0), after
 campaign-defects lands. Raw provider bytes need only one copy in a space-bounded
 rolling window. The audit-record shorthand (`nls.17`) is deferred as possibly
 unmotivated. A C6 source study is in progress.
+
+## 2026-10-19 — C6 design reviewed; C6a unit 1: response rounds are atomic
+
+C6 design (papers/clm-a1v-2026-10-19/C6_DESIGN.md) is built from a read-only source
+map (C6_SOURCE_MAP.md) and one adversarial design review. Verdict: proceed with C6a
+and the listed changes; redesign C6b, the compactor during tool waits, separately.
+Operator decisions:
+- C6a now, then C6b with live timing data.
+- Keep the main tool palette only where the provider can grey out other tools
+  natively. Otherwise offer only `context_manage`. Never offer choices that won't be
+  honored.
+
+C6a unit 1 fixes a latent CLM defect the design review found: `manage` kept call
+groups whole but could orphan an OpenAI reasoning item (or Anthropic thinking) from
+its call or message.
+- `whole_rounds` binds a reasoning item to every later entry of its append,
+  rejected as `partial-round`.
+- `publish_managed` keeps an open call's whole round under a staged `select`.
+
+RED: the two-item case on the old rule, the three-item case on the next-entry rule,
+and the staged `select` with walk-back disabled. One review and a clean recheck;
+low findings are filed as `a1v.3`. The unit-2 tools episode's `BG_3` wait, after
+`^U` on an idle screen, waited for bytes that never come; it now waits on the
+content first.

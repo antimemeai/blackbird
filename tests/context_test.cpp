@@ -253,6 +253,93 @@ int main() {
         value = Value{"obsolete"};
     check(!ok(restored.manage(stale_read_proposal)));
     check(restored.view() == view_before_reject);
+    {
+      // A response round is atomic: a reasoning item binds every later item of its
+      // append, and with them their calls' whole groups. An OpenAI encrypted
+      // reasoning item without its call is invalid input.
+      restored.append(
+          {Value::object(
+               {{"type", Value{"reasoning"}}, {"encrypted_content", Value{"R1=="}}}),
+           Value::object({{"type", Value{"function_call"}}, {"call_id", Value{"r1"}}})},
+          "round-output");
+      restored.append({Value::object({{"type", Value{"function_call_output"}},
+                                      {"call_id", Value{"r1"}},
+                                      {"output", Value{"done"}}})},
+                      "round-result");
+      restored.append(
+          {Value::object(
+               {{"type", Value{"reasoning"}}, {"encrypted_content", Value{"R2=="}}}),
+           Value::object({{"role", Value{"assistant"}}, {"content", Value{"answer"}}})},
+          "round-answer");
+      const auto round = field(restored.view(), "entries").array();
+      const auto n = round.size();
+      const auto reasoning = field(round[n - 5], "id"),
+                 round_call = field(round[n - 4], "id"),
+                 round_output = field(round[n - 3], "id"),
+                 answer_reasoning = field(round[n - 2], "id"),
+                 answer = field(round[n - 1], "id");
+      bytes_now = std::stoul(field(restored.stats(), "input_bytes").number().text());
+      auto summary = [&](Value::Array ids) {
+        auto p = proposal("summarize", std::move(ids));
+        p.object().emplace_back(
+            "summary",
+            Value::object({{"role", Value{"assistant"}}, {"content", Value{"short"}}}));
+        return p;
+      };
+      check(string_field(restored.manage(summary({round_call, round_output})),
+                         "reason") == "partial-round");
+      check(string_field(restored.manage(summary({answer})), "reason") ==
+            "partial-round");
+      check(string_field(restored.manage(summary({reasoning})), "reason") ==
+            "partial-round");
+      check(ok(restored.manage(summary({reasoning, round_call, round_output}))));
+      bytes_now = std::stoul(field(restored.stats(), "input_bytes").number().text());
+      check(ok(restored.manage(summary({answer_reasoning, answer}))));
+      // Reasoning binds every later item of its append, not only the next one.
+      restored.append(
+          {Value::object(
+               {{"type", Value{"reasoning"}}, {"encrypted_content", Value{"R3=="}}}),
+           Value::object({{"role", Value{"assistant"}}, {"content", Value{"working"}}}),
+           Value::object({{"type", Value{"function_call"}}, {"call_id", Value{"r3"}}})},
+          "round-three");
+      restored.append({Value::object({{"type", Value{"function_call_output"}},
+                                      {"call_id", Value{"r3"}},
+                                      {"output", Value{"ok"}}})},
+                      "round-three-result");
+      const auto three = field(restored.view(), "entries").array();
+      const auto m = three.size();
+      const auto r3 = field(three[m - 4], "id"), msg3 = field(three[m - 3], "id"),
+                 call3 = field(three[m - 2], "id"), out3 = field(three[m - 1], "id");
+      check(string_field(restored.manage(summary({r3, msg3})), "reason") ==
+            "partial-round");
+      check(string_field(restored.manage(summary({call3, out3})), "reason") ==
+            "partial-round");
+      bytes_now = std::stoul(field(restored.stats(), "input_bytes").number().text());
+      check(ok(restored.manage(summary({r3, msg3, call3, out3}))));
+      // A select staged in a workflow while its own call is still open (the model's
+      // context_manage) keeps that call's whole round, reasoning included, at publish.
+      restored.begin_workflow();
+      restored.append(
+          {Value::object(
+               {{"type", Value{"reasoning"}}, {"encrypted_content", Value{"R4=="}}}),
+           Value::object({{"type", Value{"function_call"}}, {"call_id", Value{"r4"}}})},
+          "round-open");
+      Value::Array keep;
+      const auto before_select = field(restored.view(), "entries").array();
+      for (std::size_t k = 0; k + 2 < before_select.size(); ++k)
+        keep.push_back(field(before_select[k], "id"));
+      check(field(restored.manage(proposal("select", keep)), "staged") == Value{true});
+      restored.append({Value::object({{"type", Value{"function_call_output"}},
+                                      {"call_id", Value{"r4"}},
+                                      {"output", Value{"closed"}}})},
+                      "round-open-result");
+      bytes_now = std::stoul(field(restored.stats(), "input_bytes").number().text());
+      check(ok(restored.finish_workflow(true)));
+      const auto after_select = field(restored.view(), "entries").array();
+      check(after_select.size() == before_select.size() + 1 &&
+            string_field(field(after_select[after_select.size() - 3], "item"),
+                         "type") == "reasoning");
+    }
     const auto rejection_cursor = root->cursor().sequence;
     bool rejected_history_stale = false;
     try {

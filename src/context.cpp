@@ -1146,6 +1146,27 @@ bool protocol_complete(const Value::Array &entries) {
   }
   return pending.empty();
 }
+// Entries of one append share its revision, the ID before the last '.'.
+std::string_view append_of(const Value &entry) {
+  const std::string_view id = string_field(entry, "id");
+  return id.substr(0, id.rfind('.'));
+}
+// A response round is atomic: a reasoning item stays with every later entry of its
+// append (message, calls), and whole_groups then binds those calls' outputs.
+// Providers reject reasoning or thinking separated from the items that follow it.
+bool whole_rounds(const Value::Array &entries, const std::set<std::string> &ids) {
+  for (std::size_t i = 0; i < entries.size(); ++i) {
+    const auto *type = field(entries[i], "item").find("type");
+    if (!type || *type != Value{"reasoning"})
+      continue;
+    const bool chosen = ids.contains(string_field(entries[i], "id"));
+    for (auto j = i + 1;
+         j < entries.size() && append_of(entries[j]) == append_of(entries[i]); ++j)
+      if (ids.contains(string_field(entries[j], "id")) != chosen)
+        return false;
+  }
+  return true;
+}
 bool whole_groups(const Value::Array &entries, const std::set<std::string> &ids) {
   std::set<std::string> pending;
   std::size_t start = 0;
@@ -1383,9 +1404,15 @@ Value ContextStore::manage(const Value &proposal, RawContextOrigin origin) {
             string_field(summary, "content").empty())
           return reject_managed(proposal, "invalid-summary", trace.child());
       }
-      if (!whole_groups(mode == "restore" ? captured_entries(trace.fresh()) : entries_,
-                        selected))
+      // Only restore reads captured originals; otherwise use entries_ without a copy.
+      std::optional<Value::Array> captured;
+      if (mode == "restore")
+        captured = captured_entries(trace.fresh());
+      const auto &candidates = captured ? *captured : entries_;
+      if (!whole_groups(candidates, selected))
         return reject_managed(proposal, "partial-tool-group", trace.child());
+      if (!whole_rounds(candidates, selected))
+        return reject_managed(proposal, "partial-round", trace.child());
       for (const auto &entry : entries_) {
         const auto &id = string_field(entry, "id");
         const auto *role = field(entry, "item").find("role");
@@ -1526,9 +1553,15 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
         pending_calls.erase(string_field(item, "call_id"));
       }
     }
-    if (!pending_calls.empty())
+    if (!pending_calls.empty()) {
+      // Keep the open call's whole round: reasoning and message precede it in its
+      // append.
+      while (open_start > 0 &&
+             append_of(basis[open_start - 1]) == append_of(basis[open_start]))
+        --open_start;
       for (std::size_t i = open_start; i < basis.size(); ++i)
         active_entries.insert(string_field(basis[i], "id"));
+    }
     bool inserted = false;
     for (const auto &entry : basis) {
       const bool chosen = selected.contains(string_field(entry, "id"));

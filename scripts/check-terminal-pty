@@ -556,8 +556,8 @@ if arguments.case in ('all', 'tools'):
             send(b'/lua arco.call("exec", {command="for i in 1 2 3; do echo BG_$i; sleep 0.15; done", yield_ms=0}); '
                  b'arco.call("exec", {command="for i in 1 2 3; do echo FG_$i; sleep 0.15; done"}); print("MIX_" .. "DONE")\r')
             wait_for(b"MIX_DONE")
-            time.sleep(0.6)
-            send(b"\x15")
+            # wait_for needs fresh bytes after send() clears the buffer, and an
+            # idle screen sends none: wait on content first, then settle.
             wait_for(b"BG_3")
             settle()
             rows = transcript_rows()
