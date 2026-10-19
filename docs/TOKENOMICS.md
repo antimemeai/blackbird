@@ -128,8 +128,14 @@ Before this change, the ChatGPT route sent neither the key nor the header. In th
 2026-10-19 Sol runs, the instructions, tools and earlier input were byte-identical
 across consecutive requests, yet cached input varied from 0% to 97% between
 consecutive requests and averaged 25–43%. Requests were landing on cache
-replicas without affinity. The diagnosis is in the journal. A matched
-before-and-after cache-rate observation is follow-through, not established here.
+replicas without affinity. The diagnosis is in the journal.
+
+After the fix, the installed generation-Sir77UUA ran one live Sol (medium)
+session of 11 requests with sequential tool calls on the same route. The first
+request had nothing cached. Every later request was 59-95% cached, with no misses:
+82% of input across requests 2-11, and 77% overall. The cached counts move in
+512-token blocks, so the newest tail of each request always misses. This is one
+short session, not a cost ranking.
 
 Retain a policy through the existing program configuration tool:
 

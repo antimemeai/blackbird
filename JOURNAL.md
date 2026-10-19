@@ -11539,3 +11539,14 @@ RED: on the unmodified behavior, with only the interface method added, the new
 across a reopened engine, an authored key preserved, and no key for a provider
 without affinity. Review fixes: none needed. A live before-and-after cache-rate
 comparison is follow-through.
+
+Follow-through: commit `50cdae2` landed on master, after the full suite passed
+265/265 on that code. At the operator's direction, the hook was overridden for the
+whitespace-only clang-format fix. Afterwards, a direct clang-tidy run on the four
+changed files was clean. Installed as generation-Sir77UUA. A live Sol session of
+11 sequential tool requests: the first had nothing cached, and requests 2-11 were
+59-95% cached, 82% of input in total and 77% overall. Before the fix, the same
+route swung between 0% and 97% and averaged 25-43%. The gate also hit two
+load-induced PTY timing failures (the load average reached 47). Each passes in
+isolation: `tui_retained_result` is filed as `arconaut-r5n`; `terminal_pty_tools`
+passed 3/3 alone. The hook lock now has three lanes (`blackbird_runs/bin/hook-lock`).
