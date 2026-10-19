@@ -193,7 +193,9 @@ private:
   Value request_tools() const;
   Value budget_, pending_budget_;
 
-  std::string budget_revision_ = "initial-disabled", pending_budget_revision_;
+  // The built-in policy has its own revision so restore follows the current
+  // default rather than freezing whichever default was active when recorded.
+  std::string budget_revision_ = "builtin-default", pending_budget_revision_;
   Value context_budget(const Value &arguments);
   Value budget_view(std::string_view model, std::size_t input_bytes) const;
   Value budget_view(std::string_view model, std::size_t input_bytes,

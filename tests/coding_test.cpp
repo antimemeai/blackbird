@@ -2,6 +2,7 @@
 #include "blackbird/json.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/raw_runtime.hpp"
+#include "request_state.hpp"
 #include <cerrno>
 #include <chrono>
 #include <iostream>
@@ -34,7 +35,7 @@ public:
   int calls = 0;
   Value respond(const Value &request,
                 const std::function<void(std::string_view)> &capture) override {
-    last_input = field(request, "input").array();
+    last_input = test::request_conversation(request);
     ++calls;
     Value::Array output;
     if (calls == 1)
@@ -72,7 +73,7 @@ public:
     }
     if (string_field(field(request, "reasoning"), "effort") != "medium")
       throw Error{ErrorCode::corrupt};
-    const auto &input = field(request, "input").array();
+    const auto input = test::request_conversation(request);
     Value response;
     if (calls == 1) {
       response = Value::object(
@@ -129,7 +130,7 @@ public:
            {"arguments",
             Value{"{\"command\":\"printf BEFORE_; printf STOP; sleep 30\"}"}}});
     else {
-      const auto &input = field(request, "input").array();
+      const auto input = test::request_conversation(request);
       std::size_t matched = 0;
       for (const auto &old : input) {
         const auto *type = old.find("type");
@@ -173,7 +174,7 @@ public:
                                       {"name", Value{"exec"}},
                                       {"arguments", Value{unwrap(dump_json(args))}}}));
     } else if (calls == 2) {
-      const auto &last = field(request, "input").array().back();
+      const auto last = test::request_conversation(request).back();
       const auto result = field(last, "output");
       if (string_field(last, "call_id") != "deadline-first" ||
           !std::get<bool>(field(result, "timed_out").value()) ||
@@ -186,7 +187,7 @@ public:
                          {"name", Value{"exec"}},
                          {"arguments", Value{R"({"command":"printf RECOVERED"})"}}}));
     } else if (calls == 3) {
-      const auto &last = field(request, "input").array().back();
+      const auto last = test::request_conversation(request).back();
       const auto result = field(last, "output");
       if (string_field(last, "call_id") != "deadline-next" ||
           string_field(result, "output") != "RECOVERED")

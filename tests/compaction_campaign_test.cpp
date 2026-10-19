@@ -1,5 +1,6 @@
 #include "blackbird/coding.hpp"
 #include "blackbird/json.hpp"
+#include "request_state.hpp"
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -39,7 +40,11 @@ public:
   Value respond(const Value &request,
                 const std::function<void(std::string_view)> &capture) override {
     ++calls;
-    require(field(request, "input") == Value{expected_input},
+    const auto state = test::request_state_text(request);
+    require(state.find("CONTEXT_BUDGET") == std::string::npos &&
+                state.find("CURRENT_TASKS") == std::string::npos,
+            "only the size line rides below the trigger");
+    require(Value{test::request_conversation(request)} == Value{expected_input},
             "actual assembled provider input");
     require(unwrap(dump_json(field(request, "input"))).find("needle-") ==
                 std::string::npos,

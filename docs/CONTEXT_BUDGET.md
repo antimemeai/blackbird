@@ -2,9 +2,20 @@
 
 ## Policy and units
 
-The native default is **disabled**, with `trigger_bytes: 262144` (256 KiB),
-`target_bytes: 131072` (128 KiB), and reason
-`opt-in; byte policy is not a provider token limit`.
+The native default is **enabled**, with `trigger_bytes: 393216` (384 KiB) and
+`target_bytes: 196608` (192 KiB), chosen from measured campaign requests
+([REQUEST_SIZES](../papers/clm-a1v-2026-10-19/REQUEST_SIZES.md)), under revision
+`builtin-default`. A session that never chose a policy follows the current
+default on reopen; that includes one recorded under the pre-2026-10-19
+`initial-disabled` revision. An explicitly chosen policy is kept exactly.
+
+Every request also carries one `CONTEXT_SIZE input_bytes=N entries=M
+trigger_bytes=T target_bytes=G` line, or `budget=off`, in its developer
+operational state, so the model always knows its size. A provider that retains
+request state in context (today only Anthropic) gets the line only with the
+trigger guidance, so stale sizes accumulate only while the trigger is
+reached (see `arconaut-2o9`). `state_context = "omit"`
+drops it.
 This documentation session instead has an enabled **9000/4500-byte** policy;
 those are session choices, not defaults.
 

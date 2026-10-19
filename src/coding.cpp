@@ -2074,11 +2074,14 @@ void validate_tool_arguments(ToolValidation input) {
 }
 Value default_context_budget() {
 
+  // Enabled by default (a1v C1): 384/192 KiB from the measured 2026-10-17
+  // campaign requests (papers/clm-a1v-2026-10-19/REQUEST_SIZES.md).
   return Value::object(
-      {{"enabled", Value{false}},
-       {"trigger_bytes", Value{Number{"262144"}}},
-       {"target_bytes", Value{Number{"131072"}}},
-       {"reason", Value{"opt-in; byte policy is not a provider token limit"}}});
+      {{"enabled", Value{true}},
+       {"trigger_bytes", Value{Number{"393216"}}},
+       {"target_bytes", Value{Number{"196608"}}},
+       {"reason", Value{"default from measured request sizes; byte policy is not a "
+                        "provider token limit"}}});
 }
 std::uint64_t command_number(const Value &value, std::string_view key,
                              std::uint64_t limit) {
@@ -2570,8 +2573,15 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
           throw;
         }
         restore.validation(parsed);
-        budget_ = std::move(policy);
-        budget_revision_ = revision;
+        // A recorded built-in policy was never a session choice ("initial-disabled"
+        // before a1v): resolve it to the current default, keep chosen ones exactly.
+        if (revision == "builtin-default" || revision == "initial-disabled") {
+          budget_ = default_context_budget();
+          budget_revision_ = "builtin-default";
+        } else {
+          budget_ = std::move(policy);
+          budget_revision_ = revision;
+        }
         restore.finish(0);
       });
     }
@@ -4384,10 +4394,27 @@ Value CodingEngine::request(Value options) {
     if (store == nullptr || *store || stream == nullptr || !*stream)
       throw Error{ErrorCode::unsupported};
     validate_protocol(field(request, "input").array(), assembly.reference());
-    const auto budget =
-        budget_view(string_field(request, "model"),
-                    unwrap(encode_packet_string(field(request, "input"))).size());
-    if (state_context && std::get<bool>(field(budget, "triggered").value())) {
+    const auto input_bytes =
+        unwrap(encode_packet_string(field(request, "input"))).size();
+    const auto budget = budget_view(string_field(request, "model"), input_bytes);
+    const bool triggered = std::get<bool>(field(budget, "triggered").value());
+    // The model always knows its context size (a1v C2). A provider that retains
+    // request state appends this item to context on every request, so there the
+    // line rides only with the trigger rather than accumulating stale sizes.
+    if (state_context && (!provider_.retain_request_state() || triggered)) {
+      const auto &policy = field(budget, "effective");
+      const bool enabled = std::get<bool>(field(policy, "enabled").value());
+      operational_state +=
+          "CONTEXT_SIZE input_bytes=" + std::to_string(input_bytes) +
+          " entries=" + std::to_string(field(request, "input").array().size()) +
+          (enabled
+               ? " trigger_bytes=" + field(policy, "trigger_bytes").number().text() +
+                     " target_bytes=" + field(policy, "target_bytes").number().text()
+               : std::string{" budget=off"}) +
+          " (native packet bytes, not tokens; context_view and context_manage compact "
+          "when useful)\n";
+    }
+    if (state_context && triggered) {
       operational_state +=
           "CONTEXT_BUDGET basis=selected_input_before_state " +
           unwrap(format_value(budget)) +

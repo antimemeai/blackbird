@@ -14,12 +14,31 @@ template <class T> T id(unsigned char n) {
 }
 class Observer final : public CodingProvider {
 public:
-  bool expect_trigger = false;
+  bool expect_trigger = false, expect_size = true, retain = false, scripted = true;
   int calls = 0;
+  std::string last_state;
+  bool retain_request_state() const noexcept override { return retain; }
   Value respond(const Value &request,
                 const std::function<void(std::string_view)> &capture) override {
     ++calls;
-    if (calls == 1) {
+    const auto &items = field(request, "input").array();
+    const bool stateful = !items.empty() && items.back().find("role") &&
+                          field(items.back(), "role") == Value{"developer"};
+    last_state = stateful ? string_field(items.back(), "content") : std::string{};
+    // a1v C2: the size line reports exactly the conversation it rides on.
+    const bool sized =
+        last_state.find("CONTEXT_SIZE input_bytes=") != std::string::npos;
+    require(sized == expect_size);
+    if (sized) {
+      const Value::Array conversation(items.begin(), items.end() - 1);
+      require(
+          last_state.find(
+              "CONTEXT_SIZE input_bytes=" +
+              std::to_string(unwrap(encode_packet_string(Value{conversation})).size()) +
+              " entries=" + std::to_string(conversation.size()) + " ") !=
+          std::string::npos);
+    }
+    if (scripted && calls == 1) {
       require(string_field(request, "model") == "request-override");
       require(string_field(request, "instructions").find("request-override") ==
               std::string::npos);
@@ -33,10 +52,10 @@ public:
         string_field(input.back(), "content").find("CONTEXT_BUDGET") !=
             std::string::npos;
     require(has_state == expect_trigger);
-    if (calls == 1)
+    if (scripted && calls == 1)
       require(string_field(input.back(), "content").find("request-override") !=
               std::string::npos);
-    if (calls == 2)
+    if (scripted && calls == 2)
       require(unwrap(dump_json(field(request, "input"))).find("REPAIR_REQUIRED_42") !=
               std::string::npos);
     auto response = Value::object({{"output", Value{Value::Array{}}}});
@@ -70,9 +89,10 @@ int main() {
       engine.display = [](std::string_view v) { std::cerr << v; };
       engine.turn({"", R"(
       local v=arco.call('context_budget',{})
-      assert(v.effective.enabled==false and arco.json.encode(v.pending)=='null')
+      local n=arco.json.encode
+      assert(v.effective.enabled==true and n(v.effective.trigger_bytes)=='393216' and n(v.effective.target_bytes)=='196608' and n(v.pending)=='null')
       local r=arco.call('context_budget',{proposal={base=v.revision,enabled=true,trigger_bytes=100,target_bytes=50,reason='direct oracle'}})
-      assert(r.staged and not r.effective.enabled and r.pending.enabled and r.pending_revision~=v.revision)
+      assert(r.staged and n(r.effective.trigger_bytes)=='393216' and r.pending.enabled and n(r.pending.trigger_bytes)=='100' and r.pending_revision~=v.revision)
       for _,bad in ipairs({{}, {enabled=true,trigger_bytes=100,target_bytes=0,reason='bad'}, {enabled=true,trigger_bytes=100.5,target_bytes=50,reason='bad'}, {enabled='yes',trigger_bytes=100,target_bytes=50,reason='bad'}, {enabled=true,trigger_bytes=100,target_bytes=50,reason=''}}) do
         assert(not arco.call('context_budget',{proposal=bad}).staged)
       end
@@ -206,6 +226,42 @@ int main() {
       require(field(field(engine.stats(), "context_budget"), "effective") ==
               expected_policy);
       require(field(field(engine.stats(), "context_budget"), "pending") == Value{});
+      // The disabled policy still reports its size; omit drops all state; a
+      // provider retaining request state gets no item when nothing else rides.
+      provider.scripted = false;
+      engine.turn({"", "arco.request()"});
+      require(provider.last_state.find("budget=off") != std::string::npos);
+      provider.expect_size = false;
+      engine.turn({"", "arco.request({state_context='omit'})"});
+      require(provider.last_state.empty());
+      provider.retain = true;
+      engine.turn({"", "arco.request()"});
+      require(provider.last_state.empty() && provider.calls == 3);
+      // With a retaining provider the line rides with the trigger, carrying the
+      // effective trigger and target.
+      engine.turn({"", "assert(arco.call('context_budget',{proposal={enabled=true,"
+                       "trigger_bytes=30,target_bytes=10,reason='retain oracle'}})"
+                       ".staged)"});
+      provider.expect_size = provider.expect_trigger = true;
+      engine.turn({"", "arco.request()"});
+      require(provider.last_state.find(" trigger_bytes=30 target_bytes=10 ") !=
+              std::string::npos);
+      // A recorded built-in policy (pre-a1v "initial-disabled") was never a
+      // session choice: reopening resolves it to the current enabled default.
+      log.record(
+          log.issue(), ApplicationChannel::program,
+          Value::object(
+              {{"label", Value{"context-budget-effective-v1"}},
+               {"policy", Value::object({{"enabled", Value{false}},
+                                         {"trigger_bytes", Value{Number{"262144"}}},
+                                         {"target_bytes", Value{Number{"131072"}}},
+                                         {"reason", Value{"opt-in"}}})},
+               {"revision", Value{"initial-disabled"}}}));
+      CodingEngine legacy{log, context, provider, "legacy-model"};
+      const auto restored_policy =
+          field(field(legacy.stats(), "context_budget"), "effective");
+      require(std::get<bool>(field(restored_policy, "enabled").value()) &&
+              field(restored_policy, "trigger_bytes").number().text() == "393216");
     }
     std::filesystem::remove_all(path);
     std::cout << "context budget boundary/trigger/repair/reopen passed\n";

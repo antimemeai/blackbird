@@ -1,5 +1,6 @@
 #include "blackbird/application.hpp"
 #include "blackbird/json.hpp"
+#include "request_state.hpp"
 #include <chrono>
 #include <exception>
 #include <fcntl.h>
@@ -65,7 +66,7 @@ public:
   Value respond(const Value &request,
                 const std::function<void(std::string_view)> &capture) override {
     ++calls;
-    const auto &input = field(request, "input").array();
+    const auto input = test::request_conversation(request);
     const auto expected = calls == 1   ? "first objective"
                           : calls == 2 ? "replace me"
                           : calls == 3 ? "replacement objective"

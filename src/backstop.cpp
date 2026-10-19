@@ -140,7 +140,7 @@ bool filesystem_predicate(RawSessionCall &owner, std::uint8_t method,
   });
 }
 constexpr std::string_view assessment = R"lua(
-local response = blackbird.request({tools=blackbird.array({}), retry_policy={max_attempts=1}})
+local response = blackbird.request({tools=blackbird.array({}), state_context='omit', retry_policy={max_attempts=1}})
 local text = ''
 for _, item in ipairs(response.output) do
   if item.type == 'function_call' then error('Assessment must not dispatch tools') end

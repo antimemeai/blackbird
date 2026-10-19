@@ -117,3 +117,29 @@ Defaults: **trigger 384 KiB, target 192 KiB, enabled.**
 - The target halves the context, so one compaction buys a long stretch, rather
   than shaving at every request.
 - These are byte heuristics, not token limits. C4 handles a real refusal.
+
+### C4 decision (operator, 2026-10-19)
+
+Overflow should not arise once the nominal path (C1/C2) is tuned, so C4 is a
+minimal backstop.
+- **Option B only.** Send the pinned instructions plus the oldest complete tool
+  groups that fit a byte budget, and have the model summarise them with
+  `context_manage`. Repeat window by window, then retry the original request.
+- **Bounds.** At most one recovery per request, a bounded number of windows, and
+  a stop when a window makes no byte progress.
+- **No fallback.** There is no harness-authored archive (option C). When the
+  smallest window still overflows, recovery stops with a clear message and every
+  original is kept.
+- **A sign to retune.** If C4 fires in real use, the nominal path needs retuning.
+- **Audit as a critical error (operator, 2026-10-19).** Every fired overflow
+  recovery, and every recovery that stops, is written to the audit log as a
+  critical error that requires investigation, not just logged as handled. It
+  must use the audit's existing severity or complaint mechanism, after reading
+  how that works, rather than a new one.
+  - **Mechanism found:** the existing rageshake complaint (`src/tools.cpp:1157`,
+    `src/coding.cpp:5168+`). It captures the context, program, model and audit
+    identities immutably, attempts bead delivery and retains the complaint
+    locally if that fails. On every fired recovery the harness raises one
+    complaint itself, as the actor, marked critical. The complaint carries the
+    failed request's reference, its sizes, the provider's refusal original and
+    the recovery outcome.

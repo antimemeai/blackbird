@@ -11560,3 +11560,35 @@ headerless FG_1 block. Settled reads make it pass 10/10, and it still fails on
 the pre-fold executable. One `tui_retained_result` failure under parallel load is
 noted on `9h5`; it showed two polls in a 4 s wait. The `e8n` note: the size pass
 found HTTP 200 for its 15 requests.
+
+C2 and C1:
+- Every request now carries a `CONTEXT_SIZE` line in its developer operational
+  state. A provider that retains request state gets the line only with the
+  trigger.
+- The budget is enabled by default at 384/192 KiB, from the measured campaign
+  requests.
+
+The review found:
+- **Recorded defaults froze.** The built-in default was snapshotted into
+  boundary records as a session choice, which would have frozen old sessions at
+  "disabled" and new ones at today's numbers. Fixed with a `builtin-default`
+  revision that resolves, along with legacy `initial-disabled`, to the current
+  default on reopen.
+- **Retained size lines.** Stale size lines would ride in retained Anthropic
+  state. Fixed by riding only with the trigger. The older per-request
+  accumulation of tasks and guidance is filed as `arconaut-2o9`.
+- **Backstop.** The backstop assessor was told about tools it lacks; it now omits
+  state.
+- **Test gaps** are closed. The recheck found only a docs wording point.
+
+Exact-request mocks now require the state item through
+`tests/request_state.hpp`; on the old code they raise corrupt. The retention and
+legacy-restore oracles were observed RED with their fixes disabled. Under full
+`-j6` runs in this worktree, `command_jobs`, `turn_raw` and `tui_retained_result`
+each timed out once; each passes alone. Same class as `9h5`.
+
+C4 depends on provider error surfacing that `5st` already built, which is staged
+but unmerged on the campaign-defects line. Proposed order: C5, merge a1v, land
+campaign-defects, then C4. Operator 2026-10-19: a fired overflow recovery is
+audited as a critical error that requires investigation, through the existing
+rageshake complaint.
