@@ -11415,3 +11415,9 @@ the rest is per-task evidence, including 487 synthetic sessions from the matched
 performance rounds. Operator sessions live in `~/.local/state/blackbird` and campaign
 sessions in `~/projects/blackbird_runs`. No source changed, so the checks are
 text-only.
+
+File cleanup after the triage: delete the untracked brainstorm server directory once
+its mockups have been confirmed identical to the tracked copies, and ignore
+`/.superpowers/`. The unattributed MCP client proposal moves unchanged from untracked
+`docs/` into `papers/2026-10-17-mcp-client-proposal.md`, with a header saying it has
+not been adopted. Only the operator's artwork remains untracked.
