@@ -271,6 +271,12 @@ void direct_owners() {
     view.append(ChatKind::assistant, binary);
     view.append(ChatKind::notice, std::string(4096, 'L'));
     view.clear();
+    // Header (6 bytes) + L0..L2 keep 15 bytes; L3..L6 (12 bytes) fold away.
+    // A later line folds L7 (3 bytes) at display-stream offset 15 + 12.
+    view.append(ChatKind::tool, "▸ h\n");
+    view.append(ChatKind::tool, "L0\nL1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\n", true);
+    view.append(ChatKind::tool, "LA\n", true);
+    view.clear();
     Composer composer;
     composer.draft("native input");
     auto data = unwrap(raw_claim_data(composer.capture_bound(1)));
@@ -313,7 +319,8 @@ void direct_owners() {
   const auto physical = physical_bytes(directory + "/ui-state.bbm");
   const auto all = records(directory);
   bool message = false, frame_body = false, write = false, submit = false,
-       decoded = false, retire = false;
+       decoded = false, retire = false, unfolded_original = false;
+  std::vector<std::pair<std::size_t, std::size_t>> folds;
   std::size_t packets = 0;
   for (const auto &[key, record] : all) {
     ByteView body = record.bytes;
@@ -369,9 +376,30 @@ void direct_owners() {
       const auto reason = native<std::uint8_t>(body);
       if (reason == 4)
         retire = true;
+      if (reason == 5) {
+        const auto offset = native<std::size_t>(body),
+                   length = native<std::size_t>(body);
+        folds.emplace_back(offset, length);
+      }
+    }
+    if (record.site == 4030) {
+      const auto kind = native<ChatKind>(body);
+      (void)native<bool>(body);
+      (void)native<IdentityBytes>(body);
+      (void)native<std::uint64_t>(body);
+      const auto size = native<std::size_t>(body); // The text follows unprefixed.
+      require(size == body.size(), "native 4030 text extent");
+      if (kind == ChatKind::tool &&
+          std::string_view{reinterpret_cast<const char *>(body.data()), size} ==
+              "L0\nL1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\n")
+        unfolded_original = true; // The complete text precedes any display fold.
     }
     (void)key;
   }
+  require(folds ==
+                  std::vector<std::pair<std::size_t, std::size_t>>{{15, 12}, {27, 3}} &&
+              unfolded_original,
+          "folds at cumulative display-stream offsets; 4030 keeps the whole text");
   require(message && frame_body && write && submit && decoded && retire && packets == 2,
           "actual source-to-disk nativeowner surfaces");
   std::filesystem::remove_all(directory);

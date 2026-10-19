@@ -175,6 +175,11 @@ void ChatView::trim(RawControlToken *credit) {
                                  detail::raw_native_field(generation_)},
                       credit);
   };
+  // A front cut removes the head a fold measured from; display restarts plain.
+  auto forget_fold = [](Block &block) {
+    block.head_end = block.hidden = block.folded_bytes = 0;
+    block.fence_parity = false;
+  };
   bool removed = false;
   if (newlines_ > 2048 && !blocks_.empty()) {
     while (blocks_.size() > 1 && newlines_ > 1536) {
@@ -194,6 +199,7 @@ void ChatView::trim(RawControlToken *credit) {
       }
       retire(blocks_.front(), 2, 0, cut);
       text.erase(0, cut);
+      forget_fold(blocks_.front());
       bytes_ = text.size();
       removed = true;
     }
@@ -215,6 +221,7 @@ void ChatView::trim(RawControlToken *credit) {
         std::count(s.begin(), s.begin() + static_cast<std::ptrdiff_t>(cut), '\n'));
     retire(blocks_.front(), 2, 0, cut);
     s.erase(0, cut);
+    forget_fold(blocks_.front());
     bytes_ = s.size();
     removed = true;
   }
@@ -229,7 +236,9 @@ void ChatView::append(ChatKind kind, std::string_view text, bool merge,
                       RawEventRef source) {
   const auto size = text.size();
   const auto ranges = raw_ui_add(1027, size / line_limit);
-  const auto credit = raw_ui_add(raw_ui_multiply(ranges, 65), raw_ui_error_bytes + 72);
+  // Ranges: 1025 block retirements, one prefix cut, line skips and one fold.
+  const auto credit =
+      raw_ui_add(raw_ui_multiply(raw_ui_add(ranges, 1), 65), raw_ui_error_bytes + 72);
   RawUiTrace trace{
       raw_capture_,
       {4030, 4033},
@@ -240,8 +249,10 @@ void ChatView::append(ChatKind kind, std::string_view text, bool merge,
       true};
   trace.run([&] {
     try {
-      if (!merge || blocks_.empty() || blocks_.back().kind != kind)
+      if (!merge || blocks_.empty() || blocks_.back().kind != kind) {
         blocks_.push_back({kind, {}, true, 0, 0, 0, false, false, trace.reference()});
+        ++serial_;
+      }
       auto &block = blocks_.back();
       bool changed = block.dirty;
       std::optional<std::size_t> skipped;
@@ -288,6 +299,8 @@ void ChatView::append(ChatKind kind, std::string_view text, bool merge,
       close_skip(text.size());
       block.dirty = block.dirty || changed;
       dirty_ = dirty_ || changed;
+      if (block.kind == ChatKind::tool && changed)
+        fold(block, trace.credit());
       const auto identity = block.identity;
       const auto current = block.text.size();
       (void)trace.event(4031, std::array{ByteView{identity.lane},
@@ -304,6 +317,94 @@ void ChatView::append(ChatKind kind, std::string_view text, bool merge,
       throw;
     }
   });
+}
+void ChatView::fold(Block &block, RawControlToken *credit) {
+  constexpr std::size_t head_lines = 4, tail_lines = 3; // Header + 3, and 3.
+  const std::string_view text{block.text};
+  if (!block.head_end) {
+    std::size_t end = 0;
+    for (std::size_t n = 0; n < head_lines; ++n) {
+      const auto lf = text.find('\n', end);
+      if (lf == std::string_view::npos)
+        return;
+      end = lf + 1;
+    }
+    block.head_end = end;
+  }
+  // The tail is the last complete lines plus any unfinished one: it starts after
+  // the (tail_lines + 1)th newline from the end. Only those bytes are scanned.
+  std::size_t tail = text.size();
+  for (std::size_t n = 0; n <= tail_lines; ++n) {
+    if (tail <= block.head_end)
+      return;
+    const auto lf = text.rfind('\n', tail - 1);
+    if (lf == std::string_view::npos || lf < block.head_end)
+      return;
+    tail = lf;
+  }
+  ++tail;
+  const auto middle = text.substr(block.head_end, tail - block.head_end);
+  const auto lines =
+      static_cast<std::size_t>(std::count(middle.begin(), middle.end(), '\n'));
+  // The elision row must stand for at least two lines the first time.
+  if (lines < (block.hidden ? 1U : 2U))
+    return;
+  // Fences hidden in the middle still toggle code state for the tail.
+  for (std::size_t at = 0; at < middle.size();) {
+    if (middle.substr(at).starts_with("```"))
+      block.fence_parity = !block.fence_parity;
+    const auto lf = middle.find('\n', at);
+    if (lf == std::string_view::npos)
+      break;
+    at = lf + 1;
+  }
+  // Coordinates are the block's display stream: bytes that entered block.text
+  // (line-clipped bytes never do), with earlier folded ranges still counted.
+  const std::uint8_t reason = 5;
+  const auto offset = block.head_end + block.folded_bytes, length = middle.size();
+  (void)raw_ui_link(4032, block.identity,
+                    std::array{detail::raw_native_field(reason),
+                               detail::raw_native_field(offset),
+                               detail::raw_native_field(length),
+                               detail::raw_native_field(generation_)},
+                    credit);
+  block.text.erase(block.head_end, length);
+  block.hidden += lines;
+  block.folded_bytes += length;
+  bytes_ -= length;
+  newlines_ -= lines;
+  block.restart = block.dirty = dirty_ = true;
+}
+void ChatView::tool_start(std::string_view header, RawEventRef source) {
+  append(ChatKind::tool, std::string{header} + "\n", false, source);
+  tool_header_ = header;
+  tool_block_ = serial_;
+}
+void ChatView::tool_output(std::string_view text, RawEventRef source) {
+  constexpr std::string_view background = "\n[command ";
+  if (const auto close = text.find("]\n");
+      text.starts_with(background) && close != std::string_view::npos) {
+    const auto job = text.substr(background.size(), close - background.size());
+    const auto body = text.substr(close + 2);
+    if (!blocks_.empty() && serial_ == background_block_ && job == background_job_) {
+      append(ChatKind::tool, body, true, source);
+      return;
+    }
+    append(ChatKind::tool, "[command " + std::string{job} + "]\n" + std::string{body},
+           false, source);
+    background_job_ = job;
+    background_block_ = serial_;
+    return;
+  }
+  const auto marker = text.starts_with("\n[") ? text.substr(1) : text;
+  if ((blocks_.empty() || serial_ != tool_block_) && !tool_header_.empty()) {
+    append(ChatKind::tool, tool_header_ + "\n" + std::string{marker}, false, source);
+    tool_block_ = serial_;
+    return;
+  }
+  const bool line_start = blocks_.empty() || blocks_.back().text.empty() ||
+                          blocks_.back().text.back() == '\n';
+  append(ChatKind::tool, line_start ? marker : text, true, source);
 }
 void ChatView::begin(ChatKind kind) {
   stream_kind_ = kind;
@@ -369,7 +470,15 @@ const std::vector<ChatRow> &ChatView::rows(std::size_t width) {
                       : b.kind == ChatKind::error     ? Ink::failure
                       : b.kind == ChatKind::assistant ? Ink::assistant
                                                       : Ink::muted;
+    // A fold changed text before the committed offset: redraw this (last) block.
+    if (b.restart && b.initialized) {
+      rows_.resize(b.first_row);
+      b.initialized = b.in_code = false;
+      b.committed = 0;
+    }
+    b.restart = false;
     if (!b.initialized) {
+      b.first_row = rows_.size();
       if (!rows_.empty())
         rows_.push_back({});
       const auto label = b.kind == ChatKind::user        ? "YOU"
@@ -415,6 +524,13 @@ const std::vector<ChatRow> &ChatView::rows(std::size_t width) {
       if (lf == std::string_view::npos)
         break;
       b.committed += length + 1;
+      if (b.hidden && b.committed == b.head_end) {
+        wrap(rows_,
+             {{"┆ " + std::to_string(b.hidden) + " more lines · Ctrl-O inspects",
+               Ink::muted}},
+             width - 4, rail);
+        code = code != b.fence_parity;
+      }
       b.stable_rows = rows_.size();
       b.in_code = code;
       remaining.remove_prefix(length + 1);

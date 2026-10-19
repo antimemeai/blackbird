@@ -109,7 +109,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('executable')
 parser.add_argument('--case', default='all', choices=(
     'all', 'controls', 'palette', 'palette-capacity', 'editor', 'composer',
-    'input', 'state', 'comfort', 'avatar', 'graphics'))
+    'input', 'tools', 'state', 'comfort', 'avatar', 'graphics'))
 arguments = parser.parse_args()
 
 if arguments.case in ('all', 'controls'):
@@ -509,6 +509,63 @@ if arguments.case in ('all', 'input'):
             os.close(master)
             os.close(slave)
     print("PTY wheel scroll, arrow history, mouse toggle, Shift-Enter, exit order and BLACKBIRD_MOUSE=0 pass")
+
+if arguments.case in ('all', 'tools'):
+    def transcript_rows():
+        # Conversation rows only: the rail sits at column 2; the task pane is cut.
+        rows = []
+        for row in observed.screen.text().splitlines():
+            if row[2:4] == "\u2502 ":
+                rows.append(row[4:].split("\u2502")[0].strip())
+            elif row.startswith("  ") and row[2:].split("\u2502")[0].strip():
+                rows.append(row[2:].split("\u2502")[0].strip())
+        return rows
+    # Tool output folds in the conversation to its header, first and last lines;
+    # Ctrl-O shows the complete retained output without rerunning the command.
+    with fixture_directory(prefix="arco-tools-") as work:
+        master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 100, 0, 0))
+        child = subprocess.Popen([arguments.executable, "--session", work], stdin=slave,
+                                 stdout=slave, stderr=slave, start_new_session=True)
+        observed = Observed()
+        try:
+            wait_for(b"Workflow reloads")
+            send(b'/lua arco.call("exec", {command="for i in $(seq 1 40); do echo TOOL_$i; done"}); print("FOLD_" .. "DONE")\r')
+            wait_for(b"FOLD_DONE")
+            rows = transcript_rows()
+            # The exit marker takes one tail line: the last 3 are TOOL_39, TOOL_40, [exit 0].
+            fold = rows.index("\u2506 35 more lines \u00b7 Ctrl-O inspects")
+            assert rows[fold - 3:fold] == ["TOOL_1", "TOOL_2", "TOOL_3"], rows
+            assert rows[fold + 1:fold + 4] == ["TOOL_39", "TOOL_40", "[exit 0]"], rows
+            assert not any(row in rows for row in ("TOOL_4", "TOOL_20", "TOOL_38")), rows
+            send(b"\x0f")
+            wait_for(b"TOOL_20")  # The inspector reads the retained original output.
+            send(b"\x0f")
+            # Background output interleaved with a foreground command keeps its
+            # own attributed block; foreground output never sits under its marker.
+            send(b'/lua arco.call("exec", {command="for i in 1 2 3; do echo BG_$i; sleep 0.15; done", yield_ms=0}); '
+                 b'arco.call("exec", {command="for i in 1 2 3; do echo FG_$i; sleep 0.15; done"}); print("MIX_" .. "DONE")\r')
+            wait_for(b"MIX_DONE")
+            time.sleep(0.6)
+            send(b"\x15")
+            wait_for(b"BG_3")
+            rows = transcript_rows()
+            def owner(index):
+                while index > 0 and rows[index - 1] != "ACTIVITY":
+                    index -= 1
+                return rows[index]
+            for marker, header in (("BG_", "[command "), ("FG_", "\u25b8 exec")):
+                found = [n for n, row in enumerate(rows) if row.startswith(marker)]
+                assert found and all(owner(n).startswith(header) for n in found), (marker, rows)
+            send(b"\x11")
+            assert exit_code() == 0
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+            os.close(master)
+            os.close(slave)
+    print("PTY tool output folds to header, first and last lines; Ctrl-O shows the rest")
 
 if arguments.case in ('all', 'state'):
     # Persistent UI state and RRC restoration must never dispatch queued drafts.

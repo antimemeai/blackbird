@@ -11466,3 +11466,48 @@ repeats the idempotent End until the pinned window shows, with the oracle and
 deadline unchanged; it passes 3/3, and on the old executable. Whether End should
 follow asynchronous growth is filed as a product question. The wrapper's exit 0
 had masked the failed commit; the hook log is the authority.
+
+## 2026-10-19 — tests must fail on the old code; tool output folds
+
+Operator amends ~/projects/BLACKBIRD.md, "Achtung on Testing!" item 5: when a fix,
+refactor or any other change adds or changes tests for anything beyond brand-new
+code, each must be run on the old code first and seen to fail, and the failure is
+recorded. A test that passes on the old code does not show the change works.
+
+Unit 2 (`rhi.8`), with its plan and review record in
+papers/text-bugs-2026-10-19/TOOL_FOLD.md. The operator chose header + first 3 +
+last 3, with Ctrl-O for the rest.
+- ChatView folds tool blocks on append and keeps only the head and the tail, so a
+  large command output no longer evicts earlier prompts and replies from the
+  64 KiB display.
+- The middle is retired with raw 4032 reason 5; 4030 still records the complete
+  text, and the command owner keeps the originals that Ctrl-O reads.
+
+Review fixes:
+- exit markers take one tail line;
+- background output keeps its own attributed block;
+- fence parity crosses the fold;
+- the raw coordinates are documented and cover two streamed folds;
+- the raw budget covers the fold event;
+- the trim reset is now actually applied.
+
+My earlier report that this reset was in place was wrong. A failed edit script's
+traceback was misread as coming from a debug script; the review caught it.
+
+RED on the old code: the PTY fold and attribution oracles on generation-IW1976SM,
+and the fence oracle with the parity line disabled. GREEN: 53 affected
+presentation, TUI and terminal tests on Debug, with readable baselines unchanged.
+
+The fold recheck (layer 2) found that queued process messages joined across
+streams, that a finished command's header stayed active, and that 4030 now holds
+the rewritten text. Fixed with a stream-aware `terminal_process_join` and
+`ChatView::tool_end()`, and the 4030 behaviour is documented. Each new oracle
+failed first on the previous behaviour. 53 affected tests pass. Hardening closed.
+
+First unit-2 hook run: 265/265 Debug tests passed. Lint then refused one
+clang-tidy bugprone-easily-swappable-parameters finding on
+`terminal_process_join`. The fix takes a `TerminalProcessJoin{queued, next}`
+struct called with designated initializers, with no suppression. `terminal_test`
+passes and clang-tidy is clean on src/terminal.cpp. The operator authorized
+stopping the rerun of the whole gate for this mechanical change and committing
+with the per-command hook override; the settled suite is not repeated.

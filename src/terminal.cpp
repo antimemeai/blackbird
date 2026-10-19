@@ -299,6 +299,26 @@ std::size_t word_right(std::string_view text, std::size_t cursor) {
   return cursor;
 }
 } // namespace
+std::optional<std::string_view> terminal_process_join(TerminalProcessJoin chunks) {
+  const auto [queued, next] = chunks;
+  // Background chunks carry "\n[command J]\n"; markers ("\n[exit 0]" etc.)
+  // start a line of their own. Bytes after a background chunk have no marker,
+  // so a joined entry could not be split back into its streams.
+  const auto background = [](std::string_view text) {
+    constexpr std::string_view marker = "\n[command ";
+    const auto close = text.find("]\n");
+    return text.starts_with(marker) && close != std::string_view::npos
+               ? text.substr(0, close + 2)
+               : std::string_view{};
+  };
+  const auto queued_job = background(queued), next_job = background(next);
+  if (!next_job.empty())
+    return next_job == queued_job ? std::optional{next.substr(next_job.size())}
+                                  : std::nullopt;
+  if (next.starts_with("\n[") || !queued_job.empty())
+    return std::nullopt;
+  return next;
+}
 std::string terminal_key_help() {
   return "Keyboard\n"
          "  Enter        Send; while busy, queue for the next turn\n"
@@ -1535,9 +1555,14 @@ void TerminalUI::post(Kind kind, std::string_view text, RawCapacityClaim *prehel
   trace.run([&] {
     const std::lock_guard lock{mutex_};
     std::uint8_t branch = 1;
-    if (!messages_.empty() && messages_.back().kind == kind &&
-        (kind == Kind::text || kind == Kind::process)) {
-      messages_.back().text.append(text);
+    const auto join =
+        messages_.empty() || messages_.back().kind != kind ? std::nullopt
+        : kind == Kind::text                               ? std::optional{text}
+        : kind == Kind::process
+            ? terminal_process_join({.queued = messages_.back().text, .next = text})
+            : std::nullopt;
+    if (join) {
+      messages_.back().text.append(*join);
       messages_.back().latest = trace.reference();
       branch = 2;
     } else {
@@ -2536,7 +2561,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           if (message.kind == Kind::notice)
             transcript.append(ChatKind::notice, message.text, true, message.enqueue);
           if (message.kind == Kind::process)
-            transcript.append(ChatKind::tool, message.text, true, message.enqueue);
+            transcript.tool_output(message.text, message.enqueue);
           if (message.kind == Kind::user || message.kind == Kind::assistant)
             transcript.append(message.kind == Kind::user ? ChatKind::user
                                                          : ChatKind::assistant,
@@ -2553,11 +2578,13 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             tool_started = std::chrono::steady_clock::now();
             tool_active = !live_provider;
             if (!live_provider)
-              transcript.append(ChatKind::tool, "▸ " + message.text + "\n");
+              transcript.tool_start("▸ " + message.text);
           }
           if (message.kind == Kind::operation_complete) {
             activity = message.text;
             tool_active = false;
+            if (!live_provider)
+              transcript.tool_end();
             if (!live_provider)
               transcript.append(
                   message.outcome == Ink::failure ? ChatKind::error : ChatKind::tool,

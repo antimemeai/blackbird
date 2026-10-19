@@ -260,6 +260,21 @@ int main() {
     check(terminal_help().find("/sessions") != std::string::npos);
     check(terminal_help().find("not model context") != std::string::npos);
     check(terminal_key_help().find("keep unsent draft") != std::string::npos);
+    // Queued process output joins only within one stream (rhi.8 attribution).
+    check(terminal_process_join({.queued = "FG_1\n", .next = "FG_2\n"}) ==
+          std::optional<std::string_view>{"FG_2\n"});
+    check(terminal_process_join(
+              {.queued = "\n[command J]\nBG_1\n", .next = "\n[command J]\nBG_2\n"}) ==
+          std::optional<std::string_view>{"BG_2\n"});
+    check(
+        !terminal_process_join({.queued = "\n[command J]\nBG_1\n", .next = "FG_2\n"}));
+    check(!terminal_process_join(
+        {.queued = "\n[command J]\nBG_1\n", .next = "\n[command K]\nBG_1\n"}));
+    check(
+        !terminal_process_join({.queued = "FG_1\n", .next = "\n[command J]\nBG_1\n"}));
+    check(!terminal_process_join({.queued = "TOOL_40\n", .next = "\n[exit 0]\n"}));
+    check(terminal_process_join({.queued = "\n[exit 0]\n", .next = "more\n"}) ==
+          std::optional<std::string_view>{"more\n"});
     Composer multiline;
     feed(multiline, "history\r");
     multiline.draft("abcd\nx\n12345");

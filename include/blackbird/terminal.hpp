@@ -70,6 +70,12 @@ EditorResult edit_terminal_draft(std::string_view draft,
                                  const RawAdapterContext *context = nullptr);
 // Shared command discovery; local-only commands are labelled in help.
 std::string terminal_help();
+// Queued process output joins only within one stream; otherwise nullopt asks
+// for a new entry. Returns the bytes to append to the queued text.
+struct TerminalProcessJoin {
+  std::string_view queued, next;
+};
+std::optional<std::string_view> terminal_process_join(TerminalProcessJoin chunks);
 std::string terminal_key_help();
 std::string terminal_command_hint(std::string_view draft);
 TerminalState load_terminal_state(const std::filesystem::path &path,

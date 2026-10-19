@@ -303,6 +303,144 @@ int main(int argc, char **) {
     ChatView large;
     large.append(ChatKind::tool, std::string(2 * 1024 * 1024, 'a'));
     require(large.size() <= 1024 * 1024, "display source unbounded");
+    {
+      // A tool block folds to its header, first 3 and last 3 lines (rhi.8).
+      std::string lines;
+      for (int n = 1; n <= 40; ++n)
+        lines += std::to_string(n) + "\n";
+      const std::string folded = "  ACTIVITY\n"
+                                 "  │ ▸ exec seq 1 40\n"
+                                 "  │ 1\n  │ 2\n  │ 3\n"
+                                 "  │ ┆ 34 more lines · Ctrl-O inspects\n"
+                                 "  │ 38\n  │ 39\n  │ 40\n";
+      ChatView whole;
+      whole.append(ChatKind::tool, "▸ exec seq 1 40\n");
+      whole.append(ChatKind::tool, lines, true);
+      require(plain(whole.rows(80)) == folded, "tool output not folded");
+      ChatView streamed;
+      streamed.append(ChatKind::tool, "▸ exec seq 1 40\n");
+      for (int n = 1; n <= 40; ++n) {
+        streamed.append(ChatKind::tool, std::to_string(n) + "\n", true);
+        (void)streamed.rows(80);
+      }
+      require(plain(streamed.rows(80)) == folded, "streamed tool output folds alike");
+      require(streamed.size() < 64, "folded display keeps only head and tail");
+      streamed.append(ChatKind::tool, "4", true);
+      streamed.append(ChatKind::tool, "1", true);
+      require(plain(streamed.rows(80))
+                  .ends_with("  │ ┆ 34 more lines · Ctrl-O inspects\n"
+                             "  │ 38\n  │ 39\n  │ 40\n  │ 41\n"),
+              "unfinished tail line not shown live");
+      streamed.append(ChatKind::tool, "\n", true);
+      require(plain(streamed.rows(80))
+                  .ends_with("  │ ┆ 35 more lines · Ctrl-O inspects\n"
+                             "  │ 39\n  │ 40\n  │ 41\n"),
+              "completed tail line not folded");
+      require(plain(streamed.rows(30)).find("┆ 35 more lines") != std::string::npos,
+              "fold lost on width change");
+      for (const auto [body_lines, fold] : {std::pair{7, false}, std::pair{8, true}}) {
+        ChatView small;
+        std::string body = "▸ h\n";
+        for (int n = 1; n <= body_lines; ++n)
+          body += "s" + std::to_string(n) + "\n";
+        small.append(ChatKind::tool, body);
+        const auto shown = plain(small.rows(80));
+        require((shown.find("┆") != std::string::npos) == fold &&
+                    (shown.find("s4") != std::string::npos) == !fold,
+                "fold needs at least two hidden lines");
+      }
+      ChatView prose;
+      prose.append(ChatKind::assistant, lines);
+      require(plain(prose.rows(80)).find("  │ 20\n") != std::string::npos,
+              "non-tool block folded");
+      ChatView conversation;
+      conversation.append(ChatKind::user, "KEEP_PROMPT");
+      conversation.append(ChatKind::tool, "▸ exec big\n");
+      for (int n = 0; n < 10000; ++n)
+        conversation.append(ChatKind::tool, "line " + std::to_string(n) + "\n", true);
+      const auto kept = plain(conversation.rows(80));
+      require(kept.find("KEEP_PROMPT") != std::string::npos &&
+                  kept.find("┆ 9994 more lines") != std::string::npos &&
+                  kept.find("Display clipped") == std::string::npos,
+              "tool output evicted the conversation");
+    }
+    {
+      // Command presentation: the exit marker takes one tail line, background
+      // output keeps its own attributed block, and foreground output after it
+      // repeats its header.
+      ChatView commands;
+      commands.tool_start("▸ exec seq");
+      for (int n = 1; n <= 40; ++n)
+        commands.tool_output(std::to_string(n) + "\n");
+      commands.tool_output("\n[exit 0]\n");
+      require(plain(commands.rows(80))
+                  .ends_with("  │ ┆ 35 more lines · Ctrl-O inspects\n"
+                             "  │ 39\n  │ 40\n  │ [exit 0]\n"),
+              "exit marker spends an extra tail line");
+      ChatView mixed;
+      mixed.tool_start("▸ exec fg");
+      mixed.tool_output("FG_1\n");
+      mixed.tool_output("\n[command J1]\nBG_1\n");
+      mixed.tool_output("\n[command J1]\nBG_2\n");
+      mixed.tool_output("FG_2\n");
+      require(plain(mixed.rows(80)) ==
+                  "  ACTIVITY\n  │ ▸ exec fg\n  │ FG_1\n\n"
+                  "  ACTIVITY\n  │ [command J1]\n  │ BG_1\n  │ BG_2\n\n"
+                  "  ACTIVITY\n  │ ▸ exec fg\n  │ FG_2\n",
+              "background output not attributed");
+      ChatView ended;
+      ended.tool_start("▸ exec e");
+      ended.tool_output("E_1\n");
+      ended.tool_end();
+      ended.append(ChatKind::tool, "✓ exec completed");
+      ended.tool_output("\n[exec: capacity]\n");
+      require(plain(ended.rows(80)).find("▸ exec e") ==
+                  plain(ended.rows(80)).rfind("▸ exec e"),
+              "finished command header reopened for later output");
+      ChatView partial;
+      partial.tool_start("▸ exec p");
+      partial.tool_output("no newline");
+      partial.tool_output("\n[exit 1]\n");
+      require(plain(partial.rows(80)).ends_with("  │ no newline\n  │ [exit 1]\n"),
+              "marker lost its separating newline");
+      // A fence opened in the head and closed in the hidden middle leaves the
+      // tail as prose; one opened in the middle leaves it as code.
+      for (const auto [close, code] :
+           {std::pair{true, false}, std::pair{false, true}}) {
+        ChatView fenced;
+        fenced.tool_start("▸ cat");
+        std::string body = close ? "a\n```\nb\n" : "a\nb\nc\n";
+        for (int n = 0; n < 6; ++n)
+          body += n == 2 ? "```\n" : "m\n";
+        body += "y\nz\nif q\n"; // Only code mode highlights the keyword.
+        fenced.tool_output(body);
+        const auto &last = fenced.rows(80).back();
+        require(std::any_of(last.begin(), last.end(),
+                            [](const ChatSpan &span) {
+                              return span.ink == Ink::keyword;
+                            }) == code,
+                "fence state lost across the fold");
+      }
+      // A fold followed by a new block before rows() renders both in order.
+      ChatView ordered;
+      ordered.tool_start("▸ exec o");
+      for (int n = 1; n <= 20; ++n)
+        ordered.tool_output("o" + std::to_string(n) + "\n");
+      ordered.append(ChatKind::assistant, "AFTER");
+      const auto ordered_text = plain(ordered.rows(80));
+      require(ordered_text.find("┆ 14 more lines") < ordered_text.find("  │ o20\n") &&
+                  ordered_text.find("  │ o20\n") < ordered_text.find("AFTER"),
+              "fold and later block out of order");
+      // A clipped over-long line inside the folded middle still folds cleanly.
+      ChatView clipped;
+      clipped.tool_start("▸ exec long");
+      clipped.tool_output("c1\nc2\nc3\n" + std::string(4096, 'x') +
+                          "\nc5\nc6\nc7\nc8\n");
+      const auto clipped_text = plain(clipped.rows(80));
+      require(clipped_text.find("┆ 2 more lines") != std::string::npos &&
+                  clipped_text.find("xxxx") == std::string::npos,
+              "clipped line broke the fold");
+    }
     ChatView narrow;
     narrow.append(ChatKind::assistant, "aa👩‍💻x\n```cpp\n// 界\n```");
     const auto narrow_text = plain(narrow.rows(8));

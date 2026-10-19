@@ -37,6 +37,16 @@ public:
               RawEventRef source = {});
   void begin(ChatKind kind);
   void stream(std::string_view text);
+  // Command presentation: a header opens the foreground command's block; its
+  // output continues that block. Background output ("\n[command J]\n" prefix)
+  // gets its own attributed block, and foreground output after other blocks
+  // repeats its header. A marker's leading newline is dropped at line start.
+  // Display appends (raw 4030) carry this rewritten text; the posted original
+  // stays in the queue's raw 4000 record and the command owner's retention.
+  void tool_start(std::string_view header, RawEventRef source = {});
+  void tool_output(std::string_view text, RawEventRef source = {});
+  // The command finished: later unprefixed output no longer belongs to it.
+  void tool_end() noexcept { tool_header_.clear(); }
   ChatView &operator+=(std::string_view notice);
   void clear();
   std::size_t size() const noexcept { return bytes_; }
@@ -52,6 +62,10 @@ private:
     std::size_t committed = 0, stable_rows = 0, line_bytes = 0;
     bool initialized = false, in_code = false;
     RawEventRef identity{};
+    // Tool output keeps its header, first and last lines; the middle is
+    // retired from display (originals stay in audit and command custody).
+    std::size_t first_row = 0, head_end = 0, hidden = 0, folded_bytes = 0;
+    bool restart = false, fence_parity = false;
   };
   bool raw_capture_ = false;
   std::deque<Block> blocks_;
@@ -61,7 +75,11 @@ private:
   ChatKind stream_kind_ = ChatKind::assistant;
   std::uint64_t reflows_ = 0, generation_ = 0;
   std::size_t newlines_ = 0;
+  // Blocks created so far; the newest block is always last.
+  std::size_t serial_ = 0, tool_block_ = 0, background_block_ = 0;
+  std::string tool_header_, background_job_;
   void trim(RawControlToken *credit = nullptr);
+  void fold(Block &block, RawControlToken *credit);
 };
 
 // Compact cells: scalar inline, complex cluster tail in a per-buffer arena.
