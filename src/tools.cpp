@@ -244,6 +244,17 @@ Value file_content_presentation(const std::string &raw, const Value &args,
                                {"content", display_bytes(selected)}});
   if (args.find("output_max_bytes")) {
     result.object().emplace_back("file_bytes", Value{Number{raw.size()}});
+    if (returned_bytes < selected_bytes) {
+      const auto next = begin + returned_bytes;
+      const auto page =
+          budget == 0 ? std::size_t{16384} : std::max(budget, std::size_t{4});
+      const auto page_size = observation_prefix_size(
+          std::string_view{raw}.substr(next, selected_bytes - returned_bytes), page);
+      result.object().emplace_back(
+          "next_range", Value::object({{"end", Value{Number{next + page_size}}},
+                                       {"mode", Value{"bytes"}},
+                                       {"start", Value{Number{next}}}}));
+    }
     result.object().emplace_back("omitted_bytes",
                                  Value{Number{selected_bytes - returned_bytes}});
     result.object().emplace_back("returned_bytes", Value{Number{returned_bytes}});
@@ -252,11 +263,81 @@ Value file_content_presentation(const std::string &raw, const Value &args,
   return result;
 }
 Value process_output_presentation(const std::string &raw, const Value &args) {
-  const auto shown = file_presentation(raw, args);
-  return Value::object({{"output", display_bytes(shown)},
-                        {"output_bytes", Value{Number{raw.size()}}},
-                        {"returned_bytes", Value{Number{shown.size()}}},
-                        {"omitted_bytes", Value{Number{raw.size() - shown.size()}}}});
+  const auto selected = file_presentation(raw, file_range(args));
+  const auto first = static_cast<std::size_t>(selected.data() - raw.data());
+  const auto budget = range_index(args, "output_max_bytes", SIZE_MAX);
+  const auto head_budget = range_index(args, "output_head_bytes", budget);
+  if (head_budget > budget)
+    throw Error{ErrorCode::invalid_range};
+  auto head_end = observation_prefix_size(selected, budget);
+  auto tail_start = selected.size();
+  if (args.find("output_head_bytes") && selected.size() > budget) {
+    head_end = observation_prefix_size(selected, head_budget);
+    const auto tail_budget = budget - head_budget;
+    tail_start = selected.size() - tail_budget;
+    auto boundary = tail_start;
+    while (boundary < selected.size() &&
+           (static_cast<unsigned char>(selected[boundary]) & 0xc0U) == 0x80U)
+      ++boundary;
+    if (valid_utf8(selected.substr(boundary))) {
+      tail_start = boundary;
+      const auto lf = selected.find('\n', tail_start);
+      if (lf != std::string_view::npos && lf + 1 - tail_start <= 256 &&
+          selected.size() - (lf + 1) >= tail_budget / 2)
+        tail_start = lf + 1;
+    }
+  }
+  const auto head = selected.substr(0, head_end);
+  const auto tail = selected.substr(tail_start);
+  const auto returned = head.size() + tail.size();
+  Value output = display_bytes(head);
+  if (!tail.empty()) {
+    if (valid_utf8(head) && valid_utf8(tail))
+      output = Value{std::string{head} + "\n[... bytes [" +
+                     std::to_string(first + head_end) + "," +
+                     std::to_string(first + tail_start) + ") omitted ...]\n" +
+                     std::string{tail}};
+    else
+      output =
+          Value::object({{"head", display_bytes(head)}, {"tail", display_bytes(tail)}});
+  }
+  auto result =
+      Value::object({{"byte_start", Value{Number{first}}},
+                     {"byte_end", Value{Number{first + head_end}}},
+                     {"next_offset", Value{Number{first + head_end}}},
+                     {"omitted_prefix_bytes", Value{Number{first}}},
+                     {"output", std::move(output)},
+                     {"output_bytes", Value{Number{raw.size()}}},
+                     {"returned_bytes", Value{Number{returned}}},
+                     {"omitted_bytes", Value{Number{raw.size() - returned}}}});
+  if (!tail.empty()) {
+    result.object().emplace_back("tail_byte_start", Value{Number{first + tail_start}});
+    result.object().emplace_back("tail_byte_end",
+                                 Value{Number{first + selected.size()}});
+  }
+  if (head_end < tail_start) {
+    result.object().emplace_back(
+        "omitted_range", Value::object({{"start", Value{Number{first + head_end}}},
+                                        {"end", Value{Number{first + tail_start}}}}));
+  }
+  if (const auto *reference = args.find("output_ref")) {
+    result.object().emplace_back("output_ref", *reference);
+    if (head_end < tail_start || first + selected.size() < raw.size()) {
+      const auto next = first + head_end;
+      const auto stop = head_end < tail_start ? first + tail_start : raw.size();
+      const auto page_size = observation_prefix_size(
+          std::string_view{raw}.substr(next, stop - next), 8192);
+      result.object().emplace_back(
+          "next_read",
+          Value::object(
+              {{"tool", Value{"read_process_output"}},
+               {"arguments",
+                Value::object({{"output_ref", *reference},
+                               {"byte_start", Value{Number{next}}},
+                               {"byte_end", Value{Number{next + page_size}}}})}}));
+    }
+  }
+  return result;
 }
 Value LocalTools::run(std::string_view name, const Value &args,
                       const RawAdapterContext *raw_context,
@@ -347,6 +428,8 @@ Value LocalTools::run(std::string_view name, const Value &args,
   captured_.clear();
   if (name == "exec") {
     const auto budget = range_index(args, "output_max_bytes", SIZE_MAX);
+    if (range_index(args, "output_head_bytes", budget) > budget)
+      throw Error{ErrorCode::invalid_range};
     int seconds = 120;
     if (const auto *n = args.find("timeout_seconds")) {
       if (!std::holds_alternative<Number>(n->value()))
@@ -408,18 +491,9 @@ Value LocalTools::run(std::string_view name, const Value &args,
       if (!result.has_value())
         raw_fence(result.error());
     }
-    const auto returned = observation_prefix_size(output, budget);
-    auto shown = display_bytes(std::string_view{output}.substr(0, returned));
-    const auto total = output.size();
+    auto result = process_output_presentation(output, args);
+    result.object().emplace_back("exit_code", Value{Number{status}});
     captured_.push_back({"process.combined", std::move(output)});
-    auto result = Value::object({{"output", std::move(shown)},
-                                 {"exit_code", Value{Number{status}}},
-                                 {"byte_start", Value{Number{0}}},
-                                 {"byte_end", Value{Number{returned}}}});
-    if (args.find("output_max_bytes")) {
-      result.object().emplace_back("output_bytes", Value{Number{total}});
-      result.object().emplace_back("omitted_bytes", Value{Number{total - returned}});
-    }
     return result;
   }
   throw Error{ErrorCode::unsupported};
@@ -821,7 +895,8 @@ Value tool_definitions() {
                   "output_max_bytes limits the selected range; "
                   "file_bytes/selected_bytes/returned_bytes/omitted_bytes describe "
                   "raw bytes before encoding. Fetch omitted facts with the returned "
-                  "snapshot and ONE range object: {mode:lines,start:1,end:20} "
+                  "snapshot plus next_range, or ONE range object: "
+                  "{mode:lines,start:1,end:20} "
                   "(one-based inclusive) or {mode:bytes,start:0,end:256} (zero-based "
                   "half-open). Missing start means first byte/line; missing end means "
                   "EOF. Beyond EOF clips/returns empty. LF retained; no phantom "
@@ -975,11 +1050,14 @@ Value tool_definitions() {
                 "deadline returns timed_out=true and effect_outcome=unknown after "
                 "local child-group cleanup, with output_ref for partial output; "
                 "inspect it and choose a distinct retry or another approach. Operator "
-                "cancellation stops the turn. Optional output_max_bytes bounds raw "
-                "prefix bytes shown to model, cut at UTF-8/nearby line boundaries; "
+                "cancellation stops the turn. Default workflow: 8192 raw bytes, "
+                "2048 head + 6144 tail. Explicit output_max_bytes keeps head-first "
+                "paging unless output_head_bytes selects a head/tail split. Cuts "
+                "respect UTF-8/nearby newlines; "
                 "byte_start/byte_end report actual offsets. Full originals remain "
                 "audited. "
-                "output_ref can retrieve omitted output using read_process_output. "
+                "Results carry output_bytes, omitted_range and next_read arguments "
+                "with output_ref for recovery without replay. "
                 "A command-registry limit returns capacity with resource, count, "
                 "limit, attempt and effect_outcome=not_started; no command launched "
                 "and there is no output_ref. Inspect jobs before choosing further "
@@ -1007,6 +1085,9 @@ Value tool_definitions() {
                                        {"minimum", Value{Number{0}}},
                                        {"maximum", Value{Number{3600000}}}})},
                        {"pty", Value::object({{"type", Value{"boolean"}}})},
+                       {"output_head_bytes",
+                        Value::object({{"type", Value{"integer"}},
+                                       {"minimum", Value{Number{0}}}})},
                        {"output_max_bytes",
                         Value::object({{"type", Value{"integer"}},
                                        {"minimum", Value{Number{0}}}})}})}})}}),
@@ -1051,16 +1132,42 @@ Value tool_definitions() {
           {{"type", Value{"function"}},
            {"name", Value{"read_process_output"}},
            {"description",
-            Value{"Read retained combined process output without rerunning effects. "
-                  "output_ref from exec identifies audited attempt. Optional "
-                  "byte_start/byte_end zero-based half-open, beyond EOF clips; missing "
-                  "end means EOF. Binary slices return hex."}},
+            Value{
+                "Read retained combined process output without rerunning effects. "
+                "output_ref from exec identifies audited attempt, also after reopen. "
+                "Use range {mode:lines,start:1,end:20} (one-based inclusive) or "
+                "{mode:bytes,start:0,end:256} (half-open); legacy byte_start/byte_end "
+                "still work, never mix selectors. Missing end means EOF. "
+                "Optional output_max_bytes pages on UTF-8/nearby line boundaries. "
+                "Results report actual byte offsets and next_read. Explicit byte "
+                "slices stay exact, including hex for binary/split UTF-8."}},
            {"parameters",
             Value::object(
                 {{"type", Value{"object"}},
                  {"properties",
                   Value::object(
-                      {{"output_ref", Value::object({{"type", Value{"string"}}})},
+                      {{"range",
+                        Value::object(
+                            {{"type", Value{"object"}},
+                             {"properties",
+                              Value::object(
+                                  {{"mode",
+                                    Value::object({{"type", Value{"string"}},
+                                                   {"enum", Value{Value::Array{
+                                                                Value{"lines"},
+                                                                Value{"bytes"}}}}})},
+                                   {"start",
+                                    Value::object({{"type", Value{"integer"}},
+                                                   {"minimum", Value{Number{0}}}})},
+                                   {"end",
+                                    Value::object({{"type", Value{"integer"}},
+                                                   {"minimum", Value{Number{0}}}})}})},
+                             {"required", Value{Value::Array{Value{"mode"}}}},
+                             {"additionalProperties", Value{false}}})},
+                       {"output_max_bytes",
+                        Value::object({{"type", Value{"integer"}},
+                                       {"minimum", Value{Number{0}}}})},
+                       {"output_ref", Value::object({{"type", Value{"string"}}})},
                        {"byte_start", Value::object({{"type", Value{"integer"}},
                                                      {"minimum", Value{Number{0}}}})},
                        {"byte_end", Value::object({{"type", Value{"integer"}},

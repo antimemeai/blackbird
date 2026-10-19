@@ -11577,3 +11577,46 @@ wait_for(BG_3) may succeed on the old screen before reading Ctrl-U's repaint.
 The fixture now drains pending PTY data to a quiet frame, then applies exactly
 the same attribution assertions. The old fixture failed in the gate; the repaired
 fixture passes on the unchanged executable (1.85 s). No TUI product code changes.
+
+## 2026-10-19 — 47k: smaller observations with exact continuation
+
+The native default workflow now chooses 8192 exec bytes, 2048 head + 6144 tail.
+Explicit budgets keep head-first compatibility unless output_head_bytes requests
+a split. File reads remain 16384-byte head-first pages. Results name exact byte
+ranges and give next_read (process) or snapshot + next_range (file). The existing
+retained process reader now accepts the same canonical line/byte ranges as files;
+no filesystem output identity, replay, ageing or TUI changes are introduced.
+
+RED before 47k: native economical_defaults fails its trailing-error assertion;
+a new seam oracle linked to the staged pre-47k tools object also fails. GREEN:
+the deterministic provider makes three native default-workflow requests, sees the
+trailing exit-7 build error, requests omitted line 3, and receives exactly
+NEEDED_MIDDLE=exact plus LF at [20013,20033). Reopen recovers the byte-exact complete
+build; the command marker remains X. Explicit zero/larger budgets and full custom
+Lua file reads remain covered. Seven targeted native tests pass; after the single
+recheck/index correction they pass again in 14.42 s. A locator-only incremental
+index avoids rescanning old metadata on every exec; output bodies stay in audit.
+
+The q4n second full gate passed 263/265. Remaining failures were asynchronous
+terminal_pty_tools attribution and terminal_pty_state shutdown fixtures; direct
+results are retained in context/q4n-hook-failures.log. They are outside observation
+projection and no TUI folding change is made here. Source changes remain inactive
+and uncommitted until a required locked full gate passes; no hooks are bypassed.
+q4n's repaired-fixture locked hook passes all 265 Debug tests (375.63 s), owned
+C++/Lua lint and LuaLS; commit 2b80669. No lint suppressions were added.
+The final 47k fixture is enlarged beyond the rolling cache: 1200058 bytes, head
+[0,2048), tail [1193914,1200058), exact recovered line [600013,600033). It fails
+on q4n-only code, then passes with original-based projection; delete the build
+source before reopen and still recover its entire original. The recheck also
+makes generated continuation ranges character-safe and corrects stale cache
+cursor metadata. Tiny nonzero file hints allow four bytes to make progress.
+Final affected Debug checks pass 7/7 (28.10 s), including tools, coding,
+economical_defaults, command_jobs, request_storage, command_raw and command
+input delivery semantics. build/release/blackbird builds successfully (targeted
+Release executable build, not an additional profile campaign). Required final
+locked source gate follows; no installed activation, push or tracker operation.
+The first 47k locked gate is interrupted by SIGTERM before completion (the rigor
+process reports Terminated: 15). No cause is established; Git remains at 2b80669
+and the 47k tree is staged, not committed. Retained output is
+context/47k-commit.log. Retry the required gate with BLACKBIRD_HOOK_LANES=1;
+this is recovery from an interrupted check, not a pass or another review layer.

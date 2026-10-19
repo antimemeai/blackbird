@@ -215,6 +215,13 @@ private:
   std::unique_ptr<Runtime> runtime_;
   Value request(Value options = Value::object({}));
   Value call(std::string name, Value arguments);
+  struct ProcessOriginalIndex {
+    bool known = false;
+    std::vector<std::pair<RecordReference, SourceReference>> chunks;
+  };
+  std::size_t process_original_cursor_ = 0;
+  std::map<std::string, ProcessOriginalIndex> process_originals_;
+  Value retained_process_output(const Value &arguments);
   Value operation(std::string_view name, const Value &input,
                   const std::function<
                       Value(OperationAttemptId, InvocationId, DefinitionGenerationId,

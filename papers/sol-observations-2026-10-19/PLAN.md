@@ -83,3 +83,58 @@ PTY bytes to a quiet frame before applying the unchanged attribution oracle.
 The failing old fixture is recorded in the gate; the corrected fixture passes on
 the unchanged q4n executable (1.85 s). No TUI product/folding code changes. This is
 a concrete gate-oracle correction in the existing recheck, not another review.
+
+## 47k implementation and direct results
+
+RED with q4n fixed but 47k unchanged: the native economical_defaults provider
+prints `economical observations line 85` (the trailing error assertion), then
+external_unknown; exit 1. It receives only the build head. The seam oracle also
+links against the staged pre-47k tools object, not a simulated old behavior.
+
+Compatibility choice: the default Lua workflow selects the 8192/2048 split;
+explicit output_max_bytes retains head-first semantics unless output_head_bytes
+is supplied. Custom Lua is full-read by default. Model callers can choose both
+budgets explicitly. Text output has an explicit gap marker; binary head/tail are
+separate values. Head/tail offsets and the bounded next_read identify exact bytes.
+Files carry snapshot plus next_range; recovery adds canonical line ranges to the
+existing retained process read tool.
+
+The native provider now makes three requests. A 40058-byte exit-7 build shows the
+trailing error while omitting NEEDED_MIDDLE=exact. The provider then calls
+read_process_output on line 3 and receives exactly [20013,20033), including LF.
+The same complete build output is recovered after reopening the session; the
+command marker remains exactly X. Explicit file/exec limits, zero, ranges and
+custom Lua full reads remain checked. Seven affected native tests pass (18.91 s).
+
+47k single recheck: clipping/line boundaries, binary encoding, zero and explicit
+budgets, metadata key order, raw command linkage, exact recovery after reopen,
+and rolling-cache versus original identity. This found a new hot-path full-history
+scan when sharing the recovery reader. Use an incremental locator-only index;
+no output bodies are retained in it. Recheck/fixes remain in this layer; no third
+review or unrelated assurance campaign. Full source gates are required by hook.
+
+q4n delivered as 2b80669 through the locked hook: all 265 Debug tests pass
+(375.63 s), owned C++/Lua lint and LuaLS pass. No suppressions were added.
+
+Final 47k recheck findings/fixes: continuation hints themselves must avoid UTF-8
+seams, not just the initial excerpt. The pre-fix hint oracle fails; hints now use
+the same safe cut (tiny nonzero file hints allow at least four bytes to progress).
+Override the command cache's next_offset/omitted_prefix_bytes with actual original
+projection coordinates. Grow the locator index geometrically, preserving atomic
+per-fact insertion without repeatedly copying its prefix.
+
+The native build fixture is enlarged to 1200058 bytes, beyond the 1 MiB rolling
+cache. On q4n-only code it fails the opening-build assertion (line 84), showing
+why the rolling cache cannot stand in for the original. Final default projection
+returns head [0,2048) and tail [1193914,1200058), with gap [2048,1193914).
+The provider recovers line 3 exactly at [600013,600033). Delete the build source
+before reopen and recover the entire original without a replay; the marker stays X.
+
+Final affected Debug checks: 7/7 pass, 28.10 s. Release executable target builds
+successfully (106 build actions). The required locked 47k source hook remains the
+commit boundary, not a new assurance/review layer. Model/effort for this work:
+gpt-6.1-sol, medium; deterministic test providers, no paid judge or retry panel.
+
+47k first locked commit gate: interrupted with SIGTERM, not a test qualification
+result. Git re-observation confirms no 47k commit. The release build and targeted
+checks stay settled; one distinct required-gate retry uses the single hook lane.
