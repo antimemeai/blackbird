@@ -11333,3 +11333,36 @@ Every completed result is correct. Pre-existing beads filed:
 MiMo's first run, before confinement, edited a global Homebrew clang cfg. It was
 restored byte for byte, and later runs ran under sandbox-exec. Not merged into
 master; awaiting the operator's go.
+
+## 2026-10-18 — campaign defect repairs, paused for the operator's break
+
+The operator asked to fix the eight beads from the C++26 campaign before running about
+200 more autonomous runs. The work note is `docs/CAMPAIGN_DEFECTS_SUBPLAN.md`; the full
+state and next steps are in `docs/CAMPAIGN_DEFECTS_HANDOFF.md`.
+
+Three units landed on their own pushed branches, each through the hook:
+- provider stall and ceiling deadlines plus the stale-marker fix (pyg/3nx, `496ff29`);
+- whole-tree test containment (j1l, `651e0be`);
+- explicit provider copy with `-Wdeprecated` (vv6, `2610af9`).
+
+Three more are staged in their worktrees: provider settings (5st), the command output
+bound with the checkpoint-storm fix (3o2), and the linker pin (e5g). Their hook
+commits kept failing for a host reason: process listings stalled intermittently, for
+5–17 s by `ps` and up to 585 s by `sysctl(KERN_PROC)`. Every failing test behaved the
+same on the vv6 baseline.
+
+Corrections during the session:
+- The operator corrected my reading of the load average: CPU was about 60% idle, and
+  the 100–170 load average counts idle runnable daemons. The stalls are the real
+  lead; a process monitor contending for the kernel process lock is a hypothesis to
+  test.
+- The operator set units to run one at a time on the laptop.
+- 3o2's investigation found that the 9.5 GB run was retained-state checkpoint tracing,
+  not command output.
+
+The campaign-1 archive is packed losslessly from 18 GB to 5.3 GB, and every pack was
+verified by a byte-exact round trip. Stream timing over 762 requests set the stall
+default (worst observed silence: 11.5 s).
+
+New beads: e8n (P1, missing raw terminal records), jaw, avo (design decision for the
+operator), ulx. Nothing is merged into master.
