@@ -11361,3 +11361,57 @@ legacy benchmark metadata arconaut-k9r open. Supported backup and checked
 documentation/data publication finish delivery. Work branch is published and
 host runtime installed; master integration is not inferred. Artwork, recovery
 stash and the existing AFL campaign stay untouched.
+
+## 2026-10-19 — orientation and backlog triage
+
+Operator asks for orientation across the repository, doctrine and every worktree,
+then a clear-out of the sprawling backlog. The front line is two lines of work that
+are not on master: startup-generation (installed on this host) and campaign-defects
+(C++26 plus the defect repairs, paused at the break). They overlap in main, session,
+terminal and the provider check scripts, and they handle unsupported effort
+differently. That is recorded at the top of CURRENT_STATE.
+
+Operator decisions: Z.ai goes on ice (`arconaut-9zh`; its studies are pushed on
+work/glm-bugbash at `738ef0b`). The small composer bugs ride along with whatever
+starts first. New beads: `rhi.8` (collapse tool calls by default), `47k` (keep full
+tool output out of the model request; the model expands on demand), and `a1v` (check
+that model-managed context still works live, then invest, with a blinking TUI
+indicator whenever it edits or compacts context).
+
+Triage the operator approved:
+- Close 14 superseded or stale beads: `7iy`, `uaa`, `uaa.2`, `uaa.4`, `os3`, `05n`,
+  `pvl`, `lh1`, `bzn`, `ew5`, `45a.6`, `ldt`, `12q`, `985`. Each close records its
+  reason.
+- Defer 16 to P4: `nls.3`–`5`, `nls.11`–`15`, `f8f`, `8zx`, `45a.5`, `438`, `nmm` and
+  `rhi.5`–`7`.
+- Reset seven idle in_progress beads to open. Only the seven campaign defect units
+  remain in progress.
+- Label `little-bugs`: `uss`, `v1i`, `2bj`, `rhi.8`, `47k`, `5z4`, `k9r`.
+- Label `quiet-host-sweep`: `9h5`, `jaw`, `igs`, `14o`, `8j8`, `xbf`, `3xf`, `0zi`.
+
+Remove nine retired worktrees: cpp23-toolchain, blackbird-workflows,
+provider-baseline-206c106, glm-bugbash and five old detached pool slots. Every HEAD
+was on master or pushed. Their ignored `context/` logs, HEAD ids, stray empty Dolt
+directories and the provider-baseline scratch patch are kept in
+`context/retired-worktrees-2026-10-19/`. The cpp23 worktree held the only copy of the
+`quarantine/cpp23-llvm-23.1.4` reference files; they move to the main quarantine and
+match their manifest hashes.
+
+Delete 23 local branches: 22 merged into master, plus
+work/claude-main-install-2026-10-17, whose plan and journal reached master in later
+form. Origin keeps all of them. Before dropping the stashes, comparison shows the AFK
+stash holds 20 files that are absent from the saved draft patch. Both stashes are
+therefore kept as local tags `archive/stash-afk-instrumentation-draft` and
+`archive/stash-claude-installer-pre-cpp23`, following the existing `archive/`
+convention, and then dropped.
+
+The 42 instrument-panel brainstorm mockups move from the untracked brainstorm
+directory into `papers/2026-10-19-instrument-panel-brainstorm/`, along with the
+agent-visualization reference study. `amr` and `jon` now point there.
+`docs/MCP_CLIENT_SUBPLAN.md` stays untracked until the operator says whose it is.
+
+`context/` holds 61 GB. About 39 GB is the build trees of worktrees nested there, and
+the rest is per-task evidence, including 487 synthetic sessions from the matched
+performance rounds. Operator sessions live in `~/.local/state/blackbird` and campaign
+sessions in `~/projects/blackbird_runs`. No source changed, so the checks are
+text-only.

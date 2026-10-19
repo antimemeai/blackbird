@@ -1,5 +1,27 @@
 # Current Blackbird stock
 
+## Front line, 2026-10-19
+
+Read this before the older sections below, which describe stock as of 2026-10-15.
+
+- **master** is `f4bd931` (native Claude provider and installer). Nothing newer is
+  merged.
+- **work/startup-generation-2026-10-17** adds the startup repair and the
+  in-harness effort question. It is qualified, and it is the build installed on
+  this host (`generation-IW1976SM` from `9641ef7`). Not on master.
+- **work/campaign-defects-2026-10-18** carries the C++26 upgrade and the campaign
+  defect repairs, paused at the operator's break. Its own
+  `docs/CAMPAIGN_DEFECTS_HANDOFF.md` lists each unit's state and the next steps.
+  Three units are staged and uncommitted in `context/defect-{5st,3o2,e5g}`.
+- These two lines both change `src/main.cpp`, `src/session.cpp`,
+  `src/terminal.cpp` and the provider check scripts. Effort handling differs:
+  startup-generation asks the operator, while `5st` refuses with a list of
+  accepted values. Reconcile them deliberately when merging.
+- Z.ai/GLM is on ice (`arconaut-9zh`, branch `work/glm-bugbash-2026-10-17`).
+- The backlog was triaged on 2026-10-19 (see the journal). The `little-bugs`
+  label marks the small items that ride along with whatever starts next;
+  `quiet-host-sweep` marks test failures to rerun on a quiet host.
+
 Economical observations and recorder-stop repairs are integrated on **master**,
 2026-10-15: the default workflow supplies a 16 KiB
 file/command observation limit when no explicit choice is present; native file

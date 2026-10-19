@@ -1,5 +1,8 @@
 # Watch handoff — 2026-10-14
 
+Historical as of 2026-10-19: this describes the 2026-10-14 watch. Current
+state is at the top of [CURRENT_STATE.md](CURRENT_STATE.md).
+
 2026-10-17 update: the operator authorized C++23 and Neuroses LLVM23.1.4/libc++23.1.4.
 Mac retains LLVM23.1.2. The earlier toolchain declarations below describe their
 original snapshot; current profiles and qualification are in the

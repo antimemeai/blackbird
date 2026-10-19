@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Subagents: two mappings v2</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:#c0caf5;font-family:"JetBrains Mono","SF Mono",Menlo,monospace;padding:16px}
+h2{font:600 17px -apple-system,sans-serif;color:#eef4fa}
+.sub{font:13px/1.5 -apple-system,sans-serif;color:#8a97a8;margin:4px 0 12px;max-width:1300px}
+.wrap{display:flex;gap:16px;flex-wrap:wrap}
+.opt{background:#0b0c12;border:1px solid #1d2030;padding:10px;border-radius:4px;cursor:pointer}
+.opt.selected{border-color:#7aa2f7;box-shadow:0 0 0 1px #7aa2f7}
+.opt h3{font:600 13px -apple-system,sans-serif;color:#eef4fa}
+.opt p{font:12px/1.45 -apple-system,sans-serif;color:#8a97a8;max-width:640px;margin:2px 0 8px;min-height:72px}
+canvas{display:block;background:#0b0c12}
+</style></head><body>
+<h2>Subagents: the "crossing" skeleton, two Blackbird mappings</h2>
+<div class="sub">Both keep the skeleton: two planes in perspective, agents as glyphs clustered where they work, a crossing between planes, trajectories (loops = going around again), and callout pills pinned to events. The camera drifts slowly so the depth reads. Glyph shape = model family (● gpt · ▲ claude · ■ kimi · ◆ jev-driven), color = the agent's team color. The data is fake.</div>
+<div class="wrap">
+ <div class="opt" data-choice="a" onclick="toggleSelect(this)">
+  <h3>A · The crossing: planned → landed</h3>
+  <p><b>Back plane = the work as planned</b>: one cluster per epic, small squares are its beads, and agents sit on the bead they've claimed. <b>The conduit is the qualification path</b> (rigor check, tests, review). Changes ride it toward the <b>front plane = landed</b> work (pushed commits, closed beads). A failed check throws the change back out in a loop. Callouts mark gate events.</p>
+  <canvas id="a" width="640" height="560"></canvas>
+ </div>
+ <div class="opt" data-choice="b" onclick="toggleSelect(this)">
+  <h3>B · Codebase × time</h3>
+  <p><b>Each plane is the repo map</b> (directories as regions). The front plane is <b>now</b> and fainter planes behind it are earlier, so <b>depth = time</b>. Each agent leaves a trail through the files it read or wrote over time. Its glyph sits on the "now" plane with a pill showing its last action and tokens. Two agents converging on the same file get flagged.</p>
+  <canvas id="b" width="640" height="560"></canvas>
+ </div>
+</div>
+<script>
+const C={bg:'#0b0c12',grid:'#2a2f45',grid2:'#3b4261',text:'#c0caf5',dim:'#565f89',pill:'rgba(22,22,30,.88)',ok:'#9ece6a',bad:'#f7768e',warn:'#e0af68',acc:'#7aa2f7'};
+const AG=[
+ {id:'main',fam:'gpt',col:'#ff9e64'},{id:'kimi-rev',fam:'kimi',col:'#bb9af7'},{id:'claude',fam:'claude',col:'#e0af68'},
+ {id:'sa·rigor',fam:'gpt',col:'#9ece6a'},{id:'sa·lit',fam:'gpt',col:'#7aa2f7'},{id:'sa·fuzz',fam:'gpt',col:'#f7768e'},
+ {id:'sa·tui',fam:'claude',col:'#7dcfff'},{id:'sa·docs',fam:'gpt',col:'#c0caf5'},{id:'sa·triage',fam:'jev',col:'#73daca'},
+];
+let seed=5;const R=()=>((seed=Math.imul(seed^seed>>>15,1|seed)+0x6D2B79F5|0)>>>0)/4294967296;
+const rnd=(a,b)=>a+R()*(b-a);
+// ---- tiny 3D camera ----
+function cam(W,H,yaw,pitch,dist,f){const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  return (x,y,z)=>{const x1=x*cy-z*sy,z1=x*sy+z*cy;const y1=y*cp-z1*sp,z2=y*sp+z1*cp;const d=z2+dist;return[W/2+f*x1/d,H/2-f*y1/d,d]}}
+function glyph(g,x,y,fam,col,s){g.save();g.fillStyle=col;g.strokeStyle='#0b0c12';g.lineWidth=1.2;g.shadowColor=col;g.shadowBlur=8;g.beginPath();
+  if(fam==='claude'){g.moveTo(x,y-s);g.lineTo(x+s*.95,y+s*.7);g.lineTo(x-s*.95,y+s*.7);g.closePath()}
+  else if(fam==='kimi'){g.rect(x-s*.8,y-s*.8,s*1.6,s*1.6)}
+  else if(fam==='jev'){g.moveTo(x,y-s);g.lineTo(x+s,y);g.lineTo(x,y+s);g.lineTo(x-s,y);g.closePath()}
+  else g.arc(x,y,s*.85,0,7);
+  g.fill();g.shadowBlur=0;g.stroke();g.restore()}
+function pill(g,x,y,txt,col,anchor){g.save();g.font='10px Menlo';const w=g.measureText(txt).width+14,h=17;let bx=anchor==='l'?x+10:x-w/2,by=y-h/2;
+  if(anchor==='l'){g.strokeStyle=col;g.globalAlpha=.5;g.beginPath();g.moveTo(x,y);g.lineTo(bx,y);g.stroke();g.globalAlpha=1}
+  g.fillStyle=C.pill;g.strokeStyle=col;g.lineWidth=1;g.beginPath();g.roundRect(bx,by,w,h,8);g.fill();g.stroke();
+  g.fillStyle=C.text;g.textBaseline='middle';g.fillText(txt,bx+7,y+.5);g.restore()}
+function planeGrid(g,P,axis,at,ext,n,col,alpha){g.save();g.strokeStyle=col;g.globalAlpha=alpha;g.lineWidth=1;
+  const L=(a,b)=>{const p=P(...a),q=P(...b);g.beginPath();g.moveTo(p[0],p[1]);g.lineTo(q[0],q[1]);g.stroke()};
+  for(let k=0;k<=n;k++){const u=-ext+2*ext*k/n;
+    if(axis==='x'){L([at,u,-ext],[at,u,ext]);L([at,-ext,u],[at,ext,u])}else{L([u,-ext,at],[u,ext,at]);L([-ext,u,at],[ext,u,at])}}
+  g.globalAlpha=Math.min(1,alpha*2.2);g.lineWidth=1.3;
+  if(axis==='x'){L([at,-ext,-ext],[at,ext,-ext]);L([at,ext,-ext],[at,ext,ext]);L([at,ext,ext],[at,-ext,ext]);L([at,-ext,ext],[at,-ext,-ext])}
+  else{L([-ext,-ext,at],[ext,-ext,at]);L([ext,-ext,at],[ext,ext,at]);L([ext,ext,at],[-ext,ext,at]);L([-ext,ext,at],[-ext,-ext,at])}
+  g.restore()}
+
+// ================= A: the crossing =================
+const A={g:document.getElementById('a').getContext('2d'),W:640,H:560,t:0};
+(function initA(){
+  const EP=['tui-metrics','instrumentation','provider-auth','raw-reader','fleet-mutants','packages','docs','session-recovery'];
+  A.clusters=EP.map((name,i)=>{const ang=i/EP.length*Math.PI*2+.3,r=150+R()*40;return{name,y:Math.sin(ang)*r,z:Math.cos(ang)*r*1.1,beads:Array.from({length:5+(R()*6|0)},()=>[rnd(-22,22),rnd(-22,22)]),landed:0}});
+  A.agents=AG.map((a,i)=>({...a,cl:i%EP.length,bead:0,state:'work',tw:rnd(2,7)}));
+  A.trips=[];A.landed=[];A.calls=[];A.hist=[];
+})();
+function stepA(dt){
+  A.t+=dt;
+  A.agents.forEach(a=>{a.tw-=dt;if(a.tw<=0&&a.state==='work'){const c=A.clusters[a.cl],b=c.beads[a.bead%c.beads.length];
+    A.trips.push({ag:a,p:0,from:[-260,c.y+b[0],c.z+b[1]],fail:R()<.28,stage:'approach'});a.tw=rnd(4,10)}});
+  A.trips.forEach(tr=>{tr.p+=dt*(tr.stage==='approach'?.55:tr.stage==='tube'?.35:.5);
+    if(tr.p>=1){tr.p=0;if(tr.stage==='approach')tr.stage='tube';
+      else if(tr.stage==='tube'){if(tr.fail){tr.stage='loop';A.calls.push({x:150,y:rnd(-20,20),z:rnd(-20,20),txt:pick(['rigor: 2 lint findings','ctest: raw_reader 1 fail','kimi review: 3 findings','AFL: 1 crash']),col:C.bad,t:3})}
+        else{tr.stage='done';const c=A.clusters[tr.ag.cl];c.landed++;A.landed.push([260,c.y*.8+rnd(-14,14),c.z*.8+rnd(-14,14),tr.ag.col]);
+          A.calls.push({x:150,y:rnd(-20,20),z:rnd(-20,20),txt:pick(['pushed '+tr.ag.id+' · '+(rnd(1,9)|0)+' files','bead closed','214 tests ✓','merged to master']),col:C.ok,t:3})}}
+      else if(tr.stage==='loop')tr.stage='back'}});
+  A.trips=A.trips.filter(tr=>tr.stage!=='done'&&tr.stage!=='back');
+  A.calls.forEach(c=>c.t-=dt);A.calls=A.calls.filter(c=>c.t>0).slice(-4);
+}
+const pick=a=>a[(R()*a.length)|0];
+function bez(a,b,c,t){return a.map((v,i)=>(1-t)*(1-t)*v+2*(1-t)*t*b[i]+t*t*c[i])}
+function drawA(){
+  const {g,W,H}=A, yaw=-.62+Math.sin(A.t*.07)*.12, P=cam(W,H,yaw,.22,820,640);
+  g.fillStyle=C.bg;g.fillRect(0,0,W,H);
+  planeGrid(g,P,'x',-260,240,24,C.grid,.35); planeGrid(g,P,'x',260,240,24,'#3d59a1',.28);
+  // conduit: funnel + tube rings
+  for(let k=0;k<=18;k++){const x=-260+k*(410/18),r=k===0?46:k<3?46-k*10:20+Math.sin(A.t*2+k*.6)*1.5;g.strokeStyle=C.grid2;g.globalAlpha=k===0?.8:.35;
+    g.beginPath();for(let a=0;a<=24;a++){const an=a/24*Math.PI*2,p=P(x,Math.sin(an)*r,Math.cos(an)*r);a?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])}g.stroke()}
+  g.globalAlpha=1;
+  for(let a=0;a<12;a++){const an=a/12*Math.PI*2;g.strokeStyle=C.grid2;g.globalAlpha=.25;g.beginPath();[[-260,46],[-220,20],[150,20]].forEach(([x,r],i)=>{const p=P(x,Math.sin(an)*r,Math.cos(an)*r);i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])});g.stroke()}
+  g.globalAlpha=1;
+  // clusters (beads) + labels
+  A.clusters.forEach(c=>{c.beads.forEach(b=>{const p=P(-260,c.y+b[0],c.z+b[1]);g.fillStyle=C.grid2;g.fillRect(p[0]-1.5,p[1]-1.5,3,3)});
+    const p=P(-260,c.y+30,c.z);g.fillStyle=C.dim;g.font='9px Menlo';g.textAlign='center';g.fillText(c.name,p[0],p[1]);g.textAlign='left'});
+  // landed
+  A.landed.forEach(([x,y,z,col])=>{const p=P(x,y,z);g.fillStyle=col;g.globalAlpha=.7;g.fillRect(p[0]-2,p[1]-2,4,4)});g.globalAlpha=1;
+  // trips
+  A.trips.forEach(tr=>{let pos,trail=[];
+    const mouth=[-260,0,0], gate=[150,0,0];
+    if(tr.stage==='approach'){const ctrl=[-200,tr.from[1]*.4+40,tr.from[2]*.4];for(let k=0;k<=12;k++){trail.push(bez(tr.from,ctrl,mouth,k/12*tr.p))}pos=bez(tr.from,ctrl,mouth,tr.p)}
+    else if(tr.stage==='tube'){pos=[-260+410*tr.p,Math.sin(tr.p*9+tr.from[1])*8,Math.cos(tr.p*9+tr.from[1])*8];for(let k=0;k<=12;k++){const q=k/12*tr.p;trail.push([-260+410*q,Math.sin(q*9+tr.from[1])*8,Math.cos(q*9+tr.from[1])*8])}}
+    else{const out=[150+rnd(0,0),tr.from[1]*.6+90*Math.sign(tr.from[1]||1),tr.from[2]*.6+80];const back=[-120,tr.from[1]*.5,tr.from[2]*.5];
+      for(let k=0;k<=16;k++){const q=k/16*tr.p;trail.push(q<.5?bez(gate,out,[0,out[1]*.6,out[2]],q*2):bez([0,out[1]*.6,out[2]],[-60,out[1]*.3,out[2]*.3],back,(q-.5)*2))}pos=trail[trail.length-1]}
+    g.strokeStyle=tr.stage==='loop'?C.bad:tr.ag.col;g.globalAlpha=.55;g.lineWidth=1.2;g.beginPath();trail.forEach((q,i)=>{const p=P(...q);i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])});g.stroke();g.globalAlpha=1;
+    const p=P(...pos);glyph(g,p[0],p[1],tr.ag.fam,tr.ag.col,4)});
+  // agents at their beads
+  A.agents.forEach(a=>{const c=A.clusters[a.cl],b=c.beads[a.bead%c.beads.length],p=P(-260,c.y+b[0],c.z+b[1]);glyph(g,p[0],p[1],a.fam,a.col,6);g.fillStyle=a.col;g.font='9px Menlo';g.fillText(a.id,p[0]+8,p[1]+3)});
+  // callouts at the gate
+  A.calls.forEach((c,i)=>{const p=P(150,0,0);pill(g,p[0]+20,p[1]-60+i*22,c.txt,c.col,'l')});
+  const pk=P(-260,-240,240),pn=P(260,-240,-240);g.fillStyle=C.dim;g.font='11px Menlo';g.fillText('planned (beads)',pk[0]-10,pk[1]+16);g.fillText('landed',pn[0]-40,pn[1]+16);
+  const gp=P(150,-30,0);g.fillStyle=C.acc;g.font='9px Menlo';g.textAlign='center';g.fillText('qualification',gp[0],gp[1]+22);g.textAlign='left';
+}
+
+// ================= B: codebase x time =================
+const B={g:document.getElementById('b').getContext('2d'),W:640,H:560,t:0};
+(function initB(){
+  // repo map: directory regions on the plane (u,v in -200..200)
+  B.dirs=[['src/',-200,-200,200,160],['src/raw_*',0,-200,110,160],['programs/',110,-200,90,160],['tests/',-200,-40,120,120],['scripts/',-80,-40,90,120],['tooling/',10,-40,190,120],['docs/',-200,80,200,120],['papers/',0,80,200,120]];
+  B.files=[];B.dirs.forEach(([n,u,v,w,h])=>{for(let k=0;k<6;k++)B.files.push({dir:n,u:u+rnd(12,w-12),v:v+rnd(18,h-10),name:n.replace('/','')+'/'+pick(['station.cpp','raw_reader.cpp','turn.lua','TUI_VIEWS.md','ctest','install','JEV.md','fuzz.cpp','chat_view.cpp'])})});
+  B.agents=AG.map((a,i)=>({...a,trail:[],f:B.files[(i*5)%B.files.length],tw:rnd(1,3),act:'read',tok:rnd(20,400)|0}));
+  B.agents.forEach(a=>{let f=pick(B.files);for(let k=0;k<14;k++){const same=B.files.filter(x=>x.dir===f.dir);f=R()<.82?pick(same):pick(B.files);a.trail.push({u:f.u,v:f.v,t:-(14-k)*3})}a.f=f});
+  B.flag=null;
+})();
+function stepB(dt){B.t+=dt;
+  B.agents.forEach(a=>{a.tw-=dt;if(a.tw<=0){{const same=B.files.filter(f=>f.dir===a.f.dir);a.f=R()<.82?pick(same):pick(B.files)}a.act=pick(['read','edit','run','grep']);a.tok+=rnd(5,40)|0;a.trail.push({u:a.f.u,v:a.f.v,t:B.t});if(a.trail.length>16)a.trail.shift();a.tw=rnd(1.5,4)}});
+  // collision: two agents on files within 14 px, at least one editing
+  B.flag=null;for(let i=0;i<B.agents.length;i++)for(let j=i+1;j<B.agents.length;j++){const a=B.agents[i],b=B.agents[j];if(Math.hypot(a.f.u-b.f.u,a.f.v-b.f.v)<14&&(a.act==='edit'||b.act==='edit'))B.flag=[a,b]}
+}
+function drawB(){
+  const {g,W,H}=B, yaw=.5+Math.sin(B.t*.07)*.1, P=cam(W,H,yaw,-.34,980,760), NOWZ=-160, TZ=t=>NOWZ+(B.t-t)*5; // now plane nearest; older recedes
+  g.fillStyle=C.bg;g.fillRect(0,0,W,H);
+  [3,2,1].forEach(k=>planeGrid(g,P,'z',NOWZ+k*100,200,10,C.grid,.09));
+  planeGrid(g,P,'z',NOWZ,200,20,C.grid,.30);
+  // dir regions on the now plane
+  B.dirs.forEach(([n,u,v,w,h])=>{const a=P(u,-v,NOWZ),b=P(u+w,-v,NOWZ),c=P(u+w,-v-h,NOWZ),d=P(u,-v-h,NOWZ);g.strokeStyle=C.grid2;g.globalAlpha=.8;g.beginPath();[a,b,c,d,a].forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.stroke();
+    g.globalAlpha=1;g.fillStyle=C.dim;g.font='9px Menlo';g.fillText(n,a[0]+4,a[1]+11)});
+  B.files.forEach(f=>{const p=P(f.u,-f.v,NOWZ);g.fillStyle=C.grid2;g.fillRect(p[0]-1,p[1]-1,2,2)});
+  // trails through time
+  B.agents.forEach(a=>{g.strokeStyle=a.col;g.lineWidth=1.2;g.globalAlpha=.6;g.beginPath();
+    const pts=a.trail.concat([{u:a.f.u,v:a.f.v,t:B.t}]).map(q=>P(q.u,-q.v,Math.min(260,TZ(q.t))));g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length-1;i++){const mx=(pts[i][0]+pts[i+1][0])/2,my=(pts[i][1]+pts[i+1][1])/2;g.quadraticCurveTo(pts[i][0],pts[i][1],mx,my)}const lp=pts[pts.length-1];g.lineTo(lp[0],lp[1]);g.stroke();g.globalAlpha=1;
+    a.trail.slice(-10).forEach(q=>{const p=P(q.u,-q.v,Math.min(260,TZ(q.t)));g.fillStyle=a.col;g.globalAlpha=.5;g.fillRect(p[0]-1,p[1]-1,2,2)});g.globalAlpha=1});
+  // glyphs + pills on the now plane
+  const order=B.agents.map((a,i)=>({a,p:P(a.f.u,-a.f.v,NOWZ)})).sort((x,y)=>x.p[1]-y.p[1]);
+  order.forEach(({a,p},k)=>{glyph(g,p[0],p[1],a.fam,a.col,6);const ly=60+k*24,lx=W-210;g.strokeStyle=a.col;g.globalAlpha=.35;g.beginPath();g.moveTo(p[0],p[1]);g.lineTo(lx-8,ly);g.stroke();g.globalAlpha=1;
+    g.save();g.font='10px Menlo';g.fillStyle=C.pill;g.strokeStyle=a.col;g.beginPath();g.roundRect(lx-8,ly-9,206,18,8);g.fill();g.stroke();g.fillStyle=a.col;g.textBaseline='middle';g.fillText(a.id,lx,ly+.5);g.fillStyle=C.text;g.fillText(`${a.act} ${a.f.name.split('/').pop()}`.slice(0,18),lx+62,ly+.5);g.fillStyle=C.dim;g.textAlign='right';g.fillText(a.tok+'k',lx+192,ly+.5);g.restore()});
+  if(B.flag){const [a,b]=B.flag,p=P(a.f.u,-a.f.v,NOWZ);g.strokeStyle=C.bad;g.lineWidth=2;g.shadowColor=C.bad;g.shadowBlur=10;g.beginPath();g.arc(p[0],p[1],16+Math.sin(B.t*8)*2,0,7);g.stroke();g.shadowBlur=0;
+    pill(g,p[0],p[1]+30,`${a.id} + ${b.id} both on ${a.f.dir}`,C.bad)}
+  const pn=P(-200,-200,NOWZ);g.fillStyle=C.text;g.font='11px Menlo';g.fillText('now',pn[0]-10,pn[1]+16);
+  [1,2,3].forEach(k=>{const pb=P(-200,-200,NOWZ+k*100);g.fillStyle=C.dim;g.fillText(`−${k*20} s`,pb[0]-10,pb[1]+14)});
+}
+let last=performance.now();
+function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;stepA(dt);stepB(dt);drawA();drawB();requestAnimationFrame(loop)}
+for(let i=0;i<300;i++){stepA(1/30);stepB(1/30)}drawA();drawB();requestAnimationFrame(loop);
+if(typeof toggleSelect==='undefined'){window.toggleSelect=el=>{document.querySelectorAll('.opt').forEach(o=>o.classList.remove('selected'));el.classList.add('selected')}}
+</script>
+</body></html>

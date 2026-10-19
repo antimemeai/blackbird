@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Subagents: city v11</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:#c0caf5;font-family:"JetBrains Mono","SF Mono",Menlo,monospace;padding:16px;display:flex;gap:20px}
+.side{width:300px;font:12.5px/1.5 -apple-system,sans-serif;color:#8a97a8}
+.side h2{font:600 17px -apple-system,sans-serif;color:#eef4fa;margin-bottom:6px}
+.side b{color:#cfd9e4}
+canvas{display:block;border:1px solid #1d2030}
+</style></head><body>
+<div class="side">
+ <h2>Subagents v11: code city</h2>
+ <b>The floor is the code as a city</b>: directories are zones, files are districts, functions are blocks sized by lines of code.<br><br>
+ <b>The city remembers.</b> Every touch warms a block in the toucher's team color, and the warmth fades over about a minute. <b>Edits raise the block</b> permanently, so tall blocks are where the session's churn went.<br><br>
+ <b>Agents hover above their block</b> on a drop-line. <b>Altitude = context fill</b>: an agent climbs as it approaches compaction. Its label rides with it.<br><br>
+ <b>Motion follows structure</b>: agents glide between functions in the same file and arc only when they jump to another file.<br><br>
+ <b>Events have shapes</b>: an edit beams down and ripples, a test run pulses across tests/, a failure flares red, and a read is a faint blink.<br><br>
+<b>Tuning</b> (after <i>Dark City</i>): when an agent adds or removes a function, the treemap re-lays out and every building slides and stretches into its new lot. New functions telescope out of the street and removed ones sink. Edits telescope blocks upward with a little overshoot.<br><br> From the scout's references:<br>
+ • <b>Persistent memory</b> (Mindwalk): an untouched block stays dark. Each block keeps its deepest touch for the whole session: <span style="color:#7f8fb8">seen</span> (grep), <span style="color:#7aa2f7">read</span> or <span style="color:#e0af68">edited</span>. A team-color flash marks each new touch and fades.<br>
+ • <b>Bundled hops</b> (Holten): a move climbs up the tree, through the file and then the directory, and back down, so traffic between subsystems forms streams.<br>
+ • <b>Radar history dots</b> trail each agent.<br>
+<br><br>Fake data, Tokyo Night palette.
+</div>
+<canvas id="c" width="900" height="900"></canvas>
+<script>
+const C={bg0:'#0d0e16',bg1:'#16161e',grid:'#1f2335',block:'#1a1b26',blockTop:'#24283b',edge:'#3b4261',text:'#c0caf5',dim:'#565f89',pill:'rgba(16,16,24,.88)',bad:'#f7768e',ok:'#9ece6a',dir:'#7aa2f7'};
+const AG=[
+ {id:'main',fam:'gpt',col:'#ff9e64'},{id:'kimi-rev',fam:'kimi',col:'#bb9af7'},{id:'claude',fam:'claude',col:'#e0af68'},
+ {id:'sa·rigor',fam:'gpt',col:'#9ece6a'},{id:'sa·lit',fam:'gpt',col:'#7aa2f7'},{id:'sa·fuzz',fam:'gpt',col:'#f7768e'},
+ {id:'sa·tui',fam:'claude',col:'#7dcfff'},{id:'sa·triage',fam:'jev',col:'#73daca'},
+];
+let seed=21;const R=()=>((seed=Math.imul(seed^seed>>>15,1|seed)+0x6D2B79F5|0)>>>0)/4294967296;
+const rnd=(a,b)=>a+R()*(b-a), pick=a=>a[(R()*a.length)|0];
+const hx=c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];
+// ---- code tree with lines of code ----
+const SPEC={src:{'station.cpp':['Station::render','Station::layout','Station::poll','Station::resize'],'raw_reader.cpp':['RawReader::next','RawReader::seek','decodeFrame'],
+  'chat_view.cpp':['ChatView::draw','wrapLines','ChatView::scroll'],'openai.cpp':['stream','parseUsage','retry'],'workflow_host.cpp':['WorkflowHost::run','join','cancel']},
+ programs:{'turn.lua':['turn','compact','route'],'orchestration.lua':['spawn','gather']},
+ tests:{'raw_reader_test.cpp':['TEST seek','TEST eof','TEST torn'],'station_test.cpp':['TEST layout','TEST resize'],'fuzz/':['raw_reader_fuzz']},
+ docs:{'TUI_VIEWS.md':['§ metrics','§ agents'],'TOKENOMICS.md':['§ caching']}};
+const DIRS=Object.entries(SPEC).map(([d,files])=>({name:d,files:Object.entries(files).map(([f,fns])=>({name:f,dir:d,fns:fns.map(n=>({name:n,file:f,dir:d,loc:rnd(30,420),churn:0,heat:[0,0,0],heatA:0}))}))}));
+DIRS.forEach(d=>{d.files.forEach(f=>f.loc=f.fns.reduce((s,x)=>s+x.loc,0));d.loc=d.files.reduce((s,f)=>s+f.loc,0)});
+const FNS=DIRS.flatMap(d=>d.files.flatMap(f=>f.fns));
+// ---- squarified treemap on the floor: x in [-330,330], y in [-310,310] ----
+function squarify(items,rect){ // items: [{v,...}] → assigns .r = [x0,y0,x1,y1]
+  const out=items.slice().sort((p,q)=>q.v-p.v);let [x0,y0,x1,y1]=rect;const total=out.reduce((s,i)=>s+i.v,0),scale=(x1-x0)*(y1-y0)/total;
+  let row=[],i=0;const worst=(row,w)=>{const s=row.reduce((a,b)=>a+b.v*scale,0),mx=Math.max(...row.map(r=>r.v*scale)),mn=Math.min(...row.map(r=>r.v*scale));return Math.max(w*w*mx/(s*s),s*s/(w*w*mn))};
+  const lay=row=>{const s=row.reduce((a,b)=>a+b.v*scale,0),w=x1-x0,h=y1-y0;
+    if(w>=h){const cw=s/h;let y=y0;row.forEach(r=>{const rh=r.v*scale/cw;r.r=[x0,y,x0+cw,y+rh];y+=rh});x0+=cw}
+    else{const rh=s/w;let x=x0;row.forEach(r=>{const cw=r.v*scale/rh;r.r=[x,y0,x+cw,y0+rh];x+=cw});y0+=rh}};
+  while(i<out.length){const w=Math.min(x1-x0,y1-y0),c=out[i];if(!row.length||worst(row.concat([c]),w)<=worst(row,w)){row.push(c);i++}else{lay(row);row=[]}}
+  if(row.length)lay(row);
+}
+const inset=(r,p,top)=>[r[0]+p,r[1]+p+(top||0),r[2]-p,r[3]-p];
+function layout(){
+  DIRS.forEach(d=>{d.files.forEach(f=>f.loc=f.fns.reduce((s,x)=>s+x.loc,0));d.loc=d.files.reduce((s,f)=>s+f.loc,0);d.v=d.loc});
+  squarify(DIRS,[-330,-310,330,310]);
+  DIRS.forEach(d=>{d.r=inset(d.r,6);d.files.forEach(f=>f.v=f.loc);squarify(d.files,inset(d.r,4,20));
+    d.files.forEach(f=>{f.r=inset(f.r,3);f.fns.forEach(fn=>fn.v=fn.loc);squarify(f.fns,inset(f.r,3,13));
+      f.fns.forEach(fn=>{fn.rT=inset(fn.r,1.5);fn.r=fn.rD||fn.rT;fn.rD=fn.r})})});
+  DIRS.forEach(d=>{d.rD=d.rD||d.r.slice();d.files.forEach(f=>{f.rD=f.rD||f.r.slice()})});
+}
+layout();
+FNS.forEach(fn=>{fn.rD=fn.rT.slice();fn.cx=(fn.rD[0]+fn.rD[2])/2;fn.cy=(fn.rD[1]+fn.rD[3])/2;fn.h=6;fn.hv=0});
+let NEWN=0;
+function tune(){ // add or remove a function somewhere: the city re-lays out and buildings morph
+  const files=DIRS.flatMap(d=>d.files);const f=pick(files);
+  if(R()<.75||f.fns.length<2){const c=[(f.r[0]+f.r[2])/2,(f.r[1]+f.r[3])/2];const fn={name:'new_fn_'+(++NEWN),file:f.name,dir:f.dir,loc:rnd(60,220),churn:0,heat:[0,0,0],heatA:0,h:0,hv:0,rD:[c[0],c[1],c[0],c[1]]};f.fns.push(fn);FNS.push(fn);FX.push({k:'tune',t:0,txt:'tuning · +'+fn.name+' in '+f.name})}
+  else{const fn=f.fns.find(x=>!agents.some(a=>a.fn===x||a.from===x));if(!fn)return;fn.dying=true;FX.push({k:'tune',t:0,txt:'tuning · −'+fn.name+' from '+f.name})}
+  layout();
+}
+// ---- camera ----
+const W=900,H=900,CITYH=900,g=document.getElementById('c').getContext('2d');
+let YAW=-.42,PITCH=-.82;
+function P(x,y,z){const cy=Math.cos(YAW),sy=Math.sin(YAW),cp=Math.cos(PITCH),sp=Math.sin(PITCH);
+  const x1=x*cy-y*sy,y1=x*sy+y*cy;const yy=z*cp-y1*sp,zz=z*sp+y1*cp;const d=zz+1300;return[W*.5+1150*x1/d,CITYH*.56-1150*yy/d,d]}
+// ---- agents ----
+const agents=AG.map((a,i)=>{const fn=pick(FNS);return{...a,fn,from:fn,t:1,mode:'glide',x:fn.cx,y:fn.cy,dwell:rnd(1,6)+i*.7,act:'read',tok:rnd(20,200)|0,ctx:rnd(.15,.6),hist:[{t:0,fn,k:'arrive'}],trails:[],dots:[],dotT:0,path:null}});
+const FX=[];let T=0;
+function heat(fn,col,amt){const c=hx(col);fn.heat=fn.heat.map((v,k)=>v*(1-amt)+c[k]*amt);fn.heatA=Math.min(1,fn.heatA+amt)}
+function act(a){const fn=a.fn,r=R();
+  if(r<.25){a.act='grep';fn.touch=Math.max(fn.touch||0,1);heat(fn,a.col,.15);FX.push({k:'read',fn,t:0,col:a.col})}
+  else if(r<.55){a.act='read';fn.touch=Math.max(fn.touch||0,2);heat(fn,a.col,.25);FX.push({k:'read',fn,t:0,col:a.col})}
+  else if(r<.83){a.act='edit';fn.touch=3;heat(fn,a.col,.6);fn.churn+=rnd(4,12);FX.push({k:'edit',fn,t:0,col:a.col,a});a.hist.push({t:T,fn,k:'edit'})}
+  else{a.act='run tests';const fail=R()<.3;FX.push({k:fail?'fail':'run',t:0,col:a.col,a});if(fail){heat(fn,'#f7768e',.5);a.hist.push({t:T,fn,k:'fail'})}}
+  a.tok+=rnd(2,25)|0;a.ctx=Math.min(1,a.ctx+rnd(.01,.05));if(a.ctx>.95&&R()<.5){a.ctx=.25;FX.push({k:'compact',a,t:0,col:a.col})}
+}
+let TUNE_AT=25;
+function step(dt){T+=dt;
+  if(T>TUNE_AT){tune();TUNE_AT=T+rnd(22,40)}
+  for(let i=FNS.length-1;i>=0;i--){const fn=FNS[i];fn.heatA*=Math.exp(-dt/45);
+    const k=Math.min(1,dt*1.6);for(let j=0;j<4;j++)fn.rD[j]+=(fn.rT[j]-fn.rD[j])*k;fn.cx=(fn.rD[0]+fn.rD[2])/2;fn.cy=(fn.rD[1]+fn.rD[3])/2;
+    const target=fn.dying?-2:6+fn.churn*1.6;fn.hv+=((target-fn.h)*30-fn.hv*7)*dt;fn.h+=fn.hv*dt; // underdamped: telescoping overshoot
+    if(fn.dying&&fn.h<0){const f=DIRS.flatMap(d=>d.files).find(x=>x.name===fn.file);f.fns.splice(f.fns.indexOf(fn),1);FNS.splice(i,1);layout()}}
+  DIRS.forEach(d=>{const k=Math.min(1,dt*1.6);d.rD=d.rD.map((v,j)=>v+(d.r[j]-v)*k);d.files.forEach(f=>{f.rD=f.rD.map((v,j)=>v+(f.r[j]-v)*k)})});
+  agents.forEach(a=>{
+    a.dotT+=dt;if(a.dotT>.9){a.dotT=0;a.dots.push(agentPos(a));if(a.dots.length>6)a.dots.shift()}
+    if(a.t<1){a.t=Math.min(1,a.t+dt/(a.mode==='arc'?2.6:1.4));if(a.t>=1){a.hist.push({t:T,fn:a.fn,k:'arrive'});a.fn.touch=Math.max(a.fn.touch||0,1)}return}
+    a.dwell-=dt; if(a.dwell<=0){
+      if(R()<.5)act(a);
+      else{const sib=FNS.filter(f=>f.file===a.fn.file&&f!==a.fn);a.from=a.fn;
+        if(sib.length&&R()<.7){a.fn=pick(sib);a.mode='glide'}else{a.fn=pick(FNS);a.mode='arc'}a.t=0;
+        const alt=50+a.ctx*150;a.path=hopPath(a.from,a.fn,alt,alt);a.trails.push({path:a.path,t:T});if(a.trails.length>5)a.trails.shift();a.hist.push({t:T,fn:a.from,k:'depart'})}
+      a.dwell=rnd(3,9)}
+  });
+  FX.forEach(f=>f.t+=dt);for(let i=FX.length-1;i>=0;i--)if(FX[i].t>(FX[i].k==='tune'?3.5:2.2))FX.splice(i,1);
+}
+const fileOf=fn=>{const d=DIRS.find(x=>x.name===fn.dir);return{d,f:d&&d.files.find(x=>x.name===fn.file)}};
+const ctr=r=>[(r[0]+r[2])/2,(r[1]+r[3])/2];
+function bspline(ctrl,n){const P2=[ctrl[0],ctrl[0],...ctrl,ctrl[ctrl.length-1],ctrl[ctrl.length-1]],out=[];
+  for(let i=0;i<P2.length-3;i++)for(let k=0;k<n;k++){const t=k/n,t2=t*t,t3=t2*t,b0=(1-t)**3/6,b1=(3*t3-6*t2+4)/6,b2=(-3*t3+3*t2+3*t+1)/6,b3=t3/6;
+    out.push([0,1,2].map(j=>b0*P2[i][j]+b1*P2[i+1][j]+b2*P2[i+2][j]+b3*P2[i+3][j]))}out.push(ctrl[ctrl.length-1]);return out}
+function hopPath(A,B,altA,altB){ // route up the tree and back down; beta-straightening as in hierarchical edge bundling
+  const a=fileOf(A),b=fileOf(B),top=Math.max(altA,altB),c=[[A.cx,A.cy,altA]];
+  if(a.f&&b.f&&a.f===b.f){const m=ctr(a.f.rD);c.push([m[0],m[1],top+18])}
+  else{if(a.f){const m=ctr(a.f.rD);c.push([m[0],m[1],top+30])}
+    if(a.d&&b.d&&a.d!==b.d){const m=ctr(a.d.rD),n=ctr(b.d.rD);c.push([m[0],m[1],top+70],[n[0],n[1],top+70])}
+    if(b.f){const m=ctr(b.f.rD);c.push([m[0],m[1],top+30])}}
+  c.push([B.cx,B.cy,altB]);const beta=.82,n=c.length-1;
+  const cs=c.map((p,i)=>p.map((v,j)=>beta*v+(1-beta)*(c[0][j]+(c[n][j]-c[0][j])*i/n)));
+  return bspline(cs,10)}
+function agentPos(a){if(a.t<1&&a.path){const e=a.t*a.t*(3-2*a.t),k=Math.min(a.path.length-1,e*(a.path.length-1)),i=Math.floor(k),f=k-i,p=a.path[i],q=a.path[Math.min(a.path.length-1,i+1)];return p.map((v,j)=>v+(q[j]-v)*f)}
+  return[a.fn.cx,a.fn.cy,50+a.ctx*150]}
+function agentPosOld(a){const A=a.from,B=a.fn,t=a.t,e=t*t*(3-2*t),alt=50+a.ctx*150;
+  const x=A.cx+(B.cx-A.cx)*e,y=A.cy+(B.cy-A.cy)*e;const lift=a.mode==='arc'?Math.sin(Math.PI*t)*Math.hypot(B.cx-A.cx,B.cy-A.cy)*.35:0;return[x,y,alt+lift]}
+// ---- drawing ----
+function quad(pts,fill,stroke,al){g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.closePath();if(fill){g.fillStyle=fill;g.fill()}if(stroke){g.strokeStyle=stroke;g.globalAlpha=al??1;g.lineWidth=1;g.stroke();g.globalAlpha=1}}
+const mix=(a,b,t)=>a.map((v,i)=>Math.round(v*(1-t)+b[i]*t));
+function draw(){
+  YAW=-.42+Math.sin(T*.04)*.06;
+  const bg=g.createLinearGradient(0,0,0,H);bg.addColorStop(0,C.bg0);bg.addColorStop(1,'#11121b');g.fillStyle=bg;g.fillRect(0,0,W,H);
+  // zones and districts
+  DIRS.forEach(d=>{const [x0,y0,x1,y1]=d.rD;quad([P(x0,y0,0),P(x1,y0,0),P(x1,y1,0),P(x0,y1,0)],'rgba(122,162,247,.035)',C.edge,.5);
+    const lp=P(x0+4,y1-4,0);g.fillStyle=C.dir;g.font='bold 15px Menlo';g.globalAlpha=.85;g.fillText(d.name+'/',lp[0],lp[1]);g.globalAlpha=1;
+    d.files.forEach(f=>{const [a,b,c,e]=f.rD;quad([P(a,b,0),P(c,b,0),P(c,e,0),P(a,e,0)],'rgba(36,40,59,.55)',C.edge,.35);
+      const fp=P(a+3,e-3,0);g.fillStyle=C.dim;g.font='10px Menlo';g.fillText(f.name,fp[0],fp[1])})});
+  // blocks: painter's order far→near
+  const base=hx(C.block),top=hx(C.blockTop);
+  const order=FNS.map(fn=>({fn,d:P(fn.cx,fn.cy,0)[2]})).sort((p,q)=>q.d-p.d);
+  order.forEach(({fn})=>{const [x0,y0,x1,y1]=fn.rD,h=Math.max(0,fn.h),hc=fn.heat,ha=fn.heatA;if(x1-x0<.5)return;
+    const MEM=[[15,16,24],[42,52,80],[45,70,140],[150,110,55]],mt=MEM[fn.touch||0],mtop=mt,mside=mix(mt,[0,0,0],.45);
+    const topc=mix(mtop,hc,ha*.8),sidec=mix(mside,hc,ha*.4);
+    const b=[P(x0,y0,0),P(x1,y0,0),P(x1,y1,0),P(x0,y1,0)],t=[P(x0,y0,h),P(x1,y0,h),P(x1,y1,h),P(x0,y1,h)];
+    quad([b[0],b[1],t[1],t[0]],`rgb(${sidec})`,C.edge,.5);   // near face (y0)
+    quad([b[1],b[2],t[2],t[1]],`rgb(${mix(sidec,[0,0,0],.25)})`,C.edge,.5); // right face
+    for(let z=6;z<h-2;z+=6){const p=P(x0,y0,z),q=P(x1,y0,z),r2=P(x1,y1,z);g.strokeStyle=C.edge;g.globalAlpha=.35;g.beginPath();g.moveTo(p[0],p[1]);g.lineTo(q[0],q[1]);g.lineTo(r2[0],r2[1]);g.stroke();g.globalAlpha=1}
+    quad(t,`rgb(${topc})`,ha>.15?`rgb(${hc})`:C.edge,ha>.15?.9:.6);
+    if(ha>.2){g.save();g.globalCompositeOperation='lighter';const c=P(fn.cx,fn.cy,h);const rg=g.createRadialGradient(c[0],c[1],0,c[0],c[1],26);rg.addColorStop(0,`rgba(${hc},${ha*.35})`);rg.addColorStop(1,`rgba(${hc},0)`);g.fillStyle=rg;g.fillRect(c[0]-26,c[1]-26,52,52);g.restore()}
+    fn.topz=h});
+  // events
+  FX.forEach(f=>{const u=f.t/(f.k==='tune'?3.5:2.2);
+    if(f.k==='read'){const c=P(f.fn.cx,f.fn.cy,f.fn.topz);g.strokeStyle=f.col;g.globalAlpha=(1-u)*.5;g.beginPath();g.ellipse(c[0],c[1],6+u*10,3+u*5,0,0,7);g.stroke();g.globalAlpha=1}
+    if(f.k==='edit'){const [ax,ay,az]=agentPos(f.a),top=P(f.fn.cx,f.fn.cy,f.fn.topz),src=P(ax,ay,az);if(u<.35){g.save();g.globalCompositeOperation='lighter';g.strokeStyle=f.col;g.lineWidth=3*(1-u/.35);g.shadowColor=f.col;g.shadowBlur=12;g.beginPath();g.moveTo(src[0],src[1]);g.lineTo(top[0],top[1]);g.stroke();g.restore()}
+      for(let k=0;k<2;k++){const uu=Math.max(0,u-k*.15);g.strokeStyle=f.col;g.globalAlpha=(1-uu)*.8;g.lineWidth=1.5;const r=uu*70;g.beginPath();for(let a=0;a<=32;a++){const an=a/32*Math.PI*2,p=P(f.fn.cx+Math.cos(an)*r,f.fn.cy+Math.sin(an)*r,0);a?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])}g.stroke();g.globalAlpha=1}}
+    if(f.k==='run'||f.k==='fail'){const d=DIRS.find(x=>x.name==='tests'),[x0,y0,x1,y1]=d.r,col=f.k==='fail'?C.bad:C.ok;const yy=y0+(y1-y0)*u;
+      g.save();g.globalCompositeOperation='lighter';g.strokeStyle=col;g.globalAlpha=(1-u)*.9;g.lineWidth=2;g.shadowColor=col;g.shadowBlur=10;const p=P(x0,yy,2),q=P(x1,yy,2);g.beginPath();g.moveTo(p[0],p[1]);g.lineTo(q[0],q[1]);g.stroke();g.restore();
+      if(f.k==='fail'&&u<.6){const c=P((x0+x1)/2,(y0+y1)/2,30);g.save();g.globalCompositeOperation='lighter';const rg=g.createRadialGradient(c[0],c[1],0,c[0],c[1],90);rg.addColorStop(0,`rgba(247,118,142,${.45*(1-u/.6)})`);rg.addColorStop(1,'rgba(247,118,142,0)');g.fillStyle=rg;g.fillRect(c[0]-90,c[1]-90,180,180);g.restore()}}
+    if(f.k==='tune'){const r=u*900;g.save();g.strokeStyle='#bb9af7';g.globalAlpha=(1-u)*.5;g.lineWidth=2;g.beginPath();for(let a=0;a<=48;a++){const an=a/48*Math.PI*2,p=P(Math.cos(an)*r,Math.sin(an)*r,0);a?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])}g.stroke();g.restore();
+      g.save();g.font='bold 12px Menlo';g.fillStyle='#bb9af7';g.globalAlpha=Math.min(1,(1-u)*2);g.textAlign='center';g.fillText(f.txt,W/2,40);g.restore()}
+    if(f.k==='compact'){const [ax,ay,az]=agentPos(f.a),p=P(ax,ay,az);g.strokeStyle=f.col;g.globalAlpha=1-u;g.beginPath();g.arc(p[0],p[1],8+u*30,0,7);g.stroke();g.globalAlpha=1}
+  });
+  agents.forEach(a=>{a.trails.forEach((tr,i)=>{const age=T-tr.t,al=Math.max(0,.5-age/40);if(al<=0)return;g.strokeStyle=a.col;g.globalAlpha=al;g.lineWidth=1.2;g.beginPath();
+      tr.path.forEach((q,j)=>{const p=P(...q);j?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])});g.stroke();g.globalAlpha=1});
+    a.dots.forEach((q,i)=>{const p=P(...q);g.fillStyle=a.col;g.globalAlpha=.15+.12*i;g.beginPath();g.arc(p[0],p[1],1.8,0,7);g.fill();g.globalAlpha=1})});
+  // agents: drop-line, glyph, riding label (sorted far→near)
+  const ag=agents.map(a=>{const [x,y,z]=agentPos(a);return{a,x,y,z,p:P(x,y,z),f:P(x,y,0)}}).sort((p,q)=>q.p[2]-p.p[2]);
+  const placed=[];
+  ag.forEach(({a,x,y,z,p,f})=>{const tz=a.t>=1?a.fn.topz:0,ft=P(x,y,tz);
+    g.save();g.strokeStyle=a.col;g.globalAlpha=.55;g.setLineDash([2,3]);g.beginPath();g.moveTo(p[0],p[1]);g.lineTo(ft[0],ft[1]);g.stroke();g.setLineDash([]);
+    g.globalAlpha=.6;g.fillStyle=a.col;g.beginPath();g.ellipse(ft[0],ft[1],4,2,0,0,7);g.fill();g.restore();
+    g.save();g.fillStyle=a.col;g.shadowColor=a.col;g.shadowBlur=12;g.strokeStyle=C.bg0;g.lineWidth=1.3;g.beginPath();const s=7;
+    if(a.fam==='claude'){g.moveTo(p[0],p[1]-s);g.lineTo(p[0]+s,p[1]+s*.7);g.lineTo(p[0]-s,p[1]+s*.7);g.closePath()}else if(a.fam==='kimi')g.rect(p[0]-s*.8,p[1]-s*.8,s*1.6,s*1.6);
+    else if(a.fam==='jev'){g.moveTo(p[0],p[1]-s);g.lineTo(p[0]+s,p[1]);g.lineTo(p[0],p[1]+s);g.lineTo(p[0]-s,p[1]);g.closePath()}else g.arc(p[0],p[1],s*.85,0,7);g.fill();g.shadowBlur=0;g.stroke();g.restore();
+    // riding label
+    g.save();g.font='bold 10px Menlo';const l1=a.id, l2=`${a.act} ${a.fn.name}`, l3=`${a.tok}k tok · ctx ${(a.ctx*100)|0}%`;g.font='10px Menlo';
+    const w=Math.max(g.measureText(l2).width,g.measureText(l3).width)+16;let lx=p[0]+12,ly=p[1]-44;
+    const cands=[[12,-44],[-w-12,-44],[12,8],[-w-12,8],[12,-90],[-w-12,-90],[12,54],[-w-12,54],[12,-136],[-w-12,-136]];
+    for(const [dx,dy] of cands){const r=[p[0]+dx,p[1]+dy,p[0]+dx+w,p[1]+dy+40];if(!placed.some(q=>r[0]<q[2]&&r[2]>q[0]&&r[1]<q[3]&&r[3]>q[1])){lx=r[0];ly=r[1];break}}
+    placed.push([lx-2,ly-2,lx+w+2,ly+42]);
+    g.fillStyle=C.pill;g.strokeStyle=a.col;g.globalAlpha=.95;g.beginPath();g.roundRect(lx,ly,w,40,6);g.fill();g.globalAlpha=.6;g.stroke();g.globalAlpha=1;
+    g.beginPath();g.moveTo(p[0],p[1]);g.lineTo(lx<p[0]?lx+w:lx,ly+20);g.strokeStyle=a.col;g.globalAlpha=.5;g.stroke();g.globalAlpha=1;
+    g.textBaseline='top';g.font='bold 10px Menlo';g.fillStyle=a.col;g.fillText(l1,lx+8,ly+4);g.font='10px Menlo';g.fillStyle=C.text;g.fillText(l2,lx+8,ly+16);g.fillStyle=C.dim;g.fillText(l3,lx+8,ly+27);g.restore()});
+}
+function drawMarey(){
+  const y0=CITYH+12,h=H-y0-14,x0=96,x1=W-16,TW=180;
+  g.fillStyle='#0f1018';g.fillRect(0,CITYH,W,H-CITYH);g.strokeStyle=C.edge;g.globalAlpha=.6;g.beginPath();g.moveTo(0,CITYH+.5);g.lineTo(W,CITYH+.5);g.stroke();g.globalAlpha=1;
+  const order=DIRS.flatMap(d=>d.files.flatMap(f=>f.fns)),N=order.length,row=fn=>{const i=order.indexOf(fn);return i<0?null:y0+h*(i+.5)/N},tx=t=>x1-(T-t)/TW*(x1-x0);
+  let i=0;DIRS.forEach((d,k)=>{const n=d.files.reduce((s,f)=>s+f.fns.length,0),ya=y0+h*i/N,yb=y0+h*(i+n)/N;g.fillStyle=k%2?'rgba(122,162,247,.04)':'rgba(122,162,247,.08)';g.fillRect(x0,ya,x1-x0,yb-ya);
+    g.fillStyle=C.dir;g.font='bold 10px Menlo';g.fillText(d.name+'/',8,(ya+yb)/2+3);i+=n});
+  for(let s=0;s<=TW;s+=30){const x=tx(T-s);g.strokeStyle=C.grid;g.beginPath();g.moveTo(x,y0);g.lineTo(x,y0+h);g.stroke();g.fillStyle=C.dim;g.font='9px Menlo';g.fillText(s?`−${s}s`:'now',x-12,y0+h+11)}
+  agents.forEach(a=>{const pts=[];a.hist.forEach(e=>{if(e.k==='arrive'||e.k==='depart'){const y=row(e.fn);if(y!==null)pts.push([Math.max(x0,tx(e.t)),y])}});
+    const cur=row(a.t<1?a.from:a.fn);if(cur!==null){if(a.t<1){const y2=row(a.fn);pts.push([x1,cur+(y2!==null?(y2-cur)*a.t:0)])}else pts.push([x1,cur])}
+    g.strokeStyle=a.col;g.lineWidth=1.6;g.globalAlpha=.85;g.beginPath();pts.forEach((p,j)=>j?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.stroke();g.globalAlpha=1;
+    a.hist.forEach(e=>{if(e.k!=='edit'&&e.k!=='fail')return;const y=row(e.fn),x=tx(e.t);if(y===null||x<x0)return;
+      if(e.k==='edit'){g.fillStyle=a.col;g.beginPath();g.arc(x,y,2.6,0,7);g.fill()}else{g.strokeStyle=C.bad;g.lineWidth=1.6;g.beginPath();g.moveTo(x-3,y-3);g.lineTo(x+3,y+3);g.moveTo(x+3,y-3);g.lineTo(x-3,y+3);g.stroke()}});
+    if(a.hist.length>400)a.hist.splice(0,a.hist.length-400)});
+  g.fillStyle=C.dim;g.font='9px Menlo';g.fillText('Marey · time → · code tree ↓',x0,CITYH+9);
+}
+let last=performance.now();function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;step(dt);draw();requestAnimationFrame(loop)}
+for(let i=0;i<5400;i++)step(1/30);draw();requestAnimationFrame(loop);
+</script>
+</body></html>

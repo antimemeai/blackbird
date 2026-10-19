@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Hero: particle cascade v3</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:#c9d3de;font-family:"JetBrains Mono","SF Mono",Menlo,monospace;padding:16px;display:flex;gap:22px}
+.side{width:300px;font:12.5px/1.5 -apple-system,sans-serif;color:#8a97a8}
+.side h2{font:600 17px -apple-system,sans-serif;color:#eef4fa;margin-bottom:6px}
+.side b{color:#cfd9e4;font-weight:600}
+.grp{margin:14px 0 4px;font:11px Menlo;color:#5b6878;text-transform:uppercase;letter-spacing:.1em}
+button{font:11px Menlo;background:#0f1720;color:#8a97a8;border:1px solid #18202a;padding:4px 9px;cursor:pointer;margin:2px 2px 0 0}
+button.on{color:#eef4fa;border-color:#2fd3e0}
+.legend{font:11px Menlo;color:#8a97a8;line-height:1.9}
+.legend i{display:inline-block;width:10px;height:8px;margin-right:6px;vertical-align:-1px}
+#stats{font:11px Menlo;color:#5b6878;margin-top:12px;line-height:1.6}
+canvas{display:block;background:#04060a;border:1px solid #18202a}
+</style></head><body>
+<div class="side">
+  <h2>Hero v3: particle cascade</h2>
+  The same fake session, sped up 5×. Each particle is a fixed quantity, so particle density is the rate and pile height is the running total. Particles glow additively, so heavy flow saturates toward white the way the video does. Leave it running a minute: sa·fuzz goes quiet around 2½ minutes in.
+  <div class="grp">quantum</div>
+  <div id="qbtn"></div>
+  <div class="grp">measure</div>
+  <button id="mt" onclick="setMode('tok')">tokens</button><button id="md" onclick="setMode('usd')">dollars</button>
+  <div class="grp">key</div>
+  <div class="legend">
+    <i style="background:#2f5fb8"></i>cache read<br><i style="background:#8e63d9"></i>cache write<br><i style="background:#f0a134"></i>uncached input<br>
+    <i style="background:#e0518f"></i>reasoning<br><i style="background:#e9f2d0"></i>output<br><i style="background:#2fd3e0"></i>jev<br>
+    <i style="background:#465260"></i>tool running (lane spine)
+  </div>
+  <div id="stats"></div>
+</div>
+<canvas id="c" width="540" height="960"></canvas>
+<script>
+const COL={cr:[47,95,184],cw:[142,99,217],in:[240,161,52],rsn:[224,81,143],out:[233,242,208],jev:[47,211,224]};
+const ORDER=['cr','cw','in','rsn','out'];
+const PRICE={cr:.125,cw:1.25,in:1.25,rsn:10,out:10,jev:.042}; // $/M, illustrative
+const LANES=[
+ {id:'main',gap:[2,9],sz:120e3,rsn:4e3},{id:'kimi-rev',gap:[4,14],sz:70e3,rsn:1.5e3},{id:'claude',gap:[3,10],sz:90e3,rsn:2e3},
+ {id:'sa·rigor',gap:[1,5],sz:40e3,rsn:1e3},{id:'sa·lit',gap:[2,8],sz:55e3,rsn:.8e3},{id:'sa·fuzz',gap:[2,6],sz:35e3,rsn:.8e3,dies:160},
+];
+let seed=11;const R=()=>((seed=Math.imul(seed^seed>>>15,1|seed)+0x6D2B79F5|0)>>>0)/4294967296;
+const rnd=(a,b)=>a+R()*(b-a);
+const QT=[100,25,10], QU=[1e-5,2.5e-6,1e-6];
+let MODE='tok', QI=0;
+const q=()=>MODE==='tok'?QT[QI]:QU[QI];
+const JEVX=()=>MODE==='tok'?1:100;
+const W=540,H=960,HEAD=36,LW=76,JW=34,STEP=.5,SPEED=5; // STEP sim-s per tick; SPEED sim-s per real s
+const laneX=i=>10+i*(LW+3);
+function spawn(L,t){
+  L.ctx=Math.min(L.sz*2,L.ctx*rnd(1.02,1.08)+3000); let hit=rnd(.8,.97);
+  if(L.ctx>=L.sz*1.9&&R()<.4){L.ctx=L.sz*.5;hit=.05}
+  const tot=L.ctx, cr=tot*hit, miss=tot-cr, cw=miss*.2, inp=miss*.8;
+  const ttft=rnd(1,3), rs=R()<.6?rnd(.3,1)*L.rsn:0, rsT=rs/rnd(150,300), out=rnd(500,3500), outT=out/rnd(120,250), end=t+ttft+rsT+outT;
+  L.active.push({cls:'cr',a:t,b:end,n:cr},{cls:'cw',a:t,b:end,n:cw},{cls:'in',a:t,b:end,n:inp},
+                {cls:'rsn',a:t+ttft,b:t+ttft+rsT,n:rs},{cls:'out',a:t+ttft+rsT,b:end,n:out});
+  L.busy=end; L.next=end+rnd(...L.gap);
+}
+const amt=(k,n)=>MODE==='tok'?n:n*PRICE[k]/1e6;
+function rates(t,dt){
+  return LANES.map(L=>{
+    const dead=L.dies&&t>L.dies;
+    if(t>=L.next&&!dead) spawn(L,t);
+    const r={cr:0,cw:0,in:0,rsn:0,out:0,tool:!dead&&t>=L.busy&&t<L.next};
+    L.active=L.active.filter(s=>{const lo=Math.max(s.a,t),hi=Math.min(s.b,t+dt);if(hi>lo){const n=s.n*(hi-lo)/(s.b-s.a);r[s.cls]+=n;L.cum[s.cls]+=n;L.usd+=n*PRICE[s.cls]/1e6}return s.b>t});
+    L.tool=r.tool; return r;
+  });
+}
+const jev={next:3,active:[],cum:0,usd:0,calls:0};
+function jevRate(t,dt){ if(t>=jev.next){jev.active.push({a:t,b:t+.5,n:rnd(400,4000)});jev.calls++;jev.next=t+rnd(4,30)}
+  let n=0; jev.active=jev.active.filter(s=>{const lo=Math.max(s.a,t),hi=Math.min(s.b,t+dt);if(hi>lo)n+=s.n*(hi-lo)/(s.b-s.a);return s.b>t}); jev.cum+=n; jev.usd+=n*PRICE.jev/1e6; return n;}
+
+// ---- particle engine: struct-of-arrays, additive accumulation buffer with decay ----
+const CAP=400000;
+const px=new Float32Array(CAP),py=new Float32Array(CAP),vx=new Float32Array(CAP),vy=new Float32Array(CAP),pr=new Uint8Array(CAP),pg=new Uint8Array(CAP),pb=new Uint8Array(CAP),pl=new Int8Array(CAP);
+let N=0;
+const acc=new Float32Array(W*H*3);
+const g=document.getElementById('c').getContext('2d'); const img=g.createImageData(W,H); const D=img.data;
+const pend=[]; // particles queued this tick, released across frames
+function emit(lane,cls,count,spanSec){
+  const c=COL[cls], cx=lane>=0?laneX(lane)+LW/2:W-JW/2, spread=lane>=0?LW*.32:JW*.25;
+  for(let i=0;i<count&&N<CAP;i++){pend.push([cx,spread,c,lane,R()*spanSec])}
+}
+const owe=LANES.map(()=>({cr:0,cw:0,in:0,rsn:0,out:0})); let oweJ=0;
+let simT=0, realT=0;
+function tick(){
+  const r=rates(simT,STEP), jn=jevRate(simT,STEP), span=STEP/SPEED;
+  r.forEach((rr,i)=>ORDER.forEach(k=>{owe[i][k]+=amt(k,rr[k]);const n=Math.floor(owe[i][k]/q());owe[i][k]-=n*q();emit(i,k,n,span)}));
+  oweJ+=amt('jev',jn)*JEVX(); const nj=Math.floor(oweJ/q()); oweJ-=nj*q(); emit(-1,'jev',nj,span);
+  simT+=STEP;
+}
+function release(dt){
+  for(let i=pend.length-1;i>=0;i--){const p=pend[i];p[4]-=dt;if(p[4]>0)continue;
+    if(N<CAP){const a=(R()+R()+R()-1.5)/1.5;px[N]=p[0]+a*p[1];py[N]=HEAD+1+R()*3;vx[N]=a*6+rnd(-4,4);vy[N]=rnd(40,140);pr[N]=p[2][0];pg[N]=p[2][1];pb[N]=p[2][2];pl[N]=p[3];N++}
+    pend[i]=pend[pend.length-1];pend.pop()}
+}
+function pileTotal(L){return MODE==='tok'?ORDER.reduce((s,k)=>s+L.cum[k],0):L.usd}
+function pileStrata(L,scale){let y=H-14;return ORDER.map(k=>{const v=MODE==='tok'?L.cum[k]:L.cum[k]*PRICE[k]/1e6,h=v*scale;const s=[k,y-h,h];y-=h;return s})}
+function frame(dt){
+  // decay trails
+  for(let i=0;i<acc.length;i++)acc[i]*=.86;
+  const mx=Math.max(...LANES.map(pileTotal),1e-12), scale=280/mx;
+  const tops=LANES.map(L=>H-14-pileTotal(L)*scale);
+  const G=520;
+  for(let i=N-1;i>=0;i--){
+    vy[i]+=G*dt; px[i]+=vx[i]*dt; py[i]+=vy[i]*dt;
+    const floor=pl[i]>=0?tops[pl[i]]:H-14;
+    if(py[i]>=floor||px[i]<0||px[i]>=W){N--;px[i]=px[N];py[i]=py[N];vx[i]=vx[N];vy[i]=vy[N];pr[i]=pr[N];pg[i]=pg[N];pb[i]=pb[N];pl[i]=pl[N];continue}
+    const x=px[i]|0,y=py[i]|0,o=(y*W+x)*3, a=1.1;
+    acc[o]+=pr[i]*a;acc[o+1]+=pg[i]*a;acc[o+2]+=pb[i]*a;
+  }
+  for(let p=0,o=0;p<W*H;p++,o+=3){const j=p*4;D[j]=4+Math.min(251,acc[o]);D[j+1]=6+Math.min(249,acc[o+1]);D[j+2]=10+Math.min(245,acc[o+2]);D[j+3]=255}
+  g.putImageData(img,0,0);
+  // piles
+  LANES.forEach((L,i)=>{const x0=laneX(i)+4;pileStrata(L,scale).forEach(([k,y,h])=>{const c=COL[k];g.fillStyle=`rgba(${c},.9)`;g.fillRect(x0,y,LW-8,h)});
+    g.fillStyle=L.tool?'#465260':'#141b23';g.fillRect(laneX(i)+LW/2,HEAD,1,6)});
+  // header
+  g.fillStyle='#04060a';g.fillRect(0,0,W,HEAD);g.textBaseline='top';
+  LANES.forEach((L,i)=>{const x=laneX(i);const dead=L.dies&&simT>L.dies;g.font='bold 10px Menlo';g.fillStyle=dead?'#ff4d4d':'#c9d3de';g.fillText(L.id,x,5);
+    g.font='9px Menlo';g.fillStyle='#5b6878';const c=ORDER.reduce((s,k)=>s+L.cum[k],0);g.fillText(dead?'silent '+Math.round(simT-L.dies)+'s':MODE==='tok'?(c/1e6).toFixed(2)+'M tok':'$'+L.usd.toFixed(3),x,19)});
+  g.font='bold 10px Menlo';g.fillStyle='#2fd3e0';g.fillText('jev',W-JW+2,5);g.font='9px Menlo';g.fillStyle='#5b6878';g.fillText(jev.calls+' calls',W-JW-4,19);
+  g.fillStyle='#18202a';g.fillRect(0,HEAD-1,W,1);
+  g.fillStyle='#04060a';g.fillRect(0,H-12,W,12);g.fillStyle='#5b6878';g.textBaseline='alphabetic';
+  g.fillText(`piles: cumulative · tallest = 280 px${MODE==='usd'?' · jev ×100':''}`,10,H-2);
+}
+let last=performance.now(), tacc=0, fps=0;
+function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;fps=fps*.95+(1/Math.max(dt,1e-3))*.05;
+  tacc+=dt; while(tacc>=STEP/SPEED){tacc-=STEP/SPEED;tick();if(simT>300)reset()}
+  release(dt);frame(dt);
+  document.getElementById('stats').innerHTML=`live particles ${N.toLocaleString()}<br>${Math.round(fps)} fps in this browser<br>session time ${Math.floor(simT/60)}:${String(Math.floor(simT%60)).padStart(2,'0')}`;
+  requestAnimationFrame(loop)}
+function reset(){seed=11;simT=0;N=0;pend.length=0;acc.fill(0);
+  LANES.forEach(L=>{L.next=rnd(0,3);L.busy=0;L.active=[];L.cum={cr:0,cw:0,in:0,rsn:0,out:0};L.usd=0;L.ctx=L.sz*.4});
+  jev.next=3;jev.active=[];jev.cum=0;jev.usd=0;jev.calls=0;owe.forEach(o=>ORDER.forEach(k=>o[k]=0));oweJ=0;
+  // warm up 60 session-seconds so the screen opens populated
+  for(let i=0;i<120;i++){tick();for(let f=0;f<3;f++){release(1/30);frame(1/30)}}}
+function setMode(m){MODE=m;document.getElementById('mt').className=m==='tok'?'on':'';document.getElementById('md').className=m==='usd'?'on':'';drawQ();reset()}
+function setQ(i){QI=i;drawQ();reset()}
+function drawQ(){document.getElementById('qbtn').innerHTML=QT.map((t,i)=>`<button class="${i===QI?'on':''}" onclick="setQ(${i})">${MODE==='tok'?t+' tok':'$'+QU[i].toExponential(1)}</button>`).join('')}
+setMode('tok');requestAnimationFrame(loop);
+</script>
+</body></html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Hero: token stream options</title>
+<style>
+:root{--bg:#05070a;--rule:#18202a;--dim:#5b6878;--text:#c9d3de}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:var(--text);font-family:"JetBrains Mono","SF Mono",Menlo,monospace;padding:18px}
+h2{font:600 17px -apple-system,sans-serif;color:#eef4fa}
+.sub{font:13px/1.5 -apple-system,sans-serif;color:#8a97a8;margin:4px 0 14px;max-width:1100px}
+.wrap{display:flex;gap:18px;flex-wrap:wrap}
+.opt{background:var(--bg);border:1px solid var(--rule);padding:10px;cursor:pointer;border-radius:4px}
+.opt.selected{border-color:#2fd3e0;box-shadow:0 0 0 1px #2fd3e0}
+.opt h3{font:600 13px -apple-system,sans-serif;color:#eef4fa;margin-bottom:2px}
+.opt p{font:12px/1.45 -apple-system,sans-serif;color:#8a97a8;max-width:500px;margin-bottom:8px}
+.legend{display:flex;gap:10px;font-size:10px;color:var(--dim);margin:12px 0 0;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:8px;margin-right:4px;vertical-align:-1px}
+canvas{display:block;background:#05070a}
+</style></head><body>
+<h2>Hero: which waterfall?</h2>
+<div class="sub">Both use the same fake session, sped up about 20×. Each lane is a colleague or subagent, and Jev runs on the far right. In both, <b>one pixel or particle is a fixed number of tokens</b>, so how dense or wide the stream looks is the measurement. Watch sa·fuzz: its stream dries up partway through.</div>
+<div class="legend">
+  <span><i style="background:#2f5fb8"></i>cache read</span><span><i style="background:#8e63d9"></i>cache write</span>
+  <span><i style="background:#f0a134"></i>uncached input</span><span><i style="background:#e0518f"></i>reasoning</span>
+  <span><i style="background:#e9f2d0"></i>output</span><span><i style="background:#2fd3e0"></i>jev</span>
+</div><br>
+<div class="wrap">
+  <div class="opt" data-choice="a" onclick="toggleSelect(this)">
+    <h3>A · Spectrogram waterfall</h3>
+    <p>This works like a radio waterfall. Every 100 ms a new row of pixels appears at the top and everything scrolls down. In each lane, the number of lit pixels in a row is the token rate (1 px = 250 tok/s), laid out as colored bands by token class. Bursts read as bright bands and silence as black. The last 90 seconds stay on screen as texture.</p>
+    <canvas id="a" width="520" height="900"></canvas>
+  </div>
+  <div class="opt" data-choice="b" onclick="toggleSelect(this)">
+    <h3>B · Particle cascade</h3>
+    <p>As tokens arrive, each lane pours out particles (1 particle = 1k tokens), colored by class. The particles fall and pile up at the bottom, so each pile's height is that lane's cumulative total. Live flow shows at the top and the running totals at the bottom. It's closest to the look of the video.</p>
+    <canvas id="b" width="520" height="900"></canvas>
+  </div>
+</div>
+
+<script>
+const COL={cr:[47,95,184],cw:[142,99,217],in:[240,161,52],rsn:[224,81,143],out:[233,242,208],jev:[47,211,224]};
+const ORDER=['cr','cw','in','rsn','out'];
+const LANES=[
+ {id:'main',gap:[3,7],sz:120e3,rsn:14e3},{id:'kimi-rev',gap:[5,12],sz:70e3,rsn:4e3},{id:'claude',gap:[4,10],sz:90e3,rsn:6e3},
+ {id:'sa·rigor',gap:[2,5],sz:40e3,rsn:3e3},{id:'sa·lit',gap:[3,8],sz:55e3,rsn:2e3},{id:'sa·fuzz',gap:[3,6],sz:35e3,rsn:2e3,dies:40},
+];
+let seed=11;const R=()=>((seed=Math.imul(seed^seed>>>15,1|seed)+0x6D2B79F5|0)>>>0)/4294967296;
+const rnd=(a,b)=>a+R()*(b-a);
+// --- event model: each request spreads input over ttft, then reasoning, then output stream ---
+// rate[lane][class] = tokens/sec currently arriving (sim time)
+const t0=performance.now(); const SPEED=1; // sim seconds per real second (demo already compresses gaps)
+LANES.forEach(L=>{L.next=rnd(0,3);L.active=[];L.cum={cr:0,cw:0,in:0,rsn:0,out:0};L.ctx=L.sz*.4});
+const jev={next:rnd(2,8),active:[],cum:0};
+function spawn(L,t){
+  L.ctx=Math.min(L.sz*2,L.ctx*rnd(1.02,1.08)+3000); let hit=rnd(.8,.97);
+  if(L.ctx>=L.sz*1.9&&R()<.4){L.ctx=L.sz*.5;hit=.05}
+  const tot=L.ctx, cr=tot*hit, miss=tot-cr, cw=miss*.2, inp=miss*.8;
+  const ttft=rnd(.6,1.6), rs=R()<.6?rnd(.3,1)*L.rsn:0, rsT=rs/rnd(3e3,6e3), out=rnd(600,5000), outT=out/rnd(80,160);
+  L.active.push({cls:'cr',a:t,b:t+ttft,n:cr},{cls:'cw',a:t,b:t+ttft,n:cw},{cls:'in',a:t,b:t+ttft,n:inp},
+                {cls:'rsn',a:t+ttft,b:t+ttft+rsT,n:rs},{cls:'out',a:t+ttft+rsT,b:t+ttft+rsT+outT,n:out});
+  L.next=t+ttft+rsT+outT+rnd(...L.gap);
+}
+function rates(t,dt){ // tokens arriving in [t,t+dt) per lane per class
+  return LANES.map(L=>{
+    if(t>=L.next&&!(L.dies&&t>L.dies)) spawn(L,t);
+    const r={cr:0,cw:0,in:0,rsn:0,out:0};
+    L.active=L.active.filter(s=>{const lo=Math.max(s.a,t),hi=Math.min(s.b,t+dt);if(hi>lo)r[s.cls]+=s.n*(hi-lo)/(s.b-s.a);return s.b>t});
+    ORDER.forEach(k=>L.cum[k]+=r[k]); return r;
+  });
+}
+function jevRate(t,dt){ if(t>=jev.next){jev.active.push({a:t,b:t+.3,n:rnd(400,4000)});jev.next=t+rnd(1,9)}
+  let n=0; jev.active=jev.active.filter(s=>{const lo=Math.max(s.a,t),hi=Math.min(s.b,t+dt);if(hi>lo)n+=s.n*(hi-lo)/(s.b-s.a);return s.b>t}); jev.cum+=n; return n;}
+
+// --- two independent sims (same seed path is fine for a mockup: run one sim, feed both views) ---
+const W=520,H=900,HEAD=34,LW=74,JW=30;
+const A=document.getElementById('a').getContext('2d'), B=document.getElementById('b').getContext('2d');
+const img=A.createImageData(W,H-HEAD);
+const ROW=2, PXTOK=250; // A: 1 px = 250 tok/s
+const parts=[]; const PTOK=1000; const owe=LANES.map(()=>({cr:0,cw:0,in:0,rsn:0,out:0})); let oweJ=0;
+const piles=LANES.map(()=>[]); const PILE_W=LW-8;
+let simT=0,last=performance.now(),acc=0;
+function header(g,label){
+  g.fillStyle='#05070a';g.fillRect(0,0,W,HEAD);g.font='bold 10px Menlo';g.textBaseline='top';
+  LANES.forEach((L,i)=>{g.fillStyle=L.dies&&simT>L.dies?'#ff4d4d':'#c9d3de';g.fillText(L.id,8+i*(LW+3),4);
+    const c=ORDER.reduce((s,k)=>s+L.cum[k],0);g.fillStyle='#5b6878';g.font='9px Menlo';g.fillText((c/1e6).toFixed(2)+'M',8+i*(LW+3),18);g.font='bold 10px Menlo'});
+  g.fillStyle='#2fd3e0';g.fillText('jev',W-JW,4);g.font='9px Menlo';g.fillStyle='#5b6878';g.fillText((jev.cum/1e3).toFixed(0)+'k',W-JW,18);
+  g.fillStyle='#18202a';g.fillRect(0,HEAD-1,W,1);
+}
+function stepA(r,jn,dt){
+  // scroll image down by ROW rows
+  const d=img.data, stride=W*4; d.copyWithin(ROW*stride,0,(H-HEAD-ROW)*stride);
+  for(let y=0;y<ROW;y++)for(let x=0;x<W;x++){const o=y*stride+x*4;d[o]=5;d[o+1]=7;d[o+2]=10;d[o+3]=255}
+  r.forEach((rr,i)=>{
+    const x0=8+i*(LW+3); let x=x0;
+    ORDER.forEach(k=>{
+      const px=rr[k]/dt/PXTOK; let n=Math.floor(px), frac=px-n; if(R()<frac)n++;
+      for(let p=0;p<n&&x<x0+LW;p++,x++){const c=COL[k], j=.65+R()*.35;
+        for(let y=0;y<ROW;y++){const o=y*stride+x*4;d[o]=c[0]*j;d[o+1]=c[1]*j;d[o+2]=c[2]*j}}
+      if(x>=x0+LW){for(let y=0;y<ROW;y++){const o=y*stride+(x0+LW-1)*4;d[o]=255;d[o+1]=255;d[o+2]=255}} // clip marker
+    });
+  });
+  const jx=W-JW+4, jp=Math.round(jn/dt/PXTOK*.25); // jev: scaled ×4 so it is visible at all
+  for(let p=0;p<Math.min(jp,22);p++)for(let y=0;y<ROW;y++){const o=y*stride+(jx+p)*4;d[o]=47;d[o+1]=211;d[o+2]=224}
+}
+function drawA(){A.putImageData(img,0,HEAD);header(A);
+  A.fillStyle='#5b6878';A.font='9px Menlo';const rowsPerSec=10, pxPerSec=rowsPerSec*ROW;
+  for(let s=10;s*pxPerSec<H-HEAD;s+=10){const y=HEAD+s*pxPerSec;A.fillStyle='rgba(91,104,120,.5)';A.fillRect(W-JW-6,y,4,1);A.fillText('−'+s+'s',W-JW-4- 26,y-4)}
+  A.fillStyle='#5b6878';A.fillText('jev ×4',W-JW,H-12);
+}
+function stepB(r,jn){
+  r.forEach((rr,i)=>{const x0=8+i*(LW+3)+LW/2;
+    ORDER.forEach(k=>{owe[i][k]+=rr[k];while(owe[i][k]>=PTOK){owe[i][k]-=PTOK;
+      parts.push({x:x0+rnd(-6,6),y:HEAD+2,vx:rnd(-.25,.25),vy:rnd(.5,1.5),c:COL[k],lane:i,k,sz:k==='out'||k==='rsn'?2.2:1.6})}})});
+  oweJ+=jn*4; while(oweJ>=PTOK){oweJ-=PTOK;parts.push({x:W-JW/2+rnd(-3,3),y:HEAD+2,vx:rnd(-.1,.1),vy:rnd(.6,1.2),c:COL.jev,lane:-1,sz:2})}
+}
+const PILE_TOP=H-8; const colH=LANES.map(()=>new Float32Array(PILE_W));
+function drawB(){
+  B.fillStyle='rgba(5,7,10,.35)';B.fillRect(0,HEAD,W,H-HEAD);
+  // piles (cumulative), drawn as stacked strata, log-free linear: 1 px row of pile = PILE_W particles
+  LANES.forEach((L,i)=>{const x0=8+i*(LW+3)+4;let y=PILE_TOP;
+    ORDER.forEach(k=>{const h=L.cum[k]/PTOK/PILE_W*.45; const c=COL[k];B.fillStyle=`rgb(${c})`;B.globalAlpha=.85;B.fillRect(x0,y-h,PILE_W,h);y-=h});B.globalAlpha=1;
+    B.fillStyle='#5b6878';B.font='9px Menlo';});
+  for(let p=parts.length-1;p>=0;p--){const q=parts[p];q.vy+=.045;q.x+=q.vx+Math.sin((q.y+p)*.05)*.15;q.y+=q.vy;
+    const L=q.lane>=0?LANES[q.lane]:null; let floor=PILE_TOP;
+    if(L){floor=PILE_TOP-ORDER.reduce((s,k)=>s+L.cum[k]/PTOK/PILE_W*.45,0)}
+    if(q.y>=floor-1){parts.splice(p,1);continue}
+    B.fillStyle=`rgb(${q.c})`;B.globalAlpha=.9;B.fillRect(q.x,q.y,q.sz,q.sz*1.6)}
+  B.globalAlpha=1;header(B);
+  B.fillStyle='#5b6878';B.font='9px Menlo';B.fillText('piles: cumulative · 1 px row ≈ 165k tok',8,H-2);
+}
+function loop(now){
+  const dt=Math.min(.1,(now-last)/1000); last=now; acc+=dt;
+  while(acc>=.1){acc-=.1; const r=rates(simT,.1), jn=jevRate(simT,.1); stepA(r,jn,.1); stepB(r,jn); simT+=.1; if(simT>75){reset()}}
+  drawA(); drawB(); requestAnimationFrame(loop);
+}
+function reset(){simT=0;LANES.forEach(L=>{L.next=rnd(0,3);L.active=[];L.cum={cr:0,cw:0,in:0,rsn:0,out:0};L.ctx=L.sz*.4});jev.next=2;jev.active=[];jev.cum=0;parts.length=0;
+  const d=img.data;for(let o=0;o<d.length;o+=4){d[o]=5;d[o+1]=7;d[o+2]=10;d[o+3]=255}B.fillStyle='#05070a';B.fillRect(0,0,W,H)}
+reset();
+for(let i=0;i<400;i++){const r=rates(simT,.1),jn=jevRate(simT,.1);stepA(r,jn,.1);stepB(r,jn);simT+=.1;if(i%2===0)drawB()}
+drawA();drawB();requestAnimationFrame(loop);
+if(typeof toggleSelect==='undefined'){window.toggleSelect=el=>{document.querySelectorAll('.opt').forEach(o=>o.classList.remove('selected'));el.classList.add('selected')}}
+</script>
+</body></html>

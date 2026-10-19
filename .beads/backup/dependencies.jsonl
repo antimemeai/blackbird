@@ -1,9 +1,12 @@
 {"created_at":"2026-10-09T18:33:28Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-05n","type":"parent-child"}
 {"created_at":"2026-10-14T04:59:22Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-0oa","type":"discovered-from"}
 {"created_at":"2026-10-15T14:36:03Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3.2","issue_id":"arconaut-0uq","type":"discovered-from"}
+{"created_at":"2026-10-17T19:59:25Z","created_by":"antimemeai","depends_on_id":"arconaut-9xx","issue_id":"arconaut-0zi","type":"discovered-from"}
 {"created_at":"2026-09-30T04:18:44Z","created_by":"antimemeai","depends_on_id":"arconaut-dcg","issue_id":"arconaut-18i","type":"discovered-from"}
 {"created_at":"2026-10-14T21:36:45Z","created_by":"antimemeai","depends_on_id":"arconaut-c8h","issue_id":"arconaut-1ud","type":"discovered-from"}
 {"created_at":"2026-10-14T21:48:26Z","created_by":"antimemeai","depends_on_id":"arconaut-c8h","issue_id":"arconaut-2aw","type":"discovered-from"}
+{"created_at":"2026-10-17T17:48:53Z","created_by":"antimemeai","depends_on_id":"arconaut-9xx","issue_id":"arconaut-3nx","type":"discovered-from"}
+{"created_at":"2026-10-17T20:00:47Z","created_by":"antimemeai","depends_on_id":"arconaut-9xx","issue_id":"arconaut-3o2","type":"discovered-from"}
 {"created_at":"2026-10-07T08:14:22Z","created_by":"antimemeai","depends_on_id":"arconaut-3oz","issue_id":"arconaut-3oz.1","type":"parent-child"}
 {"created_at":"2026-10-07T08:40:47Z","created_by":"antimemeai","depends_on_id":"arconaut-3oz","issue_id":"arconaut-3oz.2","type":"parent-child"}
 {"created_at":"2026-10-08T18:41:43Z","created_by":"antimemeai","depends_on_id":"arconaut-3sm","issue_id":"arconaut-3sm.1","type":"parent-child"}
@@ -26,6 +29,7 @@
 {"created_at":"2026-10-15T03:27:01Z","created_by":"antimemeai","depends_on_id":"arconaut-45a","issue_id":"arconaut-45a.6","type":"parent-child"}
 {"created_at":"2026-10-15T03:27:01Z","created_by":"antimemeai","depends_on_id":"arconaut-45a.1","issue_id":"arconaut-45a.6","type":"blocks"}
 {"created_at":"2026-10-14T06:50:06Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-4by","type":"discovered-from"}
+{"created_at":"2026-10-17T18:00:12Z","created_by":"antimemeai","depends_on_id":"arconaut-9xx","issue_id":"arconaut-5st","type":"discovered-from"}
 {"created_at":"2026-10-16T04:35:16Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3.5","issue_id":"arconaut-5z4","type":"discovered-from"}
 {"created_at":"2026-10-15T10:30:55Z","created_by":"antimemeai","depends_on_id":"arconaut-64s","issue_id":"arconaut-600","type":"discovered-from"}
 {"created_at":"2026-10-06T23:51:28Z","created_by":"antimemeai","depends_on_id":"arconaut-7iy","issue_id":"arconaut-7iy.1","type":"parent-child"}
@@ -44,13 +48,19 @@
 {"created_at":"2026-10-16T23:44:32Z","created_by":"antimemeai","depends_on_id":"arconaut-f8f","issue_id":"arconaut-8zx","type":"related"}
 {"created_at":"2026-10-14T04:54:21Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-90u","type":"discovered-from"}
 {"created_at":"2026-09-29T03:27:42Z","created_by":"antimemeai","depends_on_id":"arconaut-dcg","issue_id":"arconaut-ahb","type":"discovered-from"}
+{"created_at":"2026-10-19T01:38:23Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-amr","type":"discovered-from"}
+{"created_at":"2026-10-18T17:59:06Z","created_by":"antimemeai","depends_on_id":"arconaut-3o2","issue_id":"arconaut-avo","type":"discovered-from"}
 {"created_at":"2026-10-14T04:54:22Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-bho","type":"discovered-from"}
 {"created_at":"2026-10-09T18:33:28Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-c54","type":"parent-child"}
+{"created_at":"2026-10-17T18:59:02Z","created_by":"antimemeai","depends_on_id":"arconaut-9xx","issue_id":"arconaut-e5g","type":"discovered-from"}
+{"created_at":"2026-10-18T14:24:03Z","created_by":"antimemeai","depends_on_id":"arconaut-pyg","issue_id":"arconaut-e8n","type":"discovered-from"}
 {"created_at":"2026-10-15T13:31:52Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3.1","issue_id":"arconaut-ew5","type":"discovered-from"}
 {"created_at":"2026-10-15T14:31:09Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3.2","issue_id":"arconaut-f8f","type":"discovered-from"}
 {"created_at":"2026-10-14T05:02:07Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-fir","type":"discovered-from"}
 {"created_at":"2026-10-14T05:02:07Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-iva","type":"discovered-from"}
+{"created_at":"2026-10-17T19:13:06Z","created_by":"antimemeai","depends_on_id":"arconaut-9xx","issue_id":"arconaut-j1l","type":"discovered-from"}
 {"created_at":"2026-10-14T05:10:43Z","created_by":"antimemeai","depends_on_id":"arconaut-nls.2","issue_id":"arconaut-ji3","type":"discovered-from"}
+{"created_at":"2026-10-19T01:46:57Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-jon","type":"discovered-from"}
 {"created_at":"2026-10-14T21:36:45Z","created_by":"antimemeai","depends_on_id":"arconaut-1ud","issue_id":"arconaut-nan","type":"blocks"}
 {"created_at":"2026-10-14T21:48:59Z","created_by":"antimemeai","depends_on_id":"arconaut-2aw","issue_id":"arconaut-nan","type":"blocks"}
 {"created_at":"2026-10-14T21:36:45Z","created_by":"antimemeai","depends_on_id":"arconaut-c8h","issue_id":"arconaut-nan","type":"discovered-from"}
@@ -75,6 +85,7 @@
 {"created_at":"2026-10-09T01:26:48Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-nls.7","type":"parent-child"}
 {"created_at":"2026-10-09T03:41:22Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-nls.8","type":"parent-child"}
 {"created_at":"2026-10-10T06:25:11Z","created_by":"antimemeai","depends_on_id":"arconaut-nls","issue_id":"arconaut-nls.9","type":"parent-child"}
+{"created_at":"2026-10-17T17:11:00Z","created_by":"antimemeai","depends_on_id":"arconaut-9xx","issue_id":"arconaut-pyg","type":"discovered-from"}
 {"created_at":"2026-10-15T10:30:55Z","created_by":"antimemeai","depends_on_id":"arconaut-64s","issue_id":"arconaut-rhi","type":"discovered-from"}
 {"created_at":"2026-10-15T11:40:39Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-rhi.1","type":"parent-child"}
 {"created_at":"2026-10-15T12:07:06Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-rhi.2","type":"parent-child"}
@@ -95,6 +106,7 @@
 {"created_at":"2026-10-15T12:17:00Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3","issue_id":"arconaut-rhi.6","type":"blocks"}
 {"created_at":"2026-10-15T12:17:00Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-rhi.7","type":"parent-child"}
 {"created_at":"2026-10-15T12:17:01Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3","issue_id":"arconaut-rhi.7","type":"blocks"}
+{"created_at":"2026-10-19T05:12:16Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi","issue_id":"arconaut-rhi.8","type":"parent-child"}
 {"created_at":"2026-10-15T16:42:06Z","created_by":"antimemeai","depends_on_id":"arconaut-rhi.3.3","issue_id":"arconaut-rln","type":"discovered-from"}
 {"created_at":"2026-10-15T23:30:07Z","created_by":"antimemeai","depends_on_id":"arconaut-4y5","issue_id":"arconaut-ruj","type":"discovered-from"}
 {"created_at":"2026-10-06T23:51:27Z","created_by":"antimemeai","depends_on_id":"arconaut-7iy","issue_id":"arconaut-scs","type":"parent-child"}
@@ -120,6 +132,8 @@
 {"created_at":"2026-10-03T07:23:27Z","created_by":"antimemeai","depends_on_id":"arconaut-uaa","issue_id":"arconaut-uaa.7","type":"parent-child"}
 {"created_at":"2026-10-03T08:14:56Z","created_by":"antimemeai","depends_on_id":"arconaut-uaa","issue_id":"arconaut-uaa.8","type":"parent-child"}
 {"created_at":"2026-10-06T08:43:57Z","created_by":"antimemeai","depends_on_id":"arconaut-uaa","issue_id":"arconaut-uaa.9","type":"parent-child"}
+{"created_at":"2026-10-18T17:59:07Z","created_by":"antimemeai","depends_on_id":"arconaut-3o2","issue_id":"arconaut-ulx","type":"discovered-from"}
+{"created_at":"2026-10-17T16:59:24Z","created_by":"antimemeai","depends_on_id":"arconaut-9xx","issue_id":"arconaut-vv6","type":"discovered-from"}
 {"created_at":"2026-10-16T00:25:44Z","created_by":"antimemeai","depends_on_id":"arconaut-4y5","issue_id":"arconaut-vyi","type":"discovered-from"}
 {"created_at":"2026-09-29T03:29:08Z","created_by":"antimemeai","depends_on_id":"arconaut-8n8","issue_id":"arconaut-w8q","type":"blocks"}
 {"created_at":"2026-09-29T03:28:07Z","created_by":"antimemeai","depends_on_id":"arconaut-dcg","issue_id":"arconaut-w8q","type":"discovered-from"}

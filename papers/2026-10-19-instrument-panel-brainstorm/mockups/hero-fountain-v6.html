@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Hero: fountain v6</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:#c9d3de;font-family:"JetBrains Mono","SF Mono",Menlo,monospace;padding:16px;display:flex;gap:22px}
+.side{width:300px;font:12.5px/1.5 -apple-system,sans-serif;color:#8a97a8}
+.side h2{font:600 17px -apple-system,sans-serif;color:#eef4fa;margin-bottom:6px}
+.grp{margin:14px 0 4px;font:11px Menlo;color:#5b6878;text-transform:uppercase;letter-spacing:.1em}
+button{font:11px Menlo;background:#0f1720;color:#8a97a8;border:1px solid #18202a;padding:4px 9px;cursor:pointer;margin:2px 2px 0 0}
+button.on{color:#eef4fa;border-color:#2fd3e0}
+#pal{font:11px Menlo;line-height:1.75}
+#pal span{display:inline-block;width:9px;height:9px;margin-right:1px;vertical-align:-1px}
+#stats{font:11px Menlo;color:#5b6878;margin-top:12px;line-height:1.6}
+canvas{display:block;background:#030408;border:1px solid #18202a}
+</style></head><body>
+<div class="side">
+  <h2>Hero v6: fountain</h2><div style="color:#2fd3e0;margin-bottom:6px">v6: 0.2× the original velocity (same arcs), particles 2 or 3 px.</div>
+  Every source fires from the upper-left corner at its own power, so the arcs nest, and the particles pile up as sand where each stream lands. <b style="color:#cfd9e4">Hue = source, brightness = token class</b>: each source's darkest shade is cache read and its brightest is output. Each stream leaves an afterglow in its team color. Mound area is still the measurement: one sand pixel is a fixed quantity.
+  <div class="grp">quantum</div><div id="qbtn"></div>
+  <div class="grp">particle size</div><button id="s2" onclick="setSize(2)">2 px</button><button id="s3" onclick="setSize(3)">3 px</button>
+  <div class="grp">measure</div>
+  <button id="mt" onclick="setMode('tok')">tokens</button><button id="md" onclick="setMode('usd')">dollars</button>
+  <div class="grp">palettes · cache read → output</div>
+  <div id="pal"></div>
+  <div id="stats"></div>
+</div>
+<canvas id="c" width="540" height="960"></canvas>
+<script>
+// hue = source, lightness = class (cr, cw, in, rsn, out)
+const SRC=[
+ {id:'main',     team:[255,120,30], pal:[[120,30,10],[190,60,20],[240,120,30],[255,190,60],[255,240,190]], gap:[2,9], sz:120e3,rsn:4e3},
+ {id:'kimi-rev', team:[150,90,255], pal:[[45,25,110],[85,55,180],[135,100,235],[185,160,255],[235,225,255]], gap:[4,14],sz:70e3, rsn:1.5e3},
+ {id:'claude',   team:[217,119,87], pal:[[95,40,28],[150,70,50],[210,115,85],[240,170,140],[255,230,215]], gap:[3,10],sz:90e3, rsn:2e3},
+ {id:'sa·rigor', team:[90,220,110], pal:[[15,70,30],[30,120,55],[70,180,90],[150,230,140],[220,255,210]],  gap:[1,5], sz:40e3, rsn:1e3},
+ {id:'sa·lit',   team:[70,160,255], pal:[[15,45,110],[30,80,170],[60,130,230],[130,190,255],[215,235,255]],gap:[2,8], sz:55e3, rsn:.8e3},
+ {id:'sa·fuzz',  team:[255,70,170], pal:[[100,15,60],[160,30,100],[225,70,150],[255,140,200],[255,215,235]],gap:[2,6], sz:35e3, rsn:.8e3, dies:160},
+ {id:'jev',      team:[40,225,235], pal:[[40,225,235]], jev:true},
+];
+const ORDER=['cr','cw','in','rsn','out'];
+const PRICE={cr:.125,cw:1.25,in:1.25,rsn:10,out:10,jev:.042};
+let seed=11;const R=()=>((seed=Math.imul(seed^seed>>>15,1|seed)+0x6D2B79F5|0)>>>0)/4294967296;
+const rnd=(a,b)=>a+R()*(b-a), gauss=()=>(R()+R()+R()+R()-2)/1.15;
+const QT=[100,25,10], QU=[1e-5,2.5e-6,1e-6], PILE={tok:180,usd:1.8e-5};
+let MODE='tok', QI=1, SZ=3;
+const q=()=>MODE==='tok'?QT[QI]:QU[QI];
+const W=540,H=960,FLOOR=H-18,STEP=.5,SPEED=5,G=20.8,NX=18,NY=58;
+// landing centres spread across the floor; power derived so the arc lands there
+const LAND=SRC.map((s,i)=>90+i*(W-120)/(SRC.length-1));
+const VY0=-14, TFALL=(-VY0+Math.sqrt(VY0*VY0+2*G*(FLOOR-NY)))/G;
+SRC.forEach((s,i)=>s.vx=(LAND[i]-NX)/TFALL);
+
+function spawn(L,t){
+  L.ctx=Math.min(L.sz*2,L.ctx*rnd(1.02,1.08)+3000); let hit=rnd(.8,.97);
+  if(L.ctx>=L.sz*1.9&&R()<.4){L.ctx=L.sz*.5;hit=.05}
+  const tot=L.ctx, cr=tot*hit, miss=tot-cr, cw=miss*.2, inp=miss*.8;
+  const ttft=rnd(1,3), rs=R()<.6?rnd(.3,1)*L.rsn:0, rsT=rs/rnd(150,300), out=rnd(500,3500), outT=out/rnd(120,250), end=t+ttft+rsT+outT;
+  L.active.push({c:0,a:t,b:end,n:cr},{c:1,a:t,b:end,n:cw},{c:2,a:t,b:end,n:inp},{c:3,a:t+ttft,b:t+ttft+rsT,n:rs},{c:4,a:t+ttft+rsT,b:end,n:out});
+  L.busy=end; L.next=end+rnd(...L.gap);
+}
+function spawnJev(L,t){L.active.push({c:5,a:t,b:t+.5,n:rnd(400,4000)});L.calls++;L.next=t+rnd(4,30)}
+const amt=(c,n)=>MODE==='tok'?n:n*PRICE[c===5?'jev':ORDER[c]]/1e6;
+function rates(t,dt){
+  return SRC.map(L=>{
+    const dead=L.dies&&t>L.dies; if(t>=L.next&&!dead)(L.jev?spawnJev:spawn)(L,t);
+    const r=[0,0,0,0,0,0]; L.tool=!L.jev&&!dead&&t>=L.busy&&t<L.next;
+    L.active=L.active.filter(s=>{const lo=Math.max(s.a,t),hi=Math.min(s.b,t+dt);if(hi>lo){const n=s.n*(hi-lo)/(s.b-s.a);r[s.c]+=n;L.tok+=n;L.usd+=amt.call(null,s.c,n)*(MODE==='tok'?PRICE[s.c===5?'jev':ORDER[s.c]]/1e6:1)}return s.b>t});
+    return r;
+  });
+}
+// ---- particles ----
+const CAP=400000;
+const px=new Float32Array(CAP),py=new Float32Array(CAP),vx=new Float32Array(CAP),vy=new Float32Array(CAP),ps=new Uint8Array(CAP),pc=new Uint8Array(CAP);
+let N=0; const pend=[];
+const acc=new Float32Array(W*H*3);
+const pileC=new Uint8Array(W*H*3), pileOn=new Uint8Array(W*H), hgt=new Int16Array(W), pOwe=new Float32Array(W);
+const g=document.getElementById('c').getContext('2d'); const img=g.createImageData(W,H), D=img.data;
+const GW=W>>2,GH=H>>2, glow=new Float32Array(GW*GH*3), gcv=document.createElement('canvas'); gcv.width=GW;gcv.height=GH;
+const gg=gcv.getContext('2d'), gimg=gg.createImageData(GW,GH);
+const owe=SRC.map(()=>[0,0,0,0,0,0]);
+let simT=0;
+function tick(){
+  const r=rates(simT,STEP), span=STEP/SPEED;
+  r.forEach((rr,si)=>rr.forEach((v,c)=>{if(!v)return;owe[si][c]+=amt(c,v)*(SRC[si].jev&&MODE==='usd'?100:1);
+    const n=Math.floor(owe[si][c]/q());owe[si][c]-=n*q();for(let k=0;k<n;k++)pend.push(si,c,R()*span)}));
+  simT+=STEP;
+}
+function release(dt){
+  for(let i=pend.length-3;i>=0;i-=3){
+    if((pend[i+2]-=dt)>0)continue;
+    if(N<CAP){const s=SRC[pend[i]],c=pend[i+1],cls=s.jev?0:c;
+      // class sub-bands within a stream: brighter classes fly slightly further
+      const p=s.vx*(1+(cls-2)*.045+gauss()*.10);
+      px[N]=NX+gauss()*5;py[N]=NY+gauss()*5;vx[N]=p;vy[N]=VY0+gauss()*7;ps[N]=pend[i];pc[N]=cls;N++}
+    pend[i]=pend[pend.length-3];pend[i+1]=pend[pend.length-2];pend[i+2]=pend[pend.length-1];pend.length-=3}
+}
+function deposit(x,si,cls){
+  pOwe[x]+=q()/(SRC[si].jev&&MODE==='usd'?100:1);
+  const PP=PILE[MODE];
+  while(pOwe[x]>=PP){pOwe[x]-=PP;
+    let X=x; for(let k=0;k<10;k++){const l=X>0?hgt[X-1]:1e9,r=X<W-1?hgt[X+1]:1e9;
+      if(l<hgt[X]-1&&(l<=r||R()<.5))X--;else if(r<hgt[X]-1)X++;else break}
+    const y=FLOOR-1-hgt[X]; if(y<NY+40)return; hgt[X]++;
+    const col=SRC[si].pal[cls]||SRC[si].pal[0], o=y*W+X; pileOn[o]=1; pileC[o*3]=col[0];pileC[o*3+1]=col[1];pileC[o*3+2]=col[2];}
+}
+function frame(dt){
+  for(let i=0;i<acc.length;i++)acc[i]*=.84;
+  for(let i=0;i<glow.length;i++)glow[i]*=.955;
+  for(let i=N-1;i>=0;i--){
+    vy[i]+=G*dt; vx[i]*=1-.02*dt; px[i]+=vx[i]*dt+Math.sin(py[i]*.03+i)*.08; py[i]+=vy[i]*dt;
+    const x=px[i]|0;
+    if(x<0||x>=W){kill(i);continue}
+    if(py[i]>=FLOOR-1-hgt[x]){deposit(x,ps[i],pc[i]);kill(i);continue}
+    const y=py[i]|0, s=SRC[ps[i]], col=s.pal[pc[i]]||s.pal[0], a=SZ===3?.55:.7;
+    for(let dy=0;dy<SZ;dy++)for(let dx=0;dx<SZ;dx++){const xx=x+dx,yy=y+dy;if(xx>=W||yy>=H)continue;const o=(yy*W+xx)*3;acc[o]+=col[0]*a;acc[o+1]+=col[1]*a;acc[o+2]+=col[2]*a}
+    const go=((y>>2)*GW+(x>>2))*3; glow[go]+=s.team[0]*.05;glow[go+1]+=s.team[1]*.05;glow[go+2]+=s.team[2]*.05;
+  }
+  for(let p=0,o=0;p<W*H;p++,o+=3){const j=p*4;
+    if(pileOn[p]){D[j]=pileC[o];D[j+1]=pileC[o+1];D[j+2]=pileC[o+2];}
+    else{D[j]=3+Math.min(252,acc[o]);D[j+1]=4+Math.min(251,acc[o+1]);D[j+2]=8+Math.min(247,acc[o+2]);}
+    D[j+3]=255}
+  g.putImageData(img,0,0);
+  for(let p=0,o=0;p<GW*GH;p++,o+=3){const j=p*4;gimg.data[j]=Math.min(255,glow[o]);gimg.data[j+1]=Math.min(255,glow[o+1]);gimg.data[j+2]=Math.min(255,glow[o+2]);gimg.data[j+3]=255}
+  gg.putImageData(gimg,0,0);
+  g.save();g.globalCompositeOperation='lighter';g.filter='blur(7px)';g.imageSmoothingEnabled=true;g.globalAlpha=.16;g.drawImage(gcv,0,0,W,H);g.restore();
+  // nozzle
+  const ng=g.createRadialGradient(NX,NY,0,NX,NY,26);ng.addColorStop(0,'rgba(255,240,220,.35)');ng.addColorStop(1,'rgba(255,200,150,0)');
+  g.save();g.globalCompositeOperation='lighter';g.fillStyle=ng;g.fillRect(0,NY-30,60,60);g.restore();
+  // floor labels
+  g.fillStyle='#030408';g.fillRect(0,FLOOR,W,H-FLOOR);g.fillStyle='#18202a';g.fillRect(0,FLOOR,W,1);
+  g.textBaseline='top';g.textAlign='center';
+  SRC.forEach((s,i)=>{const dead=s.dies&&simT>s.dies;g.font='bold 9px Menlo';g.fillStyle=dead?'#ff4d4d':`rgb(${s.team})`;g.fillText(s.id+(s.tool?' ⚙':''),LAND[i],FLOOR+4)});
+  g.textAlign='left';
+  // roster, top right
+  const rx=W-208; g.fillStyle='rgba(3,4,8,.72)';g.fillRect(rx-8,8,206,16+SRC.length*15);
+  g.font='9px Menlo';g.fillStyle='#5b6878';g.fillText('source',rx,12);g.textAlign='right';g.fillText(MODE==='tok'?'tokens':'spend',W-14,12);g.textAlign='left';
+  SRC.forEach((s,i)=>{const y=27+i*15,dead=s.dies&&simT>s.dies;g.fillStyle=`rgb(${s.team})`;g.fillRect(rx,y+1,7,7);
+    g.fillStyle=dead?'#ff4d4d':'#c9d3de';g.font='10px Menlo';g.fillText(s.id,rx+12,y);
+    g.fillStyle=dead?'#ff4d4d':'#5b6878';g.textAlign='right';
+    g.fillText(dead?'silent '+Math.round(simT-s.dies)+'s':s.jev?s.calls+' calls':MODE==='tok'?(s.tok/1e6).toFixed(2)+'M':'$'+s.usd.toFixed(3),W-14,y);g.textAlign='left'});
+}
+function kill(i){N--;px[i]=px[N];py[i]=py[N];vx[i]=vx[N];vy[i]=vy[N];ps[i]=ps[N];pc[i]=pc[N]}
+let last=performance.now(),tacc=0,fps=30;
+function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;fps=fps*.95+(1/Math.max(dt,1e-3))*.05;
+  tacc+=dt;while(tacc>=STEP/SPEED){tacc-=STEP/SPEED;tick();if(simT>300)reset()}
+  release(dt);frame(dt);
+  document.getElementById('stats').innerHTML=`live particles ${N.toLocaleString()}<br>${Math.round(fps)} fps in this browser<br>session ${Math.floor(simT/60)}:${String(Math.floor(simT%60)).padStart(2,'0')} · 1 sand px = ${MODE==='tok'?PILE.tok+' tok':'$'+PILE.usd}${MODE==='usd'?'<br>jev drawn ×100 in dollars':''}`;
+  requestAnimationFrame(loop)}
+function reset(){seed=11;simT=0;N=0;pend.length=0;acc.fill(0);glow.fill(0);pileOn.fill(0);hgt.fill(0);pOwe.fill(0);
+  SRC.forEach(L=>{L.next=L.jev?3:rnd(0,3);L.busy=0;L.active=[];L.tok=0;L.usd=0;L.calls=0;L.ctx=(L.sz||0)*.4});owe.forEach(o=>o.fill(0));
+  for(let i=0;i<120;i++){tick();for(let f=0;f<3;f++){release(1/30);frame(1/30)}}}
+function setMode(m){MODE=m;document.getElementById('mt').className=m==='tok'?'on':'';document.getElementById('md').className=m==='usd'?'on':'';drawQ();reset()}
+function setSize(z){SZ=z;document.getElementById('s2').className=z===2?'on':'';document.getElementById('s3').className=z===3?'on':''}
+function setQ(i){QI=i;drawQ();reset()}
+function drawQ(){document.getElementById('qbtn').innerHTML=QT.map((t,i)=>`<button class="${i===QI?'on':''}" onclick="setQ(${i})">${MODE==='tok'?t+' tok':'$'+QU[i].toExponential(1)}</button>`).join('')}
+document.getElementById('pal').innerHTML=SRC.map(s=>`<div>${s.pal.map(c=>`<span style="background:rgb(${c})"></span>`).join('')} <span style="width:auto;height:auto;color:rgb(${s.team})">${s.id}</span></div>`).join('');
+setSize(3);setMode('tok');requestAnimationFrame(loop);
+</script>
+</body></html>

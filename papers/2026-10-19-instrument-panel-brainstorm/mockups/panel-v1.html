@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Blackbird instrument panel — mockup v1</title>
+<style>
+:root{
+  --bg:#06080b; --panel:#0b0f14; --rule:#1a222c; --dim:#5b6878; --text:#c9d3de; --bright:#eef4fa;
+  --cr:#3f6fc4;   /* cache read */
+  --cw:#8e63d9;   /* cache write */
+  --in:#f0a134;   /* uncached input */
+  --out:#43c483;  /* output */
+  --rsn:#e0518f;  /* reasoning */
+  --jev:#2fd3e0;  /* jev */
+  --warn:#f0a134; --bad:#ff4d4d; --ok:#43c483;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#000;height:100%;overflow:hidden}
+body{display:flex;justify-content:center;align-items:flex-start;font-family:"JetBrains Mono","SF Mono",Menlo,monospace;color:var(--text)}
+#frame{width:1080px;height:1920px;background:var(--bg);transform-origin:top center;position:relative;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.note{position:fixed;left:10px;top:10px;font:12px -apple-system,sans-serif;color:#889;max-width:260px;line-height:1.45;z-index:5}
+.note b{color:#cde}
+h4{font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--rule);padding-bottom:3px;margin-bottom:5px}
+h4 span{letter-spacing:0;text-transform:none;font-weight:400}
+.hdr{display:grid;grid-template-columns:repeat(8,1fr);gap:0;border:1px solid var(--rule);background:var(--panel)}
+.kpi{padding:6px 8px;border-right:1px solid var(--rule)}
+.kpi:last-child{border-right:0}
+.kpi .l{font-size:9px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase}
+.kpi .v{font-size:20px;color:var(--bright);font-variant-numeric:tabular-nums;line-height:1.15}
+.kpi .s{font-size:9.5px;color:var(--dim)}
+canvas{display:block}
+table{width:100%;border-collapse:collapse;font-size:10.5px;font-variant-numeric:tabular-nums}
+th{font-weight:400;color:var(--dim);text-align:left;font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:0 4px 3px}
+td{padding:2.5px 4px;border-top:1px solid #10161d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0}
+td.r,th.r{text-align:right}
+.g{color:var(--ok)}.a{color:var(--warn)}.x{color:var(--bad)}.d{color:var(--dim)}.c{color:var(--jev)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:0}
+.legend{display:flex;gap:12px;font-size:9.5px;color:var(--dim)}
+.legend i{display:inline-block;width:10px;height:8px;margin-right:4px;vertical-align:-1px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.box{background:var(--panel);border:1px solid var(--rule);padding:7px 8px}
+.ticker{font-size:10px;line-height:1.5;color:var(--dim);height:96px;overflow:hidden}
+.ticker b{font-weight:400;color:var(--text)}
+</style></head><body>
+<div class="note"><b>Mockup v1: portrait 32″ panel</b><br>Laid out at 1080×1920, scaled to fit. On a 4K panel it would draw at 2160×3840 natively.<br><br>All data is synthetic. The question is <b>what goes where and how dense</b>, not polish yet.</div>
+<div id="frame">
+
+  <div class="hdr" id="hdr"></div>
+
+  <div class="box" style="padding-bottom:4px">
+    <h4>Token waterfall <span>now ▲ at top · y = request start · bar height = latency · bar width = tokens · lanes = colleagues</span></h4>
+    <div class="legend" style="margin-bottom:4px">
+      <span><i style="background:var(--cr)"></i>cache read</span>
+      <span><i style="background:var(--cw)"></i>cache write</span>
+      <span><i style="background:var(--in)"></i>uncached input</span>
+      <span><i style="background:var(--rsn)"></i>reasoning</span>
+      <span><i style="background:var(--out)"></i>output</span>
+      <span><i style="background:var(--jev);border-radius:50%"></i>jev call</span>
+      <span style="margin-left:auto">◆ tool call · ✕ provider error</span>
+    </div>
+    <canvas id="wf" width="1046" height="760"></canvas>
+  </div>
+
+  <div class="box">
+    <h4>Colleagues &amp; subagents <span>6 live · 2 waiting · 1 stalled</span></h4>
+    <table id="agents"></table>
+  </div>
+
+  <div class="box">
+    <h4>Processes <span>read from the OS (kqueue / proc_pidinfo), not from what the agent says</span></h4>
+    <table id="procs"></table>
+  </div>
+
+  <div class="row2">
+    <div class="box">
+      <h4>Tokenomics <span>last 60 min</span></h4>
+      <canvas id="cost" width="510" height="150"></canvas>
+      <table id="econ" style="margin-top:4px"></table>
+    </div>
+    <div class="box">
+      <h4 style="color:var(--jev)">Jev <span>jev-1.13.0 · $0.042/M in</span></h4>
+      <canvas id="jev" width="510" height="150"></canvas>
+      <table id="jevt" style="margin-top:4px"></table>
+    </div>
+  </div>
+
+  <div class="box" style="flex:1">
+    <h4>Event tape</h4>
+    <div class="ticker" id="tape"></div>
+  </div>
+</div>
+
+<script>
+// ---------- deterministic synthetic data ----------
+let s=7; const R=()=>((s=Math.imul(s^s>>>15,1|s)+0x6D2B79F5|0)>>>0)/4294967296;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C={cr:css('--cr'),cw:css('--cw'),in:css('--in'),out:css('--out'),rsn:css('--rsn'),jev:css('--jev'),rule:css('--rule'),dim:css('--dim'),text:css('--text')};
+
+const lanes=[
+ {id:'main',     model:'gpt-6.1-sol·high', kind:'operator', rate:.75, size:90e3},
+ {id:'kimi-rev', model:'kimi-k3',          kind:'colleague',rate:.35, size:60e3},
+ {id:'claude',   model:'sonnet-4.6',       kind:'colleague',rate:.40, size:70e3},
+ {id:'sa·rigor', model:'gpt-6.1-mini',     kind:'subagent', rate:.9,  size:35e3},
+ {id:'sa·lit',   model:'gpt-6.1-mini',     kind:'subagent', rate:.6,  size:45e3},
+ {id:'sa·fuzz',  model:'gpt-6.1-mini',     kind:'subagent', rate:.5,  size:30e3, stalled:true},
+];
+const MIN=60; // minutes of history shown
+lanes.forEach((L,li)=>{
+  L.reqs=[]; let t=MIN*R()*.2, ctx=L.size*.3;
+  const start = li>=3 ? 10+li*6 : 0;
+  t=Math.max(t,start);
+  while(t<MIN){
+    if(L.stalled && t>MIN-14) break;
+    ctx=Math.min(L.size*2.2, ctx*(1.02+R()*.05)+2000);
+    const compacted = ctx>L.size*2 && R()<.3; if(compacted) ctx=L.size*.4;
+    const hit = compacted? .05 : .78+R()*.2;
+    const cr=ctx*hit, inp=ctx*(1-hit)*.85, cw=ctx*(1-hit)*.15+ (R()<.1?ctx*.2:0);
+    const rsn=R()*9000*(L.kind==='operator'?2:1), out=800+R()*4500;
+    const lat=(4+R()*20+rsn/1500)/60; // minutes
+    L.reqs.push({t,lat,cr,cw,in:inp,rsn,out,tool:R()<.7,err:R()<.025,compacted});
+    t+=lat+ (1/L.rate)*(.3+R()*1.4);
+  }
+});
+const jevCalls=[]; for(let i=0;i<46;i++){jevCalls.push({t:R()*MIN,lane:Math.floor(R()*R()*6),tok:300+R()*R()*6000,prim:['choice','score','noul'][Math.floor(R()*3)],conf:R()})}
+
+const sum=(a,f)=>a.reduce((x,y)=>x+f(y),0);
+const all=lanes.flatMap(l=>l.reqs);
+const tokIn=sum(all,r=>r.cr+r.cw+r.in), tokCR=sum(all,r=>r.cr);
+const price={cr:.125,cw:1.25,in:1.25,out:10,rsn:10}; // $/M illustrative
+const cost=r=>(r.cr*price.cr+r.cw*price.cw+r.in*price.in+(r.out+r.rsn)*price.out)/1e6;
+const totalCost=sum(all,cost);
+const fmt=n=>n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':Math.round(n)+'';
+
+// ---------- header ----------
+const kp=[
+ ['session','bb-7f3a','01:02:14 wall'],
+ ['spend','$'+totalCost.toFixed(2),'$'+(totalCost*60/MIN).toFixed(2)+'/h burn'],
+ ['cache hit',(100*tokCR/tokIn).toFixed(1)+'%','of '+fmt(tokIn)+' input'],
+ ['requests',all.length,'4 in flight'],
+ ['agents','6','2 waiting · 1 stalled'],
+ ['processes','14','3 hot · 1 zombie'],
+ ['jev',jevCalls.length+' calls','1 per '+Math.round(all.length/jevCalls.length)+' model reqs'],
+ ['load','6.2','cpu 71% · mem 38G'],
+];
+document.getElementById('hdr').innerHTML=kp.map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+
+// ---------- hero waterfall ----------
+(function(){
+ const cv=document.getElementById('wf'),g=cv.getContext('2d');
+ const W=cv.width,H=cv.height, top=30, axisW=34, jevW=46, spineW=0;
+ const laneW=(W-axisW-jevW)/lanes.length;
+ const y=t=>top+(MIN-t)/MIN*(H-top-4);
+ // grid
+ g.font='9px Menlo';g.textBaseline='middle';
+ for(let m=0;m<=MIN;m+=5){const yy=y(MIN-m);g.fillStyle=m%15?'#0e141a':'#16202a';g.fillRect(axisW,yy,W-axisW,1);if(m%10===0){g.fillStyle=C.dim;g.fillText(m?('−'+m+'m'):'now',2,yy)}}
+ lanes.forEach((L,i)=>{
+   const x0=axisW+i*laneW+4, w=laneW-10;
+   g.fillStyle='#0d1319';g.fillRect(x0-3,top,1,H-top);
+   // lane header
+   g.fillStyle=C.text;g.font='bold 10px Menlo';g.fillText(L.id,x0,8);
+   g.fillStyle=C.dim;g.font='9px Menlo';g.fillText(L.model,x0,20);
+   const mx=L.size*2.4+15000;
+   L.reqs.forEach(r=>{
+     const y1=y(r.t), h=Math.max(1.5,r.lat/MIN*(H-top)), yy=y1-h;
+     let x=x0; const seg=[['cr',r.cr],['cw',r.cw],['in',r.in],['rsn',r.rsn],['out',r.out]];
+     seg.forEach(([k,v])=>{const ww=v/mx*w; g.fillStyle=C[k]; g.globalAlpha=k==='cr'?.55:.95; g.fillRect(x,yy,ww,h); x+=ww;});
+     g.globalAlpha=1;
+     if(r.tool){g.fillStyle=C.text;g.fillRect(x+2,yy+h/2-1,2,2)}
+     if(r.err){g.fillStyle='#ff4d4d';g.fillText('✕',x+5,yy+h/2)}
+     if(r.compacted){g.fillStyle=C.cw;g.fillRect(x0,y1+1,w,1);g.fillText('compaction',x0+w-56,y1+6)}
+   });
+   if(L.stalled){const last=L.reqs[L.reqs.length-1];const ys=y(MIN),ye=y(last.t+last.lat);
+     g.fillStyle='rgba(255,77,77,.08)';g.fillRect(x0-2,ys,w+4,ye-ys);g.fillStyle='#ff4d4d';g.fillText('silent '+Math.round(MIN-last.t)+'m',x0,ys+10)}
+   // lane totals
+   const tc=sum(L.reqs,cost);g.fillStyle=C.dim;g.textAlign='right';g.fillText('$'+tc.toFixed(2),x0+w,8);g.textAlign='left';
+ });
+ // jev lane
+ const jx=W-jevW+6; g.fillStyle=C.jev;g.font='bold 10px Menlo';g.fillText('jev',jx,8);g.fillStyle=C.dim;g.font='9px Menlo';g.fillText(jevCalls.length+'',jx,20);
+ jevCalls.forEach(j=>{const r=1.5+Math.sqrt(j.tok)/14;g.beginPath();g.arc(jx+16+(j.prim==='choice'?-8:j.prim==='score'?0:8),y(j.t),r,0,7);g.fillStyle=C.jev;g.globalAlpha=.35+j.conf*.6;g.fill();g.globalAlpha=1});
+})();
+
+// ---------- agents table ----------
+(function(){
+ const acts=['edit src/station.cpp:412','run scripts/rigor check cxx-unit','read papers/…/qualification.md','jev choice failure_triage','grep "kitty" src/','write docs/TUI_VIEWS.md','run ctest -R raw_','—'];
+ const st=[['streaming','g'],['tool: run','a'],['waiting on main','d'],['streaming','g'],['tool: read','a'],['no event 14m','x']];
+ let h='<tr><th>agent</th><th>state</th><th style="width:30%">last action</th><th class="r">age</th><th class="r">turns</th><th>tokens/min (60m)</th><th class="r">ctx</th><th class="r">hit</th><th class="r">$</th></tr>';
+ lanes.forEach((L,i)=>{
+   const tc=sum(L.reqs,cost), hit=sum(L.reqs,r=>r.cr)/sum(L.reqs,r=>r.cr+r.cw+r.in);
+   const last=L.reqs[L.reqs.length-1], ctx=(last.cr+last.cw+last.in)/(L.size*2.4);
+   h+=`<tr><td><span class="dot" style="background:${['#43c483','#f0a134','#5b6878','#43c483','#f0a134','#ff4d4d'][i]}"></span>${L.id}</td><td class="${st[i][1]}">${st[i][0]}</td><td>${acts[i]}</td><td class="r ${i==5?'x':''}">${i==5?'14m':Math.round(R()*50)+'s'}</td><td class="r">${L.reqs.length}</td><td><canvas class="spk" data-l="${i}" width="150" height="14"></canvas></td><td class="r"><canvas class="bar" data-v="${ctx}" width="40" height="8"></canvas> ${Math.round(ctx*100)}%</td><td class="r">${(hit*100).toFixed(0)}%</td><td class="r">${tc.toFixed(2)}</td></tr>`;
+ });
+ document.getElementById('agents').innerHTML=h;
+ document.querySelectorAll('canvas.spk').forEach(cv=>{const L=lanes[cv.dataset.l],g=cv.getContext('2d');const b=new Array(60).fill(0);L.reqs.forEach(r=>b[Math.min(59,Math.floor(r.t))]+=r.cr+r.cw+r.in+r.out+r.rsn);const m=Math.max(...b,1);b.forEach((v,k)=>{const hh=v/m*13;g.fillStyle=k>55?'#c9d3de':'#3f6fc4';g.fillRect(k*2.5,14-hh,1.6,hh)})});
+ document.querySelectorAll('canvas.bar').forEach(cv=>{const v=+cv.dataset.v,g=cv.getContext('2d');g.fillStyle='#16202a';g.fillRect(0,0,40,8);g.fillStyle=v>.8?'#ff4d4d':v>.6?'#f0a134':'#43c483';g.fillRect(0,0,40*v,8)});
+})();
+
+// ---------- processes ----------
+(function(){
+ const P=[
+  [41822,'main','ninja -C build/debug','R','3m12s',[.9,.95,.97,.99,.98],'1.8G','0s','—'],
+  [41907,'main','clang++ … station.cpp','R','0m41s',[.5,.9,1,1,1],'1.1G','0s','—'],
+  [41210,'sa·rigor','ctest -R raw_ --output-on-failure','R','6m03s',[.2,.3,.25,.4,.3],'310M','2s','—'],
+  [40991,'sa·fuzz','./build/fuzz/raw_reader_fuzz -max_total_time=3600','S','22m40s',[.99,.99,.0,.0,.0],'4.2G','14m','—'],
+  [40112,'sa·lit','pdftotext papers/2610.07184v1.pdf -','Z','—',[0,0,0,0,0],'0','—','0 (unreaped)'],
+  [39887,'claude','rg -n "kitty" src docs','✓','0.4s',[.3,0,0,0,0],'—','—','0'],
+  [39811,'main','scripts/rigor check lua','✓','48s',[.6,.7,.4,0,0],'—','—','<span class="x">1</span>'],
+  [38720,'kimi-rev','git diff master…tui-metrics','✓','0.1s',[0,0,0,0,0],'—','—','0'],
+ ];
+ const st={R:'<span class="g">run</span>',S:'<span class="x">sleep · no output</span>',Z:'<span class="x">zombie</span>','✓':'<span class="d">exited</span>'};
+ let h='<tr><th class="r">pid</th><th>owner</th><th style="width:36%">command</th><th>state</th><th class="r">elapsed</th><th>cpu</th><th class="r">rss</th><th class="r">last out</th><th class="r">exit</th></tr>';
+ P.forEach((p,i)=>h+=`<tr><td class="r d">${p[0]}</td><td>${p[1]}</td><td>${p[2]}</td><td>${st[p[3]]}</td><td class="r">${p[4]}</td><td><canvas class="cpu" data-c="${p[5]}" width="70" height="12"></canvas></td><td class="r">${p[6]}</td><td class="r ${p[7]==='14m'?'x':''}">${p[7]}</td><td class="r">${p[8]}</td></tr>`);
+ document.getElementById('procs').innerHTML=h;
+ document.querySelectorAll('canvas.cpu').forEach(cv=>{const v=cv.dataset.c.split(',').map(Number),g=cv.getContext('2d');let pts=[];for(let k=0;k<35;k++){const a=v[Math.floor(k/7)];pts.push(Math.max(0,Math.min(1,a+(R()-.5)*.15*(a>0))))}g.strokeStyle='#43c483';g.beginPath();pts.forEach((p,k)=>g[k?'lineTo':'moveTo'](k*2,11-p*10));g.stroke()});
+})();
+
+// ---------- tokenomics ----------
+(function(){
+ const cv=document.getElementById('cost'),g=cv.getContext('2d'),W=cv.width,H=cv.height;
+ const cols=['#c9d3de','#f0a134','#8e63d9','#3f6fc4','#43c483','#e0518f'];
+ const acc=lanes.map(()=>0); const series=[];
+ for(let m=0;m<=MIN;m++){lanes.forEach((L,i)=>L.reqs.forEach(r=>{if(r.t>=m-1&&r.t<m)acc[i]+=cost(r)}));series.push([...acc])}
+ const mx=Math.max(...series[MIN].map((_,i)=>0),series[MIN].reduce((a,b)=>a+b));
+ for(let i=lanes.length-1;i>=0;i--){g.beginPath();series.forEach((v,m)=>{const tot=v.slice(0,i+1).reduce((a,b)=>a+b);g.lineTo(m/MIN*(W-40),H-12-tot/mx*(H-20))});g.lineTo(W-40,H-12);g.lineTo(0,H-12);g.fillStyle=cols[i];g.globalAlpha=.75;g.fill()}
+ g.globalAlpha=1;g.fillStyle=C.dim;g.font='9px Menlo';g.fillText('cumulative $ by agent',2,10);g.fillText('$'+mx.toFixed(2),W-38,12);g.fillText('−60m',0,H-1);g.fillText('now',W-60,H-1);
+ // projection
+ g.setLineDash([3,3]);g.strokeStyle='#c9d3de';g.beginPath();g.moveTo(W-40,H-12-(H-20));g.lineTo(W,H-12-(H-20)*1.08);g.stroke();g.setLineDash([]);
+ const e=[['input billed','$'+(sum(all,r=>r.in*price.in+r.cw*price.cw)/1e6).toFixed(2),'cache saved','$'+(tokCR*(price.in-price.cr)/1e6).toFixed(2)],
+          ['output+reasoning','$'+(sum(all,r=>(r.out+r.rsn)*price.out)/1e6).toFixed(2),'$ / tool call','$'+(totalCost/sum(all,r=>r.tool?1:0)).toFixed(3)],
+          ['cache misses (>50%)',all.filter(r=>r.cr/(r.cr+r.in+r.cw)<.5).length+' reqs','compactions',all.filter(r=>r.compacted).length]];
+ document.getElementById('econ').innerHTML=e.map(r=>`<tr><td class="d">${r[0]}</td><td class="r">${r[1]}</td><td class="d">${r[2]}</td><td class="r">${r[3]}</td></tr>`).join('');
+})();
+
+// ---------- jev ----------
+(function(){
+ const cv=document.getElementById('jev'),g=cv.getContext('2d'),W=cv.width,H=cv.height;
+ // confidence histogram by primitive + timeline strip
+ g.fillStyle=C.dim;g.font='9px Menlo';g.fillText('calls / 2m',2,10);
+ const b=new Array(30).fill(0);jevCalls.forEach(j=>b[Math.min(29,Math.floor(j.t/2))]++);
+ const mb=Math.max(...b);b.forEach((v,k)=>{const hh=v/mb*40;g.fillStyle=C.jev;g.fillRect(k*(W/30),58-hh,W/30-2,hh)});
+ g.fillStyle=C.dim;g.fillText('confidence distribution  ·  choice / score / noul',2,78);
+ ['choice','score','noul'].forEach((p,pi)=>{const hb=new Array(20).fill(0);jevCalls.filter(j=>j.prim===p).forEach(j=>hb[Math.min(19,Math.floor(j.conf*20))]++);
+   hb.forEach((v,k)=>{g.fillStyle=C.jev;g.globalAlpha=.25+v*.2;g.fillRect(70+k*((W-80)/20),88+pi*18,(W-80)/20-2,14)});g.globalAlpha=1;g.fillStyle=C.dim;g.fillText(p,2,95+pi*18)});
+ const jt=sum(jevCalls,j=>j.tok);
+ const rows=[['input tokens',fmt(jt),'cost','$'+(jt*.042/1e6).toFixed(5)],['median latency','0.27s','errors / 429','0 / 1'],['callers','main 22 · sa·rigor 11 · claude 5','unused gates','<span class="a">7 decision points w/o jev</span>']];
+ document.getElementById('jevt').innerHTML=rows.map(r=>`<tr><td class="d">${r[0]}</td><td class="r">${r[1]}</td><td class="d">${r[2]}</td><td class="r">${r[3]}</td></tr>`).join('');
+})();
+
+// ---------- tape ----------
+document.getElementById('tape').innerHTML=[
+ '<b>16:04:12</b> sa·fuzz  <span class="x">no provider event or process output for 14m — pid 40991 sleeping, rss 4.2G</span>',
+ '<b>16:04:09</b> main     tool run  ninja -C build/debug  (pid 41822)',
+ '<b>16:04:02</b> <span class="c">jev</span>      choice failure_triage → linker (p .91, conf .84)  1,212 tok',
+ '<b>16:03:57</b> claude   response 18.2k in (94% cached) / 2.1k out  · 11.4s',
+ '<b>16:03:41</b> sa·lit   pid 40112 exited 0 — not reaped by owner',
+ '<b>16:03:30</b> kimi-rev waiting on main: review packet tui-metrics#3',
+ '<b>16:03:12</b> main     <span class="a">cache miss: 41% hit — system prompt revision changed prefix</span>',
+].join('<br>');
+
+// ---------- fit to window ----------
+function fit(){const f=document.getElementById('frame');const sc=Math.min(window.innerHeight/1920,(window.innerWidth-20)/1080);f.style.transform=`scale(${sc})`}
+addEventListener('resize',fit);fit();
+</script>
+</body></html>
