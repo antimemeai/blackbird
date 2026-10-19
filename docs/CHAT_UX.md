@@ -9,7 +9,7 @@ The operator adopted this direction on2026-10-07: **chat-first, tools-secondary*
 
 ## Composer: delivered first editing slice
 
-Enter sends. Alt-Enter or Ctrl-J inserts a newline. Bracketed paste stays literal and never submits itself, invokes a shortcut, or dispatches a command.
+Enter sends. Shift-Enter, Alt-Enter or Ctrl-J inserts a newline. Bracketed paste stays literal and never submits itself, invokes a shortcut, or dispatches a command.
 
 | Key | Behavior |
 | --- | --- |

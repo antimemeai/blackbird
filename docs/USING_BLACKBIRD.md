@@ -77,9 +77,21 @@ Resize clamps the retained viewport and recomputes composer/cursor cell widths.
 Approximately 1 MiB of display is retained even for giant no-newline output, with
 an explicit trim notice; full originals remain audited and A2 retrieval still works.
 
-- Enter sends; Alt-Enter (or Ctrl-J) adds a line. Clipboard paste stays multiline
-  until you send it. Left/right, Home/End, Backspace/Delete and Ctrl-A/E/U edit.
+- Enter sends; Shift-Enter, Alt-Enter or Ctrl-J adds a line. Shift-Enter needs a
+  terminal that reports it distinctly: Ghostty does by default (`CSI 27;2;13~`);
+  kitty, Alacritty and WezTerm send a plain Enter until the kitty keyboard
+  protocol is supported. Clipboard paste stays multiline until you send it.
+  Left/right, Home/End, Backspace/Delete and Ctrl-A/E/U edit.
 - Up/down recall persisted submitted-prompt history. PgUp/PgDn scroll the view.
+- The mouse wheel scrolls the transcript 3 lines per report through SGR mouse
+  reporting. Shift-drag selects text natively in Ghostty while reporting is on.
+  `/mouse off` (or launching with `BLACKBIRD_MOUSE=0`) restores plain-drag
+  selection. Terminals with alternate scroll (Ghostty, Alacritty) then send the
+  wheel as arrow keys, which recall prompt history; `/mouse on` restores
+  transcript scrolling. Reporting is off while a foreground PTY command receives
+  input (reports are never forwarded to it), while the external editor runs, and
+  after ordinary exit. A killed process can leave reporting on, as it can leave
+  the alternate screen.
 - Ctrl-\ opens the local view picker; `/views` opens the same picker. Choose
   Conversation, Command runs, Command center or Result comparison to switch
   immediately while preserving the draft, cursor and each view's reading state.

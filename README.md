@@ -234,8 +234,8 @@ The basic controls are intentionally ordinary:
 | Control | Action |
 | --- | --- |
 | Enter | Submit; during a turn, queue the next prompt. |
-| Alt-Enter / Ctrl-J | Insert a newline. |
-| PgUp / PgDn | Move through the conversation. |
+| Alt-Enter / Ctrl-J / Shift-Enter | Insert a newline. Shift-Enter needs a terminal that reports it, such as Ghostty. |
+| PgUp / PgDn / mouse wheel | Move through the conversation; Shift-drag selects text; `/mouse off` restores plain-drag selection, and the wheel may then arrive as history-recalling arrow keys. |
 | Up / Down | Recall submitted prompts. |
 | Ctrl-C | Stop the active turn, clear its queue, and preserve the current draft. |
 | Ctrl-Q | Exit with drafts and queued work preserved as recoverable drafts. |

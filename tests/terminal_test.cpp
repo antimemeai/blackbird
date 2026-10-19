@@ -34,6 +34,11 @@ int main() {
     check(picker.palette_lines(8)[0].starts_with("Sessions"));
     check(feed(picker, "\x1b[B\r").text == "/resume /tmp/b");
     check(picker.text() == "unsent draft");
+    picker.choices({{"/resume /tmp/a", "", "/tmp/a", "Session", "Alpha"},
+                    {"/resume /tmp/b", "", "/tmp/b", "Session", "Beta"}},
+                   "Sessions");
+    check(feed(picker, "\x1b[<65;1;1M\r").text == "/resume /tmp/b"); // Wheel selects.
+    check(picker.text() == "unsent draft");
     picker.choices({{"/resume /tmp/a", "", "/tmp/a", "Session", "Alpha"}}, "Sessions");
     feed(picker, "\x1b");
     check(picker.flush_escape() && picker.text() == "unsent draft");
@@ -359,6 +364,60 @@ int main() {
     feed(c, "x\x1b\ry");
     check(c.text() == "x\ny");
     feed(c, "\x15");
+    // Shift, Alt and Ctrl Enter in Ghostty's default and kitty's CSI-u forms.
+    for (const std::string_view enter : {"\x1b[27;2;13~", "\x1b[13;2u", "\x1b[27;3;13~",
+                                         "\x1b[13;3u", "\x1b[27;5;13~", "\x1b[13;5u"}) {
+      feed(c, "\x15");
+      check(feed(c, std::string{"x"} + std::string{enter} + "y").action ==
+            InputAction::none);
+      check(c.text() == "x\ny" && c.cursor() == 3);
+    }
+    check(feed(c, "\r").text == "x\ny");
+    // An SGR wheel report scrolls; it never moves the caret or recalls history.
+    feed(c, "wheel draft");
+    check(feed(c, "\x1b[<64;10;5M").action == InputAction::scroll_up);
+    check(feed(c, "\x1b[<65;10;5M").action == InputAction::scroll_down);
+    check(feed(c, "\x1b[<68;1;1M").action == InputAction::scroll_up); // Shift held.
+    check(c.text() == "wheel draft" && c.cursor() == 11);
+    check(feed(c, "\x1b[<0;3;4M\x1b[<0;3;4m\x1b[<2;3;4M").action == InputAction::none);
+    check(c.text() == "wheel draft" && c.cursor() == 11 && !c.escape_pending());
+    // X10 reports from terminals that ignore ?1006: raw coordinate bytes,
+    // including parameter-range and final-looking ones, never reach the draft.
+    check(feed(c, "\x1b[M`!!").action == InputAction::scroll_up);
+    check(feed(c, "\x1b[Ma!!").action == InputAction::scroll_down);
+    check(feed(c, "\x1b[M`5m").action == InputAction::scroll_up);
+    check(feed(c, "\x1b[M 55\x1b[M#5m").action == InputAction::none);
+    feed(c, "k");
+    check(c.text() == "wheel draftk" && c.cursor() == 12);
+    // A report split across reads past the escape deadline drops its tail.
+    feed(c, "\x1b[<64;5");
+    check(c.flush_escape());
+    feed(c, ";5M");
+    feed(c, "\x1b[M`");
+    check(c.flush_escape());
+    feed(c, "!!z");
+    check(c.text() == "wheel draftkz" && c.cursor() == 13);
+    // A bare CSI M (also SCO F1) that expires arms no tail; ESC aborts X10.
+    feed(c, "\x1b[M");
+    check(c.flush_escape());
+    feed(c, "12\x1b[M`\x1b[D");
+    check(c.text() == "wheel draftkz12" && c.cursor() == 14);
+    // An input-owner handoff forgets a partial escape without arming a tail,
+    // or skips the rest of a report the PTY child was holding.
+    feed(c, "\x1b[<64;5");
+    c.reset_escape();
+    feed(c, "34");
+    check(c.text() == "wheel draftkz1342" && !c.escape_pending());
+    c.reset_escape(true);
+    feed(c, ";5Mq");
+    check(c.text() == "wheel draftkz134q2"); // The cursor sits before the final 2.
+    feed(c, "\x15");
+    // Down past the newest entry restores the draft and its cursor (2bj).
+    feed(c, "draft\x1b[D\x1b[D\x1b[A");
+    check(c.text() == "x\ny");
+    feed(c, "\x1b[B");
+    check(c.text() == "draft" && c.cursor() == 3);
+    feed(c, "\x15");
     check(feed(c, "\x04").action == InputAction::quit);
     check(terminal_lines("é界x", 3) == std::vector<std::string>{"é界", "x"});
     check(terminal_lines("x\x1b[31m", 20)[0] == "x\\x1b[31m");
@@ -484,6 +543,31 @@ int main() {
       navigation = inspection.feed(byte, nullptr, true);
     check(navigation.action == InputAction::inspect_previous);
     check(inspection.text() == "kept draft" && inspection.cursor() == kept_cursor);
+    const auto inspect_feed = [&](std::string_view bytes) {
+      InputResult last;
+      for (const auto byte : bytes)
+        if (auto next = inspection.feed(byte, nullptr, true);
+            next.action != InputAction::none)
+          last = std::move(next);
+      return last.action;
+    };
+    check(inspect_feed("\x1b[<64;2;2M") == InputAction::inspect_previous);
+    check(inspect_feed("\x1b[<65;2;2M") == InputAction::inspect_next);
+    // A click keeps inspector focus instead of returning to the draft.
+    check(inspect_feed("\x1b[<0;2;2M\x1b[<0;2;2m") == InputAction::none);
+    check(inspection.text() == "kept draft" && inspection.cursor() == kept_cursor);
+    {
+      // With the slash menu open, the wheel follows the arrows to the inspector.
+      Composer slash_inspect;
+      feed(slash_inspect, "/");
+      InputResult arrow, wheel;
+      for (const auto byte : std::string_view{"\x1b[A"})
+        arrow = slash_inspect.feed(byte, nullptr, true);
+      for (const auto byte : std::string_view{"\x1b[<64;1;1M"})
+        wheel = slash_inspect.feed(byte, nullptr, true);
+      check(arrow.action == InputAction::inspect_previous &&
+            wheel.action == InputAction::inspect_previous);
+    }
     check(inspection.feed('\t', nullptr, true).action ==
           InputAction::inspect_toggle_focus);
     check(inspection.feed('X', nullptr, true).action ==

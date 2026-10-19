@@ -415,13 +415,21 @@ while True:
         visible("PTY_READY")
         pty_job = job_id(pty_pid)
         assert pty_job != pipe_job, "different launches share job identity"
+        mouse_on, mouse_off = b"\x1b[?1000h\x1b[?1006h", b"\x1b[?1006l\x1b[?1000l"
+        assert mouse_on in raw, "composer frames enable SGR wheel reporting"
+        mark = len(raw)
         foreground(pty_job, interactive=True)
+        # PTY input is forwarded verbatim, so the child must never get reports.
+        wait(lambda: mouse_off in raw[mark:], "foreground PTY turns mouse reporting off")
         # A marker from the actual reader, not echoed composer text, proves input.
-        send("step-first\x18\r")
+        # The leading wheel report models one in flight; it must not reach the child.
+        send(b"\x1b[<64;5;5Mstep-first\x18\r")
         wait(lambda: "1:step-first\x18" in effects(), "foreground input reached actual PTY")
         visible("CHILD_STEP_1")
         assert "COMMAND CENTER" not in screen.text(), "private PTY control opened center"
+        mark = len(raw)
         send(b"\x02")
+        wait(lambda: mouse_on in raw[mark:], "releasing the PTY restores mouse reporting")
         command("/lua print('PTY_DETACHED_' .. 'LOCAL_WORK')")
         visible("PTY_DETACHED_LOCAL_WORK")
         assert alive(pty_pid), "Ctrl-B killed PTY command"

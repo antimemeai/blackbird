@@ -250,7 +250,7 @@ target_link_libraries(terminal_test PRIVATE blackbird_coding)
 add_test(NAME terminal COMMAND terminal_test)
 add_test(NAME terminal_pty COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check-terminal-pty $<TARGET_FILE:blackbird> --case controls)
 set_tests_properties(terminal_pty PROPERTIES TIMEOUT 30)
-foreach(episode palette palette-capacity editor composer state comfort avatar graphics)
+foreach(episode palette palette-capacity editor composer input state comfort avatar graphics)
   string(REPLACE "-" "_" test_suffix "${episode}")
   add_test(NAME terminal_pty_${test_suffix} COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/scripts/check-terminal-pty $<TARGET_FILE:blackbird> --case ${episode})

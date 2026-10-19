@@ -11421,3 +11421,48 @@ its mockups have been confirmed identical to the tracked copies, and ignore
 `/.superpowers/`. The unattributed MCP client proposal moves unchanged from untracked
 `docs/` into `papers/2026-10-17-mcp-client-proposal.md`, with a header saying it has
 not been adopted. Only the operator's artwork remains untracked.
+
+## 2026-10-19 — composer input: wheel, Shift-Enter, arrow history
+
+Unit 1 of the little bugs (`uss`, `v1i`, `2bj`) on work/text-bugs-2026-10-19. The
+plan and review record are in papers/text-bugs-2026-10-19/PLAN.md, grounded in the
+composer-input study from the iced Z.ai branch.
+- Ghostty sends the wheel as arrows (alternate scroll), and those arrows recalled
+  history.
+- Ghostty sends Shift-Enter as `CSI 27;2;13~`, which the parser dropped.
+- Arrow history itself was already correct.
+
+The operator compared the options with Claude Code's fullscreen design and chose
+SGR mouse reporting (`?1000h ?1006h`, no drag or motion reporting). Shift-drag
+selects in Ghostty. `BLACKBIRD_MOUSE=0` and `/mouse on|off` toggle it, and reporting
+is off during foreground PTY input, the editor and exit.
+- Mode bytes ride the frame packet ahead of graphics, under its raw capture. Emitted
+  state commits on packet completion.
+- `leave_screen` always ends reporting.
+- Shift, Alt and Ctrl Enter, in both the modifyOtherKeys and CSI-u forms, insert a
+  newline.
+
+RED:
+- the palette-wheel unit assertion fails on the old parser;
+- the new PTY input episode fails on the installed generation-IW1976SM, which never
+  enables reporting.
+
+GREEN: `terminal_test` and the affected PTY, readable-screen and custody tests pass
+on Debug.
+- The first broad run caught the graphics oracle requiring image placement right
+  before the synchronized-update close, so the mouse bytes moved ahead of graphics.
+- The editor oracle was corrected for a startup frame tail arriving after `send()`
+  cleared the buffer. The product byte order was verified directly.
+
+Review findings and recheck fixes are recorded in the plan. That makes two layers,
+closed.
+
+The first unit-1 hook run passed 263/264. `tui_retained_result` failed
+deterministically, and the installed pre-change generation fails it identically.
+Cause: F7 pins B through the asynchronous Lua instrument, while End is native. On
+this quiet, rebooted host End lands before the B rows exist (an 8 s run, against
+29 s under the 10-17 load). A 1 s probe pause makes it pass. The fixture now
+repeats the idempotent End until the pinned window shows, with the oracle and
+deadline unchanged; it passes 3/3, and on the old executable. Whether End should
+follow asynchronous growth is filed as a product question. The wrapper's exit 0
+had masked the failed commit; the hook log is the authority.

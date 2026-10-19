@@ -38,6 +38,7 @@
 {"issue_id":"arconaut-rln","label":"tui-campaign-bug"}
 {"issue_id":"arconaut-th5","label":"cpp-bug-class-audit"}
 {"issue_id":"arconaut-th5","label":"tui-campaign-bug"}
+{"issue_id":"arconaut-tnn","label":"quiet-host-sweep"}
 {"issue_id":"arconaut-uss","label":"little-bugs"}
 {"issue_id":"arconaut-v1i","label":"little-bugs"}
 {"issue_id":"arconaut-xbf","label":"quiet-host-sweep"}

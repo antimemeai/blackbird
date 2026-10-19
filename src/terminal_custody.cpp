@@ -49,8 +49,10 @@ constexpr std::uint64_t set_bytes =
     linked + 2 * sizeof(int) + termios_bytes + integer_return;
 constexpr std::uint64_t state_bytes = linked + sizeof(std::uint8_t) + sizeof(bool);
 constexpr std::string_view enter_screen = "\x18\x1b[?1049h\x1b[?2004h";
-constexpr std::string_view leave_screen = "\x18\x1b_Ga=d,d=I,i=72171,q=2;\x1b\\\x1b[?"
-                                          "2026l\x1b[0m\x1b[?2004l\x1b[?1049l\x1b[?25h";
+// Mouse reporting ends before the alternate screen, whether or not a frame set it.
+constexpr std::string_view leave_screen =
+    "\x18\x1b_Ga=d,d=I,i=72171,q=2;\x1b\\\x1b[?2026l\x1b[?1006l\x1b[?1000l\x1b[0m\x1b[?"
+    "2004l\x1b[?1049l\x1b[?25h";
 // Native field suppliers only. RawEmission owns all request/end/credit policy.
 RawEventRef publish(std::uint32_t site, RawEventRef parent,
                     std::span<const ByteView> fields, RawControlToken *bank) noexcept {

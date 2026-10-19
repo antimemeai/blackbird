@@ -273,10 +273,19 @@ while True:
             assert not any(line.startswith('INT_') for line in effects.read_text().splitlines()), 'picker leaked F8 interrupt'
             call('write', '\x1b[18~')
             call('key', 'press', 'Right')
-            call('key', 'press', 'End')
-            pinned = wait_state(lambda s: compact(b_label) in compact(comparison(s)) and
-                                'B_PINNED_ORIGINAL' in comparison(s),
-                                'pin B exact source window')
+            # The pin reaches the Lua instrument asynchronously, while End is
+            # native: End taken before the B rows exist stops short of them.
+            # Repeat the idempotent End until the pinned window shows.
+            deadline = time.monotonic() + 4
+            while True:
+                call('key', 'press', 'End')
+                pinned = state()
+                if (compact(b_label) in compact(comparison(pinned)) and
+                        'B_PINNED_ORIGINAL' in comparison(pinned)):
+                    break
+                if time.monotonic() >= deadline:
+                    raise AssertionError(f'pin B exact source window: {pinned}')
+                time.sleep(.03)
             assert 'A_SETTLED_EXIT_7' in comparison(pinned), 'comparison lost settled A tail'
             (artifacts / 'pinned-state.json').write_text(json.dumps(pinned, indent=2) + '\n')
             (artifacts / 'wide-observed.txt').write_text(pinned['text'] + '\n')

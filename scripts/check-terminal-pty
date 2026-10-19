@@ -26,6 +26,7 @@ spec = importlib.util.spec_from_file_location('screen_oracle', Path(__file__).wi
 oracle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(oracle)
 os.environ['BLACKBIRD_GRAPHICS'] = 'off'  # Text renderer cases are capability-independent.
+mouse_on, mouse_off = b"\x1b[?1000h\x1b[?1006h", b"\x1b[?1006l\x1b[?1000l"
 
 @contextlib.contextmanager
 def fixture_directory(prefix):
@@ -93,13 +94,22 @@ def exit_code(seconds=5):
             except OSError as error:
                 if error.errno != errno.EIO: raise
     assert child.poll() is not None, bytes(observed[-3000:])
+    # Exit can win the race with the last read; keep the final custody bytes.
+    while select.select([master], [], [], 0.05)[0]:
+        try:
+            data = os.read(master, 65536)
+        except OSError as error:
+            if error.errno != errno.EIO: raise
+            break
+        if not data: break
+        observed.extend(data)
     return child.wait()
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('executable')
 parser.add_argument('--case', default='all', choices=(
     'all', 'controls', 'palette', 'palette-capacity', 'editor', 'composer',
-    'state', 'comfort', 'avatar', 'graphics'))
+    'input', 'state', 'comfort', 'avatar', 'graphics'))
 arguments = parser.parse_args()
 
 if arguments.case in ('all', 'controls'):
@@ -352,6 +362,13 @@ if arguments.case in ('all', 'editor'):
             wait_for(b'Workflow reloads')
             send(b'original\x07\r') # Pre-editor typeahead must not send the returned draft.
             wait_for(b'Editor returned')
+            # The startup frame's tail may arrive after send() cleared the buffer;
+            # the suspend packet ends reporting and a frame after resume restores it.
+            def restored_after_suspend():
+                data = bytes(observed)
+                off = data.find(mouse_off)
+                return off != -1 and data.find(mouse_on, off) != -1
+            wait_for(mouse_off, predicate=restored_after_suspend)
             assert calls.read_text() == 'X'
             assert b'EDIT_RUN' not in observed, 'editor return auto-submitted a prompt'
             current = termios.tcgetattr(slave)
@@ -417,6 +434,81 @@ if arguments.case in ('all', 'composer'):
             os.close(master)
             os.close(slave)
     print("PTY multiline movement, editing, history cursor restoration and saved draft pass")
+
+if arguments.case in ('all', 'input'):
+    # Terminal input encodings on the actual executable: SGR wheel scrolls the
+    # transcript without touching the draft, arrows keep history, /mouse toggles
+    # reporting, Shift-Enter inserts newlines, and exit ends reporting first.
+    with fixture_directory(prefix="arco-input-") as work:
+        master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+        child = subprocess.Popen([arguments.executable, "--session", work], stdin=slave,
+                                 stdout=slave, stderr=slave, start_new_session=True)
+        observed = Observed()
+        try:
+            wait_for(b"Workflow reloads")
+            wait_for(mouse_on)
+            send(b'/lua print("INPUT_" .. "HISTORY")\r')
+            wait_for(b"INPUT_HISTORY")
+            send(b"typed")
+            wait_for(b"> typed")
+            send(b"\x1b[A")  # Bare Up at the first line recalls history.
+            wait_for(b'> /lua print("INPUT_')
+            send(b"\x1b[B")  # Down past the newest returns to the draft.
+            wait_for(b"> typed")
+            send(b"\x15/keys\r")
+            wait_for(b"Paste ")
+            assert b"Alt-Enter    Insert" not in observed.visible(), "precondition: help top scrolled away"
+            send(b"WHEELDRAFT")
+            wait_for(b"> WHEELDRAFT")
+            send(b"\x1b[<64;5;5M" * 6)
+            wait_for(b"Alt-Enter    Insert")
+            assert b"> WHEELDRAFT" in observed.visible(), "wheel changed the draft"
+            send(b"\x1b[<65;5;5M" * 6)
+            wait_for(b"> WHEELDRAFT", predicate=lambda: b"Alt-Enter    Insert" not in observed.visible())
+            send(b"\x15/mouse off\r")
+            wait_for(mouse_off)
+            wait_for(b"Mouse off")
+            send(b"/mouse on\r")
+            wait_for(mouse_on)
+            send(b"X\x1b[27;2;13~Y\x1b[13;2uZ")
+            wait_for(b"Z")
+            send(b"\x11")
+            assert exit_code() == 0
+            tail = bytes(observed)
+            assert tail.rfind(mouse_off) != -1 and tail.rfind(mouse_off) < tail.rfind(b"\x1b[?1049l"), "exit ends reporting before leaving the screen"
+            saved = native_packet.read_packet((Path(work) / 'ui-state.bbm'))
+            assert bytes.fromhex(saved['draft']) == b"X\nY\nZ", saved
+            # BLACKBIRD_MOUSE=0 never enables reporting until /mouse on asks.
+            observed = Observed()
+            child = subprocess.Popen([arguments.executable, "--session", work], stdin=slave,
+                                     stdout=slave, stderr=slave, start_new_session=True,
+                                     env=dict(os.environ, BLACKBIRD_MOUSE="0"))
+            wait_for(b"Workflow reloads")
+            startup = bytes(observed)
+            send(b"\x15/keys\r")
+            wait_for(b"Paste ")
+            assert mouse_on not in startup + bytes(observed), "BLACKBIRD_MOUSE=0 enabled reporting"
+            send(b"/mouse on\r")
+            wait_for(mouse_on)
+            send(b"\x11")
+            assert exit_code() == 0
+            # A launch that starts tiny enables reporting through the small frame.
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 20, 10, 0, 0))
+            observed = Observed()
+            child = subprocess.Popen([arguments.executable, "--session", work], stdin=slave,
+                                     stdout=slave, stderr=slave, start_new_session=True)
+            wait_for(mouse_on)
+            assert b"\x1b[2J" in observed, "first frame was not the small frame"
+            send(b"\x11")
+            assert exit_code() == 0
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+            os.close(master)
+            os.close(slave)
+    print("PTY wheel scroll, arrow history, mouse toggle, Shift-Enter, exit order and BLACKBIRD_MOUSE=0 pass")
 
 if arguments.case in ('all', 'state'):
     # Persistent UI state and RRC restoration must never dispatch queued drafts.

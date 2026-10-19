@@ -47,6 +47,10 @@ const std::array builtin_commands{
                 "Search command palette; Ctrl-Space or Ctrl-T (TUI only)", "Chat"},
     ChatCommand{"/views", "", "Switch local views; Ctrl-\\ preserves the draft",
                 "View"},
+    ChatCommand{"/mouse", "[on|off]",
+                "Wheel scrolls the transcript; off restores plain-drag selection (TUI "
+                "only)",
+                "View"},
     ChatCommand{
         "/edit", "",
         "Open a blank draft in $VISUAL/$EDITOR; Ctrl-G edits current draft (idle TUI)",
@@ -298,7 +302,8 @@ std::size_t word_right(std::string_view text, std::size_t cursor) {
 std::string terminal_key_help() {
   return "Keyboard\n"
          "  Enter        Send; while busy, queue for the next turn\n"
-         "  Alt-Enter    Insert newline (also Ctrl-J)\n"
+         "  Alt-Enter    Insert newline (also Ctrl-J; Shift-Enter where the\n"
+         "               terminal reports it, e.g. Ghostty)\n"
          "  Tab          Complete a slash-command name; ambiguity never submits\n"
          "  Ctrl-G       Edit current draft in $VISUAL/$EDITOR (idle only)\n"
          "  Ctrl-Space/T Search commands; arrows select, Enter loads, Esc backs out\n"
@@ -323,6 +328,9 @@ std::string terminal_key_help() {
          "  PTY input    Keys and Ctrl-C reach selected command; Ctrl-B returns\n"
          "  Ctrl-Q       Stop and exit; preserve unsent draft\n"
          "  PgUp / PgDn  Scroll transcript\n"
+         "  Wheel        Scroll transcript; Shift-drag selects text. /mouse off or\n"
+         "               BLACKBIRD_MOUSE=0 restores plain drag; the wheel may then\n"
+         "               arrive as arrow keys, which recall history\n"
          "  Paste        Multiline text stays literal; Enter sends explicitly\n";
 }
 std::vector<std::string> terminal_builtin_names() {
@@ -715,6 +723,12 @@ bool Composer::flush_escape() {
     palette_open_ = false;
     slash_open_ = false;
   }
+  // A report split across reads past the deadline must not type its tail.
+  // A bare CSI M is also SCO F1, so only a started coordinate arms the X10 tail.
+  if (escape_.starts_with("\x1b[<"))
+    sgr_tail_ = true;
+  else if (escape_.starts_with("\x1b[M") && escape_.size() > 3)
+    x10_tail_ = 6 - std::min<std::size_t>(escape_.size(), 6);
   escape_.clear();
   return true;
 }
@@ -894,6 +908,18 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
                                                  : command_catalog();
   const auto &commands = *catalog;
   const auto c = static_cast<unsigned char>(byte);
+  if (x10_tail_ && c != 27) {
+    --x10_tail_;
+    return {};
+  }
+  x10_tail_ = 0; // X10 coordinates are at least 32, so ESC starts new input.
+  if (sgr_tail_) {
+    if (c >= 0x30U && c <= 0x3fU)
+      return {};
+    sgr_tail_ = false;
+    if (byte == 'M' || byte == 'm')
+      return {};
+  }
   if (!escape_.empty()) {
     escape_ += byte;
     if (escape_ == "\x1b[200~") {
@@ -915,11 +941,49 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
       escape_.clear();
       return {};
     }
-    if (escape_ == "\x1b\r" || escape_ == "\x1b\n") {
+    // Alt-Enter, plus Shift/Alt/Ctrl-Enter as xterm modifyOtherKeys (Ghostty's
+    // default for Shift) and kitty CSI-u report them.
+    if (escape_ == "\x1b\r" || escape_ == "\x1b\n" || escape_ == "\x1b[27;2;13~" ||
+        escape_ == "\x1b[13;2u" || escape_ == "\x1b[27;3;13~" ||
+        escape_ == "\x1b[13;3u" || escape_ == "\x1b[27;5;13~" ||
+        escape_ == "\x1b[13;5u") {
       if (!palette_open_)
         insert('\n');
       escape_.clear();
       return {};
+    }
+    // Mouse reports: SGR CSI < button ; column ; row M|m, or X10 CSI M Cb Cx Cy
+    // from terminals that ignore ?1006. X10 coordinates are raw bytes, so this
+    // precedes the parameter-byte rule. Only the wheel acts; modifier bits
+    // (Shift 4, Meta 8, Ctrl 16) do not change its direction.
+    const bool sgr = escape_.starts_with("\x1b[<") && (byte == 'M' || byte == 'm');
+    if (escape_.starts_with("\x1b[M") && escape_.size() > 3 && c == 27) {
+      escape_ = byte; // Not a report: X10 coordinates are at least 32.
+      return {};
+    }
+    if (escape_.starts_with("\x1b[M") && escape_.size() < 6)
+      return {};
+    if (sgr || escape_.starts_with("\x1b[M")) {
+      unsigned button = 0;
+      if (sgr) {
+        const auto digits = std::string_view{escape_}.substr(3);
+        (void)std::from_chars(digits.data(), digits.data() + digits.size(), button);
+      } else if (static_cast<unsigned char>(escape_[3]) >= 32U)
+        button = static_cast<unsigned char>(escape_[3]) - 32U;
+      escape_.clear();
+      const bool wheel = !(sgr && byte == 'm') && (button & 0x43U) >= 0x40U &&
+                         (button & 0x43U) <= 0x41U;
+      if (!wheel)
+        return {};
+      const bool up = (button & 0x43U) == 0x40U;
+      // Same precedence as the arrows: palette, then inspector, then slash menu.
+      if (palette_open_ || (!inspecting && slash_open_)) {
+        palette_move(up);
+        return {};
+      }
+      if (inspecting)
+        return {up ? InputAction::inspect_previous : InputAction::inspect_next, {}};
+      return {up ? InputAction::scroll_up : InputAction::scroll_down, {}};
     }
     if (escape_.size() == 2 && (byte == '[' || byte == 'O'))
       return {};
@@ -2087,6 +2151,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   std::array<std::size_t, 4> image_placement{};
   bool pending_image_loaded = false;
   std::array<std::size_t, 4> pending_image_placement{};
+  // SGR wheel reporting rides frame packets; emitted state commits on completion.
+  const auto *mouse_setting = std::getenv("BLACKBIRD_MOUSE");
+  bool mouse_wanted = !mouse_setting || std::string_view{mouse_setting} != "0";
+  bool mouse_emitted = false, pending_mouse = false;
+  constexpr std::string_view mouse_on = "\x1b[?1000h\x1b[?1006h",
+                             mouse_off = "\x1b[?1006l\x1b[?1000l";
   auto service_output = [&] {
     try {
       if (!output.flush())
@@ -2098,6 +2168,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     }
     image_loaded = pending_image_loaded;
     image_placement = pending_image_placement;
+    mouse_emitted = pending_mouse;
     first_frame.outcome(RawRegionOutcome::flushed);
     first_frame.finish();
     return true;
@@ -2330,6 +2401,7 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     mode.resume();
     image_loaded = false;
     image_placement = {};
+    mouse_emitted = pending_mouse = false; // The suspend packet ended reporting.
     output.attach(STDOUT_FILENO);
     terminal_native_flush(&terminal_context); // Editor typeahead cannot send a draft.
     if (edited.accepted && edited.text != composer.text())
@@ -2556,7 +2628,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           std::chrono::steady_clock::now() >= child_escape_deadline &&
           terminal_native_poll(&terminal_context,
                                std::span{&child_input_ready, std::size_t{1}}, 0) == 0) {
-        append_child_input(child_escape);
+        if (child_pasted || !child_escape.starts_with("\x1b[<"))
+          append_child_input(child_escape); // An expired report prefix is dropped.
         child_escape.clear();
       }
       // Preserve the existing input batching despite bounded native reads.
@@ -2574,10 +2647,15 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         job.clear();
       const bool pty = !job.empty() && std::get<bool>(field(lease, "pty").value());
       if (job != foreground_job || epoch != foreground_epoch || pty != foreground_pty) {
+        const bool held_report = !child_pasted && child_escape.starts_with("\x1b[<");
         if (!child_escape.empty()) {
-          append_child_input(child_escape);
+          if (!held_report)
+            append_child_input(child_escape);
           (void)flush_child_input();
         }
+        // Neither owner may finish the other's partial escape or report.
+        if (pty != foreground_pty)
+          composer.reset_escape(held_report);
         foreground_job = std::move(job);
         foreground_epoch = epoch;
         foreground_pty = pty;
@@ -2694,8 +2772,13 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         redraw = false;
         const auto width = static_cast<std::size_t>(columns);
         const auto &committed = output.geometry();
+        // Foreground PTY input reaches the child verbatim, so reporting stays off.
+        const bool mouse_target = mouse_wanted && !foreground_pty;
+        const bool mouse_change = mouse_target != mouse_emitted;
+        // A recovering frame is never empty, so a mode change always has a packet.
         const bool recover = viewport_invalidated || committed.tiny ||
-                             committed.rows != rows || committed.columns != width;
+                             committed.rows != rows || committed.columns != width ||
+                             mouse_change;
         // A later resize wake must survive completion of this packet.
         viewport_invalidated = false;
         if (rows < 8 || columns < 12) {
@@ -2714,6 +2797,10 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             small_frame += "\x1b[1;" + std::to_string(cursor_column + 1) + "H";
             pending_image_loaded = false; // ED2 also invalidates Kitty image data.
             pending_image_placement = image_placement;
+            if (mouse_change) {
+              small_frame += mouse_target ? mouse_on : mouse_off;
+              pending_mouse = mouse_target;
+            }
             if (graphics_enabled && image_placement[2]) {
               small_frame += blackbird_graphics_erase();
               pending_image_placement = {};
@@ -3015,28 +3102,38 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         if (!packet.empty()) {
           pending_image_loaded = image_loaded && !recover;
           pending_image_placement = image_placement;
-          if (graphics_enabled && (recover || placement != image_placement)) {
+          const bool graphics_update =
+              graphics_enabled && (recover || placement != image_placement);
+          if (graphics_update || mouse_change) {
             layout.stage(4);
             constexpr auto digits = std::numeric_limits<std::size_t>::digits10 + 1;
             const auto image_bound =
                 raw_capture_ && raw_enabled()
-                    ? raw_ui_add(packet.size(), 4096 + 256 + 4 * digits)
+                    ? raw_ui_add(packet.size(),
+                                 4096 + 256 + 4 * digits + mouse_on.size())
                     : 0;
             RawUiFrame image{raw_capture_, image_bound};
             image.run([&] {
-              // Insert image commands before the existing synchronized-update close.
+              // Insert image and mouse-mode commands before the existing
+              // synchronized-update close.
               packet.resize(packet.size() - std::string_view{"\x1b[?2026l"}.size());
-              packet += blackbird_graphics_erase();
-              if (placement[2] && placement[3]) {
-                if (!pending_image_loaded) {
-                  packet += blackbird_graphics_load();
-                  pending_image_loaded = true;
+              if (mouse_change) {
+                packet += mouse_target ? mouse_on : mouse_off;
+                pending_mouse = mouse_target;
+              }
+              if (graphics_update) {
+                packet += blackbird_graphics_erase();
+                if (placement[2] && placement[3]) {
+                  if (!pending_image_loaded) {
+                    packet += blackbird_graphics_load();
+                    pending_image_loaded = true;
+                  }
+                  packet += blackbird_graphics_place(placement[0], placement[1],
+                                                     placement[2], placement[3]);
                 }
-                packet += blackbird_graphics_place(placement[0], placement[1],
-                                                   placement[2], placement[3]);
+                pending_image_placement = placement;
               }
               packet += "\x1b[?2026l";
-              pending_image_placement = placement;
               image.capture(packet);
               output.start(image.handoff());
             });
@@ -3154,7 +3251,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
         // The outer terminal's paste envelope is transport, not child input.
         // Parse across reads; controls inside it remain literal child bytes.
         if (byte == '\x02' && !child_pasted) {
-          append_child_input(child_escape);
+          if (!child_escape.starts_with("\x1b[<"))
+            append_child_input(child_escape);
           child_escape.clear();
           (void)flush_child_input();
           release_command({});
@@ -3164,11 +3262,21 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                 std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
           child_escape += byte;
           const std::string_view begin{"\x1b[200~"}, end{"\x1b[201~"};
+          // Child output is escaped text, so a child never enables outer mouse
+          // reporting: an SGR report is always Blackbird's, possibly in flight
+          // after the off packet. Hold it to its final byte, then drop it.
+          const auto u = static_cast<unsigned char>(byte);
+          const bool sgr_report = !child_pasted && child_escape.starts_with("\x1b[<");
           if (child_escape == begin) {
             child_pasted = true;
             child_escape.clear();
           } else if (child_escape == end) {
             child_pasted = false;
+            child_escape.clear();
+          } else if (sgr_report &&
+                     (child_escape.size() == 3 || (u >= 0x30U && u <= 0x3fU))) {
+            // Still inside the report: keep holding it.
+          } else if (sgr_report && (byte == 'M' || byte == 'm')) {
             child_escape.clear();
           } else if (!begin.starts_with(child_escape) &&
                      !end.starts_with(child_escape)) {
@@ -3390,6 +3498,10 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           scroll += static_cast<std::size_t>(rows / 2);
         if (result.action == InputAction::page_down)
           scroll -= std::min(scroll, static_cast<std::size_t>(rows / 2));
+        if (result.action == InputAction::scroll_up)
+          scroll += 3;
+        if (result.action == InputAction::scroll_down)
+          scroll -= std::min(scroll, std::size_t{3});
         if (result.action == InputAction::cancel) {
           action_branch = 5;
           withdraw_ui_prompts(raw_capture_, queued, 2, result.source.record,
@@ -3511,6 +3623,19 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             scroll = 0;
           } else if (result.text == "/clear") {
             transcript.clear();
+            scroll = 0;
+          } else if (result.text == "/mouse" || result.text == "/mouse on" ||
+                     result.text == "/mouse off") {
+            if (result.text != "/mouse")
+              mouse_wanted = result.text == "/mouse on";
+            transcript += mouse_wanted
+                              ? "\nMouse on: the wheel scrolls the transcript; "
+                                "Shift-drag selects text. /mouse off restores "
+                                "plain-drag selection.\n"
+                              : "\nMouse off: plain drag selects text. Terminals "
+                                "with alternate scroll (Ghostty, Alacritty) send the "
+                                "wheel as arrow keys, which recall history. /mouse on "
+                                "scrolls the transcript.\n";
             scroll = 0;
           } else if (result.text == "/drafts") {
             transcript +=

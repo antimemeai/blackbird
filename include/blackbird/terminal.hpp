@@ -44,7 +44,9 @@ enum class InputAction {
   instrument_toggle,
   instrument_action,
   select_view,
-  answer_question
+  answer_question,
+  scroll_up,
+  scroll_down
 };
 struct InputResult {
   InputAction action = InputAction::none;
@@ -99,6 +101,13 @@ public:
   bool escape_pending() const noexcept { return !escape_.empty(); }
   bool pasted() const noexcept { return pasted_; }
   bool flush_escape();
+  // Input ownership moved between the composer and a PTY child: forget any
+  // partial escape; optionally skip the rest of a mouse report the child held.
+  void reset_escape(bool skip_report_tail = false) noexcept {
+    escape_.clear();
+    x10_tail_ = 0;
+    sgr_tail_ = skip_report_tail;
+  }
   std::vector<std::string> palette_lines(std::size_t rows) const;
   const std::string &text() const noexcept { return text_; }
   std::size_t cursor() const noexcept { return cursor_; }
@@ -117,6 +126,9 @@ private:
   std::optional<std::size_t> goal_column_;
   bool pasted_ = false, palette_open_ = false;
   bool slash_open_ = false;
+  // Remainder of a mouse report whose prefix expired at the escape deadline.
+  bool sgr_tail_ = false;
+  std::size_t x10_tail_ = 0;
   std::string palette_query_;
   std::size_t palette_selected_ = 0;
   void palette_move(bool up);
