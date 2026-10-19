@@ -143,3 +143,28 @@ minimal backstop.
     complaint itself, as the actor, marked critical. The complaint carries the
     failed request's reference, its sizes, the provider's refusal original and
     the recovery outcome.
+
+## C5 result and C6 decision (2026-10-19)
+
+C5 ([C5_LIVE.md](C5_LIVE.md)): luna received the size line on every request and the
+trigger guidance on 16 consecutive requests. It never compacted, and finished at
+787 KB of input (26× the target). Advisory guidance alone does not work.
+
+Operator decisions:
+- **C6: a harness-initiated, model-authored compaction step.** When the trigger is
+  reached, Blackbird runs a dedicated compaction request.
+  - The model gets only the context tools (view, inspect, manage) and a short
+    imperative brief, and answers with a `context_manage` proposal.
+  - The proposal is audited, and the badge blinks.
+  - A decline or a rejected proposal is audited, and work continues.
+- **When it runs:** between tool rounds inside a turn, at boundaries with no open
+  tool group, and especially while a tool runs, using that idle wait. This extends
+  the activation rule, which today activates proposals only at workflow
+  completion. The extension needs its own design.
+- **Follow-up task:** different compaction instructions for models of different
+  strength (bead filed). C6 ships one brief first.
+- **C4 reuses this machinery** (a dedicated compaction request with restricted
+  tools) for its windowed overflow recovery.
+
+C6 follows the doctrine: a written design from source reading, one review, a plan,
+then tests that fail on the old code before implementation.

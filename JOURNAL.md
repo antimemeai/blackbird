@@ -11592,3 +11592,33 @@ but unmerged on the campaign-defects line. Proposed order: C5, merge a1v, land
 campaign-defects, then C4. Operator 2026-10-19: a fired overflow recovery is
 audited as a critical error that requires investigation, through the existing
 rageshake complaint.
+
+## 2026-10-19 — C5 live check: luna ignores the budget guidance
+
+Ran C5 on gpt-6-luna (high effort) through the campaign runner, sandboxed, against
+this worktree's Release build at `1f28945`.
+- The runner gained an optional `PRELUDE` launch, which staged a 60/30 KiB policy.
+- The first attempt invoked the runner by a relative path, broke its sandbox
+  profile lookup, and failed in 0 s before any request was made. It was removed
+  and relaunched by absolute path.
+
+The task, a read-heavy trace through a read-only copy of the source, completed
+with FLOW.md written in two launches of 19 requests. The site-1301 wire bodies
+show:
+- the CONTEXT_SIZE line on every request;
+- the trigger guidance on 16 consecutive requests;
+- input growing to 787 KB, 26× the target;
+- no context tool call.
+
+This matches the zero uses across the 39-run campaign: advisory guidance does not
+move this model. Evidence in papers/clm-a1v-2026-10-19/C5_LIVE.md.
+
+Operator decisions:
+- C6 is a harness-initiated, model-authored compaction step, run between tool
+  rounds and especially during tool waits.
+- Per-model-strength briefs are a follow-up (`a1v.2`).
+
+Provider errors are to be consumed and audited in full (`nls.16`, P0), after
+campaign-defects lands. Raw provider bytes need only one copy in a space-bounded
+rolling window. The audit-record shorthand (`nls.17`) is deferred as possibly
+unmotivated. A C6 source study is in progress.
