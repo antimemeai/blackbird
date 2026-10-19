@@ -36,3 +36,19 @@ campaign, where none of 39 runs used a context tool.
 
 **Conclusion.** Advisory guidance alone does not make this model manage its context. The nominal path needs a
 stronger mechanism before C4's backstop matters. The options and the operator decision are in PLAN.md.
+
+## Correction (2026-10-19, from the Jev pilot)
+
+The "Context tool calls: none" column above is **wrong**. It came from grepping the plain-mode stdout for a
+`[context_…` marker that the log does not use. The wire bodies show that luna called **`context_view` twice**
+after the trigger guidance appeared: rounds r11 and r18 of the final input.
+- The two outputs were 204,752 and 441,167 bytes: the whole context, with entry bodies.
+- Each was appended to the context as a tool result. Together they are **646 KB of the final 787 KB (80%)**.
+- The model then never called `context_manage`.
+
+So the guidance *did* move the model to inspect. The CLM tool design then defeated it:
+- `context_view` returns full bodies rather than an index;
+- its output permanently fattens the context it describes.
+
+Defect filed against `a1v`. The conclusion "advisory guidance alone does not work" is withdrawn. The finding is:
+**guidance works up to inspection, and `context_view` is unfit for that use.**

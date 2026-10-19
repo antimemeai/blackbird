@@ -11646,3 +11646,27 @@ and the staged `select` with walk-back disabled. One review and a clean recheck;
 low findings are filed as `a1v.3`. The unit-2 tools episode's `BG_3` wait, after
 `^U` on an idle screen, waited for bytes that never come; it now waits on the
 content first.
+
+## 2026-10-19 — Jev triage pilot; C5 conclusion corrected
+
+The operator questioned the C6 premise: the model deciding what to cut is the same
+expensive model being sent the oversized context. They suggested Jev as a cheap
+judge. Pilot on C5's final 787 KB input, 18 rounds, papers/clm-a1v-2026-10-19/
+JEV_PILOT.md:
+- Jev scored every round for relevance at the moment FLOW.md was written, at
+  7.8k tokens (~$0.0003) and about 0.4 s per call.
+- Two runs were stable to within 0.08.
+- It kept every cited source read verbatim and rated the trivial rounds as drop.
+
+The pilot also exposed my error. Two of those rounds are luna's own `context_view`
+calls, made after the trigger guidance appeared, each returning the whole context:
+204,752 and 441,167 bytes, 80% of the final context. My C5 count of "no context tool
+calls" was wrong; it came from grepping stdout for a marker format the plain log
+does not use. C5_LIVE.md now carries the correction.
+
+The real finding: the guidance does move the model to inspect, but `context_view`
+returns full bodies and its output fattens the context it describes, so the model
+never reaches `context_manage`. Filed as `arconaut-a1v.4` (P1). It blocks the C6
+step's working map. The operator notes Jev may not fit this particular job but is
+very useful generally, and wants it used much more, in Claude Code too (memory
+saved).
