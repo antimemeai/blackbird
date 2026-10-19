@@ -11361,3 +11361,34 @@ legacy benchmark metadata arconaut-k9r open. Supported backup and checked
 documentation/data publication finish delivery. Work branch is published and
 host runtime installed; master integration is not inferred. Artwork, recovery
 stash and the existing AFL campaign stay untouched.
+
+## 2026-10-17 — Z.ai colleague and bug-bash campaign opened
+
+Operator requests a worktree for two units: Z.ai authentication as a
+first-class colleague (GLM joins the crew), then a bug bash over beads, journal
+and docs. A slow study of Blackbird's surfaces rides along; every weakness or
+opportunity gets a bead and small ones are fixed en route. Worktree
+`context/glm-bugbash` on `work/glm-bugbash-2026-10-17`, based on the published,
+installed startup-generation candidate `1180d2b` (not master `f4bd931`): the
+installed runtime already runs that source, and its repairs should not be
+rediscovered as bugs.
+
+Running `bd` inside the fresh worktree auto-started an empty Dolt server on
+13308 from the worktree's `.beads/dolt`, the same lifecycle fault recorded on
+2026-10-16. Stopped only that newly started server and its idle monitor,
+removed the empty data directory, and wrote the ignored `.beads/redirect` to
+the main `.beads`; `bd worktree info` confirms the shared database (67 open
+issues). The main data directory was not touched. Recurrence makes this a
+scripting gap, queued for the bug bash.
+
+Research is delegated in three conceptual units: Z.ai/Zhipu primary sources and
+reference implementations, composer terminal input encoding (wheel and
+Shift+Enter), and an inventory of unfiled defects from the written record.
+Baseline Debug build and suite run in the worktree before any change.
+
+## 2026-10-19 — Z.ai thread on ice
+
+Operator puts the Z.ai colleague thread on ice before any source work. Commit the
+two completed studies and the opening entry so the worktree can retire; the
+resumable record is `arconaut-9zh`. The bug-bash half folds into the 2026-10-19
+backlog triage instead of continuing here.
