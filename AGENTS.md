@@ -123,6 +123,11 @@ Do not force-push or merge into main by implication. Record push failures plainl
 and retain local commits. Branch-based candidates use bounded worktree leases,
 not a checkout per archived candidate.
 
+Operator2026-10-19: every agent-written commit names its agent in a
+`Co-Authored-By` trailer and records its source in trailers: Claude session,
+Blackbird run/session, model and generation, and integrated reviews. See
+[commit attribution](docs/ATTRIBUTION.md).
+
 Keep the quarantined source unchanged. Record discovered mechanisms, evidence,
 consequences, and the design question or experiment needed to resolve them.
 Mutants run on the fleet, never this laptop. Run only checks that directly answer

@@ -11511,3 +11511,43 @@ struct called with designated initializers, with no suppression. `terminal_test`
 passes and clang-tidy is clean on src/terminal.cpp. The operator authorized
 stopping the rerun of the whole gate for this mechanical change and committing
 with the per-command hook override; the settled suite is not repeated.
+
+## 2026-10-19 — corpus assessments, gaps, Sol runs, attribution
+
+The operator asks for light, question-driven comparisons of Blackbird against the
+quarantined agent corpus, rather than extending the heavy `papers/capabilities/`
+matrix. Notes live in `papers/corpus-assessments-2026-10-19/`, and every subagent
+report is kept under its `reports/`.
+- **Gaps** (`gaps.md`): roughly 500 candidates swept, with tier-A identities
+  checked against the GitHub API. Google Research's Harness² is missing, as are
+  DeepSeek Harness, jcode, maki, smelt, agentty (C++26), the Zed ACP crates,
+  CodeCompanion, ACE and Grok Build. Our `openhands` snapshot is frontend only,
+  `kimi-cli` is archived (successor kimi-code), and `opencode` is 6.6k commits
+  stale. Harbor's Terminus 2 is already present inside `evo-harness-modularrsi`.
+  Nothing acquired yet.
+- **Tool output** (`01-tool-output.md`, against 12 references): Blackbird's exact,
+  session-owned originals beat every path-based store (expiring and recycled
+  paths). Its head-only command cut keeps the wrong end. Source reading finds that
+  a byte cut through a UTF-8 character hex-encodes the whole observation; filed as
+  `arconaut-q4n`, discovered from 47k.
+- **Slash commands** (`02-slash-commands.md`, 23 agents): the common everyday
+  commands are missing; 12 commands take typed JSON; `/clear` differs from other
+  agents. Tab completion can never reach `/sessions`, `/runs`, `/colleagues` or
+  `/drafts` (`complete_command` lets the exact singular win).
+
+Two autonomous Blackbird runs (gpt-6.1-sol, medium, installed
+generation-0BmneCkH) work in worktrees from master `168bb26`: slash-command
+modernization (`work/sol-slash-2026-10-19`) and 47k plus q4n
+(`work/sol-observations-2026-10-19`). The new `blackbird_runs/bin/run-worktree` is
+`run-one` with the worktree as the working directory. Its sandbox additionally
+permits writes to the worktree and the repository `.git`. HOME is isolated, so
+runs commit locally and never push; review and push happen afterwards. A sandbox
+smoke test passed: rigor doctor, a `.git` object write and a Sol reply.
+
+Fix: the tracked `BLACKBIRD.md -> ../BLACKBIRD.md` symlink dangles in every
+worktree under `context/`. The ignored `context/BLACKBIRD.md -> ../../BLACKBIRD.md`
+bridges it.
+
+The operator sets a commit attribution convention, one family for all agents:
+`Co-Authored-By` plus provenance trailers. See `docs/ATTRIBUTION.md`, with a
+pointer in AGENTS.md. Text-only change; diff and link checks only.
