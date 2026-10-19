@@ -195,8 +195,9 @@ persistent state. The model has a `lua` tool and the same APIs:
   `read_file`, `write_file`, `edit_file` access files. `exec` accepts `command` or
   `argv` and a timeout in seconds. Nonempty argv takes precedence; empty argv uses
   the command. File/process effects run without command-approval prompts.
-  The default coding workflow supplies a 16384-byte observation limit for `exec`
-  and un-ranged `read_file` calls unless `output_max_bytes` is explicit. An
+  The default coding workflow supplies 8192 bytes for `exec`: 2048 head and
+  6144 tail, unless `output_max_bytes` is explicit. Un-ranged `read_file` keeps
+  its 16384-byte head-first default. An
   explicit file range bypasses that workflow default. This bounds returned raw
   bytes, not tokens, capture, memory or external encoding. Custom Lua callers keep
   full-read defaults; zero or larger explicit limits are accepted.
@@ -210,6 +211,9 @@ persistent state. The model has a `lua` tool and the same APIs:
   clip or return empty; reversed, negative, noninteger ranges and line zero fail.
   LF is retained, CR is ordinary data, and a trailing LF creates no extra line.
   Full original file bytes remain audited; invalid UTF-8 slices return hex.
+  Observation budgets cut on character boundaries, preferring a nearby newline
+  (within 256 bytes, retaining at least half the prefix). Explicit byte slices
+  remain exact. `byte_start`/`byte_end` report actual half-open byte offsets.
   Reads still have the existing 16 MiB full-file capacity, even for small ranges.
   A native session read returns `snapshot={journal=...,sequence=...}`. For repair,
   call `read_file` with that `snapshot` instead of `path`, plus the desired range.
@@ -219,15 +223,26 @@ persistent state. The model has a `lua` tool and the same APIs:
   Optional `output_max_bytes` limits a file's selected range. `file_bytes` is the
   full original size, `selected_bytes` the clipped range size, `returned_bytes`
   the returned prefix size, and `omitted_bytes` the selected bytes not returned.
-  These four fields appear when a limit is supplied. Original capture is complete.
-  `exec` accepts `output_max_bytes` to bound the raw prefix bytes in its
-  model-facing result (JSON encoding overhead is not included). With a budget,
-  `output_bytes` and `omitted_bytes` describe the full and omitted counts. Normal
-  `exec` results include `output_ref`; use
-  `blackbird.call("read_process_output", {output_ref=REF, byte_start=N, byte_end=M})`
-  to retrieve original combined stdout/stderr from retained audit without replay.
-  Ranges use the same byte semantics as file reads, and survive reopen. Original
-  process chunks and terminal streaming are not clipped by this model budget.
+  These four fields appear when a limit is supplied. `next_range` contains the
+  next bounded byte page; pass it with the same snapshot to continue from the
+  actual cut. Zero budgets return no content but offer a progressing next page.
+  Original capture is complete.
+  `exec` accepts `output_max_bytes` to bound raw observation bytes (encoding and
+  the elision marker are not charged). Explicit budgets keep head-first behavior;
+  add `output_head_bytes` to allocate part to the head and the rest to the tail.
+  For an elided text observation, `output` is head + a clearly labeled omitted-byte
+  marker + tail; binary excerpts use an object with `head` and `tail` text/hex.
+  `byte_start`/`byte_end` identify the head, `tail_byte_start`/`tail_byte_end` the
+  tail, and `omitted_range` the exact gap. `output_bytes`, `returned_bytes` and
+  `omitted_bytes` count raw original bytes, not marker/encoding bytes.
+  `next_read` gives the recovery tool and exact `output_ref`/next byte page.
+  `blackbird.call("read_process_output", {output_ref=REF,
+  range={mode="lines", start=3, ["end"]=3}})` reads an original line without
+  replay. Canonical byte ranges, or legacy `byte_start`/`byte_end`, are also
+  supported, with the same semantics as files; never mix selectors. Optional
+  `output_max_bytes` pages large selections. Explicit byte slices remain exact,
+  including hex for binary or split UTF-8. Original process chunks and terminal
+  streaming are not clipped by this model budget, and recovery survives reopen.
   Timeout/cancellation still interrupt the turn; partial chunks and their attempt
   references remain in audit for explicit later inspection/retrieval. The existing
   16 MiB process collection capacity remains; this is not a memory/stream budget.

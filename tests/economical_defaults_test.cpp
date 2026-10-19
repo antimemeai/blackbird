@@ -7,9 +7,11 @@ using namespace blackbird;
 namespace {
 void check(bool condition,
            std::source_location where = std::source_location::current()) {
-  if (!condition)
+  if (!condition) {
+    std::cerr << "economical observations line " << where.line() << '\n';
     throw std::runtime_error("economical observations line " +
                              std::to_string(where.line()));
+  }
 }
 template <class T> T id(unsigned char byte) {
   IdentityBytes bytes{};
@@ -18,9 +20,9 @@ template <class T> T id(unsigned char byte) {
 }
 class Provider final : public CodingProvider {
 public:
-  std::string file, marker;
+  std::string file, marker, build;
   std::size_t calls = 0;
-  Value snapshot;
+  Value snapshot, output_ref;
   Value respond(const Value &request,
                 const std::function<void(std::string_view)> &) override {
     ++calls;
@@ -34,8 +36,9 @@ public:
                            {"arguments", Value{unwrap(dump_json(args))}}}));
       };
       call("read_file", Value::object({{"path", Value{file}}}));
-      call("exec", Value::object({{"command", Value{"printf X >> '" + marker +
-                                                    "'; cat '" + file + "'"}}}));
+      call("exec",
+           Value::object({{"command", Value{"printf X >> '" + marker + "'; cat '" +
+                                            build + "'; exit 7"}}}));
       call("read_file",
            Value::object({{"path", Value{file}},
                           {"range", Value::object({{"mode", Value{"bytes"}},
@@ -60,8 +63,9 @@ public:
       call("lua",
            Value::object({{"code", Value{"return blackbird.call('read_file', {path=" +
                                          unwrap(dump_json(Value{file})) + "})"}}}));
-    } else {
+    } else if (calls == 2) {
       std::size_t results = 0;
+      Value next_file_range;
       for (const auto &item : field(request, "input").array()) {
         const auto *type = item.find("type");
         if (!type || *type != Value{"function_call_output"})
@@ -73,10 +77,26 @@ public:
           check(field(result, "file_bytes") == Value{Number{40000}});
           check(field(result, "omitted_bytes") == Value{Number{23616}});
           snapshot = field(result, "snapshot");
+          if (const auto *next = result.find("next_range"))
+            next_file_range = *next;
         } else if (call_id == "1") {
-          check(string_field(result, "output") == std::string(16384, 'A'));
-          check(field(result, "omitted_bytes") == Value{Number{23616}});
-          check(field(result, "exit_code") == Value{Number{0}});
+          const auto &shown = string_field(result, "output");
+          check(shown.starts_with("build start\n"));
+          check(shown.ends_with("error: trailing failure\n"));
+          check(shown.find("NEEDED_MIDDLE=exact") == std::string::npos);
+          check(field(result, "output_bytes") == Value{Number{1200058}});
+          check(field(result, "returned_bytes") == Value{Number{8192}});
+          check(field(result, "next_offset") == Value{Number{2048}});
+          check(field(result, "omitted_prefix_bytes") == Value{Number{0}});
+          check(field(field(result, "omitted_range"), "start") == Value{Number{2048}});
+          check(field(field(result, "omitted_range"), "end") == Value{Number{1193914}});
+          check(field(result, "exit_code") == Value{Number{7}});
+          output_ref = field(result, "output_ref");
+          const auto &next = field(result, "next_read");
+          check(string_field(next, "tool") == "read_process_output");
+          check(field(field(next, "arguments"), "output_ref") == output_ref);
+          check(field(field(next, "arguments"), "byte_start") == Value{Number{2048}});
+          check(field(field(next, "arguments"), "byte_end") == Value{Number{10240}});
         } else if (call_id == "2") {
           check(string_field(result, "content") == std::string(24000, 'A'));
         } else if (call_id == "3") {
@@ -103,6 +123,34 @@ public:
         ++results;
       }
       check(results == 10);
+      check(string_field(next_file_range, "mode") == "bytes");
+      check(field(next_file_range, "start") == Value{Number{16384}});
+      check(field(next_file_range, "end") == Value{Number{32768}});
+      const auto recovery_args =
+          Value::object({{"output_ref", output_ref},
+                         {"range", Value::object({{"mode", Value{"lines"}},
+                                                  {"start", Value{Number{3}}},
+                                                  {"end", Value{Number{3}}}})}});
+      output.push_back(
+          Value::object({{"type", Value{"function_call"}},
+                         {"call_id", Value{"recover-middle"}},
+                         {"name", Value{"read_process_output"}},
+                         {"arguments", Value{unwrap(dump_json(recovery_args))}}}));
+    } else {
+      check(calls == 3);
+      bool recovered = false;
+      for (const auto &item : field(request, "input").array()) {
+        const auto *type = item.find("type");
+        if (!type || *type != Value{"function_call_output"} ||
+            string_field(item, "call_id") != "recover-middle")
+          continue;
+        const auto &result = field(item, "output");
+        check(string_field(result, "output") == "NEEDED_MIDDLE=exact\n");
+        check(field(result, "byte_start") == Value{Number{600013}});
+        check(field(result, "byte_end") == Value{Number{600033}});
+        recovered = true;
+      }
+      check(recovered);
     }
     return Value::object({{"output", Value{std::move(output)}}});
   }
@@ -111,7 +159,7 @@ void exercise(const std::string &path) {
   const JournalHeader header{id<EnvironmentId>(1),
                              id<AuditStreamId>(2),
                              7,
-                             {1024 * 1024, 4 * 1024 * 1024},
+                             {4 * 1024 * 1024, 16 * 1024 * 1024},
                              std::nullopt};
   const JournalCapacity capacity{64 * 1024 * 1024, 20000};
   const auto file = path + "/source", marker = path + "/effect";
@@ -121,6 +169,11 @@ void exercise(const std::string &path) {
   Provider provider;
   provider.file = file;
   provider.marker = marker;
+  provider.build = path + "/build-output";
+  const auto build_output = "build start\n" + std::string(600000, 'A') +
+                            "\nNEEDED_MIDDLE=exact\n" + std::string(600000, 'B') +
+                            "\nerror: trailing failure\n";
+  write_file(provider.build, build_output);
   {
     auto root =
         unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(
@@ -130,7 +183,8 @@ void exercise(const std::string &path) {
     ContextStore context{log};
     CodingEngine engine{log, context, provider, "test"};
     engine.turn({"inspect useful facts", read_file("programs/turn.lua")});
-    check(provider.calls == 2 && read_file(marker) == "X");
+    check(provider.calls == 3 && read_file(marker) == "X");
+    check(std::filesystem::remove(provider.build));
     write_file(file, "replacement must not be returned");
     const auto repaired = engine.operator_call(
         "read_file",
@@ -156,7 +210,10 @@ void exercise(const std::string &path) {
         "read_file", Value::object({{"snapshot", provider.snapshot}}));
     check(string_field(repaired, "content") == original);
     check(field(repaired, "snapshot") == provider.snapshot);
-    check(provider.calls == 2 && read_file(marker) == "X");
+    check(provider.calls == 3 && read_file(marker) == "X");
+    const auto output_repaired = engine.operator_call(
+        "read_process_output", Value::object({{"output_ref", provider.output_ref}}));
+    check(string_field(output_repaired, "output") == build_output);
     const auto conflict = engine.operator_call(
         "read_file",
         Value::object({{"snapshot", provider.snapshot}, {"path", Value{marker}}}));

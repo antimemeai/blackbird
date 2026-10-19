@@ -31,6 +31,8 @@ public:
   virtual void begin_request_group(const Value &, const RawAdapterContext *) {}
   virtual void end_request_group() noexcept {}
   virtual bool supports_prompt_cache_policy() const noexcept { return false; }
+  // The provider routes prompt-cache affinity by a request's prompt_cache_key.
+  virtual bool supports_prompt_cache_key() const noexcept { return false; }
   // Signed native histories must replay operational input at its original place.
   virtual bool retain_request_state() const noexcept { return false; }
   virtual Value respond(const Value &request,
@@ -56,6 +58,7 @@ public:
   void begin_request_group(const Value &, const RawAdapterContext *) override;
   void end_request_group() noexcept override;
   bool supports_prompt_cache_policy() const noexcept override;
+  bool supports_prompt_cache_key() const noexcept override { return true; }
   Value respond(const Value &, const std::function<void(std::string_view)> &) override;
   Value respond(const Value &, const std::function<void(std::string_view)> &,
                 const RawProviderOwner *) override;
@@ -214,6 +217,13 @@ private:
   std::unique_ptr<Runtime> runtime_;
   Value request(Value options = Value::object({}));
   Value call(std::string name, Value arguments);
+  struct ProcessOriginalIndex {
+    bool known = false;
+    std::vector<std::pair<RecordReference, SourceReference>> chunks;
+  };
+  std::size_t process_original_cursor_ = 0;
+  std::map<std::string, ProcessOriginalIndex> process_originals_;
+  Value retained_process_output(const Value &arguments);
   Value operation(std::string_view name, const Value &input,
                   const std::function<
                       Value(OperationAttemptId, InvocationId, DefinitionGenerationId,

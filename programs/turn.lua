@@ -12,7 +12,10 @@ for step = 1, 64 do
       local args = item.arguments
       if args.output_max_bytes == nil then
         if item.name == "exec" then
-          args.output_max_bytes = 16384
+          args.output_max_bytes = 8192
+          if args.output_head_bytes == nil then
+            args.output_head_bytes = 2048
+          end
         elseif
           item.name == "read_file"
           and args.range == nil

@@ -110,6 +110,33 @@ Subscription/compatibility and other models retain provider defaults or directly
 authored request fields; this implementation does not establish their cache-control
 acceptance. No paid prewarm or keepalive runs. A marker does not prove a cache hit.
 
+## Cache affinity
+
+Every main request on an OpenAI route (the ChatGPT compatibility backend and the
+owned public API) carries `prompt_cache_key`, set to the session's conversation
+identity as 32 hex digits. On the ChatGPT backend, the same value also goes in a
+`session-id` header, because that backend routes cache affinity by the header,
+not the body. Codex does the same (`codex-rs/core/src/client.rs`,
+`codex-api/src/requests/headers.rs`). The key is part of the retained request
+packet, and it stays the same across turns, reopen and native restart. A request
+that already authors `prompt_cache_key` through `blackbird.request` keeps that
+value. A key that cannot be sent as a header (empty, oversized, or containing a
+CR, LF or NUL) refuses the ChatGPT request instead of being dropped. Other
+providers get no key.
+
+Before this change, the ChatGPT route sent neither the key nor the header. In the
+2026-10-19 Sol runs, the instructions, tools and earlier input were byte-identical
+across consecutive requests, yet cached input varied from 0% to 97% between
+consecutive requests and averaged 25–43%. Requests were landing on cache
+replicas without affinity. The diagnosis is in the journal.
+
+After the fix, the installed generation-Sir77UUA ran one live Sol (medium)
+session of 11 requests with sequential tool calls on the same route. The first
+request had nothing cached. Every later request was 59-95% cached, with no misses:
+82% of input across requests 2-11, and 77% overall. The cached counts move in
+512-token blocks, so the newest tail of each request always misses. This is one
+short session, not a cost ranking.
+
 Retain a policy through the existing program configuration tool:
 
 ```lua

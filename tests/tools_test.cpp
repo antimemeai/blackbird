@@ -45,10 +45,26 @@ int main() {
     if (string_field(zero, "output") != "" ||
         field(zero, "output_bytes").number().text() != "1")
       throw Error{ErrorCode::corrupt};
+    // q4n: byte 16384 is inside the three-byte curly quote [16383,16386).
+    const std::string utf8 = std::string(16383, 'A') + "’tail\n";
+    write_file(file, utf8);
+    const auto clipped =
+        tools.run("exec", Value::object({{"command", Value{"cat '" + file + "'"}},
+                                         {"output_max_bytes", Value{Number{16384}}}}));
+    if (!std::holds_alternative<std::string>(field(clipped, "output").value())) {
+      std::cerr << "q4n: default-budget cut hex-encoded readable UTF-8\n";
+      throw Error{ErrorCode::corrupt};
+    }
+    if (string_field(clipped, "output") != std::string(16383, 'A') ||
+        field(clipped, "byte_start") != Value{Number{0}} ||
+        field(clipped, "byte_end") != Value{Number{16383}} ||
+        field(clipped, "omitted_bytes") != Value{Number{8}} ||
+        tools.captured()[0].bytes != utf8)
+      throw Error{ErrorCode::corrupt};
     auto split =
         tools.run("exec", Value::object({{"command", Value{"printf '\\303\\251'"}},
                                          {"output_max_bytes", Value{Number{"1"}}}}));
-    if (string_field(field(split, "output"), "bytes") != "c3")
+    if (string_field(split, "output") != "")
       throw Error{ErrorCode::corrupt};
     const auto marker = std::string{path} + "/nul-command-marker";
     for (const auto *number : {"-1", "1.5", "18446744073709551616"}) {
@@ -128,9 +144,9 @@ int main() {
     const auto binary_prefix = tools.run(
         "read_file",
         Value::object({{"path", Value{file}}, {"output_max_bytes", Value{Number{2}}}}));
-    if (string_field(field(binary_prefix, "content"), "bytes") != "78c3" ||
-        field(binary_prefix, "returned_bytes") != Value{Number{2}} ||
-        field(binary_prefix, "omitted_bytes") != Value{Number{2}} ||
+    if (string_field(binary_prefix, "content") != "x" ||
+        field(binary_prefix, "returned_bytes") != Value{Number{1}} ||
+        field(binary_prefix, "omitted_bytes") != Value{Number{3}} ||
         tools.captured()[0].bytes != std::string{"x\xc3\xa9\xff", 4})
       throw Error{ErrorCode::corrupt};
     write_file(file, "a\r\n\nb");
@@ -208,6 +224,51 @@ int main() {
         Value::object({{"path", Value{file}}, {"byte_start", Value{Number{"2"}}}}));
     if (string_field(field(binary, "content"), "bytes") != "ff" ||
         tools.captured()[0].bytes != std::string{"x\0\xff", 3})
+      throw Error{ErrorCode::corrupt};
+    // Both observation seams split a two-byte character before adjustment.
+    const auto seams = "AAAé" + std::string(20, 'B') + "éZZZZZZZ";
+    write_file(file, seams);
+    const auto head_tail =
+        tools.run("exec", Value::object({{"command", Value{"cat '" + file + "'"}},
+                                         {"output_max_bytes", Value{Number{12}}},
+                                         {"output_head_bytes", Value{Number{4}}}}));
+    if (!string_field(head_tail, "output").starts_with("AAA\n[... bytes [3,27)") ||
+        !string_field(head_tail, "output").ends_with("ZZZZZZZ") ||
+        field(head_tail, "returned_bytes") != Value{Number{10}} ||
+        field(head_tail, "tail_byte_start") != Value{Number{27}} ||
+        field(head_tail, "tail_byte_end") != Value{Number{34}} ||
+        tools.captured()[0].bytes != seams) {
+      std::cerr << "head/tail UTF-8 seams or original capture differ\n";
+      throw Error{ErrorCode::corrupt};
+    }
+    const auto lines = "head\n" + std::string(300, 'B') + "\ntail\n";
+    const auto near_lines = process_output_presentation(
+        lines, Value::object({{"output_max_bytes", Value{Number{16}}},
+                              {"output_head_bytes", Value{Number{8}}}}));
+    if (field(near_lines, "byte_end") != Value{Number{5}} ||
+        field(near_lines, "tail_byte_start") != Value{Number{306}} ||
+        field(near_lines, "returned_bytes") != Value{Number{10}})
+      throw Error{ErrorCode::corrupt};
+    const auto middle = process_output_presentation(
+        lines, Value::object({{"range", Value::object({{"mode", Value{"lines"}},
+                                                       {"start", Value{Number{2}}},
+                                                       {"end", Value{Number{2}}}})}}));
+    if (string_field(middle, "output") != std::string(300, 'B') + "\n" ||
+        field(middle, "byte_start") != Value{Number{5}} ||
+        field(middle, "byte_end") != Value{Number{306}})
+      throw Error{ErrorCode::corrupt};
+    const auto file_page = file_content_presentation(
+        "AAAABBBétail", Value::object({{"output_max_bytes", Value{Number{4}}}}));
+    if (field(field(file_page, "next_range"), "start") != Value{Number{4}} ||
+        field(field(file_page, "next_range"), "end") != Value{Number{7}})
+      throw Error{ErrorCode::corrupt};
+    const auto gap = "AA" + std::string(8191, 'B') + "é" + std::string(300, 'C') + "ZZ";
+    const auto process_page = process_output_presentation(
+        gap, Value::object({{"output_ref", Value{"fixture"}},
+                            {"output_max_bytes", Value{Number{4}}},
+                            {"output_head_bytes", Value{Number{2}}}}));
+    if (field(field(field(process_page, "next_read"), "arguments"), "byte_end") !=
+        Value{Number{8193}})
       throw Error{ErrorCode::corrupt};
     write_file(file, "same same");
     bool refused = false;

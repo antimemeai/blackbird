@@ -2,6 +2,7 @@
 #include "blackbird/json.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/raw_runtime.hpp"
+#include "blackbird/session.hpp"
 #include "request_state.hpp"
 #include <cerrno>
 #include <chrono>
@@ -216,6 +217,59 @@ public:
     return result;
   }
 };
+class CacheKeyProvider final : public CodingProvider {
+public:
+  bool affinity = true;
+  std::vector<Value> requests;
+  bool supports_prompt_cache_key() const noexcept override { return affinity; }
+  Value respond(const Value &request,
+                const std::function<void(std::string_view)> &) override {
+    requests.push_back(request);
+    return Value::object({{"output", Value{Value::Array{}}}});
+  }
+};
+// Cache affinity: providers that route by prompt_cache_key get the session's
+// conversation identity on every request, unchanged across a reopened engine.
+void cache_affinity_test(const std::string &path) {
+  std::filesystem::create_directory(path);
+  std::filesystem::permissions(path, std::filesystem::perms::owner_all);
+  const JournalHeader h{id<EnvironmentId>(95),
+                        id<AuditStreamId>(96),
+                        11,
+                        {1024 * 1024, 4 * 1024 * 1024},
+                        std::nullopt};
+  auto root =
+      unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(
+                                       unwrap(NativeJournalDirectory::open(path))),
+                                   "audit", h, {384 * 1024, 1000}));
+  AuditLog log{*root};
+  ContextStore context{log};
+  CacheKeyProvider provider;
+  {
+    CodingEngine engine{log, context, provider, "test"};
+    engine.turn({"", "arco.request()"});
+    engine.turn({"", "arco.request()"});
+    engine.turn({"", "arco.request({prompt_cache_key='authored-key'})"});
+  }
+  {
+    CodingEngine reopened{log, context, provider, "test"};
+    reopened.turn({"", "arco.request()"});
+  }
+  provider.affinity = false;
+  {
+    CodingEngine plain{log, context, provider, "test"};
+    plain.turn({"", "arco.request()"});
+  }
+  const auto expected = hex_identity(session_identity(log).conversation.bytes());
+  const auto key = [&](std::size_t i) -> std::string {
+    const auto *value = provider.requests.at(i).find("prompt_cache_key");
+    return value ? value->string() : std::string{"<absent>"};
+  };
+  if (provider.requests.size() != 5 || expected.size() != 32 || key(0) != expected ||
+      key(1) != expected || key(2) != "authored-key" || key(3) != expected ||
+      key(4) != "<absent>")
+    throw Error{ErrorCode::corrupt};
+}
 Value invoke(CodingEngine &engine, std::string_view name, const Value &args) {
   std::string shown;
   engine.display = [&](std::string_view text) { shown += text; };
@@ -1405,6 +1459,8 @@ int main(int argc, char **argv) {
       retry_tests(std::string{path} + "/retries");
       enter_stage("owned_route_tests");
       owned_route_tests(std::string{path} + "/owned-routes");
+      enter_stage("cache_affinity_test");
+      cache_affinity_test(std::string{path} + "/cache-affinity");
       enter_stage("fixture removal");
       std::filesystem::remove_all(path);
       enter_stage("complete");

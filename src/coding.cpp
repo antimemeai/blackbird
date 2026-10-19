@@ -4463,6 +4463,11 @@ Value CodingEngine::request(Value options) {
     prepare_request_cache(request,
                           {cache_mode, provider_.supports_prompt_cache_policy(),
                            provider_.provider_identity(), reusable_input_items});
+    // Cache affinity follows the conversation, so it survives reopen and restart.
+    // An authored key wins.
+    if (provider_.supports_prompt_cache_key() && !request.find("prompt_cache_key"))
+      request.object().emplace_back(
+          "prompt_cache_key", Value{hex_identity(identity_.conversation.bytes())});
     if (context_.head() != origin)
       throw Error{ErrorCode::conflict};
     ProviderOriginalLease final_packet{{ProviderOriginalRole::request_packet,
@@ -4811,6 +4816,110 @@ Value CodingEngine::request(Value options) {
     });
   });
 }
+Value CodingEngine::retained_process_output(const Value &arguments) {
+  const auto &reference = string_field(arguments, "output_ref");
+  auto read_credit = raw_command_claim(58);
+  const auto reference_size = reference.size();
+  const std::uint8_t mode = 2;
+  const auto request =
+      raw_command_data(2037, std::array{detail::raw_native_field(reference_size),
+                                        detail::raw_string_field(reference),
+                                        detail::raw_native_field(mode)});
+  bool known = command_jobs_->contains(reference);
+  std::string raw;
+  try {
+    // Index only newly committed metadata; keep locators, never resident output bodies.
+    for (; process_original_cursor_ < log_.root().fact_count();
+         ++process_original_cursor_) {
+      const auto fact = unwrap(log_.root().fact(process_original_cursor_));
+      const auto *record = std::get_if<ApplicationRecordEvent>(&fact.event.body);
+      if (!record || record->channel != ApplicationChannel::log)
+        continue;
+      const auto packet = unwrap(read_packet(record->payload));
+      const auto &label = string_field(packet, "label");
+      if (label != "operation.result" && label != "process.output")
+        continue;
+      const auto &metadata = field(packet, "metadata");
+      const auto *old_attempt = metadata.find("attempt");
+      if (!old_attempt)
+        continue;
+      if (label == "operation.result") {
+        const auto *op = metadata.find("operation");
+        if (op && op->string() == "exec")
+          process_originals_[old_attempt->string()].known = true;
+      } else {
+        auto &entry = process_originals_[old_attempt->string()];
+        // Reserve before mutating: an allocation failure must not duplicate chunks
+        // when this fact is encountered again.
+        if (fact.event.dependencies.size() >
+            entry.chunks.max_size() - entry.chunks.size())
+          throw Error{ErrorCode::capacity};
+        const auto required = entry.chunks.size() + fact.event.dependencies.size();
+        if (required > entry.chunks.capacity()) {
+          const auto grown = entry.chunks.capacity() <= entry.chunks.max_size() / 2
+                                 ? entry.chunks.capacity() * 2
+                                 : entry.chunks.max_size();
+          entry.chunks.reserve(std::max(required, grown));
+        }
+        for (const auto dependency : fact.event.dependencies)
+          entry.chunks.emplace_back(fact.record, dependency);
+        entry.known = true;
+      }
+    }
+    if (const auto found = process_originals_.find(reference);
+        found != process_originals_.end()) {
+      known = known || found->second.known;
+      for (const auto &[record, dependency] : found->second.chunks) {
+        auto source_credit = raw_command_claim(96);
+        const auto bytes = unwrap(log_.root().source(dependency));
+        const auto source_size = bytes.size();
+        (void)raw_command_linked(
+            2038, request,
+            std::array{ByteView{record.journal.bytes()},
+                       detail::raw_native_field(record.sequence),
+                       ByteView{dependency.journal.bytes()},
+                       detail::raw_native_field(dependency.sequence),
+                       detail::raw_native_field(source_size)},
+            source_credit ? &*source_credit : nullptr);
+        raw.append(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+      }
+    }
+    if (!known)
+      throw Error{ErrorCode::invalid_range};
+    auto result = process_output_presentation(raw, arguments);
+    const std::uint8_t branch = 1;
+    const Error error{};
+    const auto source_size = raw.size();
+    (void)raw_command_linked(2039, request,
+                             std::array{detail::raw_native_field(branch),
+                                        detail::raw_native_field(error.code),
+                                        detail::raw_native_field(error.detail),
+                                        detail::raw_native_field(source_size)},
+                             read_credit ? &*read_credit : nullptr);
+    return result;
+  } catch (const Error &error) {
+    const std::uint8_t branch = 2;
+    const auto source_size = raw.size();
+    (void)raw_command_linked(2039, request,
+                             std::array{detail::raw_native_field(branch),
+                                        detail::raw_native_field(error.code),
+                                        detail::raw_native_field(error.detail),
+                                        detail::raw_native_field(source_size)},
+                             read_credit ? &*read_credit : nullptr);
+    throw;
+  } catch (...) {
+    const std::uint8_t branch = 3;
+    const Error error{ErrorCode::allocation};
+    const auto source_size = raw.size();
+    (void)raw_command_linked(2039, request,
+                             std::array{detail::raw_native_field(branch),
+                                        detail::raw_native_field(error.code),
+                                        detail::raw_native_field(error.detail),
+                                        detail::raw_native_field(source_size)},
+                             read_credit ? &*read_credit : nullptr);
+    throw;
+  }
+}
 Value CodingEngine::call(std::string name, Value arguments) {
   if (name == "provider")
     throw Error{ErrorCode::invalid_range};
@@ -4842,6 +4951,12 @@ Value CodingEngine::call(std::string name, Value arguments) {
           if (arguments.find("output_max_bytes"))
             options.max_output = static_cast<std::size_t>(
                 command_number(arguments, "output_max_bytes", 16 * 1024 * 1024));
+          const auto output_budget = options.max_output;
+          if (arguments.find("output_head_bytes") &&
+              command_number(arguments, "output_head_bytes", 16 * 1024 * 1024) >
+                  output_budget)
+            throw Error{ErrorCode::invalid_range};
+          options.max_output = 0;
           options.stop_on_cancel = true;
           command_jobs_->start(id, arguments, raw_exec, &command_start);
           if (activity) {
@@ -4856,9 +4971,25 @@ Value CodingEngine::call(std::string name, Value arguments) {
             activity->pending_node = nullptr;
             activity->transferred = nullptr;
           }
-          return command_jobs_->wait(
+          auto result = command_jobs_->wait(
               id, options, [this] { poll_commands(); },
               [this] { return cancelled && cancelled(); });
+          auto selection =
+              Value::object({{"output_ref", Value{id}},
+                             {"output_max_bytes", Value{Number{output_budget}}}});
+          if (const auto *head = arguments.find("output_head_bytes"))
+            selection.object().emplace_back("output_head_bytes", *head);
+          auto projection = retained_process_output(selection);
+          for (auto &[key, value] : projection.object()) {
+            auto old =
+                std::find_if(result.object().begin(), result.object().end(),
+                             [&](const auto &entry) { return entry.first == key; });
+            if (old != result.object().end())
+              old->second = std::move(value);
+            else
+              result.object().emplace_back(std::move(key), std::move(value));
+          }
+          return result;
         }
         if (name == "process") {
           if (string_field(arguments, "op") == "foreground") {
@@ -5029,96 +5160,8 @@ Value CodingEngine::call(std::string name, Value arguments) {
             return Value::object({{"scheduled", Value{true}}});
           });
         }
-        if (name == "read_process_output") {
-          const auto &reference = string_field(arguments, "output_ref");
-          auto read_credit = raw_command_claim(58);
-          const auto reference_size = reference.size();
-          const std::uint8_t mode = 2;
-          const auto request = raw_command_data(
-              2037, std::array{detail::raw_native_field(reference_size),
-                               detail::raw_string_field(reference),
-                               detail::raw_native_field(mode)});
-          bool known = false;
-          std::string raw;
-          try {
-            for (std::size_t ordinal = 0; ordinal < log_.root().fact_count();
-                 ++ordinal) {
-              const auto fact = unwrap(log_.root().fact(ordinal));
-              const auto *record =
-                  std::get_if<ApplicationRecordEvent>(&fact.event.body);
-              if (!record || record->channel != ApplicationChannel::log)
-                continue;
-              const auto packet = unwrap(read_packet(record->payload));
-              const auto &label = string_field(packet, "label");
-              if (label != "operation.result" && label != "process.output")
-                continue;
-              const auto &metadata = field(packet, "metadata");
-              const auto *old_attempt = metadata.find("attempt");
-              if (!old_attempt || old_attempt->string() != reference)
-                continue;
-              if (label == "operation.result") {
-                const auto *op = metadata.find("operation");
-                if (op && op->string() == "exec")
-                  known = true;
-              }
-              if (label == "process.output") {
-                known = true;
-                for (const auto dependency : fact.event.dependencies) {
-                  auto source_credit = raw_command_claim(96);
-                  const auto bytes = unwrap(log_.root().source(dependency));
-                  const auto source_size = bytes.size();
-                  (void)raw_command_linked(
-                      2038, request,
-                      std::array{ByteView{fact.record.journal.bytes()},
-                                 detail::raw_native_field(fact.record.sequence),
-                                 ByteView{dependency.journal.bytes()},
-                                 detail::raw_native_field(dependency.sequence),
-                                 detail::raw_native_field(source_size)},
-                      source_credit ? &*source_credit : nullptr);
-                  raw.append(reinterpret_cast<const char *>(bytes.data()),
-                             bytes.size());
-                }
-              }
-            }
-            if (!known)
-              throw Error{ErrorCode::invalid_range};
-            // Retrieval supports byte ranges only, never file line semantics.
-            if (arguments.find("line_start") || arguments.find("line_end"))
-              throw Error{ErrorCode::invalid_range};
-            auto result = process_output_presentation(raw, arguments);
-            const std::uint8_t branch = 1;
-            const Error error{};
-            const auto source_size = raw.size();
-            (void)raw_command_linked(2039, request,
-                                     std::array{detail::raw_native_field(branch),
-                                                detail::raw_native_field(error.code),
-                                                detail::raw_native_field(error.detail),
-                                                detail::raw_native_field(source_size)},
-                                     read_credit ? &*read_credit : nullptr);
-            return result;
-          } catch (const Error &error) {
-            const std::uint8_t branch = 2;
-            const auto source_size = raw.size();
-            (void)raw_command_linked(2039, request,
-                                     std::array{detail::raw_native_field(branch),
-                                                detail::raw_native_field(error.code),
-                                                detail::raw_native_field(error.detail),
-                                                detail::raw_native_field(source_size)},
-                                     read_credit ? &*read_credit : nullptr);
-            throw;
-          } catch (...) {
-            const std::uint8_t branch = 3;
-            const Error error{ErrorCode::allocation};
-            const auto source_size = raw.size();
-            (void)raw_command_linked(2039, request,
-                                     std::array{detail::raw_native_field(branch),
-                                                detail::raw_native_field(error.code),
-                                                detail::raw_native_field(error.detail),
-                                                detail::raw_native_field(source_size)},
-                                     read_credit ? &*read_credit : nullptr);
-            throw;
-          }
-        }
+        if (name == "read_process_output")
+          return retained_process_output(arguments);
         if (name == "context_repair") {
           if (string_field(arguments, "base") != context_.head() ||
               operation_depth_ != 1 || detail::owned_children.load() != 0 ||

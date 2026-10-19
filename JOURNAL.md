@@ -11730,3 +11730,124 @@ The C2 `CONTEXT_SIZE` line therefore stops inviting `context_view`/`context_mana
 extended test failed on the old code (`external_unknown` from the oracle) and passes on the new code. My
 suggestion to retune the C1 target is withdrawn. Rewording the triggered guidance away from "toward
 target_bytes" is noted for the a1v.4/C6 brief work.
+
+## 2026-10-19 — prompt-cache affinity on OpenAI routes
+
+The operator asks for an immediate investigation of the Sol runs' cache use, on
+the ChatGPT compatibility route (`chatgpt.com/backend-api/codex/responses`).
+Cached input averaged 25–43% and swung between 0% and 97% from one request to the
+next within a turn. The retained requests rule out prefix churn. Across eight
+consecutive requests, instructions, tools, reasoning and include are
+byte-identical, and each input is an exact prefix of the next. Codex's source
+names the cause: "ChatGPT derives cache affinity from the Responses session-id
+header" (`client.rs:595`). Codex sends `session-id` and `prompt_cache_key` set to
+its session ID. Blackbird sent neither.
+
+Fix, on work/cache-affinity-2026-10-19 from master `168bb26`:
+- Engine: `CodingProvider::supports_prompt_cache_key()`, true for
+  `OpenAiCodingProvider`. After cache-policy preparation, the engine adds
+  `prompt_cache_key` set to the conversation identity in hex, unless the request
+  already authors one.
+- ChatGPT transport: send the same value as a `session-id` header. A value that is
+  unsafe as a header refuses the request.
+
+RED: on the unmodified behavior, with only the interface method added, the new
+`cache_affinity_test` (coding_routing) fails with corrupt. The new keyed request in
+`openai_auth` fails at line 167: the fake curl saw no `session-id` header (exit
+13). GREEN: both pass. The engine test checks identical keys across turns and
+across a reopened engine, an authored key preserved, and no key for a provider
+without affinity. Review fixes: none needed. A live before-and-after cache-rate
+comparison is follow-through.
+
+Follow-through: commit `50cdae2` landed on master, after the full suite passed
+265/265 on that code. At the operator's direction, the hook was overridden for the
+whitespace-only clang-format fix. Afterwards, a direct clang-tidy run on the four
+changed files was clean. Installed as generation-Sir77UUA. A live Sol session of
+11 sequential tool requests: the first had nothing cached, and requests 2-11 were
+59-95% cached, 82% of input in total and 77% overall. Before the fix, the same
+route swung between 0% and 97% and averaged 25-43%. The gate also hit two
+load-induced PTY timing failures (the load average reached 47). Each passes in
+isolation: `tui_retained_result` is filed as `arconaut-r5n`; `terminal_pty_tools`
+passed 3/3 alone. The hook lock now has three lanes (`blackbird_runs/bin/hook-lock`).
+
+## 2026-10-19 — q4n: character-safe observation cuts
+
+Direct exec regression fails on the original source: a 16384-byte budget inside
+U+2019 hex-encodes the entire readable prefix. Budget projections now retreat to
+character boundaries, prefer nearby LF, and report actual half-open offsets;
+command jobs collect four lookahead bytes before cutting. File projections use
+views rather than copying the selected original. Explicit byte slices stay exact,
+including hex for split UTF-8; originals/capture and effect linkage are unchanged.
+Design and RED evidence: papers/sol-observations-2026-10-19/PLAN.md.
+Final targeted tools passes; command_jobs/coding/economical_defaults pass. One
+focused boundary recheck also keeps arbitrary binary continuation bytes binary.
+The first hook passed 252/265 tests. Its request_storage failure exposed native
+versus Lua key ordering after adding file offsets; emitting file fields in lexical
+order fixes the unchanged byte-equality oracle. Other failures came from inherited
+installed-executable/graphics settings and an overlong HOME-based TUI socket path.
+Direct environment checks pass request_storage, terminal_blocked, install_blackbird
+and (with a short relative test HOME) tui_viewport. The hook is not bypassed.
+The corrected-environment gate passes 263/265; terminal_pty_tools and
+terminal_pty_state fail asynchronously, then both pass unchanged in their direct
+follow-up (32.33 s). No TUI change is included. Submit the completed q4n unit
+through the required locked gate; source remains inactive until delivery.
+The third gate passes 264/265 and exposes the same attribution fixture boundary:
+wait_for(BG_3) may succeed on the old screen before reading Ctrl-U's repaint.
+The fixture now drains pending PTY data to a quiet frame, then applies exactly
+the same attribution assertions. The old fixture failed in the gate; the repaired
+fixture passes on the unchanged executable (1.85 s). No TUI product code changes.
+
+## 2026-10-19 — 47k: smaller observations with exact continuation
+
+The native default workflow now chooses 8192 exec bytes, 2048 head + 6144 tail.
+Explicit budgets keep head-first compatibility unless output_head_bytes requests
+a split. File reads remain 16384-byte head-first pages. Results name exact byte
+ranges and give next_read (process) or snapshot + next_range (file). The existing
+retained process reader now accepts the same canonical line/byte ranges as files;
+no filesystem output identity, replay, ageing or TUI changes are introduced.
+
+RED before 47k: native economical_defaults fails its trailing-error assertion;
+a new seam oracle linked to the staged pre-47k tools object also fails. GREEN:
+the deterministic provider makes three native default-workflow requests, sees the
+trailing exit-7 build error, requests omitted line 3, and receives exactly
+NEEDED_MIDDLE=exact plus LF at [20013,20033). Reopen recovers the byte-exact complete
+build; the command marker remains X. Explicit zero/larger budgets and full custom
+Lua file reads remain covered. Seven targeted native tests pass; after the single
+recheck/index correction they pass again in 14.42 s. A locator-only incremental
+index avoids rescanning old metadata on every exec; output bodies stay in audit.
+
+The q4n second full gate passed 263/265. Remaining failures were asynchronous
+terminal_pty_tools attribution and terminal_pty_state shutdown fixtures; direct
+results are retained in context/q4n-hook-failures.log. They are outside observation
+projection and no TUI folding change is made here. Source changes remain inactive
+and uncommitted until a required locked full gate passes; no hooks are bypassed.
+q4n's repaired-fixture locked hook passes all 265 Debug tests (375.63 s), owned
+C++/Lua lint and LuaLS; commit 2b80669. No lint suppressions were added.
+The final 47k fixture is enlarged beyond the rolling cache: 1200058 bytes, head
+[0,2048), tail [1193914,1200058), exact recovered line [600013,600033). It fails
+on q4n-only code, then passes with original-based projection; delete the build
+source before reopen and still recover its entire original. The recheck also
+makes generated continuation ranges character-safe and corrects stale cache
+cursor metadata. Tiny nonzero file hints allow four bytes to make progress.
+Final affected Debug checks pass 7/7 (28.10 s), including tools, coding,
+economical_defaults, command_jobs, request_storage, command_raw and command
+input delivery semantics. build/release/blackbird builds successfully (targeted
+Release executable build, not an additional profile campaign). Required final
+locked source gate follows; no installed activation, push or tracker operation.
+The first 47k locked gate is interrupted by SIGTERM before completion (the rigor
+process reports Terminated: 15). No cause is established; Git remains at 2b80669
+and the 47k tree is staged, not committed. Retained output is
+context/47k-commit.log. Retry the required gate with BLACKBIRD_HOOK_LANES=1;
+this is recovery from an interrupted check, not a pass or another review layer.
+
+## 2026-10-19 — merge master into the a1v branch
+
+Master gained the OpenAI prompt-cache affinity, q4n and 47k (2 KiB head plus 6 KiB tail exec observations
+with exact continuation) while a1v was in progress. The merge resolved three conflicts:
+- `check-terminal-pty`: both sides fixed the same repaint race; kept `settle()`, which raises if painting never
+  stops.
+- `coding_test.cpp`: kept both includes.
+- `JOURNAL.md`: kept both sets of entries.
+
+The tool-output report and the request-path catalogue were written at `f7a79b1` and predate 47k and the cache
+affinity. Their `exec` 16 MiB finding and their cache allowlist picture need correcting against the merged tree.

@@ -402,6 +402,13 @@ Result<std::string> openai_http(const OpenAiConfig &config, const OpenAiLogin &l
         "header = " + config_quote("ChatGPT-Account-ID: " + login.account_id_) + "\n";
     input += "header = \"Content-Type: application/json\"\nheader = \"originator: "
              "blackbird\"\n";
+    // The ChatGPT backend derives prompt-cache affinity from session-id.
+    if (const auto *key = request ? request->find("prompt_cache_key") : nullptr) {
+      const auto *text = std::get_if<std::string>(&key->value());
+      if (text == nullptr || !header_safe(*text))
+        fail(ErrorCode::invalid_range);
+      input += "header = " + config_quote("session-id: " + *text) + "\n";
+    }
     if (request)
       input += "data-binary = " + config_quote(encoded_body) + "\n";
     Child child;

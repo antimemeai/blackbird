@@ -503,19 +503,22 @@ struct CommandJobs::Impl {
       const auto first = j.tail.empty() ? j.retained : j.tail.front().offset;
       const auto begin = std::min(j.retained, std::max(offset, first));
       std::string bytes;
+      const auto lookahead = max_output > SIZE_MAX - 4 ? max_output : max_output + 4;
       for (const auto &chunk : j.tail) {
         const auto end = std::min(chunk.offset + chunk.bytes->size(), j.retained);
-        if (end <= begin || bytes.size() >= max_output)
+        if (end <= begin || bytes.size() >= lookahead)
           continue;
         const auto at = std::max(chunk.offset, begin);
         bytes.append(*chunk.bytes, at - chunk.offset,
-                     std::min(end - at, max_output - bytes.size()));
+                     std::min(end - at, lookahead - bytes.size()));
       }
+      bytes.resize(observation_prefix_size(bytes, max_output));
       const auto shown = process_output_presentation(bytes, Value::object({}));
       put(result, "output", field(shown, "output"));
       put(result, "returned_bytes", Value{Number{bytes.size()}});
       put(result, "omitted_bytes", Value{Number{j.retained - bytes.size()}});
       put(result, "byte_start", Value{Number{begin}});
+      put(result, "byte_end", Value{Number{begin + bytes.size()}});
       put(result, "next_offset", Value{Number{begin + bytes.size()}});
       put(result, "omitted_prefix_bytes",
           Value{Number{begin - std::min(offset, begin)}});

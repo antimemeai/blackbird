@@ -43,6 +43,7 @@ std::string read_file(const std::filesystem::path &, std::size_t,
 void write_file(const std::filesystem::path &, std::string_view,
                 const RawAdapterContext *, const RawFileInput * = nullptr,
                 FileEffectObservation * = nullptr);
+std::size_t observation_prefix_size(std::string_view raw, std::size_t budget);
 Value process_output_presentation(const std::string &raw, const Value &args);
 Value file_content_presentation(const std::string &raw, const Value &args,
                                 RawFileToolTrace *trace = nullptr);
