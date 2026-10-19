@@ -37,6 +37,12 @@ public:
               std::to_string(unwrap(encode_packet_string(Value{conversation})).size()) +
               " entries=" + std::to_string(conversation.size()) + " ") !=
           std::string::npos);
+      // Below the trigger the size line informs only; it never invites management.
+      const auto begin = last_state.find("CONTEXT_SIZE input_bytes=");
+      const auto line = last_state.substr(begin, last_state.find('\n', begin) - begin);
+      require(line.find("context_view") == std::string::npos &&
+              line.find("context_manage") == std::string::npos &&
+              line.find("compact") == std::string::npos);
     }
     if (scripted && calls == 1) {
       require(string_field(request, "model") == "request-override");

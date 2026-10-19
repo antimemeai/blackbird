@@ -212,3 +212,23 @@ than done:
 - the `ContextChangeKind` "compacted" kind and the badge text "◆ CONTEXT compacted" become archived;
 - the report's "compaction cut" becomes an archival cut;
 - `compaction_campaign_test` keeps its name, since it tests the failure path.
+
+## Operator direction: capability, not a target (2026-10-19)
+
+The operator gave three directions:
+- **Always available, escalate later.** Context management stays available to the model's judgment at all
+  times. Blackbird nudges at the trigger and directs only later, at a higher level. The C6 harness step is a
+  direction; the C4 compaction backstop is the failure.
+- **Don't impose CLM every round.** The model needs enough context to understand what it can drop.
+- **No fetish for sizes.** Never compacting, or holding context at some target, is not the aim. The aim is for
+  the model to use these capabilities, and future ones, to make itself more effective for the moment and
+  challenge it faces.
+
+Consequences:
+- Below the trigger, the C2 `CONTEXT_SIZE` line informs only. It no longer invites `context_view` or
+  `context_manage`, a nudge that matches C5, where luna spent 646 KB on `context_view` while under the trigger.
+  The test fails on the old code.
+- The earlier suggestion to retune the C1 target toward a 30% cut is withdrawn: 5–30% describes typical
+  archival, not a goal.
+- The triggered `CONTEXT_BUDGET` wording ("propose managed context ... toward target_bytes") still frames the
+  target as a goal. It needs rewording around effectiveness, as part of the `a1v.4`/C6 brief work.

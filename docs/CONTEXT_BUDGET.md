@@ -11,7 +11,11 @@ default on reopen; that includes one recorded under the pre-2026-10-19
 
 Every request also carries one `CONTEXT_SIZE input_bytes=N entries=M
 trigger_bytes=T target_bytes=G` line, or `budget=off`, in its developer
-operational state, so the model always knows its size. A provider that retains
+operational state, so the model always knows its size. The line informs only:
+context tools stay available to the model's judgment at every request, the
+trigger guidance below is the first nudge, and any later direction escalates from
+there. No size is a goal; the model manages context to be effective for the
+work at hand. A provider that retains
 request state in context (today only Anthropic) gets the line only with the
 trigger guidance, so stale sizes accumulate only while the trigger is
 reached (see `arconaut-2o9`). `state_context = "omit"`

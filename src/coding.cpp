@@ -4411,8 +4411,7 @@ Value CodingEngine::request(Value options) {
                ? " trigger_bytes=" + field(policy, "trigger_bytes").number().text() +
                      " target_bytes=" + field(policy, "target_bytes").number().text()
                : std::string{" budget=off"}) +
-          " (native packet bytes, not tokens; context_view and context_manage compact "
-          "when useful)\n";
+          " (native packet bytes, not tokens)\n";
     }
     if (state_context && triggered) {
       operational_state +=

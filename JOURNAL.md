@@ -11718,3 +11718,15 @@ abandoned operations as outcome-unknown, and interrupted calls get placeholders 
 The operator considers replay reconstruction a safe mode after a bad problem, so a normal resume should
 restore directly from the snapshot. A clean `/quit` currently takes no snapshot (`arconaut-7c8`). The
 proposed durable-workflow design, which resumes by re-running Lua, needs the operator's decision.
+
+## 2026-10-19 — size line informs only; CLM serves effectiveness
+
+The operator directs that context management stay available to the model's judgment at all times, with a nudge
+at the trigger and a direction only later. CLM is not imposed every round, because the model needs enough
+context to understand what it can drop. Nor is it a fetish for sizes: never compacting, or holding a target, is
+not the aim; the model's effectiveness for the work at hand is.
+
+The C2 `CONTEXT_SIZE` line therefore stops inviting `context_view`/`context_manage` on every request. Its
+extended test failed on the old code (`external_unknown` from the oracle) and passes on the new code. My
+suggestion to retune the C1 target is withdrawn. Rewording the triggered guidance away from "toward
+target_bytes" is noted for the a1v.4/C6 brief work.
