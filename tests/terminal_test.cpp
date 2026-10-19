@@ -275,6 +275,12 @@ int main() {
     check(!terminal_process_join({.queued = "TOOL_40\n", .next = "\n[exit 0]\n"}));
     check(terminal_process_join({.queued = "\n[exit 0]\n", .next = "more\n"}) ==
           std::optional<std::string_view>{"more\n"});
+    check(terminal_context_badge("compacted", 10000, 50) ==
+          "◆ CONTEXT compacted −10 KiB");
+    check(terminal_context_badge("restored", 50, 1000) == "◆ CONTEXT restored +950 B");
+    check(terminal_context_badge("edited", 7, 7) == "◆ CONTEXT edited ±0 B");
+    check(terminal_context_badge("compacted", std::nullopt, 10) ==
+          "◆ CONTEXT compacted");
     Composer multiline;
     feed(multiline, "history\r");
     multiline.draft("abcd\nx\n12345");

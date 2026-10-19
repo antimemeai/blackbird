@@ -70,6 +70,10 @@ EditorResult edit_terminal_draft(std::string_view draft,
                                  const RawAdapterContext *context = nullptr);
 // Shared command discovery; local-only commands are labelled in help.
 std::string terminal_help();
+// "◆ CONTEXT compacted −48 KiB": badge text for one published context change.
+std::string terminal_context_badge(std::string_view kind,
+                                   std::optional<std::size_t> bytes_before,
+                                   std::optional<std::size_t> bytes_after);
 // Queued process output joins only within one stream; otherwise nullopt asks
 // for a new entry. Returns the bytes to append to the queued text.
 struct TerminalProcessJoin {
@@ -179,6 +183,10 @@ public:
   void usage(std::string_view text);
   void operation_started(bool provider);
   void status(std::string_view text);
+  // A published context revision (a1v): kind label, e.g. "compacted", and the
+  // encoded input size around it. The status line blinks a badge.
+  void context_changed(std::string_view kind, std::optional<std::size_t> bytes_before,
+                       std::optional<std::size_t> bytes_after);
   void operation_completed(std::string_view text, Ink outcome = Ink::muted);
   void failed();
   void title(std::string_view text);
@@ -217,7 +225,8 @@ private:
     operation_complete,
     failure,
     instrument_source,
-    question
+    question,
+    context_change
   };
   struct Message {
     Kind kind;

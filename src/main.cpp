@@ -655,6 +655,19 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         ui.tasks(packet, {3, origin.source, origin.fact, origin.revision});
       }
     };
+    // Only the TUI presents changes; headless runs attach no listener, so the
+    // store measures no sizes for them.
+    if (tui)
+      engine.context().changed = [&](const ContextChange &change) {
+        const std::string kind =
+            change.kind == ContextChangeKind::edited ? "edited"
+            : change.kind == ContextChangeKind::restored || change.mode == "restore"
+                ? "restored"
+            : change.mode == "summarize" || change.mode == "archive" ? "compacted"
+            : change.mode == "select"                                ? "selected"
+                                                                     : change.mode;
+        ui.context_changed(kind, change.bytes_before, change.bytes_after);
+      };
     engine.task_activity_native = [&, tui](const Value &event,
                                            RawTaskPresentation origin) {
       if (tui)

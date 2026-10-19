@@ -995,10 +995,31 @@ void ContextStore::append_impl(Value::Array items, std::string_view label,
     maybe_checkpoint(trace.child());
   });
 }
+std::optional<std::size_t> ContextStore::input_bytes() const noexcept {
+  try {
+    Value::Array items;
+    items.reserve(entries_.size());
+    for (const auto &entry : entries_)
+      items.push_back(field(entry, "item"));
+    const auto encoded = encode_packet_string(Value{std::move(items)});
+    return encoded.has_value() ? std::optional{encoded.value().size()} : std::nullopt;
+  } catch (...) {
+    return std::nullopt; // Presentation only: never throws between record and swap.
+  }
+}
+void ContextStore::notify(std::optional<ContextChange> change) const noexcept {
+  if (!change || !changed)
+    return;
+  try {
+    changed(*change);
+  } catch (...) {
+  } // Presentation cannot undo a published revision.
+}
 Value ContextStore::edit(const Value &candidate, RawContextOrigin origin) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::edit, 1228, origin, &initial};
-  return trace.run([&]() -> Value {
+  std::optional<ContextChange> change;
+  auto result = trace.run([&]() -> Value {
     const auto *base = candidate.find("base");
     const auto *entries = candidate.find("entries");
     const bool representation =
@@ -1033,12 +1054,16 @@ Value ContextStore::edit(const Value &candidate, RawContextOrigin origin) {
       trace.protection([&](const RawEventRef &request) {
         protect(publishes ? next : entries_, pending_proposal(trace.child()), request);
       });
+    const auto before =
+        publishes && changed ? input_bytes() : std::optional<std::size_t>{};
     auto publication = trace.publication();
     (void)log_.record(identity, ApplicationChannel::context, packet, &publication);
     history_stale_ = true;
     if (publishes) {
       entries_.swap(next);
       head_.swap(revision);
+      if (changed)
+        change = ContextChange{next_kind_, head_, {}, before, input_bytes()};
     }
     trace.state(1, raw_state());
     trace.branch(publishes ? 0 : 1);
@@ -1046,6 +1071,8 @@ Value ContextStore::edit(const Value &candidate, RawContextOrigin origin) {
     maybe_checkpoint(trace.child());
     return outcome;
   });
+  notify(std::move(change));
+  return result;
 }
 void ContextStore::restore(std::string_view entry, RawContextOrigin origin) {
   const auto initial = raw_state();
@@ -1067,9 +1094,16 @@ void ContextStore::restore(std::string_view entry, RawContextOrigin origin) {
     if (!present)
       next.push_back(Value::object(
           {{"id", Value{std::string{entry}}}, {"item", field(*original, "item")}}));
-    (void)edit(
-        Value::object({{"base", Value{head_}}, {"entries", Value{std::move(next)}}}),
-        trace.child());
+    next_kind_ = ContextChangeKind::restored;
+    try {
+      (void)edit(
+          Value::object({{"base", Value{head_}}, {"entries", Value{std::move(next)}}}),
+          trace.child());
+    } catch (...) {
+      next_kind_ = ContextChangeKind::edited;
+      throw;
+    }
+    next_kind_ = ContextChangeKind::edited;
   });
 }
 Value ContextStore::originals(RawContextOrigin origin) const {
@@ -1461,7 +1495,8 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
                                     WorkflowAcceptance *acceptance) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::publish, 1809, origin, &initial};
-  return trace.run([&]() -> Value {
+  std::optional<ContextChange> change;
+  auto result = trace.run([&]() -> Value {
     const auto &mode = string_field(proposal, "mode");
     std::set<std::string> selected;
     for (const auto &id : field(proposal, "ids").array())
@@ -1590,6 +1625,7 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
           [&](const RawEventRef &request) { protect(next, proposal, request); });
     const bool has_boundary =
         !std::holds_alternative<std::nullptr_t>(boundary_program.value());
+    const auto before = changed ? input_bytes() : std::optional<std::size_t>{};
     auto publication = trace.publication();
     (void)log_.record_boundary(identity, packet, boundary_program, &publication);
     if (acceptance) {
@@ -1603,11 +1639,16 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
       captured_.push_back(std::move(entry));
     entries_.swap(next);
     head_.swap(revision);
+    if (changed)
+      change =
+          ContextChange{ContextChangeKind::managed, head_, mode, before, input_bytes()};
     trace.state(1, raw_state());
     refresh_history();
     maybe_checkpoint(trace.child());
     return outcome;
   });
+  notify(std::move(change));
+  return result;
 }
 Value ContextStore::inspect(const Value &query, RawContextOrigin origin) const {
   const auto initial = raw_state();

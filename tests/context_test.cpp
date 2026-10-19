@@ -118,13 +118,47 @@ int main() {
     AuditLog replay{*root};
     ContextStore restored{replay};
     check(restored.head() == head && restored.items()[0] == original);
+    // Every published revision reports its kind and encoded input size; rejected
+    // and staged changes report nothing (a1v indicator source).
+    std::vector<ContextChange> changes;
+    std::size_t bytes_now = 6;
+    restored.changed = [&](const ContextChange &change) {
+      check(change.revision == restored.head() && change.bytes_before == bytes_now &&
+            change.bytes_after ==
+                std::stoul(field(restored.stats(), "input_bytes").number().text()));
+      bytes_now = *change.bytes_after;
+      changes.push_back(change);
+    };
+    bytes_now = std::stoul(field(restored.stats(), "input_bytes").number().text());
+    const auto kinds = [&] {
+      std::string out;
+      for (const auto &change : changes)
+        out += change.kind == ContextChangeKind::edited     ? "E"
+               : change.kind == ContextChangeKind::restored ? "R"
+                                                            : "M:" + change.mode;
+      return out;
+    };
     restored.edit(
         Value::object({{"base", Value{head}}, {"entries", Value{Value::Array{}}}}));
     restored.restore(entry);
     check(restored.items()[0] == original);
+    check(kinds() == "ER");
     auto ok = [](const Value &out) {
       return std::get<bool>(field(out, "accepted").value());
     };
+    // A rejected edit reports nothing; a throwing listener cannot undo a publish.
+    check(!ok(restored.edit(Value::object(
+        {{"base", Value{"stale"}}, {"entries", Value{Value::Array{}}}}))));
+    check(kinds() == "ER");
+    {
+      auto recorder = std::move(restored.changed);
+      restored.changed = [](const ContextChange &) {
+        throw Error{ErrorCode::capacity};
+      };
+      const auto published = restored.edit(restored.view());
+      check(ok(published) && restored.head() == string_field(published, "revision"));
+      restored.changed = std::move(recorder);
+    }
     auto proposal = [&](std::string mode, Value::Array ids) {
       return Value::object({{"base", Value{restored.head()}},
                             {"mode", Value{std::move(mode)}},
@@ -152,8 +186,10 @@ int main() {
     summarize.object().emplace_back(
         "summary", Value::object({{"role", Value{"developer"}},
                                   {"content", Value{"tool completed"}}}));
+    bytes_now = std::stoul(field(restored.stats(), "input_bytes").number().text());
     check(ok(restored.manage(summarize)));
     check(!ok(restored.manage(summarize))); // stale
+    check(kinds() == "ERM:summarize");
     const auto summarized = restored.view();
     check(!ok(restored.manage(proposal(
         "archive", {field(field(summarized, "entries").array().back(), "id")}))));
@@ -168,12 +204,14 @@ int main() {
     check(ok(restored.edit(reordered))); // generic CLM is still available
     check(ok(restored.manage(proposal("restore", {call, output}))));
     check(restored.items()[2] == field(all[2], "item"));
+    check(kinds() == "ERM:summarizeM:restoreEM:restore");
     const auto before_stage = restored.view();
     restored.begin_workflow();
     check(field(restored.manage(proposal("archive", {call, output})), "staged") ==
           Value{true});
     check(restored.view() == before_stage);
     check(!ok(restored.manage(proposal("archive", {call, output})))); // overlap
+    check(kinds() == "ERM:summarizeM:restoreEM:restore"); // Staged reports nothing.
     restored.append({Value::object({{"type", Value{"function_call"}},
                                     {"call_id", Value{"active"}}})},
                     "active");
@@ -181,7 +219,9 @@ int main() {
                                     {"call_id", Value{"active"}},
                                     {"output", Value{"settled"}}})},
                     "active-result");
+    bytes_now = std::stoul(field(restored.stats(), "input_bytes").number().text());
     check(ok(restored.finish_workflow(true)));
+    check(kinds() == "ERM:summarizeM:restoreEM:restoreM:archive"); // At activation.
     check(restored.items().size() == 5 &&
           string_field(restored.items()[3], "call_id") == "active");
     restored.begin_workflow();

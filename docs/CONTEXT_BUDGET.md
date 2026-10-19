@@ -112,22 +112,27 @@ base is the **context** revision and can become stale as tool exchanges append.
 Managed changes also wait for successful workflow completion.
 
 Recover omitted details with bounded `context_inspect` pages, not an unbounded
-read of all originals. This session's repair used:
+read of all originals. The default page format is the native framed BBM2 stream
+(`BBMS\1` header, then eight-byte little-endian lengths and packets), which a
+model cannot read. Ask for `"format": "json"` to page JSON text instead:
 
 ```json
 {
   "query": {
     "kind": "originals",
     "entry": "3de1dba2e9e6fb751b00000000000000.0",
+    "format": "json",
     "offset": 4500,
     "limit": 4000
   }
 }
 ```
 
-Pages are hex-encoded serialized JSON UTF-8 bytes; a slice may not be a complete
-JSON document. Decode the hex as needed. For subsequent pages, bind the returned
-`revision`; on conflict restart pagination. Append a recovered fact to the
+Either format returns the page as hex in `bytes`, plus `total_bytes`, `next`,
+`revision` and `context_revision` (`src/context.cpp`, `ContextStore::inspect`). A
+JSON slice may not be a complete document, so decode the hex and join pages as
+needed. For subsequent pages, bind the returned `revision`; on conflict, restart
+pagination. Append a recovered fact to the
 working map with `arco.append`, or use managed `restore` when the full original
 is needed. Repair can exceed the advisory target; retained originals remain
 available even after removal from presentation.
@@ -148,7 +153,7 @@ policy.
 - `src/coding.cpp`: `default_context_budget`, `validate_context_budget`,
   `CodingEngine::budget_view`, `context_budget`, constructor replay, and `turn`.
 - `src/context.cpp`: `ContextStore::finish_workflow` and boundary publication.
-- `include/arconaut/coding.hpp`: engine API/state.
+- `include/blackbird/coding.hpp`: engine API/state.
 - `tests/context_budget_test.cpp`: policy, trigger, repair, combined-boundary,
   notification, and reopen oracles (not executed for this documentation task).
 

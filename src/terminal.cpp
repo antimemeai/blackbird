@@ -319,6 +319,19 @@ std::optional<std::string_view> terminal_process_join(TerminalProcessJoin chunks
     return std::nullopt;
   return next;
 }
+std::string terminal_context_badge(std::string_view kind,
+                                   std::optional<std::size_t> measured_before,
+                                   std::optional<std::size_t> measured_after) {
+  if (!measured_before || !measured_after)
+    return "◆ CONTEXT " + std::string{kind}; // Size unknown: no invented delta.
+  const auto bytes_before = *measured_before, bytes_after = *measured_after;
+  const auto delta = bytes_after >= bytes_before ? bytes_after - bytes_before
+                                                 : bytes_before - bytes_after;
+  const auto size = delta < 1024 ? std::to_string(delta) + " B"
+                                 : std::to_string((delta + 512) / 1024) + " KiB";
+  const auto sign = delta == 0 ? "±" : bytes_after > bytes_before ? "+" : "−";
+  return "◆ CONTEXT " + std::string{kind} + " " + sign + size;
+}
 std::string terminal_key_help() {
   return "Keyboard\n"
          "  Enter        Send; while busy, queue for the next turn\n"
@@ -1637,6 +1650,11 @@ void TerminalUI::operation_started(bool provider) {
   post(provider ? Kind::provider_start : Kind::tool_start, {});
 }
 void TerminalUI::status(std::string_view value) { post(Kind::status, value); }
+void TerminalUI::context_changed(std::string_view kind,
+                                 std::optional<std::size_t> bytes_before,
+                                 std::optional<std::size_t> bytes_after) {
+  post(Kind::context_change, terminal_context_badge(kind, bytes_before, bytes_after));
+}
 void TerminalUI::operation_completed(std::string_view value, Ink outcome) {
   const auto kind = Kind::operation_complete;
   const auto size = value.size();
@@ -2176,6 +2194,14 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
   std::array<std::size_t, 4> image_placement{};
   bool pending_image_loaded = false;
   std::array<std::size_t, 4> pending_image_placement{};
+  // Context badge: blinks for context_blink after a change, steady until a turn.
+  std::string context_badge;
+  std::optional<std::chrono::steady_clock::time_point> context_changed_at;
+  constexpr auto context_blink = std::chrono::milliseconds{2000};
+  const auto context_blinking = [&](std::chrono::steady_clock::time_point at) {
+    return !context_badge.empty() && context_changed_at &&
+           at - *context_changed_at < context_blink + std::chrono::milliseconds{250};
+  };
   // SGR wheel reporting rides frame packets; emitted state commits on completion.
   const auto *mouse_setting = std::getenv("BLACKBIRD_MOUSE");
   bool mouse_wanted = !mouse_setting || std::string_view{mouse_setting} != "0";
@@ -2212,6 +2238,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                       148};
     last_launch = launch.reference();
     auto returned = [&](bool accepted) {
+      if (accepted)
+        context_badge.clear(); // A launched turn retires the previous badge.
       (void)launch.event(4070, std::array{detail::raw_native_field(accepted)});
       launch.close();
       return accepted;
@@ -2595,6 +2623,10 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
           }
           if (message.kind == Kind::failure)
             turn_failed = true;
+          if (message.kind == Kind::context_change) {
+            context_badge = message.text;
+            context_changed_at = std::chrono::steady_clock::now();
+          }
           if (message.kind == Kind::title)
             title_ = message.text;
           if (message.kind == Kind::complete) {
@@ -2784,6 +2816,8 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
     }
     if (rows != old_rows || columns != old_columns)
       redraw = true;
+    if (context_blinking(std::chrono::steady_clock::now()))
+      redraw = true;
     if (redraw && !output.pending()) {
       RawRegion render{raw_regions::command_render};
       RawUiTrace layout{
@@ -2926,14 +2960,29 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                     .count() /
                 80) %
             spinner.size();
+        // No badge in a row too narrow to hold it beside the status text.
+        const auto badge = context_badge.empty() || header_width < 24
+                               ? std::string{}
+                               : context_badge + " ";
+        const auto badge_width = std::min(display_width(badge), header_width / 2);
         const auto status_text = terminal_lines(
             std::string{busy ? spinner[phase] : "·"} + " " + status_line + " ",
-            header_width)[0];
+            header_width - badge_width)[0];
+        const auto shown_badge =
+            badge.empty() ? std::string{} : terminal_lines(badge, badge_width)[0];
+        // Alternate inks every 250 ms while blinking, then hold the steady ink.
+        const auto since = context_changed_at
+                               ? now - *context_changed_at
+                               : std::chrono::steady_clock::duration::max();
+        const bool lit =
+            since >= context_blink || (since / std::chrono::milliseconds{250}) % 2 == 0;
         std::string rule;
-        for (auto n = display_width(status_text); n < header_width; ++n)
+        for (auto n = display_width(status_text) + display_width(shown_badge);
+             n < header_width; ++n)
           rule += "─";
-        grid.line(1,
-                  {{status_text, busy ? Ink::user : Ink::muted}, {rule, Ink::border}});
+        grid.line(1, {{status_text, busy ? Ink::user : Ink::muted},
+                      {shown_badge, lit ? Ink::selected : Ink::muted},
+                      {rule, Ink::border}});
         if (show_sprite) {
           const auto &sprite = blackbird_sprite(busy, phase / 2);
           const auto ink = turn_failed   ? Ink::failure
@@ -3187,11 +3236,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
          {notifications.read_fd(), POLLIN, 0},
          {STDOUT_FILENO, static_cast<short>(output.pending() ? POLLOUT : 0), 0},
          {resize_->read_fd(), POLLIN, 0}}};
-    const auto ready =
-        terminal_native_poll(&terminal_context, inputs,
-                             composer.escape_pending() || !child_escape.empty() ? 50
-                             : busy || commands                                 ? 40
-                                                                                : 1000);
+    const auto ready = terminal_native_poll(
+        &terminal_context, inputs,
+        composer.escape_pending() || !child_escape.empty()   ? 50
+        : busy || commands                                   ? 40
+        : context_blinking(std::chrono::steady_clock::now()) ? 125
+                                                             : 1000);
     if (ready < 0) {
       if (errno == EINTR)
         continue;

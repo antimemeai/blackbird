@@ -109,7 +109,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('executable')
 parser.add_argument('--case', default='all', choices=(
     'all', 'controls', 'palette', 'palette-capacity', 'editor', 'composer',
-    'input', 'tools', 'state', 'comfort', 'avatar', 'graphics'))
+    'input', 'tools', 'context', 'state', 'comfort', 'avatar', 'graphics'))
 arguments = parser.parse_args()
 
 if arguments.case in ('all', 'controls'):
@@ -511,6 +511,15 @@ if arguments.case in ('all', 'input'):
     print("PTY wheel scroll, arrow history, mouse toggle, Shift-Enter, exit order and BLACKBIRD_MOUSE=0 pass")
 
 if arguments.case in ('all', 'tools'):
+    def settle(quiet=0.3, seconds=5):
+        # Parse rows only after painting stops: a frame read mid-update mixes
+        # stale and new rows (seen as a duplicated, headerless FG_1 block).
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if not select.select([master], [], [], quiet)[0]:
+                return
+            observed.extend(os.read(master, 65536))
+        raise AssertionError("terminal never stopped painting")
     def transcript_rows():
         # Conversation rows only: the rail sits at column 2; the task pane is cut.
         rows = []
@@ -532,6 +541,7 @@ if arguments.case in ('all', 'tools'):
             wait_for(b"Workflow reloads")
             send(b'/lua arco.call("exec", {command="for i in $(seq 1 40); do echo TOOL_$i; done"}); print("FOLD_" .. "DONE")\r')
             wait_for(b"FOLD_DONE")
+            settle()
             rows = transcript_rows()
             # The exit marker takes one tail line: the last 3 are TOOL_39, TOOL_40, [exit 0].
             fold = rows.index("\u2506 35 more lines \u00b7 Ctrl-O inspects")
@@ -549,6 +559,7 @@ if arguments.case in ('all', 'tools'):
             time.sleep(0.6)
             send(b"\x15")
             wait_for(b"BG_3")
+            settle()
             rows = transcript_rows()
             def owner(index):
                 while index > 0 and rows[index - 1] != "ACTIVITY":
@@ -566,6 +577,65 @@ if arguments.case in ('all', 'tools'):
             os.close(master)
             os.close(slave)
     print("PTY tool output folds to header, first and last lines; Ctrl-O shows the rest")
+
+if arguments.case in ('all', 'context'):
+    # A published context revision blinks a status-line badge (a1v): a managed
+    # summarize staged in a workflow activates at completion, the badge alternates
+    # inks for about 2 s, holds steady, and the next turn retires it.
+    with fixture_directory(prefix="arco-context-") as work:
+        master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 110, 0, 0))
+        child = subprocess.Popen([arguments.executable, "--session", work], stdin=slave,
+                                 stdout=slave, stderr=slave, start_new_session=True)
+        observed = Observed()
+        def badge_style():
+            for row, text in enumerate(observed.screen.text().splitlines()[:3]):
+                column = text.find("\u25c6 CONTEXT")
+                if column != -1:
+                    return text[column:].split(" \u2500")[0].strip(), observed.screen.styles[row, column]
+            return None, None
+        def pump(seconds):
+            deadline = time.monotonic() + seconds
+            while time.monotonic() < deadline:
+                if select.select([master], [], [], 0.02)[0]:
+                    observed.extend(os.read(master, 65536))
+        try:
+            wait_for(b"Workflow reloads")
+            send(b"/lua arco.append({{role='assistant',content=string.rep('NOTE ',2000)}}); print('APPEN' .. 'DED')\r")
+            wait_for(b"APPENDED")
+            pump(0.3)
+            assert badge_style()[0] is None, "an append is not a context revision"
+            send(b"/lua local v=arco.context(); local id=v.entries[#v.entries].id; "
+                 b"assert(arco.manage({base=v.base,mode='summarize',ids={id},reason='indicator oracle',"
+                 b"source='pty',summary={role='assistant',content='short'}}).staged); print('STA' .. 'GED')\r")
+            wait_for(b"STAGED")
+            wait_for(b"CONTEXT compacted", predicate=lambda: badge_style()[0] is not None)
+            text, _ = badge_style()
+            assert text.startswith("\u25c6 CONTEXT compacted \u2212") and text.endswith("KiB"), text
+            styles = set()
+            deadline = time.monotonic() + 1.6
+            while time.monotonic() < deadline:
+                pump(0.05)
+                styles.add(badge_style()[1])
+            styles.discard(None)  # A sample between frames proves nothing.
+            assert {"0;1;38;2;114;215;211", "0;38;2;160;173;188"} <= styles, ("badge did not blink", styles)
+            pump(1.2)
+            steady = badge_style()[1]
+            pump(0.6)
+            assert badge_style()[1] == steady, "badge kept changing after the blink"
+            send(b"/lua print('NEXT_' .. 'TURN')\r")
+            wait_for(b"NEXT_TURN")
+            pump(0.3)
+            assert badge_style()[0] is None, "a new turn did not retire the badge"
+            send(b"\x11")
+            assert exit_code() == 0
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+            os.close(master)
+            os.close(slave)
+    print("PTY context change blinks a status badge, holds steady and retires on the next turn")
 
 if arguments.case in ('all', 'state'):
     # Persistent UI state and RRC restoration must never dispatch queued drafts.

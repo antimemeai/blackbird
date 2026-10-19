@@ -11511,3 +11511,52 @@ struct called with designated initializers, with no suppression. `terminal_test`
 passes and clang-tidy is clean on src/terminal.cpp. The operator authorized
 stopping the rerun of the whole gate for this mechanical change and committing
 with the per-command hook override; the settled suite is not repeated.
+
+## 2026-10-19 — rebuilt installation; a1v model-managed context begins
+
+Installed generation-0BmneCkH from master 168bb26 with `scripts/install-blackbird
+--update`; its packaging smoke checks pass. `a1v` runs on work/clm-a1v-2026-10-19
+in context/clm-a1v, with a beads redirect to the main database and the pinned
+tui-test tool installed explicitly. Plan: papers/clm-a1v-2026-10-19/PLAN.md.
+
+Findings:
+- The CLM mechanism is intact. Engine tests drive model tool calls into
+  `context_manage`, and a real-executable `/lua` managed summarize activates at
+  workflow completion.
+- It is never used. The context budget is off by default, and none of the 39
+  autonomous runs of 2026-10-17 called a context tool.
+- Nothing handles provider overflow.
+- The guide's inspect example would return hex of binary BBM2 pages.
+
+The operator chose C1 (budget on by default), C2 (context size every request), C4
+(compact on overflow) and C5 (a live check on luna). Two read-only research
+passes:
+- REQUEST_SIZES.md measures 762 campaign requests and grounds the C1 defaults at
+  384/192 KiB.
+- OVERFLOW_STUDY.md surveys ten reference agents and recommends option B for C4.
+
+Unit A, the indicator:
+- `ContextStore::changed` reports edits, restores and activated managed
+  proposals, with non-throwing sizes measured around the publication.
+- The TUI badge `◆ CONTEXT compacted −N KiB` blinks for 2 s, holds steady, and
+  clears when the next turn launches.
+
+The review found:
+- a high-severity ordering defect: a size computation that could throw between
+  the journal record and the in-memory swap;
+- chrono overflow from `time_point::min()`;
+- listener cost on headless runs;
+- the badge clearing even when a launch failed;
+- a weak blink oracle;
+- label and width nits.
+All are fixed, and the recheck found none in the fixes.
+
+RED on the old code: the PTY context episode on generation-0BmneCkH. Unit B
+corrects the guide's inspect section and its stale `include/arconaut` anchor;
+`a1v.1` tracks the hex-page ergonomics.
+
+The unit-2 tools episode read rows mid-paint, which showed as a duplicated,
+headerless FG_1 block. Settled reads make it pass 10/10, and it still fails on
+the pre-fold executable. One `tui_retained_result` failure under parallel load is
+noted on `9h5`; it showed two polls in a 4 s wait. The `e8n` note: the size pass
+found HTTP 200 for its 15 requests.

@@ -3,8 +3,10 @@
 #include "blackbird/raw_context.hpp"
 #include "blackbird/retained_state.hpp"
 #include "blackbird/value.hpp"
+#include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 
 namespace blackbird {
 template <class T> T unwrap(Result<T> result) {
@@ -54,6 +56,15 @@ public:
 private:
   RetainedState &root_;
 };
+enum class ContextChangeKind : std::uint8_t { edited, restored, managed };
+// One published context revision: an edit, a restore or an activated managed
+// proposal (mode is its proposal mode). Sizes are encoded input bytes, as stats;
+// a size that could not be measured is empty, never a reason to fail publication.
+struct ContextChange {
+  ContextChangeKind kind = ContextChangeKind::edited;
+  std::string revision, mode;
+  std::optional<std::size_t> bytes_before, bytes_after;
+};
 class ContextStore {
 public:
   explicit ContextStore(AuditLog &log, RawContextOrigin origin = {});
@@ -78,6 +89,9 @@ public:
   Value inspect(const Value &query, RawContextOrigin origin = {}) const;
   // Native workflow owner validates prospective obligations before publication.
   std::function<void(const Value::Array &, const Value &, const RawEventRef &)> protect;
+  // Presentation of each published revision, after its record is complete. A
+  // listener failure never affects the publication.
+  std::function<void(const ContextChange &)> changed;
   static Value::Array stop_outputs(const Value::Array &entries, bool interrupted);
   JournalCapacity cancellation_budget(const Value::Array &entries,
                                       const Value &proposal,
@@ -90,6 +104,9 @@ public:
 
 private:
   ContextStore(AuditLog &log, bool restore_saved, RawContextOrigin origin);
+  std::optional<std::size_t> input_bytes() const noexcept;
+  void notify(std::optional<ContextChange> change) const noexcept;
+  ContextChangeKind next_kind_ = ContextChangeKind::edited;
   std::optional<Value> original_entry(std::string_view id,
                                       RawContextOrigin origin = {}) const;
   void maybe_checkpoint(RawContextOrigin origin = {});
