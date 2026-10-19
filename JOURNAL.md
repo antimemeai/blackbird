@@ -11511,3 +11511,31 @@ struct called with designated initializers, with no suppression. `terminal_test`
 passes and clang-tidy is clean on src/terminal.cpp. The operator authorized
 stopping the rerun of the whole gate for this mechanical change and committing
 with the per-command hook override; the settled suite is not repeated.
+
+## 2026-10-19 — prompt-cache affinity on OpenAI routes
+
+The operator asks for an immediate investigation of the Sol runs' cache use, on
+the ChatGPT compatibility route (`chatgpt.com/backend-api/codex/responses`).
+Cached input averaged 25–43% and swung between 0% and 97% from one request to the
+next within a turn. The retained requests rule out prefix churn. Across eight
+consecutive requests, instructions, tools, reasoning and include are
+byte-identical, and each input is an exact prefix of the next. Codex's source
+names the cause: "ChatGPT derives cache affinity from the Responses session-id
+header" (`client.rs:595`). Codex sends `session-id` and `prompt_cache_key` set to
+its session ID. Blackbird sent neither.
+
+Fix, on work/cache-affinity-2026-10-19 from master `168bb26`:
+- Engine: `CodingProvider::supports_prompt_cache_key()`, true for
+  `OpenAiCodingProvider`. After cache-policy preparation, the engine adds
+  `prompt_cache_key` set to the conversation identity in hex, unless the request
+  already authors one.
+- ChatGPT transport: send the same value as a `session-id` header. A value that is
+  unsafe as a header refuses the request.
+
+RED: on the unmodified behavior, with only the interface method added, the new
+`cache_affinity_test` (coding_routing) fails with corrupt. The new keyed request in
+`openai_auth` fails at line 167: the fake curl saw no `session-id` header (exit
+13). GREEN: both pass. The engine test checks identical keys across turns and
+across a reopened engine, an authored key preserved, and no key for a provider
+without affinity. Review fixes: none needed. A live before-and-after cache-rate
+comparison is follow-through.

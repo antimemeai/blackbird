@@ -31,6 +31,8 @@ public:
   virtual void begin_request_group(const Value &, const RawAdapterContext *) {}
   virtual void end_request_group() noexcept {}
   virtual bool supports_prompt_cache_policy() const noexcept { return false; }
+  // The provider routes prompt-cache affinity by a request's prompt_cache_key.
+  virtual bool supports_prompt_cache_key() const noexcept { return false; }
   // Signed native histories must replay operational input at its original place.
   virtual bool retain_request_state() const noexcept { return false; }
   virtual Value respond(const Value &request,
@@ -56,6 +58,7 @@ public:
   void begin_request_group(const Value &, const RawAdapterContext *) override;
   void end_request_group() noexcept override;
   bool supports_prompt_cache_policy() const noexcept override;
+  bool supports_prompt_cache_key() const noexcept override { return true; }
   Value respond(const Value &, const std::function<void(std::string_view)> &) override;
   Value respond(const Value &, const std::function<void(std::string_view)> &,
                 const RawProviderOwner *) override;

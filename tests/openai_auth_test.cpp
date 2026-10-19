@@ -99,6 +99,19 @@ int curl_helper(int argc, char **argv) {
     std::cout << "{\"error\":{\"message\":\"PRIVATE_BODY_MUST_NOT_ESCAPE\"}}\n401";
     return 0;
   }
+  // Cache affinity: the ChatGPT backend routes by the session-id header, which must
+  // carry the body's prompt_cache_key; a request without a key sends no header.
+  if (config.find("affinity-key-0123") != std::string::npos) {
+    if (config.find("header = \"session-id: affinity-key-0123\"\n") ==
+        std::string::npos)
+      return 13;
+    std::cout << "data: "
+                 "{\"type\":\"response.completed\",\"response\":{\"status\":"
+                 "\"completed\",\"output\":[]}}\n\n\n200";
+    return 0;
+  }
+  if (config.find("session-id:") != std::string::npos)
+    return 14;
   if (config.find("data-binary =") != std::string::npos) {
     if (config.find(R"(data-binary = "{\"opaque\":\"A\\\\B\\\"C\"}")") ==
         std::string::npos)
@@ -149,6 +162,9 @@ int main(int argc, char **argv) {
     auto request = Value::object({{"opaque", Value{"A\\B\"C"}}});
     auto stream = openai_http(config, login.value(), "responses", &request);
     check(stream.has_value() && completed_response(stream.value()).has_value());
+    auto keyed = Value::object({{"prompt_cache_key", Value{"affinity-key-0123"}}});
+    auto affinity = openai_http(config, login.value(), "responses", &keyed);
+    check(affinity.has_value() && completed_response(affinity.value()).has_value());
     check(!openai_http(config, login.value(), "https://other.invalid/").has_value());
     std::string partial;
     config.response_observer = [&](std::string_view bytes) { partial += bytes; };

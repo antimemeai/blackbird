@@ -4437,6 +4437,11 @@ Value CodingEngine::request(Value options) {
     prepare_request_cache(request,
                           {cache_mode, provider_.supports_prompt_cache_policy(),
                            provider_.provider_identity(), reusable_input_items});
+    // Cache affinity follows the conversation, so it survives reopen and restart.
+    // An authored key wins.
+    if (provider_.supports_prompt_cache_key() && !request.find("prompt_cache_key"))
+      request.object().emplace_back(
+          "prompt_cache_key", Value{hex_identity(identity_.conversation.bytes())});
     if (context_.head() != origin)
       throw Error{ErrorCode::conflict};
     ProviderOriginalLease final_packet{{ProviderOriginalRole::request_packet,
