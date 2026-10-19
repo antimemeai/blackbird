@@ -549,6 +549,15 @@ if arguments.case in ('all', 'tools'):
             time.sleep(0.6)
             send(b"\x15")
             wait_for(b"BG_3")
+            # wait_for may find BG_3 in the previous screen before consuming the
+            # repaint queued by Ctrl-U. Drain to a completed, quiet frame before
+            # inspecting attribution; sleeping without reading can block the PTY.
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.05)
+                if not ready:
+                    break
+                observed.extend(os.read(master, 65536))
             rows = transcript_rows()
             def owner(index):
                 while index > 0 and rows[index - 1] != "ACTIVITY":

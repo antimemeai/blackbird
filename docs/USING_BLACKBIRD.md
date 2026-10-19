@@ -210,6 +210,9 @@ persistent state. The model has a `lua` tool and the same APIs:
   clip or return empty; reversed, negative, noninteger ranges and line zero fail.
   LF is retained, CR is ordinary data, and a trailing LF creates no extra line.
   Full original file bytes remain audited; invalid UTF-8 slices return hex.
+  Observation budgets cut on character boundaries, preferring a nearby newline
+  (within 256 bytes, retaining at least half the prefix). Explicit byte slices
+  remain exact. `byte_start`/`byte_end` report actual half-open byte offsets.
   Reads still have the existing 16 MiB full-file capacity, even for small ranges.
   A native session read returns `snapshot={journal=...,sequence=...}`. For repair,
   call `read_file` with that `snapshot` instead of `path`, plus the desired range.

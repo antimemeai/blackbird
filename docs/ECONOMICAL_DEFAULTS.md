@@ -15,7 +15,11 @@ The 16 KiB value is an overridable observation default, not a token or memory ca
 
 Native `read_file` accepts `output_max_bytes`, applies it after range selection,
 and reports total file bytes, selected bytes, returned bytes and omitted selected
-bytes when a limit is supplied. Preserve binary and split-UTF-8 slices as hex.
+bytes when a limit is supplied. Budget cuts retreat to character boundaries and prefer a newline within 256
+bytes (without discarding more than half the prefix). Explicit byte slices stay
+exact, including hex when a caller intentionally selects part of a character.
+Truly binary observations remain hex. Results carry half-open absolute
+`byte_start`/`byte_end`; omitted counts use the actual cut, not the requested cap.
 Capture the complete original before projecting its model-facing result.
 
 The CodingEngine returns a `snapshot` source reference for a successful disk read.

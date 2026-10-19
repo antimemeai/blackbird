@@ -103,9 +103,9 @@ void LocalTools::capture(std::string label, std::string raw, RawFileToolTrace *t
   captured_.push_back({std::move(label), std::move(raw)});
 }
 namespace {
-Value display_bytes(const std::string &raw) {
+Value display_bytes(std::string_view raw) {
   if (valid_utf8(raw))
-    return Value{raw};
+    return Value{std::string{raw}};
   constexpr char hex[] = "0123456789abcdef";
   std::string encoded;
   for (const char ch : raw) {
@@ -164,8 +164,8 @@ Value file_range(const Value &args, RawFileToolTrace *trace = nullptr) {
                             Value{Number{lines ? "1" : "0"}});
   return Value::object(std::move(normalized));
 }
-std::string file_presentation(const std::string &raw, const Value &args,
-                              RawFileToolTrace *trace = nullptr) {
+std::string_view file_presentation(const std::string &raw, const Value &args,
+                                   RawFileToolTrace *trace = nullptr) {
   const bool bytes = args.find("byte_start") || args.find("byte_end");
   const bool lines = args.find("line_start") || args.find("line_end");
   if (bytes && lines)
@@ -179,7 +179,7 @@ std::string file_presentation(const std::string &raw, const Value &args,
     if (end < start)
       throw Error{ErrorCode::invalid_range};
     const auto first = std::min(start, raw.size());
-    return raw.substr(first, std::min(end, raw.size()) - first);
+    return std::string_view{raw}.substr(first, std::min(end, raw.size()) - first);
   }
   if (lines) {
     const auto start = range_index(args, "line_start", 1);
@@ -200,29 +200,54 @@ std::string file_presentation(const std::string &raw, const Value &args,
       }
       ++line;
     }
-    return raw.substr(first, last - first);
+    return std::string_view{raw}.substr(first, last - first);
   }
   return raw;
 }
 } // namespace
+// Only observation budgets are adjusted. Explicit byte selections stay exact.
+std::size_t observation_prefix_size(std::string_view raw, std::size_t budget) {
+  auto end = std::min(raw.size(), budget);
+  if (end == raw.size() || end == 0)
+    return end;
+  auto boundary = end;
+  while (boundary > 0 && (static_cast<unsigned char>(raw[boundary]) & 0xc0U) == 0x80U)
+    --boundary;
+  auto character_end = end;
+  while (character_end < raw.size() &&
+         (static_cast<unsigned char>(raw[character_end]) & 0xc0U) == 0x80U)
+    ++character_end;
+  if (!valid_utf8(raw.substr(0, boundary)) ||
+      !valid_utf8(raw.substr(boundary, character_end - boundary)))
+    return end; // Actual binary, not a split trailing character.
+  end = boundary;
+  if (end > 0) {
+    const auto lf = raw.rfind('\n', end - 1);
+    if (lf != std::string_view::npos && end - (lf + 1) <= 256 && lf + 1 >= end / 2)
+      end = lf + 1;
+  }
+  return end;
+}
 Value file_content_presentation(const std::string &raw, const Value &args,
                                 RawFileToolTrace *trace) {
   const auto budget = range_index(args, "output_max_bytes", SIZE_MAX);
   const auto range = file_range(args, trace);
   auto selected = file_presentation(raw, range, trace);
   const auto selected_bytes = selected.size();
-  if (selected.size() > budget)
-    selected.resize(budget);
+  const auto begin = static_cast<std::size_t>(selected.data() - raw.data());
+  selected = selected.substr(0, observation_prefix_size(selected, budget));
   const auto returned_bytes = selected.size();
   if (trace)
     trace->result(returned_bytes);
-  auto result = Value::object({{"content", display_bytes(selected)}});
+  auto result = Value::object({{"byte_end", Value{Number{begin + returned_bytes}}},
+                               {"byte_start", Value{Number{begin}}},
+                               {"content", display_bytes(selected)}});
   if (args.find("output_max_bytes")) {
     result.object().emplace_back("file_bytes", Value{Number{raw.size()}});
-    result.object().emplace_back("selected_bytes", Value{Number{selected_bytes}});
-    result.object().emplace_back("returned_bytes", Value{Number{returned_bytes}});
     result.object().emplace_back("omitted_bytes",
                                  Value{Number{selected_bytes - returned_bytes}});
+    result.object().emplace_back("returned_bytes", Value{Number{returned_bytes}});
+    result.object().emplace_back("selected_bytes", Value{Number{selected_bytes}});
   }
   return result;
 }
@@ -383,15 +408,17 @@ Value LocalTools::run(std::string_view name, const Value &args,
       if (!result.has_value())
         raw_fence(result.error());
     }
-    auto shown = display_bytes(output.substr(0, budget));
+    const auto returned = observation_prefix_size(output, budget);
+    auto shown = display_bytes(std::string_view{output}.substr(0, returned));
     const auto total = output.size();
     captured_.push_back({"process.combined", std::move(output)});
-    auto result = Value::object(
-        {{"output", std::move(shown)}, {"exit_code", Value{Number{status}}}});
+    auto result = Value::object({{"output", std::move(shown)},
+                                 {"exit_code", Value{Number{status}}},
+                                 {"byte_start", Value{Number{0}}},
+                                 {"byte_end", Value{Number{returned}}}});
     if (args.find("output_max_bytes")) {
       result.object().emplace_back("output_bytes", Value{Number{total}});
-      result.object().emplace_back("omitted_bytes",
-                                   Value{Number{total - std::min(total, budget)}});
+      result.object().emplace_back("omitted_bytes", Value{Number{total - returned}});
     }
     return result;
   }
@@ -789,7 +816,9 @@ Value tool_definitions() {
                   "original from a prior read; no disk access). Full originals are "
                   "retained. Default coding workflow returns at most16384 raw bytes "
                   "unless a range or output_max_bytes is explicit; custom Lua defaults "
-                  "to full content. output_max_bytes limits the selected range; "
+                  "to full content. Budget cuts respect UTF-8 and nearby newlines; "
+                  "byte_start/byte_end are actual half-open offsets. "
+                  "output_max_bytes limits the selected range; "
                   "file_bytes/selected_bytes/returned_bytes/omitted_bytes describe "
                   "raw bytes before encoding. Fetch omitted facts with the returned "
                   "snapshot and ONE range object: {mode:lines,start:1,end:20} "
@@ -947,7 +976,9 @@ Value tool_definitions() {
                 "local child-group cleanup, with output_ref for partial output; "
                 "inspect it and choose a distinct retry or another approach. Operator "
                 "cancellation stops the turn. Optional output_max_bytes bounds raw "
-                "prefix bytes shown to model; full original chunks remain audited. "
+                "prefix bytes shown to model, cut at UTF-8/nearby line boundaries; "
+                "byte_start/byte_end report actual offsets. Full originals remain "
+                "audited. "
                 "output_ref can retrieve omitted output using read_process_output. "
                 "A command-registry limit returns capacity with resource, count, "
                 "limit, attempt and effect_outcome=not_started; no command launched "

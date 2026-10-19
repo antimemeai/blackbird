@@ -11550,3 +11550,30 @@ route swung between 0% and 97% and averaged 25-43%. The gate also hit two
 load-induced PTY timing failures (the load average reached 47). Each passes in
 isolation: `tui_retained_result` is filed as `arconaut-r5n`; `terminal_pty_tools`
 passed 3/3 alone. The hook lock now has three lanes (`blackbird_runs/bin/hook-lock`).
+
+## 2026-10-19 — q4n: character-safe observation cuts
+
+Direct exec regression fails on the original source: a 16384-byte budget inside
+U+2019 hex-encodes the entire readable prefix. Budget projections now retreat to
+character boundaries, prefer nearby LF, and report actual half-open offsets;
+command jobs collect four lookahead bytes before cutting. File projections use
+views rather than copying the selected original. Explicit byte slices stay exact,
+including hex for split UTF-8; originals/capture and effect linkage are unchanged.
+Design and RED evidence: papers/sol-observations-2026-10-19/PLAN.md.
+Final targeted tools passes; command_jobs/coding/economical_defaults pass. One
+focused boundary recheck also keeps arbitrary binary continuation bytes binary.
+The first hook passed 252/265 tests. Its request_storage failure exposed native
+versus Lua key ordering after adding file offsets; emitting file fields in lexical
+order fixes the unchanged byte-equality oracle. Other failures came from inherited
+installed-executable/graphics settings and an overlong HOME-based TUI socket path.
+Direct environment checks pass request_storage, terminal_blocked, install_blackbird
+and (with a short relative test HOME) tui_viewport. The hook is not bypassed.
+The corrected-environment gate passes 263/265; terminal_pty_tools and
+terminal_pty_state fail asynchronously, then both pass unchanged in their direct
+follow-up (32.33 s). No TUI change is included. Submit the completed q4n unit
+through the required locked gate; source remains inactive until delivery.
+The third gate passes 264/265 and exposes the same attribution fixture boundary:
+wait_for(BG_3) may succeed on the old screen before reading Ctrl-U's repaint.
+The fixture now drains pending PTY data to a quiet frame, then applies exactly
+the same attribution assertions. The old fixture failed in the gate; the repaired
+fixture passes on the unchanged executable (1.85 s). No TUI product code changes.
