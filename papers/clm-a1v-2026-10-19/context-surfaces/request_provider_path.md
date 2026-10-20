@@ -767,3 +767,129 @@ Each item states an assumption the current code makes, where it is enforced, and
 - Whether the exec jobs path uses the 120 s timeout default from tools.cpp (§3.2). Whether `read_file` snapshot reads should be restricted to `file.read` sources (§3.2).
 - Whether the RRC dedupe can miss a note folded into saved state (§6.8). Whether WorkflowRuntime DecisionEvents (with a fresh ConversationId per task) can land in a coding journal and mislead `session_identity`'s fallback (§4.6, others item 7).
 - Whether the operator wants pinned instructions carried verbatim across generations (§6.4).
+
+## Recheck against 10827cf (after the master merge)
+
+The catalogue above was read at `f7a79b1`. Master was then merged in at `10827cf`, bringing:
+- OpenAI prompt-cache affinity (`50cdae2`, `5bd5b22`);
+- UTF-8-safe observation cuts (q4n, `2aba229`);
+- compact tail-weighted `exec` observations with exact recovery (47k, `a94d094`).
+
+The branch's own `d786c1d` also falls inside the range.
+
+This section rechecks every entry above on tool-output bounds, `read_process_output`, `output_ref` and continuation, `exec` defaults, observation shaping, prompt-cache policy, the allowlists, cache keys and affinity, and OpenAI request fields. The entries above are left as written. References are `file:line` at `10827cf`. Nothing was built, run or tested, and no provider was called.
+
+Some files did not change between `f7a79b1` and `10827cf`: src/request_cache.cpp, src/json.cpp, src/anthropic_provider.cpp, src/openrouter.cpp, src/responses_provider.cpp, src/context.cpp, src/provider_auth.cpp and include/blackbird/command_jobs.hpp. Their line numbers above still hold. In src/coding.cpp, lines after about 4411 have moved: by -1 up to 4465, by +4 from 4466, and by more after the new `retained_process_output` (src/coding.cpp:4819-4922). The lines cited below are current.
+
+### §1 Request assembly
+
+- **§1.1, `CodingProvider` virtuals: changed.**
+  - There is a new virtual, `supports_prompt_cache_key()`, which defaults to false (include/blackbird/coding.hpp:34-35). `retain_request_state` moves to :37.
+  - `OpenAiCodingProvider` overrides the new virtual to true (include/blackbird/coding.hpp:61). No other adapter overrides it.
+  - `supports_prompt_cache_policy` is unchanged (src/coding.cpp:329-340).
+- **§1.2, the request object row ("No `tool_choice`, no `max_output_tokens`, no `prompt_cache_key`, no conversation/session header at this layer"): no longer true for `prompt_cache_key`.**
+  - After `prepare_request_cache` (src/coding.cpp:4463-4465), the engine adds `prompt_cache_key = hex(identity_.conversation)` when the provider supports keys and the request has not authored one (src/coding.cpp:4466-4470).
+  - This happens before the head check (src/coding.cpp:4471) and before the final packet lease (src/coding.cpp:4473). The key is therefore part of the retained native request packet and of `last_request_bytes_`, but not of `input_bytes`, which is measured earlier.
+  - `tool_choice` and `max_output_tokens` are still not set at this layer.
+- **§1.2, the generic option override: still true.** Because the engine adds its key only when none is present, an authored `prompt_cache_key` passed through the override wins (src/coding.cpp:4468). `cache_affinity_test` in tests/coding_test.cpp asserts this.
+- **§1.3, the prompt-cache boundary: unchanged** (src/request_cache.cpp:73-136; src/json.cpp:452-506). The coupling note still holds: any edit or cut moves the breakpoint. Affinity is a separate mechanism and is covered under §2 below.
+
+### §2 Provider adapters
+
+- **§2.1, the prompt-cache allowlist: unchanged and still true.**
+  - The model pairs are still `openai-codex` with `gpt-6.1-sol` and `openrouter-responses` with `openai/gpt-6.1-sol` (src/request_cache.cpp:87-93).
+  - `prompt_cache_options` with `ttl:"30m"` and the single breakpoint are unchanged (src/request_cache.cpp:104-136).
+  - The OpenAI policy gate still requires `api_key`, `https://api.openai.com/v1` and `responses` (src/coding.cpp:329-340). On the ChatGPT compatibility route (`codex_chatgpt`), a non-default policy is still `unsupported`.
+  - OpenRouter still supports the policy whenever a group is active (include/blackbird/openrouter.hpp:18).
+- **New: affinity is independent of the allowlist.** `prompt_cache_key` is added for every model and every cache mode, including `provider_default`, on both OpenAI routes. Only `supports_prompt_cache_key()` gates it.
+- **§2.2, OpenAI/Codex headers ("No session_id, conversation or version headers"): changed.**
+  - On the compatibility route, `openai_http` now sends `session-id: <prompt_cache_key>` whenever the request carries a key (src/openai.cpp:405-411). A key that is not a string, or is unsafe as a header, fails with `invalid_range`.
+  - The other headers are unchanged (src/openai.cpp:397-404).
+  - The key also stays in the JSON body, because `export_provider_request` does not strip it. That applies to the compatibility body (src/openai.cpp:389) and to the owned `api.openai.com` route (src/openai.cpp:362-366), which sends no header.
+  - The live session recorded in JOURNAL.md ("prompt-cache affinity on OpenAI routes") ran on the ChatGPT route and succeeded. That shows the backend accepts the body field there.
+- **§2.2, the state row ("Stateless: no previous_response_id or conversation id"): partly changed.** The route is still stateless, and `previous_response_id` is still refused. But every request now carries a conversation-derived routing key. That key is a provider-side affinity handle, not server state.
+- **§2.3 (registered Responses) and §2.4 (OpenRouter): unchanged.**
+  - Neither adapter overrides `supports_prompt_cache_key()`, so neither gets an engine key.
+  - The engine still never sets OpenRouter `session_id`; the adapter only validates an authored one (src/openrouter.cpp:74-76).
+  - An authored `prompt_cache_key` would pass into an OpenRouter or registered body unchanged. Whether those hosts honour it is unconfirmed.
+- **§2.5, Anthropic cache row ("No `cache_control` breakpoints are ever emitted") and §2.8 item 6 (`arconaut-bvu`): still true.**
+  - src/anthropic_provider.cpp contains no `cache_control` or `prompt_cache` text and did not change in the merge.
+  - Non-default modes are still refused (src/request_cache.cpp:87-93).
+  - Anthropic gets no engine key. An authored `prompt_cache_key` would be refused by the request allow-list as `unsupported` (src/anthropic_provider.cpp:302-310).
+  - The bead's tracker status was not checked.
+- **§2.8 item 6, second half: still true, with an addition.** OpenAI caching policy is still a single explicit breakpoint, only for `gpt-6.1-sol`. OpenAI routes now also get affinity on every model.
+
+### §3 Tool dispatch and output shaping
+
+- **§3.1, turn.lua injection ("16384 for exec and whole-file read_file"): changed.**
+  - When `output_max_bytes` is nil, `exec` now gets `output_max_bytes = 8192`, plus `output_head_bytes = 2048` if that is also nil (programs/turn.lua:13-18).
+  - Whole-file `read_file` keeps 16384 (programs/turn.lua:19-27).
+  - It is still the only place these defaults exist. No default is injected for `read_process_output` or for `process`.
+- **§3.1, other turn loops ("exec can return up to the resident tail (1 MiB)"): changed, and larger.**
+  - These loops still inject nothing: programs/useful_turn.lua:24, programs/economy_pilot.lua:75 and the `ultracode` source in src/workflows.cpp (near :296).
+  - With no budget, the C++ default `max_output` is still 16 MiB (include/blackbird/command_jobs.hpp:16; the catalogue's ":18" was off by two).
+  - The `exec` result is now projected from the retained originals (src/coding.cpp:4974-4991), not from the resident tail. These loops can therefore now receive the whole capture as one head-first prefix, up to the 16 MiB capture limit (src/command_jobs.cpp:39, 955). This comes from reading the source; it was not run.
+- **§3.1, "Output string answer": still true in substance.** Tool results are still structured Values, stringified only at export. Size limiting still depends on the program passing a budget, though the default workflow's values have changed as described above.
+- **§3.2, `exec` row ("prefix only", "No head+tail form and no inline marker; only the counts"): no longer true.**
+  - The engine starts the job, then waits with `max_output = 0` (src/coding.cpp:4959). It then calls `retained_process_output({output_ref, output_max_bytes, output_head_bytes?})` and merges that projection over the job snapshot (src/coding.cpp:4974-4991).
+  - An `output_head_bytes` larger than the budget is `invalid_range` (src/coding.cpp:4955-4958).
+  - `process_output_presentation` (src/tools.cpp:265-341) returns a head and, if `output_head_bytes` is given, a tail, cut on UTF-8 and nearby-newline boundaries (src/tools.cpp:209-230, 274-289).
+  - Text gets the inline marker `[... bytes [a,b) omitted ...]` (src/tools.cpp:295-299). Binary gets separate `{head, tail}` values (src/tools.cpp:300-302).
+  - The result reports `byte_start`, `byte_end`, `next_offset`, `omitted_prefix_bytes`, `output_bytes`, `returned_bytes`, `omitted_bytes`, `tail_byte_start`/`tail_byte_end`, `omitted_range`, `output_ref`, and `next_read`: a `read_process_output` call for the next safe page of at most 8,192 bytes (src/tools.cpp:304-339).
+  - The cap and eviction constants are unchanged: the resident tail limit is 1 MiB (src/command_jobs.cpp:38), and EFBIG stops a job at 16 MiB (src/command_jobs.cpp:39, 955).
+  - "A later completion is never appended to context": not affected by the merge, and not rechecked. The timeout default is not rechecked either.
+- **§3.2, `process` row ("foreground ignores `output_max_bytes`"): still true.**
+  - Foreground still builds `JobWaitOptions` without `max_output` (src/coding.cpp:4994-5001), while validation accepts the key (src/command_jobs.cpp:95).
+  - The snapshot cut it returns is now UTF-8-safe, with four bytes of lookahead, and adds `byte_end` (src/command_jobs.cpp:506-521).
+  - Foreground gets no tail, no `next_read` and no projection from originals. The `read` op was not changed.
+- **§3.2, `read_process_output` row: changed, except the EOF default.**
+  - It is now `retained_process_output` (src/coding.cpp:4819-4922), dispatched at src/coding.cpp:5163-5164.
+  - **Still true:** with no `output_max_bytes` and no end, it returns the whole original. A missing budget means `SIZE_MAX` (src/tools.cpp:268), and a missing end means EOF (src/tools.cpp:175-176). tests/economical_defaults_test.cpp:214-216 relies on this.
+  - **No longer true:** "No output_max_bytes" (now optional, src/tools.cpp:268-272) and "line_* is refused" (line ranges are now accepted through `range` or `line_*`; description at src/tools.cpp:1133-1142).
+  - **Changed: lookup cost.** "Linear scan of every audit fact … O(audit) cost on every read" no longer holds. An incremental locator index (`process_original_cursor_`, `process_originals_`; include/blackbird/coding.hpp:220-225; src/coding.cpp:4831-4870) decodes only facts committed since its last advance. It keeps `(record, source)` pairs, not bodies. A new engine starts at fact 0, so the first `exec` or read after a restart or reopen scans the whole journal once, including archived facts read through the catalogue (src/retained_state.cpp:669-700).
+  - **New per-call cost:** the reader concatenates every chunk of the referenced output into memory before projecting (src/coding.cpp:4872-4889), and `exec` now pays this on every call.
+- **§3.2, retired jobs and `output_ref` across reopen.**
+  - "Retired jobs stay readable": still true.
+  - The description now claims recovery "also after reopen" (src/tools.cpp:1137). tests/economical_defaults_test.cpp:199-216 reopens the journal, recovers the coding session and builds a new engine. It then recovers the full 1,200,058-byte original after the build file has been deleted.
+  - Unconfirmed: whether that test crosses a saved-state checkpoint, and whether a re-exec restart behaves the same.
+  - Locators are journal-bound, because the index walks only `log_.root()`. They do not resolve in a `seed_successor` session or in the backstop's journal. This is inferred from the source.
+- **§3.2, `read_file` (path) row ("`selected.resize(budget)`, a prefix, with no marker"): changed.**
+  - The cut now goes through `observation_prefix_size` (src/tools.cpp:238).
+  - Results always carry `byte_start`/`byte_end` (src/tools.cpp:242-244). Budgeted results carry `next_range` when bytes were omitted (src/tools.cpp:247-257).
+  - Still head-only, with no inline marker. The snapshot row is unchanged.
+- **§3.2, `context_inspect`/`context_view`/`context_originals`/`context_restore` row: still true.** These are dispatched at src/coding.cpp:5539-5553; src/context.cpp did not change.
+- **§3.2, `display_bytes` row ("The budget cut is byte-exact … the whole slice becomes hex"): no longer true for budget cuts; still true for explicit byte slices and real binary.**
+  - Budget cuts retreat to a character boundary and prefer a newline within 256 bytes (src/tools.cpp:209-230).
+  - `display_bytes` itself is unchanged (src/tools.cpp:106-118).
+  - Raw PTY escape sequences are still not stripped: the diff adds no such code.
+- **§3.3, durable copies: still four, with smaller copies 2 and 3.** Under the default workflow, the `operation.result` and the context append now hold the roughly 8 KiB projection. The `process.output` originals are unchanged.
+- **§3.4, the `LocalTools` exec row ("prefix `output.substr(0,budget)`"): changed.** It now calls `process_output_presentation(output, args)` (src/tools.cpp:494), so it gets the same head/tail, marker and offsets. It is still not reached from `CodingEngine::call`.
+- **§3.5, existing shaping at creation: needs updating.**
+  - `exec` now has a tail-weighted default in turn.lua, a projection from originals, an inline gap marker, exact offsets and `next_read`.
+  - `read_file` has `next_range`.
+  - Budget cuts are UTF-8-safe.
+  - `process foreground` is still unshaped.
+- **§3.7, choke points.**
+  - Item 4's plumbing for a `read_process_output` budget now exists as an optional argument. The `process foreground` budget is still missing.
+  - The `exec` branch itself (src/coding.cpp:4974-4991) is now a working creation-time shaping point. It reads the retained originals, and its projection becomes the retained `operation.result`.
+
+### §5 and §6
+
+- **§5.2, the prompt-cache rules: the allowlist rows are still true. Add one engine/route rule:** affinity by `prompt_cache_key` = the conversation identity (include/blackbird/coding.hpp:35, 61; src/coding.cpp:4466-4470), mirrored to the `session-id` header on the ChatGPT route (src/openai.cpp:405-411). Like the other rows, it belongs in a provider profile, for example `cache_session_keys`.
+- **§5.3, the OpenAI/Codex header list: add `session-id`** when a key is present (src/openai.cpp:405-411).
+- **§6.1 item 1 ("No provider handle exists to rotate. OpenRouter `session_id` … is the only provider session field, and the engine never sets it"): changed.** On OpenAI routes, `prompt_cache_key` and `session-id` are now a provider-facing handle that the engine always sets. OpenRouter `session_id` is still never set.
+- **§6.1 item 5 ("Do not rotate ConversationId per generation"): reinforced.** The cache key is the ConversationId. Rotating it per generation would move the session to a new affinity, and the cached tools-and-instructions prefix would miss along with everything after the cut. A generation started as a new session through `seed_successor` would also get a new identity, and so a new key, and would strand `output_ref` locators in the old journal. Keep generations in-session, with their own `context_generation` identity, and keep the key per conversation.
+- **§6.4, prefix stability: add affinity.** On OpenAI routes, a cut now changes only the prefix, not the routing key, so the bytes before the first changed item can still hit. Pre-fix live data (0-97% swings between consecutive requests with identical prefixes) showed that without affinity even pure appends missed. OpenRouter still has no key, so prefix stability there may not produce hits; this is unconfirmed. Anthropic still requests no caching.
+- **§6.9, tool-output shaping: update.**
+  - Defaults are 8 KiB for `exec` (2 KiB head + 6 KiB tail) and 16 KiB for `read_file`, both only in turn.lua.
+  - `process foreground` still ignores `output_max_bytes`.
+  - `read_process_output` now takes an optional budget, uses an incremental index rather than a per-read scan, and still defaults to EOF.
+  - Budget cuts are now UTF-8-safe; explicit byte slices are still exact.
+  - The suggested choke point in `operation()` is no longer the only candidate: `exec` already shapes inside its own branch, from originals.
+
+### New unconfirmed items
+
+- Whether the 47k reopen test crosses a saved-state checkpoint, and whether a real `--resume-continue` restart resolves an `output_ref` the same way.
+- Whether a background (`yield_ms`) `exec` result's projection includes every byte produced so far, or only the chunks drained by that point.
+- Whether OpenRouter or registered hosts honour an authored `prompt_cache_key`, and whether OpenAI imposes per-key throughput limits that would argue for splitting keys.
+- Whether Anthropic caches anything without `cache_control` breakpoints.
