@@ -11873,3 +11873,13 @@ Tests:
   expectation failed on the old code (line 116) and passes now.
 
 ECONOMICAL_DEFAULTS, USING_BLACKBIRD and the tool descriptions are updated.
+
+## 2026-10-20 — tool-output references recorded; Kimi unavailable
+
+The SWE-agent and OpenHands trees acquired for the tool-output research are now in QUARANTINE.md, with their
+exact commits, licences and restoration commands (a6w). The acquisition kept no intact archive, so the
+exact-commit codeload ZIPs were captured to `../quarantine_proj/archives/` with SHA-256 identities.
+
+Kimi review now fails with HTTP 429 ("Your current subscription does not have access to Kimi Code right
+now"), tracked in its own bead. A fresh-context independent reviewer stands in for the tribunal on d786c1d and
+870ec8c. The JSMNTL review step had been skipped for both commits; it is now running.

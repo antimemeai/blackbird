@@ -1018,3 +1018,56 @@ tar -xzf ../quarantine_proj/archives/opencode-anthropic-auth-0.0.13.tgz -C quara
 
 Authorization, exchange and refresh fields ground the bounded alignment in
 `papers/claude-auth-integration-2026-10-17/OPENCODE_ALIGNMENT.md`.
+
+# Tool-output lifecycle references — 2026-10-19
+
+Study-only trees used by `papers/tool-output-lifecycle-2026-10-19/`. Each was
+taken with `git clone --depth 1` on 2026-10-19 into a new directory under
+`quarantine/tool-output-lifecycle-2026-10-19/`. The exact commit was recorded with
+`git rev-parse HEAD`, and the nested `.git` was deleted. No filesystem detritus was
+present. No acquired code, test, installer or build ran; no dependency was adopted.
+Archived instructions (`AGENTS.md` and similar) carry no authority.
+
+| Directory | Source | Commit | Commit date | Regular files / bytes | License |
+| --- | --- | --- | --- | ---: | --- |
+| `quarantine/tool-output-lifecycle-2026-10-19/swe-agent/` | https://github.com/SWE-agent/SWE-agent | `3ea751c087f32b16e039a2233dd6eefecef325d5` | 2026-07-16 | 407 / 36,068,345 | MIT (`LICENSE`, © 2024 Yang, Jimenez, Wettig, Yao, Narasimhan, Press) |
+| `quarantine/tool-output-lifecycle-2026-10-19/openhands/` | https://github.com/All-Hands-AI/OpenHands (redirects to OpenHands/OpenHands); HEAD is the Agent Canvas frontend only | `6dbebfb3f6a6864023c01a5bbde85dd95233d9b2` | 2026-10-19 | 2,905 / 40,035,762 | MIT (`LICENSE`, © 2025 OpenHands contributors) |
+| `quarantine/tool-output-lifecycle-2026-10-19/openhands-1.6.0/` | https://github.com/All-Hands-AI/OpenHands tag `1.6.0`, the last legacy-V0 tree with all named condensers | `c5e0de8ecd85cef10e7808d57e9f939f3770ab9d` | 2026-03-30 | 2,773 / 21,304,218 | MIT outside `enterprise/`; `enterprise/` is PolyForm Free Trial 1.0.0 (`LICENSE`, `enterprise/LICENSE`) |
+| `quarantine/tool-output-lifecycle-2026-10-19/openhands-software-agent-sdk/` | https://github.com/OpenHands/software-agent-sdk, the V1 agent core and current condensers | `33d8aa29c3078d074799e2fbf5e847aeb2d71360` | 2026-10-19 | 1,937 / 22,950,843 | MIT (`LICENSE`, © 2026 OpenHands contributors) |
+
+Omitted from SWE-agent, both confined symlinks: `docs/config/index.md -> config.md` and `docs/assets/readme_assets -> ../../assets`.
+
+Restore from the Blackbird root with each destination absent. Each line fetches the exact commit, then strips Git metadata. Repeat for each row with its URL, commit and directory:
+
+```sh
+restore() { # URL COMMIT DEST
+  test ! -e "$3" || { echo "exists: $3"; return 1; }
+  git init -q "$3" && git -C "$3" fetch -q --depth 1 "$1" "$2" &&
+  git -C "$3" checkout -q --detach FETCH_HEAD &&
+  test "$(git -C "$3" rev-parse HEAD)" = "$2" && rm -rf "$3/.git"
+}
+B=quarantine/tool-output-lifecycle-2026-10-19
+restore https://github.com/SWE-agent/SWE-agent 3ea751c087f32b16e039a2233dd6eefecef325d5 $B/swe-agent &&
+  rm -f $B/swe-agent/docs/config/index.md $B/swe-agent/docs/assets/readme_assets
+restore https://github.com/OpenHands/OpenHands 6dbebfb3f6a6864023c01a5bbde85dd95233d9b2 $B/openhands
+restore https://github.com/OpenHands/OpenHands c5e0de8ecd85cef10e7808d57e9f939f3770ab9d $B/openhands-1.6.0
+restore https://github.com/OpenHands/software-agent-sdk 33d8aa29c3078d074799e2fbf5e847aeb2d71360 $B/openhands-software-agent-sdk
+```
+
+Intact source archives were captured on 2026-10-20 from
+`https://codeload.github.com/<owner>/<repo>/zip/<commit>` into
+`../quarantine_proj/archives/`. GitHub may regenerate these ZIPs with different
+bytes, so these hashes identify the copies kept on this shelf; verify trees by
+commit, not by refetched archive bytes.
+
+| Archive | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `swe-agent-3ea751c087f32b16e039a2233dd6eefecef325d5.zip` | 32,219,361 | `520ce0b29c668c73e09da9aa06a7621b0c61f810e73e891be8fa99c42d25833d` |
+| `openhands-6dbebfb3f6a6864023c01a5bbde85dd95233d9b2.zip` | 23,547,968 | `6049ca0cb2f9e0bae22fe0ce5c3cae06cf910a96973d508c9197be8a34d0ba83` |
+| `openhands-1.6.0-c5e0de8ecd85cef10e7808d57e9f939f3770ab9d.zip` | 6,224,706 | `83dc7fef3fde2f6506f92bdf4e2e4b932b873cb6e7caaaae927b22c908f3d843` |
+| `openhands-software-agent-sdk-33d8aa29c3078d074799e2fbf5e847aeb2d71360.zip` | 6,455,589 | `5e65e16e59895abbc1d6c9d63861964a2a887d30b679e45149119c0885847c71` |
+
+To restore from the kept archives instead of fetching, extract each archive with
+the owned `scripts/ingest_zip.py ARCHIVE DEST --root ROOT --skip-symlinks`, where
+ROOT is the archive's top directory: `SWE-agent-<commit>`, `OpenHands-<commit>` (both
+OpenHands trees) or `software-agent-sdk-<commit>`.
