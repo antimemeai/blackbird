@@ -11959,3 +11959,25 @@ Both checks failed on the old code:
 - `tui_retained_result`, with "pin B exact source window".
 
 Both pass now.
+
+## 2026-10-20 — e8n: no raw loss; an analyzer ordering bug
+
+The 15 campaign requests "missing" 1302/1303 records have them all: status 200, terminal branch 1. The raw
+losslessness contract holds:
+- every lane's ordinals are contiguous;
+- no failure-partition fence exists;
+- the 1301 and 1612 records prove each trace held its terminal credit.
+
+The fault was the stream-timing analyzer. Its 1300 handler replaced the request's entry. The recorder drains
+the control partition before the data partition on each pass (src/raw_runtime.cpp:972-992). Each request's
+80-170 KB body and its stdout fill the data partition, so that partition lags. Sometimes it lags far enough
+that a request's 1302/1303 reach disk before its 1300, and the late 1300 wiped those fields.
+
+**Red test:** a synthetic stream with the control partition first. It failed on the old analyzer (`http`
+null) and passes after the one-line merge fix. On real data, the restored a-t08-luna run went from 14 good
+rows plus 9 null rows to 23 rows of `(200, 1)`.
+
+**Recorded:**
+- STREAM_TIMING.md carries a dated correction; the census is now 718 at 200.
+- RAW_READER.md now states that one lane's partitions interleave, so consumers must merge by lane and ordinal.
+- Evidence is in `papers/e8n-2026-10-20/ROOT_CAUSE.md`.

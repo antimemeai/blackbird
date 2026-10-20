@@ -15,6 +15,11 @@ blackbird-raw-reader records /path/to/session/raw/bbRUN checkpoint.bin > later.b
 error beside its name; it does not hide healthy runs. `descriptions` writes the
 retained ABI/site/body descriptions exactly. `records` emits one snapshot of
 the preserved prefix. Reopen explicitly to consume a later publication.
+Within one lane, `records` writes events in the order the recorder saved them,
+not in ordinal order. The recorder drains the failure, control and data partitions
+separately, so a request's control events (for example 1302/1303) can come before
+its data events (1300/1301). A consumer that joins events must key on lane and
+ordinal or reference and must merge, never assume arrival order (`arconaut-e8n`).
 Neither a closed marker nor a complete physical commit substitutes for the
 recorder's published cursor.
 
