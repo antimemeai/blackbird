@@ -404,6 +404,18 @@ Value run_backstop(CodingEngine &source_engine, AuditLog &source_log,
                            std::move(restore_credit)};
     CodingEngine engine{log, context, assessor, settings.model};
     engine.effort(settings.effort);
+    // The backstop's journal records the session's profile set, and its requests the
+    // profile each resolves to; a refusal is reported, not only its error code.
+    if (const auto *profiles = source_engine.session_profiles()) {
+      if (profiles->set_record != Value{})
+        log.record(ApplicationChannel::program, profiles->set_record);
+      if (const auto pinned = engine.profiles(*profiles); !pinned.has_value()) {
+        if (display)
+          display("\n[backstop: provider profile refused: " + pinned.error().message() +
+                  "]\n");
+        throw Error{ErrorCode::invalid_range};
+      }
+    }
     // Bound even a selected Lua action that loops without making progress. The
     // ordinary VM interrupt hook and transport cancellation consume this deadline.
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(2);

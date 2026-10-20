@@ -147,6 +147,8 @@ struct EffectiveProfile {
   std::string digest;
   std::vector<std::string> layers; // lowest first, "shipped:conservative/1"
   Value profile;
+  // Set when the route's base URL could not be normalized and conservative applies.
+  std::string fallback;
 };
 // Layers, lowest first: conservative; the operator override of conservative, which is
 // the base under every shipped profile; the selected shipped profile; the operator
@@ -154,4 +156,60 @@ struct EffectiveProfile {
 ProfileResult<EffectiveProfile>
 resolve_profile(const ProfileSet &set, const ProfileQuery &query,
                 const Value *session_override = nullptr);
+// A binding's query for main coding. A base URL that cannot be normalized (an IPv6
+// literal, `_` in the host, over 512 bytes, ...) is not refused: such a route ran
+// before profiles existed, so it keeps running under the conservative profile, and
+// `fallback` says why (owner decision 2026-10-20). The query then holds the base URL as
+// bound.
+struct RouteQuery {
+  ProfileQuery query;
+  std::string fallback;      // the full reason: set record start_route and /profile
+  std::string fallback_code; // base_url_malformed or base_url_not_https
+};
+ProfileResult<RouteQuery> route_query(const Value &binding, std::string_view model);
+// "sha256:" + hex over the query's non-secret route fields: provider, protocol,
+// base_url (normalized when it can be) and account_kind. Never the account or model.
+std::string binding_digest(const ProfileQuery &query);
+// resolve_profile, or the conservative profile for a fallback route.
+ProfileResult<EffectiveProfile> resolve_route(const ProfileSet &set,
+                                              const RouteQuery &route,
+                                              const Value *session_override = nullptr);
+// route_query(binding, model), then resolve_route.
+ProfileResult<EffectiveProfile>
+resolve_binding(const ProfileSet &set, const Value &binding, std::string_view model,
+                const Value *session_override = nullptr);
+// Every shipped profile resolved as a query selecting it would resolve it, without a
+// session override: conservative first, then by id.
+ProfileResult<std::vector<EffectiveProfile>> effective_profiles(const ProfileSet &set);
+// "sha256:" + hex over a whole normalized layer, provenance included: the layer as
+// loaded. The set's content digest covers the same values.
+std::string profile_content_digest(const Value &layer);
+
+// One behavioural leaf of a complete profile, as /profile shows it: its field path
+// ("turn.boundary.enabled", "errors[1].status", "stop_reasons.end_turn"), its value
+// and its basis ("" when it has none).
+struct ProfileLeaf {
+  std::string path;
+  Value value;
+  std::string basis;
+};
+std::vector<ProfileLeaf> profile_leaves(const Value &profile);
+
+// Session records (program channel, latest wins; src/retained_state.cpp
+// current_programs). The set record carries both set digests, the directories it was
+// loaded from, and every layer: id, revision, layer ("shipped" or "operator"), target
+// (an override's), behavioural digest, content digest and the normalized native body.
+inline constexpr std::string_view profile_set_record_label = "provider-profile-set-v1";
+inline constexpr std::string_view profile_override_record_label =
+    "provider-profile-override-v1";
+Value profile_set_record(const ProfileSet &set, const ProfileDirectories &directories);
+// What each provider.request records: {id, revision, digest, layers, model, binding},
+// plus, for a fallback route, `fallback {code, base_url (its first 256 bytes),
+// base_url_bytes}`. digest is the effective profile's behavioural digest; model is the
+// request's own; binding is binding_digest of its route.
+Value profile_request_record(const EffectiveProfile &profile, const RouteQuery &route);
+// The session override layer: the `override` value of the latest
+// provider-profile-override-v1 record among current programs, or none. A record
+// without one is refused.
+ProfileResult<std::optional<Value>> session_override(const Value::Array &programs);
 } // namespace blackbird

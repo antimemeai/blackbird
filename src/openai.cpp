@@ -168,6 +168,18 @@ std::optional<RawAuthParent> auth_parent(const OpenAiConfig &config) {
   return std::nullopt;
 }
 } // namespace
+Value openai_profile_binding(const OpenAiConfig &config, const RawAuthParent *parent) {
+  // The same route choice as openai_request_binding, without its credential read: an
+  // owned account is selected exactly when the binding names one. One store open.
+  if (config.codex_home.empty() && config.codex_executable == "codex") {
+    const ProviderAuth auth{config.owned_auth};
+    auto owned = auth.binding("openai", parent);
+    if (const auto *account = owned.find("account");
+        account && *account != Value{std::string{}})
+      return owned;
+  }
+  return compatibility_binding({});
+}
 Result<Value> openai_request_binding(const OpenAiConfig &config) {
   std::optional<RawAuthTrace> owner;
   try {

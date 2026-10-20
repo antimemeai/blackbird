@@ -44,6 +44,12 @@ private:
 };
 // Metadata-only request-group identity; no refresh or account probe.
 Result<Value> openai_request_binding(const OpenAiConfig &config);
+// The route a request group would bind, for profile selection: the owned account's
+// binding when one is selected, else the Codex compatibility route. One auth-store open
+// and no credential read, so the compatibility binding's account is empty; a profile
+// query reads only provider, kind, base_url and protocol (provider_profile.hpp).
+Value openai_profile_binding(const OpenAiConfig &config,
+                             const RawAuthParent *parent = nullptr);
 // Compatibility renewal stays with Codex; owned accounts use ProviderAuth.
 Result<OpenAiLogin> codex_login(const OpenAiConfig &config, bool refresh = false,
                                 const Value *expected_binding = nullptr);

@@ -15,6 +15,9 @@ public:
   bool retain_request_state() const noexcept override { return true; }
   void begin_request_group(const Value &, const RawAdapterContext *) override;
   void end_request_group() noexcept override;
+  const Value *group_binding() const noexcept override {
+    return group_ ? &binding_ : nullptr;
+  }
   Value respond(const Value &, const std::function<void(std::string_view)> &) override;
   Value respond(const Value &, const std::function<void(std::string_view)> &,
                 const RawProviderOwner *) override;

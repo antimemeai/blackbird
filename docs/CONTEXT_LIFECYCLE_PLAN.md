@@ -360,6 +360,25 @@ behaviour change (there should be none).
 
 **Exit.** Every request records its profile; the three locations agree; behaviour is unchanged.
 
+**Owner decisions 2026-10-20 (P1b hardening layer 1).**
+- Profile files load only at session start, never at a definition boundary: stricter than the
+  text above. Every successor start (`/new`, `/resume`, a restart's resumed start) is a session
+  start and loads afresh.
+- Each `provider.request` resolves its profile from the request's final model (after request
+  options) and its request group's actual binding, cached per (model, binding digest); files are
+  never reread. The record gains `model` and `binding` (a digest of the binding's non-secret
+  fields: provider, protocol, normalized base URL, account kind).
+- A binding whose base URL cannot be normalized (an IPv6 literal, `_` in the host, over 512
+  bytes) is not refused: the route ran before profiles existed, so it runs under `conservative`,
+  and the reason is recorded in `provider-profile-set-v1` (`start_route.fallback`), in the
+  request record (`fallback`) and shown by `/profile`.
+- An auth store that cannot be read at start does not stop a session that never calls a
+  provider: the start records the deferral (`start_route.deferral`) and the first provider
+  request reads the binding, failing as an auth-store refusal that names the store's path.
+- A new session's route is resolved before its directory is made, so a resolution refusal leaves
+  no session directory; a refused `/new` successor removes the empty directory its predecessor
+  made for it.
+
 ### S1. Context persistence
 
 **What and why.** "Live state equals reopened state" for the new format (design §4.2-§4.5): the `cut`
@@ -1301,7 +1320,8 @@ rd7.3's four row steps (20 attempts), and rd7.3's tokens (§4.4).
 - 5st, P2, K1 and every probe-row step that changes a behavioural value change behavioural profile
   digests. Every edit, provenance included, changes the set's content digest, which trial records
   carry (§7.3).
-- Profiles load once per session start or definition boundary.
+- Profiles load once per session start (owner decision 2026-10-20, stricter than "or
+  definition boundary"; see P1b).
 - Trial runs pin their profile set per run (§7.3), so an edit in a worktree never reaches a run.
 
 ### 6.3 Downgrade, plainly
@@ -1390,7 +1410,10 @@ only when the policy record in force matches the arm's declaration.
   session whose loaded set differs refuses to start (P1b);
 - refuses a `BUILD_DIR` that is not `<generation>/build/release` of an installed generation.
 
-The reader also rejects a run whose recorded profile digest changes between turns.
+The reader also rejects a run whose recorded profile changes between turns: it compares the
+`id` and `layers` as well as the `digest`. The behavioural digest alone does not identify the
+profile: one that adds no behavioural row to `conservative` digests like it (today
+`openrouter-responses` and `conservative` share a digest).
 
 **Provenance.** `meta.txt` records:
 - the checkout commit (`BLACKBIRD_CHECKOUT` set to the program-branch worktree);

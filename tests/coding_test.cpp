@@ -701,6 +701,249 @@ void capacity_warning_test(const std::string &path) {
     throw Error{ErrorCode::corrupt};
   }
 }
+// Every provider.request records its profile (P1b, design §15.4, §18): exactly
+// {id, revision, digest, layers, model, binding}, resolved from the request's final
+// model and its request group's binding; the digest is the effective behavioural one.
+// Oracle: resolve_profile over the shipped set (P1a), the literal ids and layers the
+// shipped files and the session layer name, and the route fields the binding digest
+// covers. The provider never sees a profile.
+class BindingProvider final : public CodingProvider {
+public:
+  Value binding;
+  unsigned calls = 0;
+  bool open = false, retain = false;
+  bool retain_request_state() const noexcept override { return retain; }
+  void begin_request_group(const Value &, const RawAdapterContext *) override {
+    open = true;
+  }
+  void end_request_group() noexcept override { open = false; }
+  const Value *group_binding() const noexcept override {
+    return open ? &binding : nullptr;
+  }
+  Value respond(const Value &, const std::function<void(std::string_view)> &) override {
+    ++calls;
+    return Value::object(
+        {{"output", Value{Value::Array{Value::object(
+                        {{"type", Value{"message"}},
+                         {"id", Value{"m" + std::to_string(calls)}},
+                         {"role", Value{"assistant"}},
+                         {"content", Value{Value::Array{Value::object(
+                                         {{"type", Value{"output_text"}},
+                                          {"text", Value{"bound"}}})}}}})}}}});
+  }
+};
+Value anthropic_binding(std::string_view kind) {
+  return Value::object({{"provider", Value{"anthropic"}},
+                        {"account", Value{"main"}},
+                        {"revision", Value{Number{1}}},
+                        {"kind", Value{std::string{kind}}},
+                        {"base_url", Value{"https://api.anthropic.com/v1"}},
+                        {"protocol", Value{"messages"}}});
+}
+void profile_record_tests(AuditLog &log, RetainedState &root, const char *program) {
+  auto loaded = load_profile_set({BLACKBIRD_TEST_PROFILES, std::nullopt});
+  if (!loaded.has_value())
+    throw std::runtime_error("shipped profiles: " + loaded.error().message());
+  const auto set = std::make_shared<const ProfileSet>(std::move(loaded).value());
+  const auto binding = anthropic_binding("oauth");
+  const auto session_layer = Value::object(
+      {{"schema", Value{"blackbird.provider-profile-override/1"}},
+       {"id", Value{"trial-arm"}},
+       {"revision", Value{Number{2}}},
+       {"target", Value{"anthropic-messages-prefix-checked"}},
+       {"archival", Value::object({{"mode", Value{"refused_until_probed"}}})}});
+  const auto route_digest = [](std::string_view kind) {
+    return binding_digest({"anthropic", "messages", "https://api.anthropic.com/v1",
+                           std::string{kind}, ""});
+  };
+  const auto expected = [&](std::string_view id, std::string_view model,
+                            std::string_view kind, const Value *layer,
+                            const std::vector<std::string_view> &layers) {
+    const auto resolved =
+        resolve_profile(*set,
+                        {"anthropic", "messages", "https://api.anthropic.com/v1",
+                         std::string{kind}, std::string{model}},
+                        layer);
+    if (!resolved.has_value())
+      throw std::runtime_error("oracle resolution: " + resolved.error().message());
+    Value::Array names;
+    for (const auto entry : layers)
+      names.emplace_back(std::string{entry});
+    return Value::object({{"id", Value{std::string{id}}},
+                          {"revision", Value{Number{1}}},
+                          {"digest", Value{resolved.value().digest}},
+                          {"layers", Value{std::move(names)}},
+                          {"model", Value{std::string{model}}},
+                          {"binding", Value{route_digest(kind)}}});
+  };
+  const std::vector<std::string_view> newer_layers{
+      "shipped:conservative/1", "shipped:anthropic-messages-prefix-checked/1"};
+  const std::vector<std::string_view> older_layers{"shipped:conservative/1",
+                                                   "shipped:anthropic-messages/1"};
+  const auto prefix_checked =
+      expected("anthropic-messages-prefix-checked", "claude-opus-5-5", "oauth", nullptr,
+               newer_layers);
+  const auto older =
+      expected("anthropic-messages", "claude-opus-4-5", "oauth", nullptr, older_layers);
+  const auto with_session = expected(
+      "anthropic-messages-prefix-checked", "claude-opus-5-5", "oauth", &session_layer,
+      {"shipped:conservative/1", "shipped:anthropic-messages-prefix-checked/1",
+       "session:trial-arm/2"});
+  if (string_field(with_session, "digest") == string_field(prefix_checked, "digest") ||
+      route_digest("oauth") == route_digest("api_key"))
+    throw std::runtime_error("oracle digests must differ");
+  const auto profiles_since = [&](std::size_t from) {
+    std::vector<Value> found;
+    const auto &facts = root.committed_facts();
+    for (std::size_t i = from; i < facts.size(); ++i) {
+      const auto *record = std::get_if<ApplicationRecordEvent>(&facts[i].event.body);
+      if (!record || record->channel != ApplicationChannel::log)
+        continue;
+      const auto packet = unwrap(read_packet(record->payload));
+      if (!packet.find("label") || string_field(packet, "label") != "provider.request")
+        continue;
+      const auto *profile = field(packet, "metadata").find("profile");
+      if (!profile)
+        throw std::runtime_error("provider.request carries no profile");
+      found.push_back(*profile);
+    }
+    return found;
+  };
+  const auto require = [&](std::size_t from, const Value &want, std::size_t count,
+                           std::string_view what) {
+    const auto found = profiles_since(from);
+    if (found.size() != count)
+      throw std::runtime_error(std::string{what} + ": " + std::to_string(found.size()) +
+                               " provider.request records, expected " +
+                               std::to_string(count));
+    for (const auto &profile : found)
+      if (profile != want)
+        throw std::runtime_error(std::string{what} + ": recorded " +
+                                 unwrap(format_value(profile)) + ", expected " +
+                                 unwrap(format_value(want)));
+  };
+  const auto pin = [&](CodingEngine &engine, std::optional<Value> layer) {
+    SessionProfiles profiles;
+    profiles.set = set;
+    profiles.binding = binding;
+    profiles.session_override = std::move(layer);
+    if (const auto pinned = engine.profiles(std::move(profiles)); !pinned.has_value())
+      throw std::runtime_error("pin: " + pinned.error().message());
+  };
+  {
+    ContextStore context{log};
+    FlakyProvider provider;
+    provider.accepted_id = "profile-start"; // call ids stay unique in the shared log
+    CodingEngine engine{log, context, provider, "claude-opus-5-5"};
+    pin(engine, std::nullopt);
+    auto from = root.committed_facts().size();
+    engine.turn({"profile test", program});
+    require(from, prefix_checked, 2, "session start");
+    if (provider.first_request.find("profile"))
+      throw std::runtime_error("the provider request must not carry the profile");
+    // A model change between turns: the next request resolves its own model.
+    engine.model("claude-opus-4-5");
+    provider.calls = 0;
+    provider.first_request = Value{};
+    provider.accepted_id = "profile-model";
+    from = root.committed_facts().size();
+    engine.turn({"profile test", program});
+    require(from, older, 2, "after the model change");
+    // The request's own model, crossing families, selects its own profile.
+    engine.model("claude-opus-5-5");
+    provider.calls = 0;
+    provider.first_request = Value{};
+    provider.accepted_id = "profile-option";
+    from = root.committed_facts().size();
+    engine.turn(
+        {"profile test",
+         R"(local r=arco.request({model='claude-opus-4-5',retry_policy={max_attempts=3,base_ms=0,cap_ms=0}}); for _,v in ipairs(r.output) do local out=arco.call(v.name, {}); arco.append({{type="function_call_output",call_id=v.call_id,output=arco.json.encode(out)}}) end)"});
+    require(from, older, 2, "request option model");
+  }
+  {
+    ContextStore context{log};
+    FlakyProvider provider;
+    provider.accepted_id = "profile-session";
+    CodingEngine engine{log, context, provider, "claude-opus-5-5"};
+    pin(engine, session_layer);
+    const auto from = root.committed_facts().size();
+    engine.turn({"profile test", program});
+    require(from, with_session, 2, "session override layer");
+  }
+  {
+    // The request group's own binding: an account switched mid-session is recorded.
+    ContextStore context{log};
+    BindingProvider provider;
+    provider.binding = binding;
+    CodingEngine engine{log, context, provider, "claude-opus-5-5"};
+    pin(engine, std::nullopt);
+    const char *once = "arco.request({})";
+    auto from = root.committed_facts().size();
+    engine.turn({"profile test", once});
+    require(from, prefix_checked, 1, "group binding");
+    provider.binding = anthropic_binding("api_key");
+    from = root.committed_facts().size();
+    engine.turn({"profile test", once});
+    require(from,
+            expected("anthropic-messages-prefix-checked", "claude-opus-5-5", "api_key",
+                     nullptr, newer_layers),
+            1, "after an account switch");
+  }
+  {
+    // A program-config model, activated at the workflow boundary, then reset so later
+    // engines on this shared log keep their launch model.
+    ContextStore context{log};
+    FlakyProvider provider;
+    provider.accepted_id = "profile-config";
+    CodingEngine engine{log, context, provider, "claude-opus-5-5"};
+    pin(engine, std::nullopt);
+    const auto stage = [&](std::string_view model) {
+      engine.turn(
+          {"profile test",
+           "local v=arco.call('program_config',{}); "
+           "assert(arco.call('program_config',{proposal={modules=arco.array({}),"
+           "model='" +
+               std::string{model} + "',effort=''},base=v.revision}).staged)"});
+    };
+    stage("claude-opus-4-5");
+    const auto from = root.committed_facts().size();
+    engine.turn({"profile test", program});
+    require(from, older, 2, "program-config model");
+    stage("");
+    if (engine.definition_model() != "claude-opus-5-5")
+      throw std::runtime_error("program-config reset");
+  }
+  {
+    // A provider that retains request state appends its state item to context before
+    // the request goes out; a refused request must leave none behind, however often a
+    // program retries it. The session layer targets prefix-checked, so the older
+    // family's profile is refused.
+    ContextStore context{log};
+    BindingProvider provider;
+    provider.binding = binding;
+    provider.retain = true;
+    CodingEngine engine{log, context, provider, "claude-opus-5-5"};
+    pin(engine, session_layer);
+    (void)engine.tasks().operator_command("add PROFILE_STATE_FIXTURE");
+    const auto state_items = [&] {
+      std::size_t found = 0;
+      for (const auto &item : context.items())
+        if (const auto *content = item.find("content");
+            content && std::holds_alternative<std::string>(content->value()) &&
+            content->string().starts_with("CURRENT_TASKS"))
+          ++found;
+      return found;
+    };
+    const auto before = state_items();
+    engine.turn({"profile test", "for i=1,3 do assert(not pcall(arco.request, "
+                                 "{model='claude-opus-4-5'})) end"});
+    if (state_items() != before || provider.calls != 0)
+      throw std::runtime_error("refused requests left " +
+                               std::to_string(state_items() - before) +
+                               " request-state items (provider calls " +
+                               std::to_string(provider.calls) + ")");
+  }
+}
 void retry_tests(const std::string &path) {
   std::filesystem::create_directory(path);
   std::filesystem::permissions(path, std::filesystem::perms::owner_all);
@@ -754,6 +997,9 @@ void retry_tests(const std::string &path) {
         continue;
       if (string_field(original, "label") == "provider.request") {
         const auto &metadata = field(original, "metadata");
+        // An engine given no profiles (as here) records none.
+        if (metadata.find("profile"))
+          throw Error{ErrorCode::corrupt};
         ++requests;
         attempts.insert(string_field(metadata, "attempt"));
         const auto current = string_field(metadata, "retry_group");
@@ -769,6 +1015,7 @@ void retry_tests(const std::string &path) {
     if (attempts.size() != 2 || requests != 2 || streams != 1)
       throw Error{ErrorCode::corrupt};
   }
+  profile_record_tests(log, *root, program);
   for (const auto fault :
        {Error{ErrorCode::provider_transport, 92},
         Error{ErrorCode::external_unknown, 429},

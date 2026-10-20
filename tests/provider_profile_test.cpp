@@ -1059,6 +1059,220 @@ void shipped(const std::filesystem::path &directory) {
   std::cout << "shipped profile set " << set.value().digest << '\n';
 }
 } // namespace
+// P1b's records and presentation over a layered set: the content digest moves with
+// provenance where the behavioural one does not; the leaves are exactly the
+// behavioural leaves, their basis empty exactly where missing_basis names them; the set
+// record carries every layer as loaded and survives BBM2; the request record and the
+// session-override lookup are exact.
+void records() {
+  Directory d;
+  d.write("shipped/conservative.lua", conservative_text);
+  const auto acme_body =
+      std::string{"errors = { { class = \"overloaded\", status = 529, basis = "
+                  "\"probed:fixture\" } }, stop_reasons = { end_turn = \"completed\", "
+                  "max_tokens = \"output_limit\", basis = { end_turn = "
+                  "\"probed:fixture\" } }"};
+  d.write("shipped/acme.lua",
+          shipped_profile("acme", "{ provider = \"acme\", protocol = \"responses\" }",
+                          acme_body));
+  d.write(
+      "operator/acme-local.lua",
+      override_profile("acme-local", "acme", "turn = { close = \"reply_request\" }"));
+  const auto set = d.load();
+  check(set.has_value(), "records set: " + shown(set));
+  const auto &s = set.value();
+  // Content digest: whole layer, provenance included.
+  const auto acme = parse(shipped_profile(
+      "acme", "{ provider = \"acme\", protocol = \"responses\" }", acme_body));
+  const auto rebased = parse(
+      shipped_profile("acme", "{ provider = \"acme\", protocol = \"responses\" }",
+                      std::string{acme_body}.replace(acme_body.find("probed:fixture"),
+                                                     14, "probed:another")));
+  check(profile_digest(acme) == profile_digest(rebased),
+        "a basis edit moved the behavioural digest");
+  check(profile_content_digest(acme) != profile_content_digest(rebased),
+        "a basis edit must move the content digest");
+  check(profile_content_digest(acme) == profile_content_digest(parse(shipped_profile(
+                                            "acme",
+                                            "{ provider = \"acme\", protocol = "
+                                            "\"responses\" }",
+                                            acme_body))) &&
+            profile_content_digest(acme) != profile_digest(acme),
+        "content digest stability and domain");
+  // Resolution through a binding, and every shipped profile resolved.
+  const auto binding = Value::object({{"provider", Value{"acme"}},
+                                      {"account", Value{"a"}},
+                                      {"revision", Value{Number{1}}},
+                                      {"kind", Value{"api_key"}},
+                                      {"base_url", Value{"https://Acme.Example/v1/"}},
+                                      {"protocol", Value{"responses"}}});
+  const auto via_binding = resolve_binding(s, binding, "m");
+  const auto direct = resolve_profile(
+      s, {"acme", "responses", "https://acme.example/v1", "api_key", "m"});
+  check(via_binding.has_value() && direct.has_value() &&
+            via_binding.value().digest == direct.value().digest &&
+            via_binding.value().layers ==
+                std::vector<std::string>{"shipped:conservative/1", "shipped:acme/1",
+                                         "operator:acme-local/3"},
+        "resolve_binding: " + shown(via_binding));
+  auto chat = binding;
+  chat.object().back().second = Value{"chat"};
+  check(!resolve_binding(s, chat, "m").has_value(), "a chat binding must be refused");
+  const auto all = effective_profiles(s);
+  check(all.has_value() && all.value().size() == 2 &&
+            all.value()[0].id == "conservative" && all.value()[1].id == "acme" &&
+            all.value()[1].digest == direct.value().digest &&
+            all.value()[0].digest ==
+                resolve_profile(s, {"other", "responses", "", "api_key", "m"})
+                    .value()
+                    .digest,
+        "effective_profiles");
+  // Leaves: the behavioural leaves; basis empty exactly where missing_basis says.
+  const auto &profile = direct.value().profile;
+  const auto leaves = profile_leaves(profile);
+  const auto missing = missing_basis(profile);
+  std::vector<std::string> unbased;
+  for (const auto &leaf : leaves)
+    if (leaf.basis.empty())
+      unbased.push_back(leaf.path);
+  check(unbased == missing, "leaves without basis differ from missing_basis");
+  const auto find = [&](std::string_view path) -> const ProfileLeaf & {
+    for (const auto &leaf : leaves)
+      if (leaf.path == path)
+        return leaf;
+    throw std::runtime_error("no leaf " + std::string{path});
+  };
+  check(find("turn.close").value == Value{"reply_request"} &&
+            find("turn.close").basis.empty() &&
+            find("turn.start").basis == "conservative" &&
+            find("turn.boundary.enabled").value == Value{false} &&
+            find("errors[1].status").value == Value{Number{529}} &&
+            find("errors[1].status").basis == "probed:fixture" &&
+            find("stop_reasons.end_turn").basis == "probed:fixture" &&
+            find("stop_reasons.max_tokens").basis.empty() &&
+            find("retry.http").value.array().size() == 6,
+        "leaf values and bases");
+  for (const auto &leaf : leaves)
+    check(!leaf.path.starts_with("match") && !leaf.path.starts_with("sources") &&
+              !leaf.path.ends_with("basis") && leaf.path != "id" &&
+              leaf.path != "schema" && leaf.path != "revision",
+          "a non-behavioural leaf: " + leaf.path);
+  // The set record: every layer as loaded, both set digests, survives BBM2.
+  const ProfileDirectories where{d.path / "shipped", d.path / "operator"};
+  const auto record = profile_set_record(s, where);
+  check(
+      record.find("label")->string() == profile_set_record_label &&
+          record.find("digest")->string() == s.digest &&
+          record.find("content_digest")->string() == s.content_digest &&
+          record.find("shipped_directory")->string() == (d.path / "shipped").string() &&
+          record.find("operator_directory")->string() == (d.path / "operator").string(),
+      "set record fields");
+  const auto &layers = record.find("layers")->array();
+  check(layers.size() == 3, "set record layers");
+  const std::vector<const ProfileFile *> files{&s.conservative, &s.shipped[0],
+                                               &s.operator_overrides[0]};
+  for (std::size_t i = 0; i < layers.size(); ++i) {
+    const auto &entry = layers[i];
+    const auto &layer = files[i]->layer;
+    check(*entry.find("id") == *layer.find("id") &&
+              entry.find("layer")->string() == (i == 2 ? "operator" : "shipped") &&
+              (i == 2) == (entry.find("target") != nullptr) &&
+              entry.find("digest")->string() == profile_digest(layer) &&
+              entry.find("content_digest")->string() == profile_content_digest(layer) &&
+              *entry.find("body") == layer,
+          "set record layer " + std::to_string(i));
+  }
+  const auto bytes = encode_packet(record);
+  check(bytes.has_value(), "set record encodes");
+  const auto decoded = decode_packet(bytes.value());
+  check(decoded.has_value() && decoded.value() == record, "set record BBM2 round trip");
+  // The request record: the route's non-secret fields only, the request's own model.
+  const auto route = route_query(binding, "m");
+  check(route.has_value() && route.value().fallback.empty(), "route query");
+  const auto route_digest = binding_digest(route.value().query);
+  auto renamed = binding;
+  renamed.object()[1].second =
+      Value{"another-account"}; // the account is not a route field
+  check(binding_digest(route_query(renamed, "other-model").value().query) ==
+                route_digest &&
+            binding_digest({"acme", "responses", "https://acme.example/v1", "oauth",
+                            "m"}) != route_digest &&
+            route_digest.starts_with("sha256:"),
+        "binding digest covers provider, protocol, base_url and account_kind only");
+  const auto request = profile_request_record(direct.value(), route.value());
+  check(request == Value::object(
+                       {{"id", Value{"acme"}},
+                        {"revision", Value{Number{1}}},
+                        {"digest", Value{direct.value().digest}},
+                        {"layers", Value{Value::Array{Value{"shipped:conservative/1"},
+                                                      Value{"shipped:acme/1"},
+                                                      Value{"operator:acme-local/3"}}}},
+                        {"model", Value{"m"}},
+                        {"binding", Value{route_digest}}}),
+        "request record");
+  // A base URL that cannot be normalized falls back to conservative, saying why
+  // (owner decision 2026-10-20); profile_query still refuses it.
+  for (const auto &[url, fault] : std::vector<std::pair<std::string, std::string>>{
+           {"https://[::1]:8443/v1", "binding.base_url: "},
+           {"https://my_host.example/v1", "binding.base_url: "},
+           {"https://acme.example/" + std::string(600, 'p'), "binding.base_url: "}}) {
+    auto odd = binding;
+    odd.object()[4].second = Value{url};
+    const auto fallback = route_query(odd, "m");
+    check(
+        fallback.has_value() && fallback.value().fallback.starts_with(fault) &&
+            fallback.value().fallback.ends_with("; the conservative profile applies") &&
+            fallback.value().query.base_url == url,
+        "fallback route for " + url.substr(0, 40) + ": " + shown(fallback));
+    check(!profile_query(odd, "m").has_value(), "profile_query still refuses " + url);
+    const auto resolved = resolve_binding(s, odd, "m");
+    check(resolved.has_value() && resolved.value().id == "conservative" &&
+              resolved.value().fallback == fallback.value().fallback &&
+              resolved.value().layers ==
+                  std::vector<std::string>{"shipped:conservative/1"},
+          "fallback resolution: " + shown(resolved));
+    // Per request the record is bounded: a code, at most 256 bytes of the URL, and its
+    // full length; the full reason belongs to the set record once.
+    const auto recorded = profile_request_record(resolved.value(), fallback.value());
+    const auto *bounded = recorded.find("fallback");
+    check(bounded &&
+              *bounded ==
+                  Value::object(
+                      {{"code", Value{"base_url_malformed"}},
+                       {"base_url",
+                        Value{url.substr(0, std::min<std::size_t>(url.size(), 256))}},
+                       {"base_url_bytes", Value{Number{url.size()}}}}),
+          "the bounded fallback is recorded for " + url.substr(0, 40));
+  }
+  {
+    auto plain = binding;
+    plain.object()[4].second = Value{"http://acme.example/v1"};
+    const auto route_plain = route_query(plain, "m");
+    check(route_plain.has_value() &&
+              route_plain.value().fallback_code == "base_url_not_https" &&
+              route_plain.value().fallback ==
+                  "binding.base_url: `http://acme.example/v1` is not an https URL; the "
+                  "conservative profile applies",
+          "a non-https route: " + shown(route_plain));
+  }
+  // The session override: absent, the latest of several, or refused without a value.
+  const auto labelled = [](Value body) {
+    return Value::object({{"label", Value{std::string{profile_override_record_label}}},
+                          {"override", std::move(body)}});
+  };
+  check(session_override({record}).value() == std::nullopt, "no session override");
+  const auto first = labelled(Value{"first"});
+  const auto second = labelled(Value{"second"});
+  const auto latest = session_override({first, record, second});
+  check(latest.has_value() && latest.value() == Value{"second"}, "latest override");
+  const auto bare =
+      Value::object({{"label", Value{std::string{profile_override_record_label}}}});
+  const auto refused = session_override({bare});
+  check(!refused.has_value() &&
+            refused.error() == ProfileError{std::string{profile_override_record_label},
+                                            0, 0, "override", "required"},
+        "an override record without a value: " + shown(refused));
+}
 int main(int argc, char **argv) {
   try {
     const std::string mode = argc > 1 ? argv[1] : "";
@@ -1072,11 +1286,13 @@ int main(int argc, char **argv) {
       match();
     else if (mode == "digest")
       digest();
+    else if (mode == "records")
+      records();
     else if (mode == "shipped" && argc > 2)
       shipped(argv[2]);
     else {
       std::cerr << "usage: provider_profile_test "
-                   "schema|effective|layering|match|digest|shipped PROFILES\n";
+                   "schema|effective|layering|match|digest|records|shipped PROFILES\n";
       return 2;
     }
   } catch (const std::exception &error) {

@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import io
+import re
 from pathlib import Path
 import shlex
 import subprocess
@@ -115,6 +116,18 @@ for name, mode, instrumentation in [('debug', 'Debug', 'none'), ('release', 'Rel
     if test_regex is not None:
         tests += ['-R', test_regex]
     subprocess.run(tests, check=True)
+    # The digests this build computes for the shipped set, for the three-location
+    # check (scripts/check-installed-profiles), only when this run built blackbird;
+    # a scratch home holds no overrides.
+    if build_targets is None or 'blackbird' in build_targets:
+        import tempfile
+        with tempfile.TemporaryDirectory() as home:
+            env = {'PATH': '/usr/bin:/bin', 'HOME': home}
+            digests = subprocess.run([str(build / 'blackbird'), '--profile-digests'], env=env,
+                                     check=True, capture_output=True, text=True).stdout
+        for line in digests.splitlines():
+            if line.startswith(('set-digest ', 'set-content-digest ', 'effective ')):
+                print('linux-' + name + ' ' + line, flush=True)
 '''
         commands = "test_regex = " + repr(args.test_regex) + "\nbuild_targets = " + repr(args.targets) + "\nselected_profiles = " + repr(args.profiles) + "\nfuzz_runs = " + repr(args.fuzz_runs) + "\n" + commands
         with (capture / "checks.log").open("wb") as output:
@@ -147,6 +160,10 @@ for name, mode, instrumentation in [('debug', 'Debug', 'none'), ('release', 'Rel
                 print(note, file=sys.stderr)
         if result.returncode:
             raise RuntimeError(f"Linux checks failed ({result.returncode}); inspect {capture / 'checks.log'}")
+        # The profile digests each build printed (scripts/check-installed-profiles reads them).
+        for line in (capture / "checks.log").read_text(errors="replace").splitlines():
+            if re.match(r"linux-(debug|release|asan) (set-digest|set-content-digest|effective) ", line):
+                print(line)
         selection = f" (CTest filter: {args.test_regex})" if args.test_regex is not None else ""
         checked_profiles = "/".join(args.profiles or ("debug", "release", "asan"))
         print("Linux " + checked_profiles + " native checks passed" + selection + ".")
