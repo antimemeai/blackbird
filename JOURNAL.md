@@ -11981,3 +11981,27 @@ rows plus 9 null rows to 23 rows of `(200, 1)`.
 - STREAM_TIMING.md carries a dated correction; the census is now 718 at 200.
 - RAW_READER.md now states that one lane's partitions interleave, so consumers must merge by lane and ordinal.
 - Evidence is in `papers/e8n-2026-10-20/ROOT_CAUSE.md`.
+
+## 2026-10-20 — rd7.1 context lifecycle design final (revision 3)
+
+`docs/CONTEXT_LIFECYCLE.md` is the reviewed design for context chapters (context generations), selective
+archival, shaped tool output, inspection, the inform/nudge/direct/fail sequence, the C6a/C6b archival step, C4
+recovery (option A, then B), shipped provider profiles, cache economics, the TUI and the trial signals.
+
+**Review history.** Kimi was unavailable, so three independent fresh-context reviewers formed the tribunal:
+provider and protocol truth against primary documentation; state, replay and concurrency against the source;
+doctrine, model ergonomics and waste. They raised 76 findings, all dispositioned in Appendix A. The single
+recheck found 40 of the 44 high and medium dispositions held and 4 partial, and found 1 high and 11 medium
+defects introduced by the revision. All are fixed in revision 3 ("Recheck fixes"). Per BOUNDED_HARDENING there
+is no further review layer on the design. The plan and its review come next.
+
+**Owner decisions recorded in §23/§24:**
+- C4 runs option A, then option B.
+- The model may archive an older byte-identical copy of an instruction.
+- There is no pin ceiling.
+- A pending cut survives a failed turn, a crash and an operator interrupt.
+- The renames from compaction to archival.
+- The Anthropic archival step ships `palette_only`. Each model switches to `appended_removal` once rd7.3 shows
+  that removed tools cannot be called and thinking survives.
+
+The papers are in `papers/clm-a1v-2026-10-19/design-tribunal/`.
