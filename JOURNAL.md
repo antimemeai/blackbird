@@ -11932,3 +11932,14 @@ raised nine findings.
 
 On the new code it passes. A segfault in my first draft was the test holding a reference to
 `workflow_result_` across operator calls; it now copies the result.
+
+## 2026-10-20 — k9r: the startup benchmark names the binary it launches
+
+`scripts/benchmark-startup` hashed `build/release/blackbird-ui`, but it launched `scripts/blackbird`, which
+follows the managed installed generation. It now needs `--executable PATH`. It launches the launcher with
+`BLACKBIRD_EXECUTABLE` set to that file; the launcher's rule is that an explicit development executable always
+wins (scripts/blackbird:9-18). It records that exact file's path and SHA-256 in `metadata.json`.
+
+A bad path fails before any output directory is created. I checked the argument handling directly. No
+timing was run, so the script makes no measurement claim, and the bead's precondition ("before using it
+again") is met by the next real use.

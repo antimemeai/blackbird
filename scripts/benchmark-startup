@@ -39,13 +39,16 @@ def clone_session(seed, destination):
         if clone(os.fsencode(source), os.fsencode(destination/source.name), 0):
             raise OSError(ctypes.get_errno(), 'clonefile failed')
 
-def sample(scenario, trial, seed, run_root, logs):
+def sample(scenario, trial, seed, run_root, logs, executable):
     session = run_root/f'{scenario}-{trial:03d}'
     clone_session(seed, session)  # excluded from the timing; same immutable prefix
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH',35,110,0,0))
+    # The launcher runs an explicit development executable instead of following
+    # the installed generation, so the hashed binary is the one measured.
     env = dict(os.environ, TERM='xterm-256color', TERM_PROGRAM='ghostty',
-               LANG='en_US.UTF-8')
+               LANG='en_US.UTF-8', BLACKBIRD_EXECUTABLE=str(executable))
+    env.pop('ARCO_EXECUTABLE', None)
     result = {'scenario':scenario,'trial':trial}
     transcript = bytearray()
     child = None
@@ -118,15 +121,21 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('output',type=Path)
     parser.add_argument('--count',type=int,default=100)
+    parser.add_argument('--executable',type=Path,required=True,
+                        help='native blackbird executable to launch and identify')
     args=parser.parse_args()
     out=args.output.resolve()
     if not 1<=args.count<=10000:parser.error('count must be 1..10000')
+    try:binary=args.executable.resolve(strict=True)
+    except OSError:parser.error(f'executable not found: {args.executable}')
+    if not os.access(binary,os.X_OK):parser.error(f'not executable: {binary}')
     runs=out/'runs';logs=out/'terminal-output'
     runs.mkdir(mode=0o700);logs.mkdir(mode=0o700)
     scenarios=[('fresh',None),('heavy',out/'heavy-seed'),('weird',out/'weird-seed')]
-    binary=ROOT/'build/release/blackbird-ui'
     metadata={'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
+              'binary':str(binary),
               'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),
+              'launcher':'scripts/blackbird with BLACKBIRD_EXECUTABLE=binary',
               'count_per_scenario':args.count,'order':'round robin, serial',
               'terminal':'110x35 PTY; Ghostty image path; consumer drains bytes',
               'cache':'ordinary macOS cache; no cache flush; fresh process and private session each run',
@@ -137,7 +146,7 @@ def main():
     with (out/'samples.jsonl').open('x') as stream:
         for trial in range(1,args.count+1):
             for scenario,seed in scenarios:
-                result=sample(scenario,trial,seed,runs,logs)
+                result=sample(scenario,trial,seed,runs,logs,binary)
                 records.append(result);stream.write(json.dumps(result)+'\n');stream.flush()
                 if result['status']!='ok':print(json.dumps(result),flush=True)
             if trial%10==0 or trial==args.count:
