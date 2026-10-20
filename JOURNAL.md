@@ -12005,3 +12005,31 @@ is no further review layer on the design. The plan and its review come next.
   that removed tools cannot be called and thinking survives.
 
 The papers are in `papers/clm-a1v-2026-10-19/design-tribunal/`.
+
+## 2026-10-20 — 4by: real file-tool dispatch emits File raw surfaces
+
+`CodingEngine::call` passed no RawAdapterContext to `LocalTools::run`, so the File raw surfaces (3400-3448 and
+3490) were never emitted for operator, authored-Lua and model `read_file`/`write_file`/`edit_file` calls. Only
+direct native calls emitted them. The dispatch now passes the live operation as parent, as `git_observe`,
+`decision_model` and `beads` already do. That adds no new issuer or transport: the File code prepays its own
+claims, and failures flow through the operation's capture scope.
+
+`coding_file_raw_test` has seven cases: operator, nested (an operator `lua` calling `read_file`, which
+parents under the inner operation), missing directory, overwrite, authored Lua, model, and cancelled. Each
+checks:
+- exact argument, proposal and native read/write bytes against fixture literals;
+- mkstemp/realpath/rename names;
+- parent links and request/result pairing;
+- observer counts;
+- error branches.
+
+A parity case runs the same sequence with raw disabled and requires identical business results and disk
+bytes. Every case failed on the old code ("one File tool per … dispatch") and passes in debug and ASan.
+
+An independent review found:
+- a 3407 field-order misparse in the first test draft, which was UB under ASan; fixed;
+- missing cases; added.
+
+It also measured that raw volume per file call roughly doubles. That is recorded on `ulx` for measurement
+before any change. A failed edit search records `find()`'s exact `npos` as present: raw records the exact value,
+so this is kept.

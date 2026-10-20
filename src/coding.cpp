@@ -5664,7 +5664,13 @@ Value CodingEngine::call(std::string name, Value arguments) {
           poll_commands();
           return cancelled && cancelled();
         };
-        auto result = tools.run(name, arguments, nullptr, nullptr, &file_effect);
+        // File surfaces nest under this actual operation, as sibling adapters do.
+        const RawAdapterContext raw_context{
+            nullptr,
+            operation_trace_ ? std::optional{operation_trace_->reference()}
+                             : std::nullopt,
+            nullptr, nullptr};
+        auto result = tools.run(name, arguments, &raw_context, nullptr, &file_effect);
         if (name == "read_file" && file_snapshot)
           result.object().emplace_back(
               "snapshot",
