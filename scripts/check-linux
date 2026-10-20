@@ -18,12 +18,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--test-regex", help="Run the matching CTest cases in each declared profile")
     parser.add_argument("--targets", nargs="+", help="Build only the owning targets for a scoped native check")
-    parser.add_argument("--profiles", nargs="+", choices=("debug", "release", "asan"),
-                        help="Select declared profiles for a changed-path recheck (default: all three)")
+    parser.add_argument("--profiles", nargs="+", choices=("debug", "release", "asan", "fuzz"),
+                        help="Select declared profiles for a changed-path recheck (default: debug, "
+                             "release and asan; fuzz runs only when named)")
+    parser.add_argument("--fuzz-runs", type=int, default=1000000,
+                        help="Bounded libFuzzer executions of the profile reader in the fuzz profile")
     args = parser.parse_args()
     # Explicit current native unit source scope, excluding history, credentials and captures.
     paths = ["CMakeLists.txt", "include", "src", "tests", "programs", "tooling/probes",
-             "assets", "packages", "scripts/check-foundation-api", "scripts/check-terminal-pty", "scripts/check-new-session-pty", "scripts/check-participants-pty", "scripts/check-tiny-terminal-pty", "scripts/check-provider-auth", "scripts/check-trajectory", "scripts/check-observations", "scripts/check-tasks-pty", "scripts/check-command-jobs-pty", "scripts/check-command-jobs-station", "scripts/check-rrc", "scripts/arco", "scripts/blackbird", "scripts/terminal-screen-oracle.py", "scripts/native-packet.py"]
+             "assets", "packages", "profiles", "scripts/check-foundation-api", "scripts/check-terminal-pty", "scripts/check-new-session-pty", "scripts/check-participants-pty", "scripts/check-tiny-terminal-pty", "scripts/check-provider-auth", "scripts/check-trajectory", "scripts/check-observations", "scripts/check-tasks-pty", "scripts/check-command-jobs-pty", "scripts/check-command-jobs-station", "scripts/check-rrc", "scripts/arco", "scripts/blackbird", "scripts/terminal-screen-oracle.py", "scripts/native-packet.py"]
     paths.append("scripts/check-raw-capture")
     paths.append("scripts/check-trace-archive")
     paths.append("scripts/check-openrouter")
@@ -57,14 +60,15 @@ def main():
     remote = subprocess.check_output([*SSH, "mktemp -d /tmp/arconaut-linux-XXXXXXXX"], text=True, timeout=15).strip()
     if not remote.startswith("/tmp/arconaut-linux-") or len(remote.splitlines()) != 1:
         raise RuntimeError("unexpected remote workspace")
+    keep_remote = False
     try:
         subprocess.run([*SSH, "tar -xzf - -C " + shlex.quote(remote)], input=archive.getvalue(), check=True, timeout=30)
         commands = '''import platform, subprocess, tarfile, re
 from pathlib import Path
 root = Path.cwd()
 # Explicit development-tool provisioning precedes configuration/testing.
-if test_regex is None or any(re.search(test_regex, name) for name in
-                             ('tui_microsoft', 'tui_command_inspector', 'tui_command_center', 'tui_retained_result')):
+if (selected_profiles != ['fuzz']) and (test_regex is None or any(re.search(test_regex, name) for name in
+                             ('tui_microsoft', 'tui_command_inspector', 'tui_command_center', 'tui_retained_result'))):
     subprocess.run(['python3', str(root / 'scripts/tui-test'), '--install'], check=True)
     subprocess.run(['python3', str(root / 'scripts/tui-test'), '--check'], check=True)
 print(platform.platform(), flush=True)
@@ -80,14 +84,29 @@ with tarfile.open(root / 'tooling/dependencies/lua-5.4.8.tar.gz', 'r:gz') as arc
 lua = root / 'tooling/dependencies/lua-5.4.8/src'
 subprocess.run(['make', '-C', str(lua), 'liblua.a', 'CC=/usr/bin/clang-23', 'MYCFLAGS=-DLUA_USE_LINUX -fPIC'], check=True)
 
-for name, mode, instrumentation in [('debug', 'Debug', 'none'), ('release', 'Release', 'none'), ('asan', 'Debug', 'address')]:
+for name, mode, instrumentation in [('debug', 'Debug', 'none'), ('release', 'Release', 'none'), ('asan', 'Debug', 'address'), ('fuzz', 'Debug', 'fuzz')]:
     if selected_profiles and name not in selected_profiles:
+        continue
+    if name == 'fuzz' and not selected_profiles:
         continue
     build = root / 'build' / name
     configure = ['/usr/bin/cmake', '-S', str(root), '-B', str(build), '-G', 'Ninja', '-DCMAKE_CXX_COMPILER=/usr/bin/clang++-23', '-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja', '-DBLACKBIRD_COMPILER_PROFILE=linux-llvm23', '-DCMAKE_BUILD_TYPE='+mode, '-DBLACKBIRD_DEBUG='+('OFF' if mode == 'Release' else 'ON'), '-DBLACKBIRD_INSTRUMENTATION='+instrumentation, '-DLUA_INCLUDE_DIR='+str(lua), '-DLUA_LIBRARY='+str(lua / 'liblua.a')]
     if instrumentation == 'address':
         configure.append('-DCMAKE_CXX_FLAGS_DEBUG=-g -O1')
     subprocess.run(configure, check=True)
+    if name == 'fuzz':
+        # The profile reader fuzzer, bounded by executions; the corpus starts from copies
+        # of the shipped profiles so libFuzzer never writes into the source tree.
+        subprocess.run(['/usr/bin/cmake', '--build', str(build), '--parallel', '16', '--target', 'profile_reader_fuzz'], check=True)
+        corpus = build / 'profile-reader-corpus'
+        corpus.mkdir(exist_ok=True)
+        for seed in sorted((root / 'profiles/providers').glob('*.lua')):
+            (corpus / seed.name).write_bytes(seed.read_bytes())
+        artifacts = build / 'artifacts'
+        artifacts.mkdir(exist_ok=True)
+        print('Fuzz artifacts (remote): ' + str(artifacts), flush=True)
+        subprocess.run([str(build / 'profile_reader_fuzz'), '-runs=' + str(fuzz_runs), '-max_len=8192', '-seed=1', '-artifact_prefix=' + str(artifacts) + '/', str(corpus)], check=True)
+        continue
     build_command = ['/usr/bin/cmake', '--build', str(build), '--parallel', '16']
     if build_targets:
         build_command += ['--target', *build_targets]
@@ -97,24 +116,54 @@ for name, mode, instrumentation in [('debug', 'Debug', 'none'), ('release', 'Rel
         tests += ['-R', test_regex]
     subprocess.run(tests, check=True)
 '''
-        commands = "test_regex = " + repr(args.test_regex) + "\nbuild_targets = " + repr(args.targets) + "\nselected_profiles = " + repr(args.profiles) + "\n" + commands
+        commands = "test_regex = " + repr(args.test_regex) + "\nbuild_targets = " + repr(args.targets) + "\nselected_profiles = " + repr(args.profiles) + "\nfuzz_runs = " + repr(args.fuzz_runs) + "\n" + commands
         with (capture / "checks.log").open("wb") as output:
             result = subprocess.run([*SSH, "cd " + shlex.quote(remote) + " && python3 -"], input=commands.encode(), stdout=output, stderr=subprocess.STDOUT)
+        if args.profiles and "fuzz" in args.profiles:
+            # Crash, leak and timeout inputs come back before the remote workspace goes.
+            # A failed or timed-out copy keeps the workspace, so no input is lost.
+            kept = capture / "fuzz-artifacts"
+            kept.mkdir()
+            failure = None
+            try:
+                copy = subprocess.run([*SSH, "cd " + shlex.quote(remote) + " && if test -d build/fuzz/artifacts; then tar -czf - -C build/fuzz artifacts; else exit 3; fi"], capture_output=True, timeout=600)
+                if copy.returncode == 3:
+                    print("Fuzz artifacts: none (the fuzz step made no artifact directory)")
+                elif copy.returncode != 0:
+                    failure = f"exit {copy.returncode}: " + copy.stderr.decode(errors="replace").strip()
+                else:
+                    with tarfile.open(fileobj=io.BytesIO(copy.stdout), mode="r:gz") as bundle:
+                        bundle.extractall(kept, filter="data")
+                    found = sorted(str(path.relative_to(kept)) for path in kept.rglob("*") if path.is_file())
+                    print(f"Fuzz artifacts kept in {kept}: " + (", ".join(found) if found else "none"))
+            except subprocess.TimeoutExpired:
+                failure = "timed out after 600 s"
+            except (tarfile.TarError, OSError) as error:
+                failure = f"unpacking failed: {error}"
+            if failure:
+                keep_remote = True
+                note = f"Fuzz artifact copy-back failed ({failure}); remote workspace kept at neuroses:{remote}"
+                (capture / "copy-back-error.txt").write_text(note + "\n")
+                print(note, file=sys.stderr)
         if result.returncode:
             raise RuntimeError(f"Linux checks failed ({result.returncode}); inspect {capture / 'checks.log'}")
         selection = f" (CTest filter: {args.test_regex})" if args.test_regex is not None else ""
         checked_profiles = "/".join(args.profiles or ("debug", "release", "asan"))
         print("Linux " + checked_profiles + " native checks passed" + selection + ".")
     finally:
-        try:
-            subprocess.run([*SSH, "rm -rf -- " + shlex.quote(remote)], check=True, timeout=15)
-        except (subprocess.SubprocessError, OSError) as error:
-            warning = f"Remote cleanup failed for {remote}: {error}"
+        # A kept workspace only skips the removal; the checks' own result still stands.
+        if keep_remote:
+            print(f"Remote workspace kept for its fuzz artifacts: neuroses:{remote}", file=sys.stderr)
+        else:
             try:
-                (capture / "cleanup-error.txt").write_text(warning + "\n")
-            except OSError:
-                warning += " (could not retain cleanup-error.txt)"
-            print(warning, file=sys.stderr)
+                subprocess.run([*SSH, "rm -rf -- " + shlex.quote(remote)], check=True, timeout=15)
+            except (subprocess.SubprocessError, OSError) as error:
+                warning = f"Remote cleanup failed for {remote}: {error}"
+                try:
+                    (capture / "cleanup-error.txt").write_text(warning + "\n")
+                except OSError:
+                    warning += " (could not retain cleanup-error.txt)"
+                print(warning, file=sys.stderr)
 
 
 if __name__ == "__main__":

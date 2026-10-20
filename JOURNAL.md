@@ -12105,3 +12105,38 @@ reports are in `context/clm-rd7-notes/`.
 
 **Found.** Contexts over about 8 MiB cannot be snapshotted at all; this is pre-existing (`arconaut-yc4`,
 owned by S1).
+
+## 2026-10-20 — P1a: provider profile mechanism core
+
+P1a lands provider rules as shipped data, the core of the rd7 program's profile lane. It runs in a parallel
+lane, on new files only.
+
+**Reader and schema.**
+- A native reader for the data-only Lua table-constructor subset executes nothing and links no Lua.
+- Refusals name the file, line, column, construct and reason.
+- Schema `blackbird.provider-profile/1` records a basis (`cited`, `probed`, `conservative` or `unobserved`)
+  for every behavioural field, and validates cross-field consistency.
+
+**Layering and selection.**
+- Layers run conservative base, then the selected shipped profile, then operator, then session.
+- Overrides are sparse. An operator override of conservative applies at the base under every profile.
+- The most specific match wins, and ties are refused.
+- Queries come from real bindings, with URLs normalised.
+
+**Anthropic default.** Anthropic Messages defaults to the prefix-checked rules (`drop_after_change`, which is
+valid on every Anthropic model). Only the listed older families keep reasoning at a cut. A `models` entry
+matches exactly or as a `-suffix` family.
+
+**Digests.** An owned SHA-256 gives two digests: a behavioural digest, for rebinds, and a content digest,
+which includes provenance and is used for trial pinning.
+
+**Installation.** Profiles install with Blackbird and ship to the Linux checks.
+
+**Fuzzing.** The fuzz profile was requalified on Neuroses with a planted crash, found in about a minute with
+the artifact fetched back. A 1,000,000-run budget then ran clean.
+
+**Review.** One review and one recheck. The recheck's high finding was that dated 5.x model variants fell to
+keep-reasoning; it is fixed by making prefix-checked the default.
+
+**Deviation.** The early behaviour rows ship now, recorded in the plan; P2 owns the regression comparison.
+Notes are in `context/clm-rd7-notes/P1a*.md`.
