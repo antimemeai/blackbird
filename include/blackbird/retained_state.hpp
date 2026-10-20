@@ -97,6 +97,10 @@ public:
   prepare_raw_transfer(const RawThreadHandle &child, RawWorkerDispatch dispatch);
   RawRetainedStopBundle *raw_stop_bundle() noexcept { return raw_stop_.get(); }
   bool raw_owner_blocked() const noexcept { return raw_owner_blocked_; }
+  // On the owner thread: settles joined-child debt that a refused owner
+  // admission left (RawRetainedTransfer::joined), as the next
+  // prepare_raw_transfer would. Succeeds at once when the owner is not blocked.
+  Result<void> resume_raw_owner();
 
   Result<void> store_diagnostic(std::string_view name, ByteView bytes,
                                 std::uint64_t now) {

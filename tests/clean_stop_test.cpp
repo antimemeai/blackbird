@@ -5,7 +5,8 @@
 // handoff: its successor restores compactly and reports no suffix. After a
 // SIGKILL the reopen writes exactly one record naming the suffix it found. The
 // saved state is read through load_saved_state over a FramedJournal; no
-// ContextStore is built.
+// ContextStore is built. SIGTERM (unit S0b) is a clean stop with exit status 143;
+// a second SIGTERM kills, and the next open reports the suffix.
 #include "blackbird/context.hpp"
 #include "blackbird/journal_storage.hpp"
 #include "blackbird/journal_writer.hpp"
@@ -23,15 +24,22 @@
 #include <fstream>
 #include <iostream>
 #include <poll.h>
+#include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <sys/file.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
+#if defined(__APPLE__)
+#include <libproc.h>
+#include <mach/mach_time.h>
+#endif
 
 extern char **environ;
 using namespace blackbird;
@@ -106,15 +114,20 @@ enum class Stdio : std::uint8_t {
   pipe,            // stdin from a pipe, stdout and stderr to the output file
   terminal,        // all three on a PTY (the TUI)
   readonly_stdout, // as pipe, but stdout cannot be written
+  stalled_stdout,  // as pipe, but stdout is a pipe this test never reads
 };
 // A child blackbird process.
 class Process {
 public:
+  // own_group puts the child in a new process group, so a signal can reach the
+  // whole group: the session, its raw supervisor and recorder. program replaces
+  // the blackbird executable (the wrapper script, GNU timeout).
   Process(const Fixture &fixture, std::vector<std::string> arguments, Stdio stdio,
-          std::string_view label)
-      : output_(fixture.root / output_name(label)) {
+          std::string_view label, bool own_group = false,
+          const std::string &program = {})
+      : output_(fixture.root / output_name(label)), group_(own_group) {
     const bool terminal = stdio == Stdio::terminal;
-    arguments.insert(arguments.begin(), executable);
+    arguments.insert(arguments.begin(), program.empty() ? executable : program);
     auto environment = fixture.environment();
     std::vector<char *> argv, envp;
     for (auto &argument : arguments)
@@ -134,8 +147,11 @@ public:
       slave_name = name;
     } else
       check(::pipe(input) == 0, "stdin pipe failed");
+    int stalled[2] = {-1, -1};
+    if (stdio == Stdio::stalled_stdout)
+      check(::pipe(stalled) == 0, "stdout pipe failed");
     // The child must not inherit the pipe's write end, or it never reads EOF.
-    for (const int descriptor : {input[0], input[1], master_})
+    for (const int descriptor : {input[0], input[1], master_, stalled[0], stalled[1]})
       if (descriptor >= 0)
         check(::fcntl(descriptor, F_SETFD, FD_CLOEXEC) == 0, "cloexec failed");
     const int out =
@@ -143,6 +159,8 @@ public:
     check(out >= 0, "output file open failed");
     pid_ = ::fork();
     if (pid_ == 0) {
+      if (own_group && !terminal && ::setpgid(0, 0) != 0)
+        _exit(126);
       if (terminal) {
         ::setsid();
         const int slave = ::open(slave_name.c_str(), O_RDWR);
@@ -155,8 +173,10 @@ public:
             ::dup2(slave, STDERR_FILENO) < 0)
           _exit(126);
       } else {
-        const int stdout_target =
-            stdio == Stdio::readonly_stdout ? ::open("/dev/null", O_RDONLY) : out;
+        const int stdout_target = stdio == Stdio::readonly_stdout
+                                      ? ::open("/dev/null", O_RDONLY)
+                                  : stdio == Stdio::stalled_stdout ? stalled[1]
+                                                                   : out;
         if (stdout_target < 0 || ::dup2(input[0], STDIN_FILENO) < 0 ||
             ::dup2(stdout_target, STDOUT_FILENO) < 0 || ::dup2(out, STDERR_FILENO) < 0)
           _exit(126);
@@ -165,6 +185,10 @@ public:
       _exit(127);
     }
     ::close(out);
+    leader_ = pid_;
+    if (stalled[1] >= 0)
+      ::close(stalled[1]);
+    stalled_ = stalled[0];
     check(pid_ > 0, "fork failed");
     if (!terminal) {
       ::close(input[0]);
@@ -173,6 +197,8 @@ public:
       input_ = master_;
   }
   ~Process() {
+    if (group_ && leader_ > 0)
+      (void)::kill(-leader_, SIGKILL); // anything the leader left behind
     if (pid_ > 0) {
       (void)::kill(pid_, SIGKILL);
       (void)reap();
@@ -181,6 +207,8 @@ public:
       ::close(input_);
     if (master_ >= 0)
       ::close(master_);
+    if (stalled_ >= 0)
+      ::close(stalled_);
   }
   Process(const Process &) = delete;
   Process &operator=(const Process &) = delete;
@@ -257,6 +285,34 @@ public:
     return WIFEXITED(status_) ? WEXITSTATUS(status_) : 128 + WTERMSIG(status_);
   }
   void interrupt() { check(pid_ > 0 && ::kill(pid_, SIGINT) == 0, "SIGINT failed"); }
+  void terminate() { check(pid_ > 0 && ::kill(pid_, SIGTERM) == 0, "SIGTERM failed"); }
+  // The child leads its own group (own_group or a terminal).
+  void terminate_group() {
+    check(pid_ > 0 && ::kill(-pid_, SIGTERM) == 0, "group SIGTERM failed");
+  }
+  // After wait: whether the child died by a signal rather than exiting.
+  bool signalled() const { return WIFSIGNALED(status_); }
+  pid_t pid() const { return pid_; }
+  // Waits until the child has filled its stdout pipe and stopped writing: the
+  // unread bytes are nonzero and unchanged for half a second.
+  void await_stalled_stdout(std::string_view label) {
+    check(stalled_ >= 0, std::string{label} + ": stdout is not a stalled pipe");
+    const auto deadline = Clock::now() + std::chrono::seconds{20};
+    int previous = -1;
+    auto since = Clock::now();
+    for (;;) {
+      int pending = 0;
+      check(::ioctl(stalled_, FIONREAD, &pending) == 0, "FIONREAD failed");
+      if (pending != previous) {
+        previous = pending;
+        since = Clock::now();
+      } else if (pending > 0 && Clock::now() - since >= std::chrono::milliseconds{500})
+        return;
+      check(running() && Clock::now() < deadline,
+            std::string{label} + ": stdout never stalled\n" + text());
+      std::this_thread::sleep_for(std::chrono::milliseconds{20});
+    }
+  }
   void kill9() {
     check(pid_ > 0 && ::kill(pid_, SIGKILL) == 0, "SIGKILL failed");
     (void)reap();
@@ -272,8 +328,9 @@ private:
     return status;
   }
   fs::path output_;
-  pid_t pid_ = -1;
-  int input_ = -1, master_ = -1, status_ = 0;
+  bool group_ = false;
+  pid_t pid_ = -1, leader_ = -1;
+  int input_ = -1, master_ = -1, stalled_ = -1, status_ = 0;
   std::string screen_;
 };
 
@@ -339,7 +396,7 @@ std::uint64_t number(const Value &record, std::string_view key) {
   return result;
 }
 // Every session.reopen-suffix record on ApplicationChannel::log, in order.
-std::vector<Value> reopen_records(const fs::path &session) {
+std::vector<Value> log_records(const fs::path &session, std::string_view wanted) {
   auto disk = read_disk(session);
   std::vector<Value> result;
   // An unconfirmed open holds its scanned frames as staged records.
@@ -357,10 +414,13 @@ std::vector<Value> reopen_records(const fs::path &session) {
     auto packet = unwrap(decode_packet(bytes));
     if (const auto *label = packet.find("label");
         label && std::holds_alternative<std::string>(label->value()) &&
-        label->string() == "session.reopen-suffix")
+        label->string() == wanted)
       result.push_back(std::move(packet));
   }
   return result;
+}
+std::vector<Value> reopen_records(const fs::path &session) {
+  return log_records(session, "session.reopen-suffix");
 }
 
 // Specification: the newer slot's boundary is the journal end. maybe_checkpoint
@@ -1063,6 +1123,765 @@ void kill_case() {
   require_clean(fixture, session, "kill (after the recovering reopen)");
 }
 
+// SIGTERM (unit S0b). The first SIGTERM is a clean stop: the session leaves
+// through its normal exit, takes the stop's snapshot and exits with 143 (128 +
+// SIGTERM, what a shell reports for a SIGTERM death), as a status, not a signal
+// death. The oracle is the same as every clean stop: the bytes on disk.
+// The disk is checked before the status, so a failing stop names its suffix.
+constexpr int terminated_status = 128 + SIGTERM;
+struct Stop {
+  int status;
+  bool signalled;
+  std::string output;
+};
+Stop await_stop(Process &process, std::string_view label) {
+  const auto status = process.wait(label);
+  return {status, process.signalled(), process.text()};
+}
+void require_terminated(const Stop &stop, std::string_view label) {
+  check(stop.status == terminated_status && !stop.signalled,
+        std::string{label} + ": status " + std::to_string(stop.status) +
+            (stop.signalled ? " (killed by the signal)" : "") + "\n" + stop.output);
+}
+// A workflow whose turn starts a background job, then runs a foreground command
+// until it is interrupted; the marker exists once that command runs.
+std::string running_exec_lua(const fs::path &marker) {
+  return "blackbird.call('exec',{command='sleep 30',yield_ms=0})\n"
+         "blackbird.call('exec',{command=[[touch '" +
+         marker.string() + "'; exec sleep 30]]})\nprint('EXEC_RETURNED')\n";
+}
+void await_file(Process &process, const fs::path &path, std::string_view label) {
+  const auto deadline = Clock::now() + std::chrono::seconds{20};
+  while (!fs::exists(path)) {
+    check(process.running() && Clock::now() < deadline,
+          std::string{label} + ": " + path.filename().string() + " never appeared\n" +
+              process.text());
+    process.pump(std::chrono::milliseconds{20});
+  }
+}
+
+// The plain loop is idle at its prompt with a background job and a participant.
+void term_idle_plain_case() {
+  constexpr std::string_view label = "SIGTERM idle plain loop";
+  Fixture fixture{"term-idle-plain"};
+  const auto session = fixture.session("s");
+  Process process{fixture,
+                  {"--plain", "--session", session.string(), "--workflow",
+                   fixture.workflow.string()},
+                  Stdio::pipe,
+                  "term-idle-plain"};
+  process.send(busy);
+  auto at = process.await_text("BOTH_STARTED");
+  at = process.await_text("LOCAL", at);
+  (void)process.await_text("blackbird> ", at);
+  require_participant_running(process.text(), label);
+  process.terminate();
+  const auto stop = await_stop(process, label);
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+}
+
+void term_idle_tui_case() {
+  constexpr std::string_view label = "SIGTERM idle TUI";
+  Fixture fixture{"term-idle-tui"};
+  const auto session = fixture.session("s");
+  Process process{
+      fixture,
+      {"--session", session.string(), "--workflow", fixture.workflow.string()},
+      Stdio::terminal,
+      "term-idle-tui"};
+  auto at = process.await_text("Workflow");
+  process.send("/lua blackbird.append({{role='user',content='TUI_CONTEXT'}}); "
+               "print('TUI_APPENDED')\r");
+  at = process.await_text("TUI_APPENDED", at);
+  process.send("/lua " + job_and_participant_lua() + "\r");
+  at = process.await_text("BOTH_STARTED", at);
+  (void)process.await_text(" running", at);
+  process.terminate();
+  const auto stop = await_stop(process, label);
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+}
+
+// A plain-loop turn is inside a foreground exec: SIGTERM interrupts it as
+// SIGINT would, and the loop then stops instead of reading more input.
+void term_running_plain_case() {
+  constexpr std::string_view label = "SIGTERM running plain turn";
+  Fixture fixture{"term-running"};
+  const auto marker = fixture.root / "exec-running";
+  fixture.program(running_exec_lua(marker));
+  const auto session = fixture.session("s");
+  Process process{fixture,
+                  {"--plain", "--session", session.string(), "--workflow",
+                   fixture.workflow.string()},
+                  Stdio::pipe,
+                  "term-running"};
+  process.send(append_line + "hello\n/lua print('AFTER_STOP')\n");
+  await_file(process, marker, label);
+  process.terminate();
+  const auto stop = await_stop(process, label);
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+  check(stop.output.find("EXEC_RETURNED") == std::string::npos,
+        std::string{label} + ": the command ran to completion\n" + stop.output);
+  check(stop.output.find("AFTER_STOP") == std::string::npos,
+        std::string{label} + ": the loop read input after the stop\n" + stop.output);
+}
+
+// The same running turn under --once.
+void term_once_case() {
+  constexpr std::string_view label = "SIGTERM --once turn";
+  Fixture fixture{"term-once"};
+  const auto marker = fixture.root / "exec-running";
+  fixture.program(running_exec_lua(marker));
+  const auto session = fixture.session("s");
+  Process process{fixture,
+                  {"--session", session.string(), "--workflow",
+                   fixture.workflow.string(), "--once", "hello"},
+                  Stdio::pipe,
+                  "term-once"};
+  process.close_input();
+  await_file(process, marker, label);
+  process.terminate();
+  const auto stop = await_stop(process, label);
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+  check(stop.output.find("EXEC_RETURNED") == std::string::npos,
+        std::string{label} + ": the command ran to completion\n" + stop.output);
+}
+
+// SIGTERM while the --once provider attempt is in flight: the stop is still a
+// clean exit (143), but the attempt is unresolved, so S0's rule applies: no
+// exit snapshot, and the next open reports the suffix.
+void term_unsettled_attempt_case() {
+  constexpr std::string_view label = "SIGTERM unsettled attempt";
+  Fixture fixture{"term-unsettled"};
+  const auto curl = fixture.bin / "curl";
+  const auto in_flight = fixture.root / "request-in-flight";
+  write_text(curl, "#!/bin/sh\ntouch '" + in_flight.string() +
+                       "'\ncat > /dev/null\nsleep 30\n");
+  fs::permissions(curl, fs::perms::owner_all);
+  fixture.extra = {"OPENROUTER_API_KEY=fixture-secret",
+                   "BLACKBIRD_OPENROUTER_CURL=" + curl.string()};
+  const auto session = fixture.session("s");
+  auto arguments = provider_once;
+  arguments.insert(arguments.begin(), {"--session", session.string()});
+  Stop stop{};
+  {
+    Process process{fixture, arguments, Stdio::pipe, "term-unsettled"};
+    process.close_input();
+    await_file(process, in_flight, label);
+    process.terminate();
+    stop = await_stop(process, label);
+  }
+  require_no_exit_snapshot(session, label);
+  (void)require_reported_reopen(fixture, session, label, reopen_notice);
+  require_clean(fixture, session, std::string{label} + " (after recovery)");
+  require_terminated(stop, label);
+}
+
+// SIGTERM to the session's whole process group. The raw supervisor keeps
+// SIGTERM blocked and the recorder obeys it only from the supervisor, its
+// parent; the session stops cleanly and every raw capture directory closes.
+void term_group_case() {
+  constexpr std::string_view label = "SIGTERM process group";
+  Fixture fixture{"term-group"};
+  const auto session = fixture.session("s");
+  Process process{fixture,
+                  {"--plain", "--session", session.string(), "--workflow",
+                   fixture.workflow.string()},
+                  Stdio::pipe,
+                  "term-group",
+                  true};
+  process.send(append_line + "hello\n");
+  const auto at = process.await_text("LOCAL");
+  (void)process.await_text("blackbird> ", at);
+  process.terminate_group();
+  const auto stop = await_stop(process, label);
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+  std::size_t captures = 0;
+  for (const auto &entry : fs::directory_iterator{session / "raw"}) {
+    ++captures;
+    check(fs::exists(entry.path() / "closed"), std::string{label} + ": raw capture " +
+                                                   entry.path().filename().string() +
+                                                   " did not close");
+  }
+  check(captures > 0, std::string{label} + ": no raw capture directory");
+}
+
+// The station's published status packet (session/station-status.bbm).
+Value station_status(const fs::path &session) {
+  const auto bytes = contents(session / "station-status.bbm");
+  const auto *data = reinterpret_cast<const std::byte *>(bytes.data());
+  return unwrap(decode_packet(std::span<const std::byte>{data, bytes.size()}));
+}
+bool station_flag(const Value &status, std::string_view key) {
+  const auto *station = status.find("station");
+  const auto *value = station ? station->find(key) : nullptr;
+  check(value && std::holds_alternative<bool>(value->value()),
+        "station status lacks station." + std::string{key});
+  return std::get<bool>(value->value());
+}
+// A station between events: SIGTERM ends its loop. It is a supervisor stop, not
+// an operator interrupt: one station.supervisor-stop record, no pause, so the
+// reopened station runs unpaused. The stop is clean.
+void term_station_case() {
+  constexpr std::string_view label = "SIGTERM station";
+  Fixture fixture{"term-station"};
+  const auto marker = fixture.root / "event-done";
+  fixture.program(job_and_participant_lua() + "\nblackbird.call('write_file',{path='" +
+                  marker.string() + "',content='done'})\n");
+  const auto session = fixture.session("s");
+  const auto adapter = fixture.root / "adapter";
+  fs::create_directories(adapter);
+  write_atomically(
+      adapter / "events.json",
+      R"([{"source":"repo","id":"e1","cursor":"c1","prompt":"inventory"}])");
+  Process process{fixture,
+                  {"--session", session.string(), "--workflow",
+                   fixture.workflow.string(), "--station", adapter.string()},
+                  Stdio::pipe,
+                  "term-station"};
+  process.close_input();
+  await_file(process, marker, label);
+  // The marker is written inside the event's turn; the station publishes "idle"
+  // to its status file only after it has finished the event.
+  const auto status = session / "station-status.bbm";
+  const auto deadline = Clock::now() + std::chrono::seconds{20};
+  while (contents(status).find("idle") == std::string::npos) {
+    check(process.running() && Clock::now() < deadline,
+          std::string{label} + ": the station never returned to idle\n" +
+              process.text());
+    process.pump(std::chrono::milliseconds{20});
+  }
+  require_participant_running(process.text(), label);
+  process.terminate();
+  const auto stop = await_stop(process, label);
+  // Station programs keep the snapshot from compact restore (unchanged by S0).
+  require_clean(fixture, session, label, false);
+  require_terminated(stop, label);
+  const auto stops = log_records(session, "station.supervisor-stop");
+  check(stops.size() == 1, std::string{label} + ": " + std::to_string(stops.size()) +
+                               " station.supervisor-stop records, expected 1");
+  check(string_field(stops.front(), "reason") == "stopped: SIGTERM",
+        std::string{label} + ": supervisor stop reason");
+  // Reopen the station: it publishes its view as a new process, unpaused.
+  const auto first_pid = field(station_status(session), "pid").number().text();
+  Process reopened{fixture,
+                   {"--session", session.string(), "--workflow",
+                    fixture.workflow.string(), "--station", adapter.string()},
+                   Stdio::pipe,
+                   "term-station-reopen"};
+  reopened.close_input();
+  const auto reopen_deadline = Clock::now() + std::chrono::seconds{20};
+  for (;;) {
+    check(reopened.running() && Clock::now() < reopen_deadline,
+          std::string{label} + ": the reopened station never published\n" +
+              reopened.text());
+    if (fs::exists(session / "station-status.bbm")) {
+      const auto published = station_status(session);
+      if (published.find("pid") &&
+          field(published, "pid").number().text() != first_pid &&
+          string_field(published, "phase") == "idle") {
+        check(!station_flag(published, "paused"),
+              std::string{label} + ": the reopened station is paused");
+        break;
+      }
+    }
+    reopened.pump(std::chrono::milliseconds{20});
+  }
+  write_atomically(adapter / "control.json", R"({"id":"stop-1","action":"stop"})");
+  check(reopened.wait("term-station-reopen") == 0,
+        std::string{label} + ": reopened station stop\n" + reopened.text());
+}
+
+// Developer fault fixture (debug builds): one SIGTERM raised inside a TUI worker
+// join's owner-admission wait. Admission is refused, the root's raw owner is
+// left blocked, and the stop must still snapshot.
+void term_join_fault_case() {
+#if BLACKBIRD_DEBUG
+  constexpr std::string_view label = "SIGTERM inside a worker join";
+  Fixture fixture{"term-join-fault"};
+  fixture.extra = {"BLACKBIRD_FAULT_SIGTERM_IN_JOIN=1"};
+  const auto session = fixture.session("s");
+  Process process{
+      fixture,
+      {"--session", session.string(), "--workflow", fixture.workflow.string()},
+      Stdio::terminal,
+      "term-join-fault"};
+  const auto at = process.await_text("Workflow");
+  // An exec protects a settlement, so the next owner admission claims a stop bank.
+  process.send("/lua blackbird.call('exec',{command='sleep 30',yield_ms=0}); "
+               "print('FIRST_TURN')\r");
+  (void)process.await_text("FIRST_TURN", at);
+  // The second launch joins the first worker; the fixture raises SIGTERM there.
+  // The UI then unwinds on the interrupt inside that launch: the prompt never
+  // runs (no marker) and stays queued.
+  const auto second = fixture.root / "second-turn-ran";
+  const std::string prompt =
+      "/lua blackbird.call('write_file',{path='" + second.string() + "',content='x'})";
+  process.send(prompt + "\r");
+  const auto stop = await_stop(process, label);
+  check(stop.output.find("napshot failed") == std::string::npos,
+        std::string{label} + ": the stop reported a failed snapshot\n" + stop.output);
+  check(!fs::exists(second), std::string{label} + ": the second launch ran");
+  // ui-state.bbm keeps drafts and queued prompts hex-encoded (hex-v1).
+  std::string hex;
+  for (const char text : prompt) {
+    constexpr std::string_view digits = "0123456789abcdef";
+    const auto c = static_cast<unsigned char>(text);
+    hex += digits[c >> 4U];
+    hex += digits[c & 15U];
+  }
+  const auto state_bytes = contents(session / "ui-state.bbm");
+  const auto ui_state = unwrap(decode_packet(std::span<const std::byte>{
+      reinterpret_cast<const std::byte *>(state_bytes.data()), state_bytes.size()}));
+  bool kept = string_field(ui_state, "draft") == hex;
+  for (const auto &queued : field(ui_state, "queued").array())
+    kept = kept || (std::holds_alternative<std::string>(queued.value()) &&
+                    queued.string() == hex);
+  check(kept, std::string{label} + ": the prompt was neither queued nor a draft");
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+#else
+  std::cout << "  term-join-fault needs a BLACKBIRD_DEBUG build; skipped\n";
+#endif
+}
+
+// Developer fault fixture (debug builds): one SIGTERM inside a TUI launch after
+// the loop's exit check and before the launch's rearm clears the interrupt. The
+// launch is refused: the turn never runs, the prompt stays in the composer, and
+// the loop leaves through its exit check.
+void term_launch_refusal_case() {
+#if BLACKBIRD_DEBUG
+  constexpr std::string_view label = "SIGTERM before a TUI launch's rearm";
+  Fixture fixture{"term-launch-refusal"};
+  fixture.extra = {"BLACKBIRD_FAULT_SIGTERM_BEFORE_REARM=1"};
+  const auto session = fixture.session("s");
+  Process process{
+      fixture,
+      {"--session", session.string(), "--workflow", fixture.workflow.string()},
+      Stdio::terminal,
+      "term-launch-refusal"};
+  (void)process.await_text("Workflow");
+  const auto marker = fixture.root / "turn-ran";
+  const std::string prompt =
+      "/lua blackbird.call('write_file',{path='" + marker.string() + "',content='x'})";
+  process.send(prompt + "\r");
+  const auto stop = await_stop(process, label);
+  check(!fs::exists(marker), std::string{label} + ": the refused launch ran");
+  check(stop.output.find("interrupted (") == std::string::npos,
+        std::string{label} +
+            ": the UI unwound on the interrupt instead of its exit "
+            "check\n" +
+            stop.output);
+  std::string hex;
+  for (const char text : prompt) {
+    constexpr std::string_view digits = "0123456789abcdef";
+    const auto c = static_cast<unsigned char>(text);
+    hex += digits[c >> 4U];
+    hex += digits[c & 15U];
+  }
+  const auto state_bytes = contents(session / "ui-state.bbm");
+  const auto ui_state = unwrap(decode_packet(std::span<const std::byte>{
+      reinterpret_cast<const std::byte *>(state_bytes.data()), state_bytes.size()}));
+  check(string_field(ui_state, "draft") == hex,
+        std::string{label} + ": the refused prompt is not the saved draft");
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+#else
+  std::cout << "  term-launch-refusal needs a BLACKBIRD_DEBUG build; skipped\n";
+#endif
+}
+
+// After /resume the process holds the origin as its fallback. A SIGTERM in the
+// destination ends the process; it must not reopen the origin.
+void term_after_resume_case() {
+  constexpr std::string_view label = "SIGTERM after /resume";
+  Fixture fixture{"term-resume"};
+  const auto origin = fixture.session("a"), destination = fixture.session("b");
+  check(run(fixture, "term-resume-setup",
+            {"--session", destination.string(), "--workflow", fixture.workflow.string(),
+             "--once", "hello"},
+            "") == 0,
+        std::string{label} + ": destination setup failed");
+  Process process{fixture,
+                  {"--plain", "--session", origin.string(), "--workflow",
+                   fixture.workflow.string()},
+                  Stdio::pipe,
+                  "term-resume"};
+  process.send(append_line + "/resume " + destination.string() + "\n");
+  // The destination's greeting names its directory; its prompt follows.
+  const auto at = process.await_text(" · " + destination.string() + "\n");
+  (void)process.await_text("blackbird> ", at);
+  process.terminate();
+  const auto stop = await_stop(process, label);
+  check(stop.output.find("returning to the previous session") == std::string::npos,
+        std::string{label} + ": the process reopened the origin\n" + stop.output);
+  require_clean(fixture, destination, std::string{label} + " (destination)");
+  require_clean(fixture, origin, std::string{label} + " (origin)");
+  require_terminated(stop, label);
+}
+
+// A turn blocked writing to a stdout nobody reads (the pipe holds a stable,
+// nonzero backlog before the signal): SIGTERM still ends the turn and the session
+// stops cleanly. Which call observes the interrupt is not asserted here.
+void term_stalled_output_case() {
+  constexpr std::string_view label = "SIGTERM stalled stdout";
+  Fixture fixture{"term-stalled"};
+  const auto session = fixture.session("s");
+  Process process{fixture,
+                  {"--plain", "--session", session.string(), "--workflow",
+                   fixture.workflow.string()},
+                  Stdio::stalled_stdout,
+                  "term-stalled"};
+  process.send(append_line + "/lua print(string.rep('x', 4194304))\n");
+  process.await_stalled_stdout(label);
+  process.terminate();
+  const auto stop = await_stop(process, label);
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+}
+
+// The child's user plus system CPU time.
+std::chrono::nanoseconds cpu_time(pid_t pid) {
+#if defined(__APPLE__)
+  rusage_info_v2 info{};
+  check(::proc_pid_rusage(pid, RUSAGE_INFO_V2,
+                          reinterpret_cast<rusage_info_t *>(&info)) == 0,
+        "proc_pid_rusage failed");
+  mach_timebase_info_data_t base{};
+  check(::mach_timebase_info(&base) == KERN_SUCCESS, "mach_timebase_info failed");
+  const auto ticks = info.ri_user_time + info.ri_system_time;
+  return std::chrono::nanoseconds{ticks * base.numer / base.denom};
+#else
+  const auto text = contents("/proc/" + std::to_string(pid) + "/stat");
+  const auto close = text.rfind(')');
+  check(close != std::string::npos, "unreadable /proc stat");
+  std::istringstream fields{text.substr(close + 2)};
+  std::string field;
+  unsigned long long user = 0, system = 0;
+  for (int index = 3; index <= 15 && fields >> field; ++index) {
+    if (index == 14)
+      user = std::stoull(field);
+    if (index == 15)
+      system = std::stoull(field);
+  }
+  const auto tick = static_cast<unsigned long long>(::sysconf(_SC_CLK_TCK));
+  return std::chrono::nanoseconds{(user + system) * 1'000'000'000ULL / tick};
+#endif
+}
+// Waits until the child spins: at least 70 ms of CPU in each of three
+// consecutive 100 ms windows.
+void await_spin(Process &process, std::string_view label) {
+  const auto deadline = Clock::now() + std::chrono::seconds{20};
+  auto last = cpu_time(process.pid());
+  for (int spinning = 0; spinning < 3;) {
+    check(process.running() && Clock::now() < deadline,
+          std::string{label} + ": the turn never spun\n" + process.text());
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+    const auto now = cpu_time(process.pid());
+    spinning = now - last >= std::chrono::milliseconds{70} ? spinning + 1 : 0;
+    last = now;
+  }
+}
+
+// A turn that cannot see the interrupt: one string.find call backtracks through
+// an exponential pattern inside Lua's C matcher, where no count hook runs. The
+// first SIGTERM is caught; a second inside the grace window only repeats the
+// request and the process keeps running; one after the window kills it at once,
+// and the next open reports the suffix.
+void term_second_case() {
+  constexpr std::string_view label = "SIGTERM after the grace window";
+  Fixture fixture{"term-second"};
+  fixture.program("string.find(string.rep('a', 60), string.rep('a*', 30) .. 'b')\n");
+  const auto session = fixture.session("s");
+  {
+    Process process{fixture,
+                    {"--plain", "--session", session.string(), "--workflow",
+                     fixture.workflow.string()},
+                    Stdio::pipe,
+                    "term-second"};
+    process.send(append_line + "hello\n");
+    await_spin(process, label);
+    const auto first = Clock::now();
+    process.terminate();
+    std::this_thread::sleep_for(std::chrono::milliseconds{300});
+    if (process.running())
+      process.terminate();
+    while (Clock::now() < first + std::chrono::milliseconds{1500}) {
+      if (!process.running()) {
+        const auto status = process.wait(label);
+        throw std::runtime_error(
+            std::string{label} + ": a SIGTERM inside the grace window ended the " +
+            "process (status " + std::to_string(status) +
+            (process.signalled() ? ", killed by the signal)" : ")"));
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds{20});
+    }
+    std::this_thread::sleep_until(first + std::chrono::milliseconds{2300});
+    const auto sent = Clock::now();
+    process.terminate();
+    const auto prompt = sent + std::chrono::seconds{2};
+    while (process.running()) {
+      check(Clock::now() < prompt,
+            std::string{label} + ": the process outlived the late SIGTERM by 2 s");
+      std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+    const auto elapsed =
+        std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - sent);
+    const auto status = process.wait(label);
+    check(process.signalled() && status == 128 + SIGTERM,
+          std::string{label} + ": status " + std::to_string(status) +
+              ", expected death by SIGTERM");
+    std::cout << "  late SIGTERM to exit: " << elapsed.count() << " ms\n";
+  }
+  (void)require_reported_reopen(fixture, session, label, reopen_notice);
+}
+
+// A sender that signals the pid and then its group, as GNU timeout does: two
+// SIGTERMs close together are one clean stop.
+void term_doubled_case() {
+  constexpr std::string_view label = "doubled SIGTERM";
+  Fixture fixture{"term-doubled"};
+  const auto session = fixture.session("s");
+  Process process{fixture,
+                  {"--plain", "--session", session.string(), "--workflow",
+                   fixture.workflow.string()},
+                  Stdio::pipe,
+                  "term-doubled",
+                  true};
+  process.send(busy);
+  auto at = process.await_text("BOTH_STARTED");
+  at = process.await_text("LOCAL", at);
+  (void)process.await_text("blackbird> ", at);
+  // Apart enough that both are delivered, not merged into one pending signal.
+  process.terminate();
+  std::this_thread::sleep_for(std::chrono::milliseconds{50});
+  process.terminate_group();
+  const auto stop = await_stop(process, label);
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+}
+
+// GNU timeout (Linux): TERM to the pid, then to its group, while a --once turn
+// runs. Every run stops cleanly. On a loaded host the open can outlast the
+// timeout; that SIGTERM then lands before the turn (the early handler) and must
+// stop cleanly too, but at least one run must have its turn running.
+void term_timeout_case() {
+  constexpr std::string_view label = "GNU timeout";
+  const std::string timeout = "/usr/bin/timeout";
+  if (!fs::exists(timeout) ||
+      std::system("/usr/bin/timeout --version 2>/dev/null | grep -q 'GNU coreutils'") !=
+          0) {
+    std::cout << "  term-timeout needs GNU timeout at /usr/bin/timeout; skipped\n";
+    return;
+  }
+  int running = 0;
+  for (int run = 0; run < 8; ++run) {
+    const auto name = "term-timeout-" + std::to_string(run);
+    Fixture fixture{name};
+    const auto marker = fixture.root / "exec-running";
+    fixture.program(running_exec_lua(marker));
+    const auto session = fixture.session("s");
+    Process process{fixture,
+                    {"-s", "TERM", "--preserve-status", "4", executable, "--session",
+                     session.string(), "--workflow", fixture.workflow.string(),
+                     "--once", "hello"},
+                    Stdio::pipe,
+                    name,
+                    false,
+                    timeout};
+    process.close_input();
+    const auto stop = await_stop(process, name);
+    const auto run_label = std::string{label} + " run " + std::to_string(run);
+    running += fs::exists(marker) ? 1 : 0;
+    require_clean(fixture, session, run_label);
+    require_terminated(stop, run_label);
+  }
+  std::cout << "  " << running << " of 8 timeout runs signalled a running turn\n";
+  check(running > 0, std::string{label} + ": no run reached its turn");
+}
+
+// scripts/blackbird forwards a SIGTERM sent only to its own pid, waits for the
+// session, and exits with its status.
+void term_wrapper_case() {
+  constexpr std::string_view label = "SIGTERM to scripts/blackbird";
+  const char *selected = std::getenv("CLEAN_STOP_WRAPPER");
+  const std::string wrapper = selected ? selected : BLACKBIRD_WRAPPER;
+  Fixture fixture{"term-wrapper"};
+  fixture.extra = {"BLACKBIRD_EXECUTABLE=" + executable};
+  const auto session = fixture.session("s");
+  Process process{fixture,
+                  {"--plain", "--session", session.string(), "--workflow",
+                   fixture.workflow.string()},
+                  Stdio::pipe,
+                  "term-wrapper",
+                  true,
+                  wrapper};
+  process.send(append_line + "hello\n");
+  const auto at = process.await_text("LOCAL");
+  (void)process.await_text("blackbird> ", at);
+  process.terminate();
+  const auto stop = await_stop(process, label);
+  // A wrapper that dies leaves the session running and its journal locked, so
+  // the status comes first here.
+  require_terminated(stop, label);
+  require_clean(fixture, session, label);
+}
+
+// The wrapper starts the session as an asynchronous child, which a POSIX shell
+// starts with SIGINT ignored. A terminal's Ctrl-C (SIGINT to the group) during
+// the open must still end the session, as it did before S0b: the open here
+// blocks reading a workflow FIFO that has no writer.
+void wrapper_sigint_open_case() {
+  constexpr std::string_view label = "Ctrl-C during a wrapped open";
+  const char *selected = std::getenv("CLEAN_STOP_WRAPPER");
+  const std::string wrapper = selected ? selected : BLACKBIRD_WRAPPER;
+  Fixture fixture{"wrapper-sigint-open"};
+  fixture.extra = {"BLACKBIRD_EXECUTABLE=" + executable};
+  const auto fifo = fixture.root / "workflow.fifo";
+  check(::mkfifo(fifo.c_str(), 0600) == 0, "mkfifo failed");
+  const auto session = fixture.session("s");
+  Process process{
+      fixture,
+      {"--plain", "--session", session.string(), "--workflow", fifo.string()},
+      Stdio::pipe,
+      "wrapper-sigint-open",
+      true,
+      wrapper};
+  const auto deadline = Clock::now() + std::chrono::seconds{20};
+  while (!fs::exists(session / "audit")) {
+    check(process.running() && Clock::now() < deadline,
+          std::string{label} + ": the open never started\n" + process.text());
+    process.pump(std::chrono::milliseconds{20});
+  }
+  std::this_thread::sleep_for(std::chrono::milliseconds{500});
+  check(process.running(),
+        std::string{label} + ": the open did not block\n" + process.text());
+  check(::kill(-process.pid(), SIGINT) == 0, "group SIGINT failed");
+  const auto sent = Clock::now();
+  while (process.running()) {
+    if (Clock::now() - sent > std::chrono::seconds{5}) {
+      // Release the open so the fixture can end.
+      const int writer = ::open(fifo.c_str(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+      if (writer >= 0)
+        ::close(writer);
+      throw std::runtime_error(std::string{label} +
+                               ": the wrapped session ignored SIGINT for 5 s");
+    }
+    process.pump(std::chrono::milliseconds{20});
+  }
+  const auto status = process.wait(label);
+  check(status == 128 + SIGINT, std::string{label} + ": wrapper status " +
+                                    std::to_string(status) + "\n" + process.text());
+}
+
+// Programs the wrapped session spawns without resetting dispositions (here the
+// provider's curl) must not inherit SIGQUIT ignored from the wrapper's
+// asynchronous child.
+void wrapper_sigquit_child_case() {
+  constexpr std::string_view label = "SIGQUIT in a wrapped session's child";
+  const char *selected = std::getenv("CLEAN_STOP_WRAPPER");
+  const std::string wrapper = selected ? selected : BLACKBIRD_WRAPPER;
+  Fixture fixture{"wrapper-sigquit-child"};
+  const auto curl = fixture.bin / "curl";
+  const auto started = fixture.root / "curl-started";
+  const auto survived = fixture.root / "curl-survived-sigquit";
+  write_text(curl, "#!/bin/sh\ntouch '" + started.string() +
+                       "'\nkill -QUIT $$\ntouch '" + survived.string() +
+                       "'\ncat > /dev/null\nprintf "
+                       "'{\"error\":{\"message\":\"fixture\"}}\\n401'\n");
+  fs::permissions(curl, fs::perms::owner_all);
+  fixture.extra = {"OPENROUTER_API_KEY=fixture-secret",
+                   "BLACKBIRD_OPENROUTER_CURL=" + curl.string(),
+                   "BLACKBIRD_EXECUTABLE=" + executable};
+  const auto session = fixture.session("s");
+  auto arguments = provider_once;
+  arguments.insert(arguments.begin(), {"--session", session.string()});
+  Process process{fixture, arguments, Stdio::pipe, "wrapper-sigquit-child",
+                  true,    wrapper};
+  process.close_input();
+  (void)process.wait(label);
+  check(fs::exists(started),
+        std::string{label} + ": curl never ran\n" + process.text());
+  check(!fs::exists(survived),
+        std::string{label} + ": curl ignored SIGQUIT\n" + process.text());
+}
+
+// A TUI turn inside a foreground exec: SIGTERM interrupts it as SIGINT would.
+void term_tui_running_case() {
+  constexpr std::string_view label = "SIGTERM running TUI turn";
+  Fixture fixture{"term-tui-running"};
+  const auto marker = fixture.root / "exec-running";
+  fixture.program(running_exec_lua(marker));
+  const auto session = fixture.session("s");
+  Process process{
+      fixture,
+      {"--session", session.string(), "--workflow", fixture.workflow.string()},
+      Stdio::terminal,
+      "term-tui-running"};
+  (void)process.await_text("Workflow");
+  process.send("hello\r");
+  await_file(process, marker, label);
+  process.terminate();
+  const auto stop = await_stop(process, label);
+  require_clean(fixture, session, label);
+  require_terminated(stop, label);
+  check(stop.output.find("EXEC_RETURNED") == std::string::npos,
+        std::string{label} + ": the command ran to completion");
+}
+
+// /restart ends a session with 75, which a wrapper relaunches. A SIGTERM at any
+// point of that exit, including its teardown, must end the process with 143:
+// never a 75 after "stopped by SIGTERM", never a signal death.
+void term_restart_race_case() {
+  constexpr std::string_view label = "SIGTERM racing a restart exit";
+  std::mt19937 random{20261020};
+  std::chrono::milliseconds exit_time{};
+  int terminated = 0, restarted = 0;
+  for (int run = -1; run < 20; ++run) {
+    const auto name = "term-restart-race-" + std::to_string(run + 1);
+    Fixture fixture{name};
+    const auto session = fixture.session("s");
+    Process process{fixture,
+                    {"--plain", "--session", session.string(), "--workflow",
+                     fixture.workflow.string()},
+                    Stdio::pipe,
+                    name};
+    process.send(append_line + "/lua print('READY')\n");
+    const auto at = process.await_text("READY");
+    (void)process.await_text("blackbird> ", at);
+    const auto sent = Clock::now();
+    process.send("/restart RACE_NOTE\n");
+    if (run < 0) {
+      // Calibration: the unsignalled restart exit and its duration.
+      const auto status = process.wait(name);
+      exit_time =
+          std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - sent);
+      check(status == 75, std::string{label} + ": calibration status " +
+                              std::to_string(status) + "\n" + process.text());
+      continue;
+    }
+    std::uniform_int_distribution<long long> offset{0, exit_time.count() * 6 / 5};
+    std::this_thread::sleep_until(sent + std::chrono::milliseconds{offset(random)});
+    if (process.running())
+      process.terminate();
+    const auto stop = await_stop(process, name);
+    const auto run_label = std::string{label} + " run " + std::to_string(run);
+    check(!stop.signalled, run_label + ": killed by the signal");
+    const bool stopped = stop.output.find("stopped by SIGTERM") != std::string::npos;
+    check(stopped ? stop.status == terminated_status : stop.status == 75,
+          run_label + ": status " + std::to_string(stop.status) +
+              (stopped ? " after \"stopped by SIGTERM\"" : "") + "\n" + stop.output);
+    ++(stop.status == 75 ? restarted : terminated);
+  }
+  std::cout << "  restart exit " << exit_time.count() << " ms; " << terminated
+            << " runs stopped by SIGTERM, " << restarted << " exited 75 first\n";
+  check(terminated > 0, std::string{label} + ": no SIGTERM arrived before the exit");
+}
+
 void run_case(std::string_view name, void (*body)()) {
   try {
     body();
@@ -1089,7 +1908,7 @@ int main(int argc, char **argv) {
       (fs::temp_directory_path() / "blackbird-clean-stop-XXXXXX").string();
   check(::mkdtemp(pattern.data()) != nullptr, "mkdtemp failed");
   workspace = fs::canonical(pattern);
-  const std::array<std::pair<std::string_view, void (*)()>, 22> cases{{
+  const std::array<std::pair<std::string_view, void (*)()>, 41> cases{{
       {"quit", quit_case},
       {"exit", exit_case},
       {"eof", eof_case},
@@ -1112,6 +1931,25 @@ int main(int argc, char **argv) {
       {"application", application_case},
       {"application-failure", application_snapshot_failure_case},
       {"kill", kill_case},
+      {"term-idle-plain", term_idle_plain_case},
+      {"term-idle-tui", term_idle_tui_case},
+      {"term-running", term_running_plain_case},
+      {"term-once", term_once_case},
+      {"term-unsettled", term_unsettled_attempt_case},
+      {"term-group", term_group_case},
+      {"term-join-fault", term_join_fault_case},
+      {"term-launch-refusal", term_launch_refusal_case},
+      {"term-station", term_station_case},
+      {"term-resume", term_after_resume_case},
+      {"term-stalled", term_stalled_output_case},
+      {"term-second", term_second_case},
+      {"term-doubled", term_doubled_case},
+      {"term-timeout", term_timeout_case},
+      {"term-wrapper", term_wrapper_case},
+      {"wrapper-sigint-open", wrapper_sigint_open_case},
+      {"wrapper-sigquit-child", wrapper_sigquit_child_case},
+      {"term-tui-running", term_tui_running_case},
+      {"term-restart-race", term_restart_race_case},
   }};
   for (const auto &[name, body] : cases) {
     bool selected = argc == 2;

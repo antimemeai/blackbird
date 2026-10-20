@@ -68,9 +68,50 @@ fi
 if "$blackbird_session_option" && ! "$blackbird_once" && ! "$blackbird_probe" && [ -t 0 ] && [ -t 1 ]; then
   printf 'Opening Blackbird session: %s\n' "$blackbird_session" >&2
 fi
+# The session runs as an asynchronous child so this shell can take SIGTERM while
+# it waits and forward it: a supervisor that signals only this pid still stops
+# the session cleanly (status 143). A TERM before the child's pid is known is
+# kept and forwarded at once; none starts a relaunch. The child reads this
+# shell's stdin through descriptor 9, because dash gives an asynchronous list
+# /dev/null as stdin before its explicit redirections; a closed stdin stays
+# closed. Such a child also starts with SIGINT and SIGQUIT ignored:
+# BLACKBIRD_WRAPPED_CHILD tells it to restore their default actions. A
+# terminal's SIGINT reaches the session directly; the INT trap only keeps this
+# shell waiting.
+blackbird_child=''
+blackbird_terminated=false
+blackbird_signalled=false
+trap 'blackbird_terminated=true; blackbird_signalled=true; if [ -n "$blackbird_child" ]; then kill -TERM "$blackbird_child" 2>/dev/null || :; fi' TERM
+trap 'blackbird_signalled=true' INT
+if { true 9<&0; } 2>/dev/null; then
+  blackbird_stdin=open
+  exec 9<&0
+else
+  blackbird_stdin=closed
+fi
 while :; do
-  if "$blackbird_executable" "$@"; then exit 0; else blackbird_status=$?; fi
-  if [ "$blackbird_status" -ne 75 ]; then exit "$blackbird_status"; fi
+  if "$blackbird_terminated"; then exit 143; fi
+  if [ "$blackbird_stdin" = open ]; then
+    BLACKBIRD_WRAPPED_CHILD=1 "$blackbird_executable" "$@" <&9 9<&- &
+  else
+    BLACKBIRD_WRAPPED_CHILD=1 "$blackbird_executable" "$@" <&- &
+  fi
+  blackbird_child=$!
+  if "$blackbird_terminated"; then kill -TERM "$blackbird_child" 2>/dev/null || :; fi
+  blackbird_status=''
+  while :; do
+    blackbird_signalled=false
+    if wait "$blackbird_child"; then blackbird_waited=0; else blackbird_waited=$?; fi
+    # 127: this shell already reported the child (bash 3.2 forgets it).
+    if [ "$blackbird_waited" -eq 127 ] && [ -n "$blackbird_status" ]; then break; fi
+    blackbird_status=$blackbird_waited
+    # A trapped signal ends wait early, above 128, while the child runs on.
+    if "$blackbird_signalled" && [ "$blackbird_waited" -gt 128 ]; then continue; fi
+    break
+  done
+  blackbird_child=''
+  if [ "$blackbird_status" -eq 0 ]; then exit 0; fi
+  if [ "$blackbird_status" -ne 75 ] || "$blackbird_terminated"; then exit "$blackbird_status"; fi
   set -- --session "$blackbird_session" --resume-continue
   if "$blackbird_plain"; then set -- "$@" --plain; fi
   if "$blackbird_once"; then set -- "$@" --resume-once; fi

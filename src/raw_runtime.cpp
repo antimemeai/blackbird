@@ -665,7 +665,16 @@ extern "C" void child_changed(int) {
   }
   errno = saved;
 }
-extern "C" void recorder_signal(int signal) {
+extern "C" void recorder_signal(int signal, siginfo_t *info, void *) {
+  // Only this recorder's supervisor, its parent, stops it. A SIGTERM sent to
+  // the session's whole process group (GNU timeout, a session supervisor) is
+  // addressed to the session: draining and exiting here would refuse the
+  // session's in-flight lane requests while it stops. Darwin reports si_code 0
+  // rather than SI_USER for kill(), so only the sender's pid is compared, and a
+  // signal left pending while start_recorder blocked it arrives on Darwin with
+  // si_pid 0: an unknown sender is obeyed.
+  if (info != nullptr && info->si_pid != 0 && info->si_pid != ::getppid())
+    return;
   const int saved = errno;
   recorder_stop = signal == SIGTERM ? 2 : 1;
   if (recorder_notice >= 0) {
@@ -790,7 +799,8 @@ int record(const std::string &path, JournalHeader header,
   recorder_notice = stop_write.value;
   recorder_stop = drain ? 2 : 0;
   struct sigaction action{};
-  action.sa_handler = recorder_signal;
+  action.sa_sigaction = recorder_signal;
+  action.sa_flags = SA_SIGINFO;
   sigemptyset(&action.sa_mask);
   if (::sigaction(SIGUSR1, &action, nullptr) != 0 ||
       ::sigaction(SIGTERM, &action, nullptr) != 0)
