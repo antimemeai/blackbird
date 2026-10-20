@@ -165,6 +165,14 @@ brief.
 - **Fuzzing runs on Neuroses only**, through a `fuzz` profile that P1a adds to `scripts/check-linux`
   as a tooling change, requalified once with a planted crash. AGENTS.md keeps fuzzing off the
   laptop, and the Mac fuzz link fails until e5g lands.
+  - `scripts/check-linux --profiles fuzz [--fuzz-runs N]` (default 1,000,000 executions) builds
+    `profile_reader_fuzz` and runs it over copies of `profiles/providers/*.lua`.
+  - libFuzzer writes crash, leak and timeout inputs to `build/fuzz/artifacts/` in the remote
+    workspace; before that workspace is removed, `check-linux` copies them to
+    `context/linux/run-*/fuzz-artifacts/artifacts/` (ignored) and prints both paths. The log is
+    `context/linux/run-*/checks.log`.
+  - The Linux link needs libstdc++ for the distribution's libFuzzer runtime, which is built against
+    it (CMakeLists.txt, the P1a block).
 - **TSan**: A2's first step adds a Linux `tsan` profile (requalified with a planted race). Mac TSan
   waits for bead 0zi in the operator's campaign.
 - **Never** mutation runs on the laptop.
@@ -300,6 +308,18 @@ budget on Neuroses.
 validates but crashes a consumer.
 
 **Exit.** Profiles are copied, required and validated; the fuzzer ran its budget with no crash.
+
+**Deviation, owner decision 2026-10-20.** P1a ships the early behaviour rows in the provider files,
+not only `match` and `sources`: the reasoning, turn, request-state, note, tool-change and archival
+rows that P1b records and S3a consumes, with honest bases (Anthropic rows `unobserved` per §1.4,
+OpenAI rows cited with their probe pending). S3a therefore consumes these rows rather than adding
+them. Nothing reads them in P1a or P1b. When code starts reading a row that reproduces a hard-coded
+rule, the regression comparison against the old code's decisions stays with P2 (design §15.5). The
+families P2 and K1 migrate (cache detail, errors, stop reasons, retry per provider, effort, output)
+remain the conservative profile's until then; transforms to disable are deferred to the unit that
+sends them. The design's example profile and basis vocabulary were reconciled with the implemented
+schema (design §15.2), and an operator override of `conservative` is the base layer under every
+shipped profile (design §15.4).
 
 ### P1b. Profile wiring (serial)
 
@@ -1026,7 +1046,7 @@ twice. Behavioural cases (5, 6, 7) run three times, and their row is enabled onl
   baseline run's (the baseline is chosen to continue in at least 2 of 3);
 - a behavioural case passes when every repeat is accepted, not degraded, and continues.
 
-**Outcomes**, in `openai-codex.lua` only:
+**Outcomes**, in `profiles/providers/openai-chatgpt-responses.lua` only:
 
 | Case | Row |
 |---|---|
@@ -1273,12 +1293,14 @@ rd7.3's four row steps (20 attempts), and rd7.3's tokens (§4.4).
 | E1 | a v1 policy mapped; the `context_budget` schema changed: one `prefix` cut | policy v2; one `prefix` frame |
 | A1 | none on the main prefix | `clm.step` records |
 | R1 | the rageshake schema changed: one `prefix` cut | one `prefix` frame |
-| 5st, P2, K1, each probe-row step | a behavioural-field change in a profile changes the binding digest: one `rebind` frame at the next session start, removing nothing for same-family reasoning | one `rebind` frame per change |
+| 5st, P2, K1, each probe-row step that changes a behavioural value | the behavioural digest changes: one `rebind` frame at the next session start, removing nothing for same-family reasoning. A step that changes only provenance (a basis from `cited` to `probed`, a source) changes the set's content digest, not the behavioural digest, and causes no rebind | one `rebind` frame per behavioural change |
 
 ### 6.2 Tools, instructions and profile digests on existing sessions
 
 - V1, E1 and R1 change tool definitions. T1 does as well, but lands before chapters exist.
-- 5st, P2, K1 and every probe-row step change profile digests.
+- 5st, P2, K1 and every probe-row step that changes a behavioural value change behavioural profile
+  digests. Every edit, provenance included, changes the set's content digest, which trial records
+  carry (§7.3).
 - Profiles load once per session start or definition boundary.
 - Trial runs pin their profile set per run (§7.3), so an edit in a worktree never reaches a run.
 

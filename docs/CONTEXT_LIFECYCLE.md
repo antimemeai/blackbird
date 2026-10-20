@@ -1293,61 +1293,104 @@ src/coding.cpp:5285). The badge shows the critical state.
 
 ### 15.2 Schema `blackbird.provider-profile/1`
 
+The schema as implemented (src/provider_profile.cpp). An illustrative shipped profile; the shipped
+files are in `profiles/providers/`:
+
 ```lua
 return {
   schema = "blackbird.provider-profile/1",
-  id = "anthropic-messages-prefix-checked", revision = 1,
-  match = { provider = "anthropic", protocol = "messages",
-            models = { "claude-fable-5-1", "claude-opus-5-5",
-                       "claude-sonnet-5-5", "claude-haiku-5-5" } },
+  id = "anthropic-messages-prefix-checked",
+  revision = 1,
+  -- The default for native Anthropic: every family not listed by anthropic-messages.
+  match = { provider = "anthropic", protocol = "messages" },
   sources = {
     preserved = { url = "https://platform.claude.com/docs/en/build-with-claude/preserved-thinking", read = "2026-10-20" },
-    thinking  = { url = "https://platform.claude.com/docs/en/build-with-claude/thinking", read = "2026-10-20" },
-    caching   = { url = "https://platform.claude.com/docs/en/build-with-claude/prompt-caching", read = "2026-10-20" },
+    thinking = { url = "https://platform.claude.com/docs/en/build-with-claude/thinking", read = "2026-10-20" },
+    errors = { url = "https://platform.claude.com/docs/en/api/errors", read = "2026-10-20" },
+    streaming = { url = "https://platform.claude.com/docs/en/build-with-claude/streaming", read = "2026-10-20" },
+    effort = { url = "https://platform.claude.com/docs/en/build-with-claude/effort", read = "2026-10-20" },
+    overflow_reports = {
+      path = "papers/clm-a1v-2026-10-19/OVERFLOW_STUDY.md",
+      read = "2026-10-19",
+      note = "community: the Claude Code reconstruction and pi; Anthropic documents no overflow text",
+    },
   },
-  pairing   = { validator = "anthropic-messages", basis = "cited:thinking" },
-  reasoning = { at_cut = "drop_after_change", basis = "cited:preserved",
-                at_rebind = "keep_in_family",
-                side_request_reasoning = "drop_all" },
-  turn = { start = "user_message_without_results", basis = "cited:thinking",
-           close = "reply_request",
-           open_turn = { "closed_only", "boundary" },
-           boundary = { form = "reply_then_note", enabled = false, basis = "probe:rd7.3" } },
+  pairing = { validator = "anthropic-messages", basis = "cited:thinking" },
+  reasoning = {
+    at_cut = "drop_after_change",
+    at_rebind = "keep_in_family",
+    side_request_reasoning = "drop_all",
+    basis = { at_cut = "cited:preserved", at_rebind = "cited:preserved", side_request_reasoning = "unobserved" },
+  },
+  turn = {
+    start = "user_message_without_results",
+    close = "reply_request",
+    open_turn = { "closed_only", "boundary" },
+    boundary = { form = "reply_then_note", enabled = false, basis = "conservative:probe rd7.3 pending" },
+    basis = "cited:thinking",
+  },
   request_state = { placement = "retained_in_place", basis = "cited:preserved" },
-  note = { role = "developer_as_user_text", placement = "after_tool_results",
-           basis = "blackbird-rendering" },
-  tool_restriction = { mode = "palette_only", basis = "decision:§24" },
+  note = {
+    role = "developer_as_user_text",
+    placement = "after_tool_results",
+    basis = "conservative:Blackbird's rendering, src/anthropic_provider.cpp:428-434",
+  },
+  tool_restriction = { mode = "palette_only", basis = "conservative:§24 owner decision" },
   tool_change = { mode = "cut", basis = "cited:preserved" },
-  archival = "allowed",
-  cache = { capability = "none", basis = "current-behaviour" },   -- bvu changes this
+  archival = { mode = "allowed", basis = "cited:preserved" },
+  edit_acceptance = { in_place = "unknown", basis = "conservative:not probed" },
+  cache = { capability = "none", basis = "conservative:no cache controls until bvu" },
   errors = {
     { class = "context_overflow", status = 400, contains = "prompt is too long",
       extract = { input_tokens = "prompt is too long: ", limit_tokens = "> " },
-      basis = "community:claude-code-reconstruction,pi" },
-    { class = "payload_too_large", status = 413, error_type = "request_too_large",
-      basis = "cited:errors" },
+      basis = "cited:overflow_reports" },
+    { class = "payload_too_large", status = 413, error_type = "request_too_large", basis = "cited:errors" },
     { class = "overloaded", status = 529, basis = "cited:errors" },
-    { class = "overloaded", event = "error", error_type = "overloaded_error",
-      basis = "cited:streaming" },
+    { class = "overloaded", event = "error", error_type = "overloaded_error", basis = "cited:streaming" },
   },
-  stop_reasons = { model_context_window_exceeded = "output_window_exhausted",
-                   basis = "cited:thinking" },
-  retry = { http = { 408, 429, 500, 502, 503, 504, 529 },
-            transport = { 5, 6, 7, 16, 18, 28, 52, 55, 56, 92, 95, 96 },
-            rate_limit_requires_retry_after = true, basis = "cited:errors" },
-  effort = { values = { "low", "medium", "high", "xhigh", "max" },
-             thinking = "adaptive", basis = "cited:effort" },
-  output = { max_tokens = 16384, basis = "conservative" },   -- current behaviour
+  stop_reasons = { model_context_window_exceeded = "output_window_exhausted", basis = "cited:thinking" },
+  retry = {
+    http = { 408, 429, 500, 502, 503, 504, 529 },
+    transport = { 5, 6, 7, 16, 18, 28, 52, 55, 56, 92, 95, 96 },
+    rate_limit_requires_retry_after = true,
+    basis = "cited:errors",
+  },
+  effort = { values = { "low", "medium", "high", "xhigh", "max" }, thinking = "adaptive", basis = "cited:effort" },
+  output = { max_tokens = 16384, basis = "conservative:matches today, include/blackbird/anthropic_provider.hpp:8" },
 }
 ```
 
+**Anthropic selection** (owner decision, 2026-10-20). `anthropic-messages-prefix-checked` is the
+default for native Anthropic Messages. It covers Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 5.5, and any
+new or unknown family, because `drop_after_change` is valid on every Anthropic model while `keep` is not
+valid where the prefix check runs. `anthropic-messages` lists in `match.models` only the older families
+that do not run the check (Mythos 5.1 and families before Fable 5.1), and keeps reasoning at a cut. A
+family whose name is a `-`-prefix of a prefix-checked name (Fable 5, Mythos 5, Opus 5, Sonnet 5), and
+Sonnet 4 and Opus 4 by their bare names, are not listed; they take the valid default.
+
+The shipped Anthropic file differs from this example where plan §1.4 requires it: its unprobed rows
+carry `unobserved`, and the families it does not consume yet (errors, stop reasons, retry, effort,
+output, cache) are left to the conservative profile until P2 and K1.
+
+**Basis.** A `basis` sits inside a family table: a string for every field the table sets, or a table
+of field = basis. The value is `kind[:detail]` with exactly four kinds:
+- `cited:<source>`: names an entry in `sources`. A community-observed rule is cited too, through a
+  source whose `note` says `community:` and names who observed it;
+- `probed:<probe>`: a Blackbird probe's result;
+- `conservative[:why]`: the safe choice, or Blackbird's own rendering or decision;
+- `unobserved[:why]`: built against documentation or mocks, never observed live.
+A source entry has a `url` (https) or a repository `path`, a `read` date, and an optional `title` and
+`note`. A basis must cover at least one field its layer sets. A missing basis is never refused.
+
 Field families (decision 6): pairing and validity; reasoning (`at_cut`, `at_rebind`,
 `side_request_reasoning`, `context` for OpenAI); turn (`start`, `close`, `open_turn`, `boundary`);
-request-state placement; note role and placement; tool restriction; tool change; archival allowed or
-refused until probed; edit acceptance; cache (capability, breakpoint plan, TTL, minimum,
-`read_multiplier`, `write_multiplier`, affinity body field and header); error classification; stop
-reasons; retry; effort; output ceilings; transforms to disable (OpenRouter `context-compression` off,
-never `truncation: auto`).
+request-state placement; note role and placement; tool restriction; tool change; archival
+(`allowed` or `refused_until_probed`, a table so it carries a basis); edit acceptance; cache
+(capability, breakpoints, TTL, minimum, `read_multiplier`, `write_multiplier`, affinity body field and
+header; detail fields only where the capability gives them meaning); error classification; stop
+reasons; retry; effort; output ceilings. **Transforms to disable** (OpenRouter `context-compression`
+off, never `truncation: auto`) are deferred to the unit that sends them (P2, with the OpenRouter
+adapter); until then the schema has no such family and refuses the key.
 
 ### 15.3 Error rules
 
@@ -1369,19 +1412,55 @@ never `truncation: auto`).
 
 ### 15.4 Selection, layering, validation, override
 
-- Match on provider, protocol, base URL, account kind and model prefix; the most specific wins. A
-  shipped `conservative` profile matches everything else: `closed_only`, `turn.close = none`, boundary
-  disabled, `keep`, `palette_only`, `tool_change = cut`, no cache controls, the current retry set.
-- Layers, highest first: session override (program record `provider-profile-override-v1`, staged to
-  the workflow boundary); operator override files in `~/.local/share/blackbird/profiles/`; shipped
-  profiles. Overrides are sparse; tables merge by key, arrays replace.
-- Native validation checks what affects behaviour: schema, enumerations, numeric ranges, codec
+- **The query.** A request is matched on five fields (`ProfileQuery`,
+  include/blackbird/provider_profile.hpp), derived from the session's binding by `profile_query`:
+  - `provider`: the binding's provider name;
+  - `protocol`: the codec the main-coding route actually sends with, which is not always the
+    descriptor's: `messages` for native Anthropic; `responses` for OpenAI's ChatGPT route and for
+    OpenRouter, whose descriptor says `chat` (src/provider_auth.cpp:313) but whose main-coding
+    adapter is Responses (src/main.cpp:528-532); a registered route's own `responses` or
+    `responses-portable`. Any other binding is refused for main coding;
+  - `base_url`: normalized (lowercase scheme and host, port 443 dropped, trailing `/` dropped);
+    a non-https or malformed URL is refused. A profile's `match.base_url` must already be in normal
+    form;
+  - `account_kind`: the binding's `kind` (`oauth`, `api_key`, `environment`, `codex_chatgpt`, ...),
+    never the account's name (src/provider_auth.cpp:797-806, src/openai.cpp:157-163);
+  - `model`: a `match.models` entry `F` names a family, as src/anthropic_provider.cpp:486-492
+    identifies families by name. It matches `M == F` (exact, the higher rank) or `M` starting
+    with `F` followed by `-` and any suffix, such as a snapshot date (ranked like a prefix of
+    length `F` + 1). The `-` keeps `claude-opus-5-50` out of the `claude-opus-5-5` family. A
+    `match.model_prefixes` entry matches any `M` that starts with it, ranked by its length.
+- **Selection.** The most specific matching shipped profile wins: more constrained dimensions, then
+  an exact model over a prefix, then the longer prefix. Equal specificity is refused as ambiguous,
+  never broken by file order. A shipped `conservative` profile matches everything else:
+  `closed_only`, `turn.close = none`, boundary disabled, `keep`, `palette_only`, `tool_change = cut`,
+  no cache controls, the current retry set.
+- **Layers**, lowest first:
+  1. the shipped `conservative` profile, the base under every profile;
+  2. the operator override targeting `conservative`, if any. It sits at the base under every shipped
+     profile, so one operator file changes the default everywhere (owner decision, 2026-10-20);
+  3. the selected shipped profile;
+  4. the operator override targeting that profile, if any;
+  5. the session override (program record `provider-profile-override-v1`, staged to the workflow
+     boundary).
+  Operator override files live in `~/.local/share/blackbird/profiles/`; at most one per target. An
+  absent operator directory means no overrides; any other error reading it refuses the set.
+  Overrides are sparse; tables merge by key, arrays replace. A field a layer sets takes that layer's
+  basis, or none.
+- **Validation** checks what affects behaviour: schema, enumerations, numeric ranges, codec
   consistency (for example `allowed_tools` only where the codec sends it, `reply_then_note` only with
-  `close = reply_request`), and contradictory pairs (`drop_after_change` with `retain_current_turn`).
-  An invalid profile is refused with the exact reason and the previous set stays in force.
+  `close = reply_request`), cache detail that contradicts `cache.capability`, and contradictory pairs
+  (`drop_after_change` with `retain_current_turn`). Every override is validated in every effective
+  profile it can reach at load: the override of `conservative` under `conservative` and under each
+  shipped profile. An invalid profile is refused with the exact reason and the previous set stays in
+  force.
 - `basis` is recorded data, reported per request and shown by `/profile`; a repository test checks that
   every shipped behavioural field has one. Loading never refuses a profile or an override for missing
   provenance.
+- **Digests.** The behavioural digest of a profile covers its schema and behavioural families only;
+  the set digest covers every profile's id, match and behavioural digest. A basis, source or revision
+  edit changes neither, so it causes no rebind. The set's content digest covers every layer whole,
+  provenance included, and identifies exactly what a trial ran.
 - Each request records `profile {id, revision, digest, layers}`.
 
 ### 15.5 Migration of hard-coded rules

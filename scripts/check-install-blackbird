@@ -15,6 +15,8 @@ with tempfile.TemporaryDirectory(prefix='blackbird install ') as temporary:
     checkout.mkdir()
     for name in ('programs', 'assets', 'scripts'):
         (checkout / name).mkdir()
+    (checkout / 'profiles/providers').mkdir(parents=True)
+    (checkout / 'profiles/providers/conservative.lua').write_text('fixture profile')
     (checkout / 'CMakeLists.txt').write_text('fixture')
     (checkout / 'CMakePresets.json').write_text('fixture')
     (checkout / 'programs/turn.lua').write_text('fixture workflow')
@@ -80,6 +82,8 @@ exec /bin/mv "$@"
     assert (first / 'share/blackbird/programs/turn.lua').read_text() == 'fixture workflow'
     assert (first / 'share/blackbird/programs/instruments/results.lua').is_file()
     assert (first / 'share/blackbird/assets/sr71.png').is_file()
+    assert (first / 'share/blackbird/profiles/providers/conservative.lua').read_text() == \
+        'fixture profile', 'profiles were not shipped beside programs and assets'
     assert '-DBLACKBIRD_RESOURCE_ROOT=' + str(first / 'share/blackbird') in (root / 'configure').read_text()
     assert str(first / 'build/release') in (root / 'configure').read_text()
     capture = root / 'capture'
@@ -89,6 +93,12 @@ exec /bin/mv "$@"
     assert capture.read_text().splitlines() == [str(root), str(first / 'share/blackbird/assets/sr71.png'),
                                                 '--session', 'named session', '--once', "hello '$() world"]
     previous_launcher = (prefix / 'bin/blackbird').read_bytes()
+    profile = checkout / 'profiles/providers/conservative.lua'
+    profile.unlink()
+    missing = install('--update', success=False)
+    assert 'Incomplete source: profiles/providers/conservative.lua' in missing.stderr, missing.stderr
+    assert current.resolve() == first, 'source without profiles changed active generation'
+    profile.write_text('fixture profile')
     install('--update', success=False, extra={'FAIL_SWITCH': 'yes'})
     assert current.resolve() == first, 'failed final switch changed active generation'
     assert (prefix / 'bin/blackbird').read_bytes() == previous_launcher, 'failed update changed launcher'
@@ -114,4 +124,4 @@ exec /bin/mv "$@"
     install(success=False)
     assert (prefix / 'bin/blackbird').read_text() == '#!/bin/sh\n# operator wrapper\n'
     assert current.resolve() == second
-print('Install/update: packaged resources, exact arguments/cwd, generation switch, rollback and unrelated launcher preservation pass')
+print('Install/update: packaged resources and profiles, exact arguments/cwd, generation switch, rollback and unrelated launcher preservation pass')

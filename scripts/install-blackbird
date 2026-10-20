@@ -24,7 +24,7 @@ while [ "$#" -gt 0 ]; do
 done
 case "$blackbird_jobs" in ''|*[!0-9]*|0) printf 'Jobs must be a positive integer.\n' >&2; exit 2 ;; esac
 blackbird_source=$(CDPATH= cd -- "$blackbird_source" && pwd -P)
-for blackbird_required in CMakeLists.txt CMakePresets.json scripts/blackbird programs/turn.lua programs/instruments/results.lua assets/sr71.png; do
+for blackbird_required in CMakeLists.txt CMakePresets.json scripts/blackbird programs/turn.lua programs/instruments/results.lua assets/sr71.png profiles/providers/conservative.lua; do
   [ -f "$blackbird_source/$blackbird_required" ] || { printf 'Incomplete source: %s\n' "$blackbird_required" >&2; exit 1; }
 done
 mkdir -p -- "$blackbird_prefix"
@@ -80,7 +80,7 @@ if [ -e "$blackbird_home/current" ] && [ ! -L "$blackbird_home/current" ]; then
 fi
 blackbird_generation=$(mktemp -d "$blackbird_home/releases/generation-XXXXXXXX")
 mkdir -p -- "$blackbird_generation/share/blackbird" "$blackbird_generation/scripts" "$blackbird_generation/build/release"
-cp -R -- "$blackbird_source/programs" "$blackbird_source/assets" "$blackbird_generation/share/blackbird/"
+cp -R -- "$blackbird_source/programs" "$blackbird_source/assets" "$blackbird_source/profiles" "$blackbird_generation/share/blackbird/"
 cp -- "$blackbird_source/scripts/blackbird" "$blackbird_generation/scripts/blackbird"
 chmod 755 "$blackbird_generation/scripts/blackbird"
 # Build at the final path: compiled helper paths stay within this generation.

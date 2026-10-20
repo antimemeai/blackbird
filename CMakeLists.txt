@@ -1002,3 +1002,49 @@ set_tests_properties(tui_retained_result PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
 
 add_test(NAME install_blackbird COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check-install-blackbird)
 set_tests_properties(install_blackbird PROPERTIES TIMEOUT 30)
+
+# Provider profiles (P1a, CONTEXT_LIFECYCLE §15): the native data-only reader, schema,
+# layering and digests. The library links no Lua: nothing in a profile can execute.
+add_library(blackbird_profiles src/profile_reader.cpp src/provider_profile.cpp)
+target_link_libraries(blackbird_profiles PUBLIC blackbird_foundation)
+add_executable(profile_reader_test tests/profile_reader_test.cpp)
+# Lua 5.4 is the reference model oracle for accepted texts, in this test only.
+target_include_directories(profile_reader_test SYSTEM PRIVATE ${LUA_INCLUDE_DIR})
+target_link_libraries(profile_reader_test PRIVATE blackbird_profiles ${LUA_LIBRARIES})
+foreach(reader_case grammar roundtrip lua_model no_execution generated)
+  add_test(NAME profile_reader_${reader_case} COMMAND profile_reader_test ${reader_case}
+    ${CMAKE_SOURCE_DIR}/profiles/providers)
+  set_tests_properties(profile_reader_${reader_case} PROPERTIES TIMEOUT 60)
+endforeach()
+add_executable(provider_profile_test tests/provider_profile_test.cpp)
+target_link_libraries(provider_profile_test PRIVATE blackbird_profiles blackbird_coding)
+foreach(profile_case schema effective layering match digest shipped)
+  add_test(NAME provider_profile_${profile_case} COMMAND provider_profile_test
+    ${profile_case} ${CMAKE_SOURCE_DIR}/profiles/providers)
+  set_tests_properties(provider_profile_${profile_case} PROPERTIES TIMEOUT 30)
+endforeach()
+if(BLACKBIRD_DEBUG)
+  # The libFuzzer entry compiles in every debug build; it links and runs only in the
+  # fuzz profile on Neuroses (scripts/check-linux --profiles fuzz), never on the laptop.
+  add_library(profile_reader_fuzz_entry OBJECT tests/profile_reader_fuzz.cpp)
+  target_link_libraries(profile_reader_fuzz_entry PRIVATE blackbird_profiles)
+endif()
+if(BLACKBIRD_INSTRUMENTATION STREQUAL "fuzz")
+  add_executable(profile_reader_fuzz $<TARGET_OBJECTS:profile_reader_fuzz_entry>)
+  target_link_libraries(profile_reader_fuzz PRIVATE blackbird_profiles)
+  target_link_options(profile_reader_fuzz PRIVATE -fsanitize=fuzzer,address,undefined)
+  if(BLACKBIRD_COMPILER_PROFILE STREQUAL "linux-llvm23")
+    # The distribution's libclang_rt.fuzzer is built against libstdc++: its own classes
+    # are std::__cxx11 and need libstdc++.so. Ours are libc++'s std::__1. libstdc++.so
+    # also carries libsupc++ (__cxa_throw, the personality routine, operator new), which
+    # libc++abi defines too. Observed on Neuroses (LD_BIND_NOW=1 LD_DEBUG=bindings): the
+    # link gives NEEDED libc++.so.1, libc++abi.so.1, libstdc++.so.6 in that order, so
+    # every C++ ABI symbol (__cxa_throw, __cxa_begin_catch, __gxx_personality_v0,
+    # exception_ptr, rethrow) binds to libc++abi/libc++, libstdc++'s own references to
+    # the personality bind to libc++abi, and operator new to ASan's. One ABI runtime
+    # serves all exceptions; an exception_ptr round trip in a fuzz entry ran clean.
+    # The driver appends the runtime last, and the host linker's --as-needed would drop
+    # libstdc++ before the runtime asks for it; a scoped push/pop does not keep it.
+    target_link_libraries(profile_reader_fuzz PRIVATE "-Wl,--no-as-needed,-lstdc++")
+  endif()
+endif()
