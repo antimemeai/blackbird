@@ -12033,3 +12033,35 @@ An independent review found:
 It also measured that raw volume per file call roughly doubles. That is recorded on `ulx` for measurement
 before any change. A failed edit search records `find()`'s exact `npos` as present: raw records the exact value,
 so this is kept.
+
+## 2026-10-20 — rd7.1 delivery plan final (revision 3)
+
+`docs/CONTEXT_LIFECYCLE_PLAN.md` delivers the reviewed design. Two independent reviewers attacked it: one on
+sequencing, dependencies and resources, one on tests, migration and risk. All 45 findings were accepted. The
+single recheck found 9 dispositions partly held and 12 new medium defects, all fixed in revision 3. There is no
+further layer.
+
+**Shape:**
+- One serial lane for every unit touching the hot files: coding, context, retained_state, tools and the
+  Anthropic adapter.
+- Parallel lanes only on disjoint files.
+- Every merge goes through the hook, with master merged in at each unit boundary.
+- One gate at a time, with a sampler logging overlaps.
+
+**Critical path:** S0/S0b (clean-stop snapshots and SIGTERM), P1b, S1, S2, T1, S3a, S3b, Q1, B, V1, E1, c3f,
+A1, R1, then the R0 audit, calibration, pilot and batch.
+
+**Probes:**
+- rd7.2 runs on the ChatGPT route only; OpenRouter is dropped because there is no account.
+- rd7.3 waits for an Anthropic account. The Anthropic-only paths inside units being built ship with
+  `basis = "unobserved"`; P3 and K1's Anthropic part wait at the tail.
+
+**Integration proposal 1** comes right after P1b. It gives 5st's rework a master base. 5st stays in the
+operator's campaign-defects phase and waits for the operator's acceptance.
+
+**Resources:** about 98 commits and about 241 gate attempts, roughly 40 hours of serialized gate time. Provider
+spend outside trials is 6M-20M tokens of ChatGPT quota, plus a metered Paper probe that needs approval. The
+first trial batch answers one question (does the step settle mid-run cuts on luna without lowering task
+completion) with paired arms that differ only in the step.
+
+Implementation starts with S0.
