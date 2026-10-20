@@ -4,6 +4,7 @@
 #include "blackbird/packet.hpp"
 #include "blackbird/process_lifetime.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/raw_auth.hpp"
 #include "blackbird/raw_authored.hpp"
 #include "blackbird/raw_bridge.hpp"
 #include "blackbird/raw_command.hpp"
@@ -4477,6 +4478,30 @@ Value CodingEngine::request(Value options) {
           "audit reclamation.";
     }
     auto reusable_input_items = field(request, "input").array().size();
+    // Before anything enters context (a provider that retains request state appends
+    // its state item below): a start binding the auth store could not give is read
+    // now, before the adapter reads the store itself, so its failure is an auth-store
+    // refusal; and the request's final model must resolve against it, so a refused
+    // attempt leaves nothing behind.
+    std::optional<Value> start_binding;
+    if (profiles_) {
+      const RawAuthParent parent{assembly.reference()};
+      auto binding = session_binding(*profiles_, &parent);
+      if (!binding.has_value()) {
+        if (notice || display)
+          (notice ? notice : display)("\n[" + binding.error().message() + "]\n");
+        throw Error{ErrorCode::provider_auth};
+      }
+      start_binding = std::move(binding).value();
+      const auto model = string_field(request, "model");
+      if (const auto resolved = resolve_profile_for(*profiles_, model, *start_binding);
+          !resolved.has_value()) {
+        if (notice || display)
+          (notice ? notice : display)("\n[provider profile refused for model " + model +
+                                      ": " + resolved.error().message() + "]\n");
+        throw Error{ErrorCode::invalid_range};
+      }
+    }
     if (!operational_state.empty()) {
       auto state_item =
           Value::object({{"role", Value{"developer"}},
@@ -4504,6 +4529,22 @@ Value CodingEngine::request(Value options) {
     };
     request_group.began = true;
     provider_.begin_request_group(request, &preparation_context);
+    // The request's profile: its final model and this group's binding (design §15.4).
+    // Nothing reads the behavioural rows yet. Shared storage; fixed for every attempt.
+    Value profile_metadata;
+    if (profiles_ && start_binding) {
+      const auto *group = provider_.group_binding();
+      const auto model = string_field(request, "model");
+      const auto resolved =
+          resolve_profile_for(*profiles_, model, group ? *group : *start_binding);
+      if (!resolved.has_value()) {
+        if (notice || display)
+          (notice ? notice : display)("\n[provider profile refused for model " + model +
+                                      ": " + resolved.error().message() + "]\n");
+        throw Error{ErrorCode::invalid_range};
+      }
+      profile_metadata = resolved.value()->record;
+    }
     prepare_request_cache(request,
                           {cache_mode, provider_.supports_prompt_cache_policy(),
                            provider_.provider_identity(), reusable_input_items});
@@ -4615,19 +4656,19 @@ Value CodingEngine::request(Value options) {
                       std::holds_alternative<std::string>(instructions->value()))
                     observations_->doctrine(instructions->string(),
                                             admission.admission.invocation, attempt);
-                  log_.record(
-                      ApplicationChannel::log,
-                      Value::object(
-                          {{"label", Value{"provider.request"}},
-                           {"metadata",
-                            Value::object(
-                                {{"attempt", Value{hex_identity(attempt.bytes())}},
-                                 {"revision", Value{origin}},
-                                 {"generation",
-                                  Value{hex_identity(generation_.bytes())}},
-                                 {"input_binding", Value{"attempt-invocation-v1"}},
-                                 {"retry_group", Value{retry_group}},
-                                 {"ordinal", Value{Number{ordinal}}}})}}));
+                  Value::Object request_metadata{
+                      {"attempt", Value{hex_identity(attempt.bytes())}},
+                      {"revision", Value{origin}},
+                      {"generation", Value{hex_identity(generation_.bytes())}},
+                      {"input_binding", Value{"attempt-invocation-v1"}},
+                      {"retry_group", Value{retry_group}},
+                      {"ordinal", Value{Number{ordinal}}}};
+                  if (profile_metadata != Value{})
+                    request_metadata.emplace_back("profile", profile_metadata);
+                  log_.record(ApplicationChannel::log,
+                              Value::object(
+                                  {{"label", Value{"provider.request"}},
+                                   {"metadata", Value{std::move(request_metadata)}}}));
                   RawRegion transport{raw_regions::provider_transport, {.cpu = false}};
                   if (transport.enabled())
                     transport.linkage({raw_text(origin), attempt.bytes()});
@@ -5777,6 +5818,83 @@ void CodingEngine::effort(std::string value) {
       value != "max")
     throw Error{ErrorCode::invalid_range};
   effort_ = std::move(value);
+}
+std::string CodingEngine::definition_model() const {
+  const auto &configured = string_field(program_config_, "model");
+  return configured.empty() ? model_ : configured;
+}
+ProfileResult<void> CodingEngine::profiles(SessionProfiles profiles) {
+  if (!profiles.set)
+    return std::unexpected(ProfileError{"session", 0, 0, "profile", "no profile set"});
+  resolved_profiles_.clear();
+  const auto &pinned = profiles_.emplace(std::move(profiles));
+  if (!pinned.binding)
+    return {}; // deferred: the first provider request reads it
+  auto resolved = resolve_profile_for(pinned, definition_model(), *pinned.binding);
+  if (!resolved.has_value())
+    return std::unexpected(resolved.error());
+  return {};
+}
+ProfileResult<const CodingEngine::ResolvedProfile *>
+CodingEngine::resolve_profile_for(const SessionProfiles &profiles,
+                                  const std::string &model, const Value &binding,
+                                  RouteQuery *route) {
+  auto query = route_query(binding, model);
+  if (!query.has_value())
+    return std::unexpected(query.error());
+  if (route)
+    *route = query.value();
+  auto key = std::pair{model, binding_digest(query.value().query)};
+  if (const auto found = resolved_profiles_.find(key);
+      found != resolved_profiles_.end())
+    return &found->second;
+  const auto &layer = profiles.session_override;
+  auto resolved =
+      resolve_route(*profiles.set, query.value(), layer ? &*layer : nullptr);
+  if (!resolved.has_value())
+    return std::unexpected(resolved.error());
+  auto record = profile_request_record(resolved.value(), query.value());
+  return &resolved_profiles_
+              .emplace(std::move(key),
+                       ResolvedProfile{std::move(resolved).value(), std::move(record)})
+              .first->second;
+}
+// The start binding, or the deferred one read now; an auth-store failure is refused
+// as such, naming the store, never as a bare error code.
+ProfileResult<Value> CodingEngine::session_binding(SessionProfiles &profiles,
+                                                   const RawAuthParent *parent) {
+  if (const auto &bound = profiles.binding)
+    return *bound;
+  try {
+    if (!profiles.bind)
+      throw Error{ErrorCode::unsupported};
+    auto bound = profiles.bind(parent);
+    profiles.binding = bound;
+    profiles.deferral.clear();
+    return bound;
+  } catch (const Error &error) {
+    return std::unexpected(
+        ProfileError{profiles.auth_store.string(), 0, 0, "auth store",
+                     std::string{"the provider auth store could not be read ("} +
+                         error_name(error.code) + ", " + std::to_string(error.detail) +
+                         "); repair or remove it, or set BLACKBIRD_AUTH_HOME"});
+  }
+}
+ProfileResult<ProfileView>
+CodingEngine::effective_profile(const RawAuthParent *parent) {
+  if (!profiles_)
+    return ProfileView{};
+  auto &profiles = *profiles_;
+  auto binding = session_binding(profiles, parent);
+  if (!binding.has_value())
+    return std::unexpected(binding.error());
+  ProfileView view;
+  auto resolved =
+      resolve_profile_for(profiles, definition_model(), binding.value(), &view.route);
+  if (!resolved.has_value())
+    return std::unexpected(resolved.error());
+  view.profile = &resolved.value()->profile;
+  return view;
 }
 void CodingEngine::present(const Value &item) {
   std::string text;

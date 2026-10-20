@@ -1385,8 +1385,7 @@ ProfileResult<std::string> normalize_base_url(std::string_view url) {
 // Mirrors the main-coding route choice (src/main.cpp:466-545): OpenAI's ChatGPT route
 // and OpenRouter always send Responses (OpenRouter's descriptor says `chat`); native
 // Anthropic sends Messages; a registered route must be a Responses route.
-ProfileResult<ProfileQuery> profile_query(const Value &binding,
-                                          std::string_view model) {
+ProfileResult<RouteQuery> route_query(const Value &binding, std::string_view model) {
   const auto field = [&](std::string_view key) -> const std::string * {
     const auto *x = binding.find(key);
     return x ? std::get_if<std::string>(&x->value()) : nullptr;
@@ -1415,10 +1414,38 @@ ProfileResult<ProfileQuery> profile_query(const Value &binding,
                          "native Anthropic Messages"});
   std::string fault;
   auto normal = normal_url(*field("base_url"), fault);
-  if (!normal)
-    return std::unexpected(ProfileError{"binding", 0, 0, "binding.base_url", fault});
+  if (!normal) {
+    // The route ran before profiles existed; it keeps running, under conservative.
+    query.base_url = *field("base_url");
+    const auto https = fault.ends_with(" is not a well-formed https URL");
+    return RouteQuery{std::move(query),
+                      "binding.base_url: " + fault +
+                          "; the conservative profile applies",
+                      https ? "base_url_malformed" : "base_url_not_https"};
+  }
   query.base_url = std::move(*normal);
-  return query;
+  return RouteQuery{std::move(query), {}, {}};
+}
+
+ProfileResult<ProfileQuery> profile_query(const Value &binding,
+                                          std::string_view model) {
+  auto route = route_query(binding, model);
+  if (!route.has_value())
+    return std::unexpected(route.error());
+  if (!route.value().fallback.empty()) {
+    std::string fault;
+    (void)normal_url(route.value().query.base_url, fault);
+    return std::unexpected(ProfileError{"binding", 0, 0, "binding.base_url", fault});
+  }
+  return std::move(route).value().query;
+}
+
+std::string binding_digest(const ProfileQuery &query) {
+  return digest_text("blackbird.provider-profile-binding/1",
+                     Value::object({{"provider", Value{query.provider}},
+                                    {"protocol", Value{query.protocol}},
+                                    {"base_url", Value{query.base_url}},
+                                    {"account_kind", Value{query.account_kind}}}));
 }
 
 ProfileResult<ProfileSet> load_profile_set(const ProfileDirectories &directories) {
@@ -1590,6 +1617,82 @@ ProfileResult<const ProfileFile *> select_profile(const ProfileSet &set,
   return best ? best : &set.conservative;
 }
 
+namespace {
+ProfileResult<EffectiveProfile> resolve_chosen(const ProfileSet &set,
+                                               const ProfileFile &chosen,
+                                               const Value *session_override) {
+  EffectiveProfile result;
+  result.id = chosen.layer.find("id")->string();
+  result.revision = revision_of(chosen.layer);
+  result.profile = set.conservative.layer;
+  result.layers.push_back(label("shipped", set.conservative.layer));
+  if (const auto *base = override_for(set, conservative_profile_id)) {
+    result.profile = merge_override(result.profile, base->layer);
+    result.layers.push_back(label("operator", base->layer));
+  }
+  if (&chosen != &set.conservative) {
+    result.profile = merge_override(result.profile, chosen.layer);
+    result.layers.push_back(label("shipped", chosen.layer));
+    if (const auto *own = override_for(set, result.id)) {
+      result.profile = merge_override(result.profile, own->layer);
+      result.layers.push_back(label("operator", own->layer));
+    }
+  }
+  if (session_override) {
+    auto layer = validate_profile(
+        {*session_override, ProfileLayerKind::override_layer, "session"});
+    if (!layer.has_value())
+      return std::unexpected(layer.error());
+    const auto &target = layer.value().find("target")->string();
+    if (target != result.id)
+      return std::unexpected(ProfileError{
+          "session", 0, 0, "target",
+          "`" + target + "` is not the selected profile `" + result.id + "`"});
+    result.profile = merge_override(result.profile, layer.value());
+    if (auto ok = validate_effective(result.profile, "session"); !ok.has_value())
+      return std::unexpected(ok.error());
+    result.layers.push_back(label("session", layer.value()));
+  }
+  result.digest = profile_digest(result.profile);
+  return result;
+}
+// The behavioural leaves in schema order, as `missing` walks them.
+void leaves(const Node &node, const Value &v, const std::string &path,
+            std::vector<ProfileLeaf> &out) {
+  const auto *fields = std::get_if<Value::Object>(&v.value());
+  if (!fields)
+    return;
+  const auto *b = lookup(*fields, "basis");
+  const auto basis_of = [](const Value *table, std::string_view key) {
+    const auto *x = table ? table->find(key) : nullptr;
+    return x && std::holds_alternative<std::string>(x->value()) ? x->string()
+                                                                : std::string{};
+  };
+  for (const auto &field : node.fields) {
+    const auto *x = lookup(*fields, field.name);
+    if (!x || (path.empty() && !behavioural(field.name)))
+      continue;
+    const auto where = join(path, field.name);
+    const auto &child = *field.node;
+    if (child.shape == Shape::record) {
+      leaves(child, *x, where, out);
+    } else if (child.shape == Shape::list && child.element->shape == Shape::record) {
+      if (const auto *items = std::get_if<Value::Array>(&x->value()))
+        for (std::size_t i = 0; i < items->size(); ++i)
+          leaves(*child.element, (*items)[i], indexed(where, i), out);
+    } else if (child.shape == Shape::map && child.basis) {
+      const auto *covered = x->find("basis");
+      if (const auto *entries = std::get_if<Value::Object>(&x->value()))
+        for (const auto &[key, entry] : *entries)
+          if (key != "basis")
+            out.push_back({join(where, key), entry, basis_of(covered, key)});
+    } else {
+      out.push_back({where, *x, basis_of(b, field.name)});
+    }
+  }
+}
+} // namespace
+
 ProfileResult<EffectiveProfile> resolve_profile(const ProfileSet &set,
                                                 const ProfileQuery &query,
                                                 const Value *session_override) {
@@ -1597,43 +1700,137 @@ ProfileResult<EffectiveProfile> resolve_profile(const ProfileSet &set,
     auto selected = select_profile(set, query);
     if (!selected.has_value())
       return std::unexpected(selected.error());
-    const auto &chosen = *selected.value();
-    EffectiveProfile result;
-    result.id = chosen.layer.find("id")->string();
-    result.revision = revision_of(chosen.layer);
-    result.profile = set.conservative.layer;
-    result.layers.push_back(label("shipped", set.conservative.layer));
-    if (const auto *base = override_for(set, conservative_profile_id)) {
-      result.profile = merge_override(result.profile, base->layer);
-      result.layers.push_back(label("operator", base->layer));
-    }
-    if (&chosen != &set.conservative) {
-      result.profile = merge_override(result.profile, chosen.layer);
-      result.layers.push_back(label("shipped", chosen.layer));
-      if (const auto *own = override_for(set, result.id)) {
-        result.profile = merge_override(result.profile, own->layer);
-        result.layers.push_back(label("operator", own->layer));
-      }
-    }
-    if (session_override) {
-      auto layer = validate_profile(
-          {*session_override, ProfileLayerKind::override_layer, "session"});
-      if (!layer.has_value())
-        return std::unexpected(layer.error());
-      const auto &target = layer.value().find("target")->string();
-      if (target != result.id)
-        return std::unexpected(ProfileError{
-            "session", 0, 0, "target",
-            "`" + target + "` is not the selected profile `" + result.id + "`"});
-      result.profile = merge_override(result.profile, layer.value());
-      if (auto ok = validate_effective(result.profile, "session"); !ok.has_value())
-        return std::unexpected(ok.error());
-      result.layers.push_back(label("session", layer.value()));
-    }
-    result.digest = profile_digest(result.profile);
-    return result;
+    return resolve_chosen(set, *selected.value(), session_override);
   } catch (const std::bad_alloc &) {
     return std::unexpected(ProfileError{"session", 0, 0, "profile", "out of memory"});
   }
+}
+
+ProfileResult<EffectiveProfile> resolve_route(const ProfileSet &set,
+                                              const RouteQuery &route,
+                                              const Value *session_override) {
+  if (route.fallback.empty())
+    return resolve_profile(set, route.query, session_override);
+  try {
+    auto resolved = resolve_chosen(set, set.conservative, session_override);
+    if (resolved.has_value())
+      resolved.value().fallback = route.fallback;
+    return resolved;
+  } catch (const std::bad_alloc &) {
+    return std::unexpected(ProfileError{"session", 0, 0, "profile", "out of memory"});
+  }
+}
+
+ProfileResult<EffectiveProfile> resolve_binding(const ProfileSet &set,
+                                                const Value &binding,
+                                                std::string_view model,
+                                                const Value *session_override) {
+  auto route = route_query(binding, model);
+  if (!route.has_value())
+    return std::unexpected(route.error());
+  return resolve_route(set, route.value(), session_override);
+}
+
+ProfileResult<std::vector<EffectiveProfile>> effective_profiles(const ProfileSet &set) {
+  try {
+    std::vector<EffectiveProfile> out;
+    out.reserve(set.shipped.size() + 1);
+    const auto add = [&](const ProfileFile &file) -> ProfileResult<void> {
+      auto resolved = resolve_chosen(set, file, nullptr);
+      if (!resolved.has_value())
+        return std::unexpected(resolved.error());
+      out.push_back(std::move(resolved).value());
+      return {};
+    };
+    if (auto ok = add(set.conservative); !ok.has_value())
+      return std::unexpected(ok.error());
+    for (const auto &file : set.shipped)
+      if (auto ok = add(file); !ok.has_value())
+        return std::unexpected(ok.error());
+    return out;
+  } catch (const std::bad_alloc &) {
+    return std::unexpected(ProfileError{"set", 0, 0, "profile", "out of memory"});
+  }
+}
+
+std::string profile_content_digest(const Value &layer) {
+  return digest_text("blackbird.provider-profile-content/1", layer);
+}
+
+std::vector<ProfileLeaf> profile_leaves(const Value &profile) {
+  std::vector<ProfileLeaf> out;
+  leaves(node::shipped_root, profile, "", out);
+  return out;
+}
+
+Value profile_set_record(const ProfileSet &set, const ProfileDirectories &directories) {
+  Value::Array layers;
+  const auto add = [&](const ProfileFile &file, std::string_view layer) {
+    Value::Object entry{{"id", *file.layer.find("id")},
+                        {"revision", Value{Number{revision_of(file.layer)}}},
+                        {"layer", Value{std::string{layer}}}};
+    if (const auto *target = file.layer.find("target"))
+      entry.emplace_back("target", *target);
+    entry.emplace_back("digest", Value{profile_digest(file.layer)});
+    entry.emplace_back("content_digest", Value{profile_content_digest(file.layer)});
+    entry.emplace_back("body", file.layer);
+    layers.push_back(Value{std::move(entry)});
+  };
+  add(set.conservative, "shipped");
+  for (const auto &file : set.shipped)
+    add(file, "shipped");
+  for (const auto &file : set.operator_overrides)
+    add(file, "operator");
+  return Value::object(
+      {{"label", Value{std::string{profile_set_record_label}}},
+       {"digest", Value{set.digest}},
+       {"content_digest", Value{set.content_digest}},
+       {"shipped_directory", Value{directories.shipped.string()}},
+       {"operator_directory",
+        Value{directories.operator_overrides ? directories.operator_overrides->string()
+                                             : std::string{}}},
+       {"layers", Value{std::move(layers)}}});
+}
+
+Value profile_request_record(const EffectiveProfile &profile, const RouteQuery &route) {
+  Value::Array layers;
+  layers.reserve(profile.layers.size());
+  for (const auto &layer : profile.layers)
+    layers.emplace_back(layer);
+  Value::Object out{{"id", Value{profile.id}},
+                    {"revision", Value{Number{profile.revision}}},
+                    {"digest", Value{profile.digest}},
+                    {"layers", Value{std::move(layers)}},
+                    {"model", Value{route.query.model}},
+                    {"binding", Value{binding_digest(route.query)}}};
+  // Bounded per request: the reason code, at most 256 bytes of the URL (cut at a UTF-8
+  // boundary) and its full length. The set record keeps the full reason once.
+  if (!route.fallback_code.empty()) {
+    const auto &url = route.query.base_url;
+    std::size_t kept = std::min<std::size_t>(url.size(), 256);
+    while (kept > 0 && kept < url.size() &&
+           (static_cast<unsigned char>(url[kept]) & 0xC0U) == 0x80U)
+      --kept;
+    out.emplace_back("fallback",
+                     Value::object({{"code", Value{route.fallback_code}},
+                                    {"base_url", Value{url.substr(0, kept)}},
+                                    {"base_url_bytes", Value{Number{url.size()}}}}));
+  }
+  return Value{std::move(out)};
+}
+
+ProfileResult<std::optional<Value>> session_override(const Value::Array &programs) {
+  std::optional<Value> found;
+  for (const auto &packet : programs) {
+    const auto *label = packet.find("label");
+    if (!label || *label != Value{std::string{profile_override_record_label}})
+      continue;
+    const auto *layer = packet.find("override");
+    if (!layer)
+      return std::unexpected(ProfileError{std::string{profile_override_record_label}, 0,
+                                          0, "override", "required"});
+    found = *layer;
+  }
+  return found;
 }
 } // namespace blackbird

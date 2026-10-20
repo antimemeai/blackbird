@@ -26,9 +26,11 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <expected>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <poll.h>
 #include <stdexcept>
 #include <sys/random.h>
@@ -88,10 +90,148 @@ bool restart_handoff_pending(const RetainedState &root) {
       return true;
   return false;
 }
+// The directory /new made for its successor, recorded in this process: a refused
+// successor start removes exactly that directory, still empty, and nothing named only
+// by a command-line flag.
+std::filesystem::path successor_directory_created;
+// A refused start's own fresh directory: only the one this process made, only while it
+// is still an empty real directory (never a file or a symbolic link).
+void discard_created_directory(const std::filesystem::path &created,
+                               const std::filesystem::path &session) {
+  if (created.empty() || created.lexically_normal() != session.lexically_normal())
+    return;
+  std::error_code error;
+  if (std::filesystem::symlink_status(session, error).type() !=
+          std::filesystem::file_type::directory ||
+      error || !std::filesystem::is_empty(session, error) || error)
+    return;
+  std::filesystem::remove(session, error);
+}
+// The model the session's requests use when nothing overrides it per request: an
+// activated program-config model, else the session's launch model
+// (CodingEngine::definition_model, read before the engine exists).
+std::string definition_model_of(const Value::Array &programs,
+                                const std::string &launch_model) {
+  for (const auto &packet : programs) {
+    const auto *label = packet.find("label");
+    if (!label || *label != Value{"workflow-config-effective-v1"})
+      continue;
+    const auto *config = packet.find("program_config");
+    const auto *model = config ? config->find("model") : nullptr;
+    if (model && std::holds_alternative<std::string>(model->value()) &&
+        !model->string().empty())
+      return model->string();
+  }
+  return launch_model;
+}
 struct SessionSuccessorOutputs {
   std::vector<std::string> &next;
   std::vector<std::string> &fallback;
 };
+// The provider profile set a session start loads (docs/CONTEXT_LIFECYCLE.md §15.4):
+// BLACKBIRD_PROFILES or this generation's profiles, and the operator's overrides.
+struct LoadedProfiles {
+  std::shared_ptr<const ProfileSet> set;
+  ProfileDirectories directories;
+  // Set when BLACKBIRD_PROFILE_SET_DIGEST names another content digest.
+  std::string pin_refusal;
+};
+std::expected<LoadedProfiles, std::string> load_profiles(const char *home) {
+  LoadedProfiles loaded;
+  loaded.directories.shipped = BLACKBIRD_PROFILE_DIRECTORY;
+  loaded.directories.operator_overrides =
+      std::filesystem::path{home} / ".local/share/blackbird/profiles";
+  if (const char *chosen = std::getenv("BLACKBIRD_PROFILES")) {
+    if (*chosen == '\0')
+      return std::unexpected(
+          "Provider profiles refused: BLACKBIRD_PROFILES is set but empty. Name a "
+          "profile directory, or unset it to use this Blackbird's profiles; no session "
+          "was opened.\n");
+    loaded.directories.shipped = std::filesystem::absolute(chosen).lexically_normal();
+  }
+  auto set = load_profile_set(loaded.directories);
+  if (!set.has_value())
+    return std::unexpected(
+        "Provider profiles refused: " + set.error().message() +
+        "\nShipped profiles: " + loaded.directories.shipped.string() +
+        "; operator overrides: " + loaded.directories.operator_overrides->string() +
+        ". Set BLACKBIRD_PROFILES to a profile directory, or reinstall Blackbird; no "
+        "session was opened.\n");
+  loaded.set = std::make_shared<const ProfileSet>(std::move(set).value());
+  if (const char *pin = std::getenv("BLACKBIRD_PROFILE_SET_DIGEST")) {
+    if (*pin == '\0')
+      loaded.pin_refusal = "Provider profiles refused: BLACKBIRD_PROFILE_SET_DIGEST is "
+                           "set but empty; no session was opened.\n";
+    else if (loaded.set->content_digest != pin)
+      loaded.pin_refusal =
+          "Provider profiles refused: the loaded set's content digest " +
+          loaded.set->content_digest + " differs from BLACKBIRD_PROFILE_SET_DIGEST " +
+          pin + " (shipped profiles " + loaded.directories.shipped.string() +
+          "); no session was opened.\n";
+  }
+  return loaded;
+}
+template <class T> T unwrap_profile(ProfileResult<T> result) {
+  if (!result.has_value())
+    throw std::runtime_error{"provider profile: " + result.error().message()};
+  return std::move(result).value();
+}
+// The set lines shared by /profile and --profile-digests. `pin` names exactly what
+// BLACKBIRD_PROFILE_SET_DIGEST must equal: the content digest.
+std::string profile_set_lines(const LoadedProfiles &loaded) {
+  const auto &set = *loaded.set;
+  return "set-digest " + set.digest + "\nset-content-digest " + set.content_digest +
+         "\npin " + set.content_digest + "\nset-shipped " +
+         loaded.directories.shipped.string() + "\nset-operator " +
+         loaded.directories.operator_overrides.value_or(std::filesystem::path{})
+             .string() +
+         " (" + std::to_string(set.operator_overrides.size()) + " overrides)\n";
+}
+std::string joined_layers(const EffectiveProfile &profile, std::string_view separator) {
+  std::string out;
+  for (const auto &layer : profile.layers)
+    out += (out.empty() ? "" : std::string{separator}) + layer;
+  return out;
+}
+// The route binding a profile query reads, as the provider would bind it: one
+// auth-store open. A store that cannot be read defers it to the first provider request
+// (owner decision 2026-10-20), so a session that never calls a provider runs as before.
+struct StartBinding {
+  std::optional<Value> binding;
+  std::string deferral;
+};
+Value profile_binding(std::string_view provider, const RawAuthParent *parent) {
+  if (provider == "openai")
+    return openai_profile_binding(OpenAiConfig{}, parent);
+  return ProviderAuth{}.binding(provider, parent);
+}
+StartBinding start_binding(std::string_view provider, const RawAuthParent *parent) {
+  try {
+    return {profile_binding(provider, parent), {}};
+  } catch (const Error &error) {
+    return {std::nullopt, std::string{"the auth store could not be read at start ("} +
+                              error_name(error.code) + ", " +
+                              std::to_string(error.detail) + ")"};
+  }
+}
+std::string describe_profile(const LoadedProfiles &loaded,
+                             const EffectiveProfile &profile, const RouteQuery &route) {
+  const auto &query = route.query;
+  std::string out = "profile " + profile.id + " revision " +
+                    std::to_string(profile.revision) + " digest " + profile.digest +
+                    " (behavioural; each provider.request records it)\nlayers " +
+                    joined_layers(profile, " < ") +
+                    "\nquery provider=" + query.provider +
+                    " protocol=" + query.protocol + " base_url=" + query.base_url +
+                    " account_kind=" + query.account_kind + " model=" + query.model +
+                    "\nbinding " + binding_digest(query) + "\n" +
+                    (profile.fallback.empty() ? std::string{}
+                                              : "fallback " + profile.fallback + "\n");
+  for (const auto &leaf : profile_leaves(profile.profile))
+    out += "  " + leaf.path + " = " + unwrap(format_value(leaf.value)) + " · basis " +
+           (leaf.basis.empty() ? std::string{"none"} : leaf.basis) + "\n";
+  return out + profile_set_lines(loaded);
+}
 } // namespace
 int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                 RawSuccessorHandoff *selected_handoff = nullptr,
@@ -111,7 +251,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     std::string model = "gpt-6.1-sol", once, seed_path, backstop_path, station_path;
     Value backstop_mission;
     bool one = false, inspect = false, plain = false, rebuild_session = false,
-         expire_diagnostics = false, recover_unknown_effects = false;
+         expire_diagnostics = false, recover_unknown_effects = false,
+         profile_digests = false;
     std::string effort = "medium";
     std::string provider_name = "openai";
     bool provider_option = false, session_option = false;
@@ -133,13 +274,14 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                      "[--plain] [--list-sessions [ROOT]] [--seed-session JSON] "
                      "[--backstop MISSION_JSON (requires --once)] "
                      "[--resume-continue|--resume-once] [--rebuild-session] "
-                     "[--expire-diagnostics] [--recover-unknown-effects]\n"
+                     "[--expire-diagnostics] [--recover-unknown-effects] "
+                     "[--profile-digests]\n"
                      "Without --session, start a fresh conversation. Reopen an "
                      "existing conversation with --session DIRECTORY.\nInteractive: "
                      "/context, "
                      "/originals, /restore "
                      "ENTRY, /lua CODE, /model NAME, /effort LEVEL, /workflow FILE, "
-                     "/session, /new, "
+                     "/session, /profile, /new, "
                      "/restart NOTE, /paste (until /send), /quit or /exit\n";
         return 0;
       }
@@ -157,6 +299,10 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       }
       if (arg == "--expire-diagnostics") {
         expire_diagnostics = true;
+        continue;
+      }
+      if (arg == "--profile-digests") {
+        profile_digests = true;
         continue;
       }
       if (arg == "--rebuild-session") {
@@ -226,13 +372,60 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       std::cout << unwrap(dump_json(list_sessions(discovery_root))) << '\n';
       return 0;
     }
-    if (!session_option) {
-      if (inspect || expire_diagnostics || rebuild_session || recover_unknown_effects ||
-          resume_requested) {
-        std::cerr << "Select an existing session with --session DIRECTORY for "
-                     "inspection, recovery, continuation or maintenance.\n";
+    // Usage errors come before any profile load or route check.
+    if (!session_option && (inspect || expire_diagnostics || rebuild_session ||
+                            recover_unknown_effects || resume_requested)) {
+      std::cerr << "Select an existing session with --session DIRECTORY for "
+                   "inspection, recovery, continuation or maintenance.\n";
+      return 1;
+    }
+    // Provider profiles load once per session start, before any session file is
+    // created or opened, so a refusal writes nothing. Inspection and diagnostic
+    // expiry make no provider request and need none. A refused successor start
+    // removes the still-empty directory its predecessor's /new made for it.
+    const auto created_for_this_start = std::exchange(successor_directory_created, {});
+    const auto refuse_start = [&](const std::string &text) {
+      std::cerr << text;
+      if (switched_session && session_option)
+        discard_created_directory(created_for_this_start, session);
+      return 1;
+    };
+    LoadedProfiles profiles;
+    if (profile_digests || (!inspect && !expire_diagnostics)) {
+      auto loaded = load_profiles(home);
+      if (!loaded.has_value())
+        return refuse_start(loaded.error());
+      profiles = std::move(loaded).value();
+    }
+    if (profile_digests) {
+      std::cout << profile_set_lines(profiles);
+      for (const auto &effective : unwrap_profile(effective_profiles(*profiles.set)))
+        std::cout << "effective " << effective.id << " revision " << effective.revision
+                  << " digest " << effective.digest << " layers "
+                  << joined_layers(effective, ",") << '\n';
+      if (!profiles.pin_refusal.empty()) {
+        std::cerr << profiles.pin_refusal;
         return 1;
       }
+      return 0;
+    }
+    if (!profiles.pin_refusal.empty())
+      return refuse_start(profiles.pin_refusal);
+    // A new session resolves its route now, before mkdtemp or RetainedState::create.
+    // An existing one resolves after its settings are read, before settings writes.
+    std::optional<StartBinding> early_binding;
+    if (profiles.set && !inspect && !expire_diagnostics &&
+        (!session_option || !std::filesystem::exists(session / "audit"))) {
+      early_binding = start_binding(provider_name, nullptr);
+      if (early_binding->binding)
+        if (const auto resolved =
+                resolve_binding(*profiles.set, *early_binding->binding, model);
+            !resolved.has_value())
+          return refuse_start("Provider profile refused for " + provider_name +
+                              " model " + model + ": " + resolved.error().message() +
+                              "; no session was opened.\n");
+    }
+    if (!session_option) {
       std::filesystem::create_directories(session_root);
       auto directory_template = (session_root / "session-XXXXXX").string();
       if (::mkdtemp(directory_template.data()) == nullptr)
@@ -628,6 +821,46 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       warning("). Open an interactive harness to answer there.\n");
       throw Error{ErrorCode::unsupported};
     }
+    // The start route and model of an existing session, resolved before its first
+    // settings-dependent write; only recovery's own records (an unclean stop's
+    // abandonment records) can precede a refusal here. A new session was resolved
+    // before its directory existed. A binding the auth store cannot give is deferred.
+    const RawAuthParent profile_parent{session_capture.parent.value_or(RawEventRef{})};
+    auto begun = early_binding && settings.provider == provider_name
+                     ? std::move(*early_binding)
+                     : start_binding(settings.provider, &profile_parent);
+    SessionProfiles session_profiles;
+    session_profiles.set = profiles.set;
+    session_profiles.binding = std::move(begun.binding);
+    session_profiles.deferral = std::move(begun.deferral);
+    session_profiles.bind = [provider =
+                                 settings.provider](const RawAuthParent *parent) {
+      return profile_binding(provider, parent);
+    };
+    session_profiles.auth_store = ProviderAuth{}.directory() / "credentials.bbm";
+    {
+      auto layer = session_override(root->current_programs());
+      if (!layer.has_value()) {
+        warning("Provider profile refused: " + layer.error().message() + "\n");
+        throw Error{ErrorCode::invalid_range};
+      }
+      session_profiles.session_override = std::move(layer).value();
+      // The model the engine will pin: an activated program-config model wins.
+      const auto pinned_model =
+          definition_model_of(root->current_programs(), settings.model);
+      const auto resolved =
+          session_profiles.binding
+              ? resolve_binding(*profiles.set, *session_profiles.binding, pinned_model,
+                                session_profiles.session_override
+                                    ? &*session_profiles.session_override
+                                    : nullptr)
+              : ProfileResult<EffectiveProfile>{};
+      if (!resolved.has_value()) {
+        warning("Provider profile refused for " + settings.provider + " model " +
+                pinned_model + ": " + resolved.error().message() + "\n");
+        throw Error{ErrorCode::invalid_range};
+      }
+    }
     // Before this point the open writes only what recovery requires: the
     // abandonment records of recover_coding_session after an unclean stop, and a
     // validated --seed-session for a new session. Every option- and
@@ -678,6 +911,30 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                                              : std::filesystem::absolute(station_path)
                                                    .lexically_normal()
                                                    .string()}}}));
+    // The loaded set, latest wins; an unchanged set (a clean reopen) adds nothing.
+    {
+      auto record = profile_set_record(*profiles.set, profiles.directories);
+      // The start route: its binding digest, a conservative fallback's reason, or why
+      // reading it was deferred.
+      Value::Object start;
+      if (session_profiles.binding) {
+        if (const auto route = route_query(*session_profiles.binding, settings.model);
+            route.has_value()) {
+          start.emplace_back("binding", Value{binding_digest(route.value().query)});
+          if (!route.value().fallback.empty())
+            start.emplace_back("fallback", Value{route.value().fallback});
+        }
+      } else
+        start.emplace_back("deferral", Value{session_profiles.deferral});
+      record.object().emplace_back("start_route", Value{std::move(start)});
+      session_profiles.set_record = record;
+      bool recorded = false;
+      for (const auto &program : root->current_programs())
+        if (string_field(program, "label") == profile_set_record_label)
+          recorded = program == record;
+      if (!recorded)
+        log.record(ApplicationChannel::program, std::move(record));
+    }
     context.finish_open(
         RawContextOrigin{session_capture.parent.value_or(RawEventRef{})});
     session_store.save(settings, &session_capture);
@@ -711,6 +968,11 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     } else
       provider = std::make_unique<OpenAiCodingProvider>();
     CodingEngine engine{log, context, *provider, model};
+    if (const auto pinned = engine.profiles(session_profiles); !pinned.has_value()) {
+      warning("Provider profile refused for model " + engine.definition_model() + ": " +
+              pinned.error().message() + "\n");
+      throw Error{ErrorCode::invalid_range};
+    }
     if (engine.uncontained_command_custody())
       warning("Prior command custody remains unknown; restart and automatic "
               "backstop stay fenced. No old PID adopted or effect replayed.\n");
@@ -942,7 +1204,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
           dispatch.run([&] {
             if (session_store.settings().effort_pending &&
                 !prompt.starts_with("/effort ") && !prompt.starts_with("/model ") &&
-                prompt != "/session" && prompt != "/help" && prompt != "/context") {
+                prompt != "/session" && prompt != "/help" && prompt != "/context" &&
+                prompt != "/profile") {
               ask_effort(session_store.settings(),
                          route_efforts(session_store.settings(), command_context));
               return;
@@ -1170,6 +1433,20 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                          Value{session_store.settings().effort_pending}},
                         {"workflow", Value{workflow.string()}}}))) +
                    "\n");
+            } else if (prompt == "/profile") {
+              raw_main_branch(dispatch, 42);
+              // A refusal is shown, as the next request would show it; the session
+              // continues.
+              const RawAuthParent command_parent{
+                  command_context.parent.value_or(RawEventRef{})};
+              const auto view = engine.effective_profile(&command_parent);
+              if (!view.has_value())
+                emit("Provider profile refused for model " + engine.definition_model() +
+                     ": " + view.error().message() + "\n" +
+                     profile_set_lines(profiles));
+              else
+                emit(describe_profile(profiles, *view.value().profile,
+                                      view.value().route));
             } else if (prompt == "/name" || prompt.starts_with("/name ")) {
               raw_main_branch(dispatch, 22);
               auto candidate = session_store.settings();
@@ -1262,6 +1539,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                                          template_credit);
                 raw_restart_directory(selection, directory_template);
                 const std::filesystem::path directory{directory_template};
+                successor_directory_created = directory;
                 handoff.select(selection);
                 const auto directory_text = raw_restart_path(selection, directory);
                 const auto workflow_text = raw_restart_path(selection, workflow);
@@ -1349,6 +1627,18 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
               auto candidate = session_store.settings();
               candidate.model = prompt.substr(7);
               const auto levels = prepare_route(candidate, command_context);
+              // A model the profiles cannot resolve is refused before it is saved.
+              if (const auto *pinned = engine.session_profiles();
+                  pinned && pinned->binding)
+                if (const auto resolved = resolve_binding(
+                        *pinned->set, *pinned->binding, candidate.model,
+                        pinned->session_override ? &*pinned->session_override
+                                                 : nullptr);
+                    !resolved.has_value()) {
+                  emit("Provider profile refused for model " + candidate.model + ": " +
+                       resolved.error().message() + "\n");
+                  throw Error{ErrorCode::invalid_range};
+                }
               session_store.save(candidate, &command_context);
               engine.model(candidate.model);
               model = candidate.model;

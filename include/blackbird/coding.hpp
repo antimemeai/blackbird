@@ -6,6 +6,7 @@
 #include "blackbird/observations.hpp"
 #include "blackbird/openai.hpp"
 #include "blackbird/participants.hpp"
+#include "blackbird/provider_profile.hpp"
 #include "blackbird/raw_program.hpp"
 #include "blackbird/session.hpp"
 #include "blackbird/tools.hpp"
@@ -35,6 +36,9 @@ public:
   virtual bool supports_prompt_cache_key() const noexcept { return false; }
   // Signed native histories must replay operational input at its original place.
   virtual bool retain_request_state() const noexcept { return false; }
+  // The binding of the open request group, for its profile record; nullptr outside a
+  // group or for an adapter that binds no route (test doubles).
+  virtual const Value *group_binding() const noexcept { return nullptr; }
   virtual Value respond(const Value &request,
                         const std::function<void(std::string_view)> &capture) = 0;
   virtual Value respond(const Value &request,
@@ -64,6 +68,9 @@ public:
                 const RawProviderOwner *) override;
   Value respond(const Value &, const std::function<void(std::string_view)> &,
                 const RawProviderOwner *, const RawAdapterContext *) override;
+  const Value *group_binding() const noexcept override {
+    return request_binding_ ? &*request_binding_ : nullptr;
+  }
 
 private:
   OpenAiConfig config_;
@@ -75,6 +82,28 @@ enum class RecoveryMode { provider_only, acknowledge_local_unknowns };
 void recover_coding_session(RetainedState &root,
                             RecoveryMode mode = RecoveryMode::provider_only,
                             const RawAdapterContext *context = nullptr);
+// The provider profiles a session loaded at its start (docs/CONTEXT_LIFECYCLE.md
+// §15.4). Files are read only then (owner decision 2026-10-20).
+struct SessionProfiles {
+  std::shared_ptr<const ProfileSet> set;
+  // The route binding read at session start. Absent when the auth store could not be
+  // read then (`deferral` says why): bind() reads it at the first provider request,
+  // whose failure is reported as an auth-store refusal naming the store.
+  std::optional<Value> binding;
+  std::string deferral;
+  // Traced under the caller's raw parent: the request's assembly phase, or /profile's
+  // command.
+  std::function<Value(const RawAuthParent *)> bind;
+  std::filesystem::path auth_store;
+  std::optional<Value> session_override;
+  // provider-profile-set-v1 as the session recorded it; the backstop records it too.
+  Value set_record;
+};
+// The profile in force for one (model, binding) pair, and the route it resolved from.
+struct ProfileView {
+  const EffectiveProfile *profile = nullptr;
+  RouteQuery route;
+};
 struct TurnInput {
   std::string_view prompt;
   std::string_view program;
@@ -105,6 +134,20 @@ public:
   TaskStore &tasks() noexcept { return tasks_; }
   ParticipantObservationReader participant_observer() const;
   void model(std::string name) { model_ = std::move(name); }
+  // Pins the session's profiles. Each provider.request resolves its profile from its
+  // final model (after request options) and its request group's binding, cached per
+  // (model, binding digest); the set is never reread. When the start binding was read,
+  // the definition-level model is resolved now, so a refusal is immediate. An engine
+  // without profiles records none.
+  ProfileResult<void> profiles(SessionProfiles profiles);
+  const SessionProfiles *session_profiles() const noexcept {
+    return profiles_ ? &*profiles_ : nullptr;
+  }
+  // The profile for the definition-level model and the session's binding (reading a
+  // deferred binding now), as /profile shows it; a null profile without profiles.
+  ProfileResult<ProfileView> effective_profile(const RawAuthParent *parent = nullptr);
+  // The program config's model, else the launch model.
+  std::string definition_model() const;
   std::function<void(std::string_view)> display;
   std::function<void(std::string_view)> diagnostic;
   std::function<void(std::string_view)> notice;
@@ -165,6 +208,17 @@ private:
   CodingProvider &provider_;
   std::string model_;
   std::string effort_ = "medium";
+  std::optional<SessionProfiles> profiles_;
+  struct ResolvedProfile {
+    EffectiveProfile profile;
+    Value record;
+  };
+  std::map<std::pair<std::string, std::string>, ResolvedProfile> resolved_profiles_;
+  ProfileResult<const ResolvedProfile *>
+  resolve_profile_for(const SessionProfiles &profiles, const std::string &model,
+                      const Value &binding, RouteQuery *route = nullptr);
+  static ProfileResult<Value> session_binding(SessionProfiles &profiles,
+                                              const RawAuthParent *parent);
   Value last_request_bytes_, usage_;
   // Calls already unanswered at workflow admission. Repair never closes calls
   // introduced by the currently running workflow.

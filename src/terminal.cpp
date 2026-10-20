@@ -79,6 +79,8 @@ const std::array builtin_commands{
     ChatCommand{"/checkpoint", "", "Save session state and retry maintenance",
                 "Session"},
     ChatCommand{"/stats", "", "Context bytes and observed provider usage", "Session"},
+    ChatCommand{"/profile", "", "Provider profile in force: layers, basis, digests",
+                "Session"},
     ChatCommand{"/tasks",
                 "[add TITLE | sub ID TITLE | done ID | block ID REASON | rename ID "
                 "TITLE | read JSON | apply JSON]",

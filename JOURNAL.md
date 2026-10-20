@@ -12170,3 +12170,34 @@ after SIGTERM, and marks its child so the session restores default SIGINT and SI
 on the old code. They pass on Mac and on Linux debug and ASan.
 
 **Review.** One review and one recheck. The notes are in `context/clm-rd7-notes/S0b*.md`.
+
+## 2026-10-20 — P1b: provider profiles wired into sessions and requests
+
+P1b is a serial-lane unit, on branch `work/clm-rd7`.
+
+**Loading.** Profiles load once at session start, before any write. They come from the shipped directory or
+`BLACKBIRD_PROFILES`, with operator overrides from `~/.local/share/blackbird/profiles`. They never reload
+mid-session; that is an owner decision, stricter than the plan text.
+
+**Records.**
+- The loaded set is recorded as the latest-wins program record `provider-profile-set-v1`.
+- Every `provider.request` records `profile {id, revision, digest, layers, model, binding}`. That is the
+  behavioural digest of the profile its own final model and actual request-group binding resolved to.
+
+**Refusals and pinning.**
+- A missing or invalid set refuses startup visibly, before any session directory is created.
+- `BLACKBIRD_PROFILE_SET_DIGEST` pins a run to the content digest.
+- `/profile` and `--profile-digests` show the effective profile, its basis and the digests.
+
+**Fallbacks.**
+- Registered routes whose URL cannot be normalised run under conservative, with the reason recorded.
+- An unreadable auth store defers resolution to the first provider request, which fails naming the store.
+  Local workflows run as before.
+
+**Checks.** An installed release build, the source build and Linux debug and ASan all agree on every digest.
+
+**Review.** One review and one recheck. `tui_retained_result` failed once in the first gate with r5n's
+intermittent message, with no overlap and a load of 7. It passed alone 3/3 and in the rerun gate; this is
+recorded on r5n.
+
+Integration proposal 1 follows: S0, S0b, P1a, P1b and the a1v branch's units.

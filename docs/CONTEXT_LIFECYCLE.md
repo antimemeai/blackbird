@@ -1461,7 +1461,15 @@ adapter); until then the schema has no such family and refuses the key.
   the set digest covers every profile's id, match and behavioural digest. A basis, source or revision
   edit changes neither, so it causes no rebind. The set's content digest covers every layer whole,
   provenance included, and identifies exactly what a trial ran.
-- Each request records `profile {id, revision, digest, layers}`.
+- Each request records `profile {id, revision, digest, layers, model, binding}`: `digest` is the
+  effective profile's behavioural digest, `model` the request's own and `binding` a digest of the
+  request group's route fields (provider, protocol, normalized base URL, account kind).
+- **Owner decisions 2026-10-20 (P1b).** Profile files load only at session start; each request
+  resolves from its final model and its request group's binding without rereading them. A
+  binding whose base URL cannot be normalized runs under `conservative` with the reason recorded,
+  rather than being refused. An unreadable auth store defers the binding to the first provider
+  request, which fails as an auth-store refusal naming the store. The plan's P1b section has the
+  detail.
 
 ### 15.5 Migration of hard-coded rules
 
