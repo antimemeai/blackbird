@@ -16,6 +16,7 @@
 #include "blackbird/raw_runtime.hpp"
 #include "blackbird/raw_storage.hpp"
 #include "blackbird/responses_provider.hpp"
+#include "blackbird/saved_state.hpp"
 #include "blackbird/sprite.hpp"
 #include "blackbird/station.hpp"
 #include "blackbird/terminal.hpp"
@@ -67,6 +68,15 @@ std::string safe(std::string_view text) {
       out += text[i];
   }
   return out;
+}
+// A pending session.restart: a recorded handoff whose successor (a --resume*
+// open) plays back the tail after the last snapshot.
+bool restart_handoff_pending(const RetainedState &root) {
+  for (const auto &program : root.current_programs())
+    if (string_field(program, "label") == "session.restart" &&
+        string_field(program, "state") == "pending")
+      return true;
+  return false;
 }
 struct SessionSuccessorOutputs {
   std::vector<std::string> &next;
@@ -290,6 +300,13 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
           unwrap(NativeJournalDirectory::open(session.string(), raw_storage_owner)));
     };
     std::unique_ptr<RetainedState> root;
+    // What this open observes after the saved boundary, before it writes. A
+    // clean stop leaves no frames, bytes or torn tail (S0).
+    struct ReopenSuffix {
+      std::uint64_t frames = 0, bytes = 0, torn_bytes = 0;
+      const char *snapshot = "absent";
+    };
+    std::optional<ReopenSuffix> reopen_suffix;
     if (std::filesystem::exists(path)) {
       if (!seed_path.empty())
         throw Error{ErrorCode::conflict};
@@ -325,6 +342,25 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         return 1;
       }
       root = unwrap(std::move(opened));
+      {
+        const auto end = root->cursor();
+        const auto available = root->recovery_report().available_end;
+        ReopenSuffix suffix;
+        suffix.torn_bytes = available > end.end_offset ? available - end.end_offset : 0;
+        if (const auto *saved = root->saved_state()) {
+          suffix.frames = end.sequence - saved->boundary.sequence;
+          suffix.bytes = end.end_offset - saved->boundary.end_offset;
+          suffix.snapshot = "accepted";
+        } else {
+          suffix.frames = end.sequence;
+          suffix.bytes = end.end_offset - journal_header_size;
+          for (const auto *slot : {"audit.state.0", "audit.state.1"})
+            if (std::filesystem::exists(session / slot))
+              suffix.snapshot = "rejected";
+        }
+        if (suffix.frames || suffix.bytes || suffix.torn_bytes)
+          reopen_suffix = suffix;
+      }
       if (!root->compact_recovery())
         warning("Session recovery: rebuilding from audit; uncertain operations "
                 "will not be retried.\n");
@@ -419,7 +455,67 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       return 0;
     }
     AuditLog log{*root};
-    ContextStore context{log};
+    ContextStore context{log, ContextStore::DeferOpenCheckpoint{}};
+    // Set once this process records a restart: that exit is a handoff.
+    std::atomic_bool restart_pending{false};
+    // Every clean return arms this guard with arm(); an exception after the
+    // open's first write marks it with orderly_error() (OrderlyErrors below).
+    // Declared before the engine, the participant and command shutdown and the
+    // UI, it runs after their teardown records, so the snapshot is the last
+    // journal write. It writes only into a quiescent journal with no unresolved
+    // attempt, and never after this process recorded a restart, which its
+    // successor plays back. A failed snapshot is reported and keeps the status.
+    struct CleanStop {
+      RetainedState &root;
+      ContextStore &context;
+      const RawAdapterContext &capture;
+      const std::atomic_bool &restart_recorded;
+      const decltype(warning) &report;
+      const int exceptions = std::uncaught_exceptions();
+      enum class Mode : std::uint8_t { none, clean, orderly_error } mode = Mode::none;
+      int arm(int status) noexcept {
+        mode = Mode::clean;
+        return status;
+      }
+      void orderly_error() noexcept { mode = Mode::orderly_error; }
+      ~CleanStop() {
+        if (mode == Mode::none ||
+            (mode == Mode::clean && std::uncaught_exceptions() > exceptions))
+          return;
+        try {
+          // An unresolved attempt would leave the snapshot without semantic
+          // coverage and force a full replay; recovery settles it from the tail.
+          if (!root.quiescent() || restart_recorded.load() ||
+              !unwrap(root.unresolved_attempts()).empty())
+            return;
+          const auto *saved = root.saved_state();
+          const auto end = root.cursor();
+          if (saved && saved->boundary.sequence == end.sequence &&
+              saved->boundary.end_offset == end.end_offset)
+            return; // the current snapshot already ends the journal
+          const auto result = context.checkpoint(
+              RawContextOrigin{capture.parent.value_or(RawEventRef{})});
+          if (!result.has_value())
+            report(std::string{"Clean-stop snapshot failed ("} +
+                   error_name(result.error().code) +
+                   "); the next open plays back the journal tail.\n");
+        } catch (...) {
+          constexpr std::string_view fallback =
+              "blackbird: clean-stop snapshot failed\n";
+          (void)!::write(STDERR_FILENO, fallback.data(), fallback.size());
+        }
+      }
+    } clean_stop{*root, context, session_capture, restart_pending, warning};
+    // Marks an exception leaving its scope as an orderly failure: the exception
+    // still leaves, and the guard snapshots a quiescent journal first.
+    struct OrderlyErrors {
+      CleanStop &stop;
+      const int exceptions = std::uncaught_exceptions();
+      ~OrderlyErrors() {
+        if (std::uncaught_exceptions() > exceptions)
+          stop.orderly_error();
+      }
+    };
     if (!seed_path.empty())
       context.seed_successor(
           seed, RawContextOrigin{session_capture.parent.value_or(RawEventRef{})});
@@ -434,14 +530,6 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       }
     if (!station_path.empty() && one)
       throw Error{ErrorCode::conflict};
-    log.record(
-        ApplicationChannel::program,
-        Value::object({{"label", Value{"station.profile"}},
-                       {"adapter", Value{station_path.empty()
-                                             ? ""
-                                             : std::filesystem::absolute(station_path)
-                                                   .lexically_normal()
-                                                   .string()}}}));
     SessionStore session_store{log, &session_capture};
 
     auto settings = session_store.settings();
@@ -512,6 +600,58 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       warning("). Open an interactive harness to answer there.\n");
       throw Error{ErrorCode::unsupported};
     }
+    // Before this point the open writes only what recovery requires: the
+    // abandonment records of recover_coding_session after an unclean stop, and a
+    // validated --seed-session for a new session. Every option- and
+    // settings-dependent write, and the open-time snapshot, follow here.
+    // From the first of them on, an exception leaving run_session is an orderly
+    // failure, so the guard snapshots a quiescent journal.
+    OrderlyErrors orderly{clean_stop};
+    // Recovered programs are current here, so a pending restart is visible. Only
+    // a resuming open is its successor; any other open reports the restart left
+    // pending, and a torn tail is reported either way.
+    std::string reopen_notice;
+    const bool pending_restart = restart_handoff_pending(*root);
+    if (reopen_suffix &&
+        !(resume_requested && pending_restart && reopen_suffix->torn_bytes == 0)) {
+      const bool accepted = reopen_suffix->snapshot == std::string_view{"accepted"};
+      Value::Object metadata{{"saved_state", Value{accepted}},
+                             {"snapshot", Value{reopen_suffix->snapshot}},
+                             {"suffix_frames", Value{Number{reopen_suffix->frames}}},
+                             {"suffix_bytes", Value{Number{reopen_suffix->bytes}}},
+                             {"torn_bytes", Value{Number{reopen_suffix->torn_bytes}}}};
+      if (pending_restart)
+        metadata.emplace_back("pending_restart", Value{true});
+      log.record(ApplicationChannel::log,
+                 Value::object({{"label", Value{"session.reopen-suffix"}},
+                                {"metadata", Value{std::move(metadata)}}}));
+      reopen_notice =
+          std::to_string(reopen_suffix->frames) + " journal frames (" +
+          std::to_string(reopen_suffix->bytes) + " bytes)" +
+          (reopen_suffix->torn_bytes
+               ? " and " + std::to_string(reopen_suffix->torn_bytes) + " torn bytes"
+               : std::string{}) +
+          (accepted ? " after the last snapshot"
+           : reopen_suffix->snapshot == std::string_view{"rejected"}
+               ? " after a rejected snapshot"
+               : " with no snapshot") +
+          (pending_restart ? ": a restart was left pending and not resumed, or the "
+                             "last stop was not clean.\n"
+                           : ": the last stop was not clean, or the session predates "
+                             "this Blackbird.\n");
+      if (!tui)
+        warning(reopen_notice);
+    }
+    log.record(
+        ApplicationChannel::program,
+        Value::object({{"label", Value{"station.profile"}},
+                       {"adapter", Value{station_path.empty()
+                                             ? ""
+                                             : std::filesystem::absolute(station_path)
+                                                   .lexically_normal()
+                                                   .string()}}}));
+    context.finish_open(
+        RawContextOrigin{session_capture.parent.value_or(RawEventRef{})});
     session_store.save(settings, &session_capture);
     model = settings.model;
     provider_name = settings.provider;
@@ -520,8 +660,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     bool resume_turn = resume_requested && !settings.effort_pending &&
                        session_store.resume(context, &session_capture);
     if (resume_requested && !resume_turn && one)
-      return 0;
-    std::atomic_bool restart_pending{false};
+      return clean_stop.arm(0);
     std::atomic_bool new_pending{false};
     RawAdapterContext restart_capture;
     std::unique_ptr<CodingProvider> provider;
@@ -571,6 +710,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         startup->outcome(RawRegionOutcome::ready);
         startup->finish();
       }
+      // The application close attempts its own snapshot (application.cpp), so
+      // the guard is not armed here and never retries it.
       return application->run(engine, log, settings, session);
     }
     RawCommandInterrupt interrupt_owner{interrupted};
@@ -1327,7 +1468,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     if (!station_path.empty()) {
       // Explicit local file adapter; the existing synchronous owner/cadence stays.
       RawSessionCall station_call{4620, 4621, &session_capture};
-      return station_call.run([&] {
+      return clean_stop.arm(station_call.run([&] {
         const auto station_context = station_call.context();
         station_call.stage(1);
         std::error_code absolute_error;
@@ -1602,17 +1743,19 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         station_call.stage(18);
         publish(restart_pending.load() ? "restart" : "stopped");
         return restart_pending.load() ? 75 : 0;
-      });
+      }));
     }
     if (one) {
       perform(resume_turn ? "continue" : once);
       write_plain_output(STDOUT_FILENO, PlainOutputKind::newline,
                          std::array<std::string_view, 1>{"\n"}, &session_capture);
-      return restart_pending.load() ? 75 : 0;
+      return clean_stop.arm(restart_pending.load() ? 75 : 0);
     }
     bool participant_retention_failed = false, command_retention_failed = false;
     if (tui) {
       ui.notice("/help lists commands. Workflow reloads each turn.\n");
+      if (!reopen_notice.empty())
+        ui.notice(reopen_notice);
       for (const auto &item : context.items()) {
         const auto *role = item.find("role");
         if (!role || !std::holds_alternative<std::string>(role->value()))
@@ -1698,7 +1841,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
             [&] { return interrupt_owner.reset(); }, root.get(), center_context,
             std::move(instrument_source));
       });
-      return finish_interactive();
+      return clean_stop.arm(finish_interactive());
     }
     if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))
       for (const auto &line : blackbird_startup(80, 24, false))
@@ -1715,7 +1858,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     if (resume_turn)
       perform("continue");
     if (restart_pending.load() || new_pending.load())
-      return finish_interactive();
+      return clean_stop.arm(finish_interactive());
     std::string pending_input;
     bool input_eof = false;
     auto read_line = [&](std::string &result) {
@@ -1831,7 +1974,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
           break;
       }
     }
-    return finish_interactive();
+    return clean_stop.arm(finish_interactive());
 
   } catch (const Error &e) {
     std::cerr << "blackbird: " << error_name(e.code) << " (" << e.detail << ").\n";

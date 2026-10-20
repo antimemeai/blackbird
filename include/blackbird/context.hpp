@@ -68,6 +68,12 @@ struct ContextChange {
 class ContextStore {
 public:
   explicit ContextStore(AuditLog &log, RawContextOrigin origin = {});
+  // Opens without the open-time maintenance snapshot. The caller runs it with
+  // finish_open() once it has recorded what the open found and validated its
+  // invocation, so a refused invocation cannot move the saved boundary.
+  struct DeferOpenCheckpoint {};
+  ContextStore(AuditLog &log, DeferOpenCheckpoint, RawContextOrigin origin = {});
+  void finish_open(RawContextOrigin origin = {});
   ~ContextStore();
   ContextStore(const ContextStore &) = delete;
   ContextStore &operator=(const ContextStore &) = delete;
@@ -103,7 +109,8 @@ public:
                         WorkflowAcceptance *acceptance = nullptr);
 
 private:
-  ContextStore(AuditLog &log, bool restore_saved, RawContextOrigin origin);
+  ContextStore(AuditLog &log, bool restore_saved, RawContextOrigin origin,
+               bool defer_open_checkpoint = false);
   std::optional<std::size_t> input_bytes() const noexcept;
   void notify(std::optional<ContextChange> change) const noexcept;
   ContextChangeKind next_kind_ = ContextChangeKind::edited;

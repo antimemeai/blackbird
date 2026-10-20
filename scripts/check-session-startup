@@ -261,6 +261,9 @@ end
         send(b'\x15/effort medium\r')
         until('What level of effort did you intend?')
         await_setting(directory, 'effort_pending', True)
+        # Keys typed while the /effort turn still runs are queued for the composer;
+        # answer only once that turn has returned.
+        until('Turn completed')
         send(b'\x1b[B\r')
         until('Effort set to high')
         await_setting(directory, 'effort_pending', False)

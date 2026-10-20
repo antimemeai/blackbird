@@ -12065,3 +12065,43 @@ first trial batch answers one question (does the step settle mid-run cuts on lun
 completion) with paired arms that differ only in the step.
 
 Implementation starts with S0.
+
+## 2026-10-20 — S0: snapshot at every clean stop (7c8)
+
+S0 is the first unit of the context lifecycle program, and runs in the serial lane, on branch `work/clm-rd7`.
+
+**Clean exits snapshot.** Every clean exit now writes a context snapshot as its last journal write, so a
+clean reopen has an empty suffix. The clean exits are `/quit`, `/exit`, EOF, TUI exit, `--once`,
+`--resume-once`, station stop, application close, and orderly error exits on a quiescent journal. A guard
+declared after the context store runs after participant and command teardown, which write after `return`.
+
+**No snapshot is taken:**
+- while an attempt is unresolved, which would lose coverage;
+- for a restart this process recorded, which is a handoff.
+
+**Reopen record.** A reopen that finds frames after the last snapshot writes one `session.reopen-suffix`
+record with these metadata fields:
+- `saved_state`;
+- `snapshot: accepted|absent|rejected`;
+- `suffix_frames`, `suffix_bytes`, `torn_bytes`;
+- `pending_restart`, set when a stale restart is found by a non-resuming open; it is reported, not settled.
+
+The record shows a neutral notice. The context store's open-time snapshot is deferred until after the
+record, so a refused invocation cannot erase the evidence of an unclean stop.
+
+**Tests.** `clean_stop_test` has 22 cases, 20 of which fail on the old code. It passes on Mac and on Linux
+debug and ASan. `check-session-startup` gained a wait that fixes its own race; the slower `/effort` return
+behind that race is still unexplained (`arconaut-0ad`).
+
+**Review.** One review and one recheck, per BOUNDED_HARDENING. The notes, red records and both review
+reports are in `context/clm-rd7-notes/`.
+
+**Measured.**
+
+| Context size | Quit snapshot bytes | Extra quit time |
+| --- | --- | --- |
+| 384 KiB | about 0.8 MB | +53 ms |
+| 6 MiB | about 12.6 MB | +308 ms |
+
+**Found.** Contexts over about 8 MiB cannot be snapshotted at all; this is pre-existing (`arconaut-yc4`,
+owned by S1).

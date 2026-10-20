@@ -322,7 +322,21 @@ int ApplicationConnection::run(CodingEngine &engine, AuditLog &log,
     finish_discarded();
   }
   shutdown.run();
-  unwrap(engine.context().checkpoint());
+  // Best-effort: a failed close snapshot leaves a suffix for the next open to
+  // report; it does not fail the close. An unresolved attempt would leave the
+  // snapshot without semantic coverage, so recovery settles it from the tail.
+  const bool unresolved = !unwrap(log.root().unresolved_attempts()).empty();
+  if (const auto saved =
+          unresolved ? Result<void>::success() : engine.context().checkpoint();
+      !saved.has_value())
+    try {
+      const auto warning = std::string{"Application close snapshot failed ("} +
+                           error_name(saved.error().code) +
+                           "); the next open plays back the journal tail.\n";
+      write_all(STDERR_FILENO,
+                std::as_bytes(std::span{warning.data(), warning.size()}));
+    } catch (...) {
+    }
   if (closing_)
     send(Value::object({{"type", Value{"closed"}}, {"id", Value{close_id_}}}));
   return 0;
