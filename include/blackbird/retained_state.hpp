@@ -77,6 +77,12 @@ public:
       return Result<void>::failure({ErrorCode::audit_unavailable});
     return journal_->publish_scan_checkpoint();
   }
+  // Live, reconciled, and no transaction or prepared state open: a derived
+  // snapshot taken now covers exactly the committed journal.
+  bool quiescent() const noexcept {
+    return state() == JournalWriterState::live && !in_transaction_ && !prepared_ &&
+           reconciled_;
+  }
   bool used_scan_checkpoint() const noexcept {
     return journal_->used_scan_checkpoint();
   }

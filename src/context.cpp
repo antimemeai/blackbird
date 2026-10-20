@@ -324,7 +324,11 @@ Value::Array ContextStore::captured_entries(RawContextOrigin origin) const {
 }
 ContextStore::ContextStore(AuditLog &log, RawContextOrigin origin)
     : ContextStore(log, true, origin) {}
-ContextStore::ContextStore(AuditLog &log, bool restore_saved, RawContextOrigin origin)
+ContextStore::ContextStore(AuditLog &log, DeferOpenCheckpoint, RawContextOrigin origin)
+    : ContextStore(log, true, origin, true) {}
+void ContextStore::finish_open(RawContextOrigin origin) { maybe_checkpoint(origin); }
+ContextStore::ContextStore(AuditLog &log, bool restore_saved, RawContextOrigin origin,
+                           bool defer_open_checkpoint)
     : log_(log) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::reconstruct, 450, origin, &initial};
@@ -487,7 +491,7 @@ ContextStore::ContextStore(AuditLog &log, bool restore_saved, RawContextOrigin o
       }
     }
     trace.state(2, raw_state());
-    if (restore_saved)
+    if (restore_saved && !defer_open_checkpoint)
       maybe_checkpoint(trace.fresh());
     historical_ = log_.root().history_snapshot();
     root_lifetime_ = log_.root().lifetime();
