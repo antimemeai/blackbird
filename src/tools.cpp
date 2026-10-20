@@ -888,9 +888,9 @@ Value tool_definitions() {
            {"description",
             Value{"Read exactly one of path (current disk) or snapshot (retained "
                   "original from a prior read; no disk access). Full originals are "
-                  "retained. Default coding workflow returns at most16384 raw bytes "
-                  "unless a range or output_max_bytes is explicit; custom Lua defaults "
-                  "to full content. Budget cuts respect UTF-8 and nearby newlines; "
+                  "retained. Returns at most 16384 raw bytes unless a range or "
+                  "output_max_bytes is explicit. Budget cuts respect UTF-8 and nearby "
+                  "newlines; "
                   "byte_start/byte_end are actual half-open offsets. "
                   "output_max_bytes limits the selected range; "
                   "file_bytes/selected_bytes/returned_bytes/omitted_bytes describe "
@@ -1050,7 +1050,7 @@ Value tool_definitions() {
                 "deadline returns timed_out=true and effect_outcome=unknown after "
                 "local child-group cleanup, with output_ref for partial output; "
                 "inspect it and choose a distinct retry or another approach. Operator "
-                "cancellation stops the turn. Default workflow: 8192 raw bytes, "
+                "cancellation stops the turn. Default: 8192 raw bytes, "
                 "2048 head + 6144 tail. Explicit output_max_bytes keeps head-first "
                 "paging unless output_head_bytes selects a head/tail split. Cuts "
                 "respect UTF-8/nearby newlines; "
@@ -1097,7 +1097,9 @@ Value tool_definitions() {
            {"description",
             Value{"Inspect/control the original command job. op read lists jobs or "
                   "reads a bounded absolute byte cursor; foreground waits without "
-                  "relaunch or deadline renewal, optional yield_ms. background "
+                  "relaunch or deadline renewal, optional yield_ms, and returns "
+                  "output shaped like exec (default 8192 bytes; output_max_bytes and "
+                  "output_head_bytes select more or a split). background "
                   "releases only its current wait. input requires PTY, exact bytes and "
                   "request_id; the same identity/content is never written twice, "
                   "conflicting reuse fails. resize uses rows/columns. signal names "
@@ -1120,6 +1122,10 @@ Value tool_definitions() {
                        {"bytes", Value::object({{"type", Value{"string"}}})},
                        {"signal", Value::object({{"type", Value{"string"}}})},
                        {"yield_ms", Value::object({{"type", Value{"integer"}}})},
+                       {"output_max_bytes",
+                        Value::object({{"type", Value{"integer"}}})},
+                       {"output_head_bytes",
+                        Value::object({{"type", Value{"integer"}}})},
                        {"offset", Value::object({{"type", Value{"integer"}}})},
                        {"count", Value::object({{"type", Value{"integer"}}})},
                        {"rows", Value::object({{"type", Value{"integer"}}})},
@@ -1137,7 +1143,9 @@ Value tool_definitions() {
                 "output_ref from exec identifies audited attempt, also after reopen. "
                 "Use range {mode:lines,start:1,end:20} (one-based inclusive) or "
                 "{mode:bytes,start:0,end:256} (half-open); legacy byte_start/byte_end "
-                "still work, never mix selectors. Missing end means EOF. "
+                "still work, never mix selectors. Missing end means EOF. Without a "
+                "range or output_max_bytes it returns 8192 raw bytes, 2048 head + "
+                "6144 tail, with next_read. "
                 "Optional output_max_bytes pages on UTF-8/nearby line boundaries. "
                 "Results report actual byte offsets and next_read. Explicit byte "
                 "slices stay exact, including hex for binary/split UTF-8."}},

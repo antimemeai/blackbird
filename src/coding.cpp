@@ -315,6 +315,29 @@ void validate_protocol(const Value::Array &items,
     }
   });
 }
+// A program that names no observation budget still gets an observation shaped at
+// creation, matching the default coding workflow; more is an explicit request.
+void default_observation_budget(std::string_view name, Value &arguments) {
+  if (!std::holds_alternative<Value::Object>(arguments.value()) ||
+      arguments.find("output_max_bytes"))
+    return;
+  const bool selected = arguments.find("range") || arguments.find("byte_start") ||
+                        arguments.find("byte_end") || arguments.find("line_start") ||
+                        arguments.find("line_end");
+  const auto *op = arguments.find("op");
+  const bool foreground = name == "process" && op && *op == Value{"foreground"};
+  if (name == "exec" || foreground || (name == "read_process_output" && !selected)) {
+    const bool head = arguments.find("output_head_bytes") != nullptr;
+    arguments.object().emplace_back("output_max_bytes",
+                                    Value{Number{std::size_t{8192}}});
+    if (!head)
+      arguments.object().emplace_back("output_head_bytes",
+                                      Value{Number{std::size_t{2048}}});
+  } else if (name == "read_file" && !selected) {
+    arguments.object().emplace_back("output_max_bytes",
+                                    Value{Number{std::size_t{16384}}});
+  }
+}
 } // namespace
 void OpenAiCodingProvider::begin_request_group(const Value &,
                                                const RawAdapterContext *context) {
@@ -4923,6 +4946,31 @@ Value CodingEngine::retained_process_output(const Value &arguments) {
 Value CodingEngine::call(std::string name, Value arguments) {
   if (name == "provider")
     throw Error{ErrorCode::invalid_range};
+  if (!operator_call_)
+    default_observation_budget(name, arguments);
+  // Shape a job's result from its retained originals within the selected budget.
+  const auto shaped = [this](Value result, const std::string &id,
+                             const Value &arguments) {
+    const auto output_budget = static_cast<std::size_t>(
+        arguments.find("output_max_bytes")
+            ? command_number(arguments, "output_max_bytes", 16 * 1024 * 1024)
+            : 16 * 1024 * 1024);
+    auto selection =
+        Value::object({{"output_ref", Value{id}},
+                       {"output_max_bytes", Value{Number{output_budget}}}});
+    if (const auto *head = arguments.find("output_head_bytes"))
+      selection.object().emplace_back("output_head_bytes", *head);
+    auto projection = retained_process_output(selection);
+    for (auto &[key, value] : projection.object()) {
+      auto old = std::find_if(result.object().begin(), result.object().end(),
+                              [&](const auto &entry) { return entry.first == key; });
+      if (old != result.object().end())
+        old->second = std::move(value);
+      else
+        result.object().emplace_back(std::move(key), std::move(value));
+    }
+    return result;
+  };
   CommandStartStatus command_start;
   DomainAdmission domain_admission;
   FileEffectObservation file_effect;
@@ -4974,31 +5022,27 @@ Value CodingEngine::call(std::string name, Value arguments) {
           auto result = command_jobs_->wait(
               id, options, [this] { poll_commands(); },
               [this] { return cancelled && cancelled(); });
-          auto selection =
-              Value::object({{"output_ref", Value{id}},
-                             {"output_max_bytes", Value{Number{output_budget}}}});
-          if (const auto *head = arguments.find("output_head_bytes"))
-            selection.object().emplace_back("output_head_bytes", *head);
-          auto projection = retained_process_output(selection);
-          for (auto &[key, value] : projection.object()) {
-            auto old =
-                std::find_if(result.object().begin(), result.object().end(),
-                             [&](const auto &entry) { return entry.first == key; });
-            if (old != result.object().end())
-              old->second = std::move(value);
-            else
-              result.object().emplace_back(std::move(key), std::move(value));
-          }
-          return result;
+          return shaped(std::move(result), id, arguments);
         }
         if (name == "process") {
           if (string_field(arguments, "op") == "foreground") {
             JobWaitOptions options;
             if (arguments.find("yield_ms"))
               options.yield_ms = command_number(arguments, "yield_ms", 3600000);
-            return command_jobs_->wait(
-                string_field(arguments, "job_id"), options, [this] { poll_commands(); },
+            const auto output_budget =
+                arguments.find("output_max_bytes")
+                    ? command_number(arguments, "output_max_bytes", 16 * 1024 * 1024)
+                    : 16 * 1024 * 1024;
+            if (arguments.find("output_head_bytes") &&
+                command_number(arguments, "output_head_bytes", 16 * 1024 * 1024) >
+                    output_budget)
+              throw Error{ErrorCode::invalid_range};
+            options.max_output = 0;
+            const auto &job = string_field(arguments, "job_id");
+            auto result = command_jobs_->wait(
+                job, options, [this] { poll_commands(); },
                 [this] { return cancelled && cancelled(); });
+            return shaped(std::move(result), job, arguments);
           }
           return command_jobs_->control(arguments);
         }
@@ -5773,6 +5817,12 @@ Value CodingEngine::operator_call(std::string_view name, const Value &arguments)
   };
   operator_arguments_ = arguments;
   const auto program = "return blackbird.call(" + literal(name) + ",_native_args)";
+  struct OperatorScope {
+    bool &active;
+    bool previous;
+    ~OperatorScope() { active = previous; }
+  } scope{operator_call_, operator_call_};
+  operator_call_ = true;
   turn({"", program});
   return workflow_result_;
 }

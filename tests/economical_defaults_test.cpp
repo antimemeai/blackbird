@@ -109,8 +109,12 @@ public:
           check(field(result, "omitted_bytes") == Value{Number{10000}});
         } else if (call_id == "5") {
           check(string_field(result, "content") == std::string(24000, 'A'));
-        } else if (call_id == "6" || call_id == "9") {
+        } else if (call_id == "6") {
           check(string_field(result, "content").size() == 40000);
+        } else if (call_id == "9") {
+          // Custom Lua naming no budget still gets a shaped observation (o17).
+          check(string_field(result, "content") == std::string(16384, 'A'));
+          check(field(result, "file_bytes") == Value{Number{40000}});
         } else if (call_id == "7") {
           check(string_field(result, "output").empty());
           check(field(result, "omitted_bytes") == Value{Number{1}});

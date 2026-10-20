@@ -199,8 +199,10 @@ persistent state. The model has a `lua` tool and the same APIs:
   6144 tail, unless `output_max_bytes` is explicit. Un-ranged `read_file` keeps
   its 16384-byte head-first default. An
   explicit file range bypasses that workflow default. This bounds returned raw
-  bytes, not tokens, capture, memory or external encoding. Custom Lua callers keep
-  full-read defaults; zero or larger explicit limits are accepted.
+  bytes, not tokens, capture, memory or external encoding. The same defaults apply
+  natively to every program, including custom Lua and `ultracode`, and to
+  `process op=foreground` and unranged `read_process_output`; operator `/call`
+  inspection stays complete. Zero or larger explicit limits are accepted.
   `read_file` accepts one optional `range` object: `{mode="lines", start=1,
   ["end"]=20}` (one-based inclusive) or `{mode="bytes", start=0, ["end"]=256}`
   (zero-based half-open). Omit `range` for the whole file. Only one mode is possible;

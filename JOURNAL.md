@@ -11851,3 +11851,25 @@ with exact continuation) while a1v was in progress. The merge resolved three con
 
 The tool-output report and the request-path catalogue were written at `f7a79b1` and predate 47k and the cache
 affinity. Their `exec` 16 MiB finding and their cache allowlist picture need correcting against the merged tree.
+
+## 2026-10-19 — o17: every program gets shaped observations
+
+The post-merge recheck found that since 47k, `exec` with no `output_max_bytes` returns up to 16 MiB into model
+context, because it now reads from the stored originals instead of the 1 MiB in-memory tail. Only `turn.lua`
+set a default, and `ultracode` passes model arguments straight through. The operator approved a bounded native
+default.
+
+`CodingEngine::call` now gives any program call that names no budget the default workflow's shape:
+- `exec`, `process op=foreground` and an unranged `read_process_output`: 8192 bytes, 2048 head plus 6144 tail,
+  with `next_read`;
+- unranged `read_file`: 16384 bytes.
+
+Explicit ranges and limits stay exact, and operator `/call` inspection stays complete. Foreground now shares
+exec's shaping from the retained originals, and its schema lists `output_max_bytes` and `output_head_bytes`.
+
+Tests:
+- The new `observation_budget_test` failed on the old code at the `exec` size check (line 82). It passes now.
+- `economical_defaults_test` pinned the old "custom Lua read remains complete" behaviour. Its updated call-9
+  expectation failed on the old code (line 116) and passes now.
+
+ECONOMICAL_DEFAULTS, USING_BLACKBIRD and the tool descriptions are updated.

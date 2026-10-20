@@ -144,6 +144,7 @@ private:
   std::optional<Error> failed_turn_;
   Value workflow_result_;
   std::optional<Value> operator_arguments_;
+  bool operator_call_ = false; // Operator inspection stays exact; programs get budgets.
   std::shared_ptr<CommandJobs> command_jobs_;
   std::unique_ptr<RetainedState::SettlementScope> settlement_;
   CommandTaskMap command_tasks_;
