@@ -216,7 +216,8 @@ Result<void> CollectionInspector::measure(std::shared_ptr<const Scene> scene,
   width = std::max(width, std::size_t{1});
   if (scene == measured_ && detail_width_ == width) {
     const auto total = line_starts_.empty() ? 0 : line_starts_.back();
-    detail_offset_ = std::min(detail_offset_, total - std::min(total, detail_page_));
+    const auto bottom = total - std::min(total, detail_page_);
+    detail_offset_ = detail_follow_ ? bottom : std::min(detail_offset_, bottom);
     return Result<void>::success();
   }
   const auto &detail = *inspector(*scene, inspector_.key);
@@ -250,7 +251,10 @@ Result<void> CollectionInspector::measure(std::shared_ptr<const Scene> scene,
     offset = starts[anchor_line] +
              row_for_byte(detail.lines[anchor_line], {width}, anchor_byte);
   }
-  offset = std::min(offset, starts.back() - std::min(starts.back(), detail_page_));
+  const auto bottom = starts.back() - std::min(starts.back(), detail_page_);
+  if (!same)
+    detail_follow_ = false;
+  offset = detail_follow_ ? bottom : std::min(offset, bottom);
   line_starts_.swap(starts);
   measured_.swap(scene);
   if (!same)
@@ -289,6 +293,7 @@ Result<void> CollectionInspector::act(InspectorAction action) {
       const auto total = line_starts_.back();
       const auto last = total - std::min(total, detail_page_);
       detail_offset_ = move(detail_offset_, last, detail_page_, action);
+      detail_follow_ = action == InspectorAction::last;
       return Result<void>::success();
     }
     if (!focused(*host_, collection_))

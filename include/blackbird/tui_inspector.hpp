@@ -59,6 +59,7 @@ private:
   bool detail_identity_ = false;
   std::size_t detail_width_ = 0;
   std::size_t detail_offset_ = 0;
+  bool detail_follow_ = false; // End keeps the newest detail rows in view.
   std::size_t collection_page_ = 1, detail_page_ = 1;
 };
 } // namespace blackbird::tui

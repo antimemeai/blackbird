@@ -274,11 +274,10 @@ while True:
             call('write', '\x1b[18~')
             call('key', 'press', 'Right')
             # The pin reaches the Lua instrument asynchronously, while End is
-            # native: End taken before the B rows exist stops short of them.
-            # Repeat the idempotent End until the pinned window shows.
+            # native. One End must keep following rows that arrive after it.
+            call('key', 'press', 'End')
             deadline = time.monotonic() + 4
             while True:
-                call('key', 'press', 'End')
                 pinned = state()
                 if (compact(b_label) in compact(comparison(pinned)) and
                         'B_PINNED_ORIGINAL' in comparison(pinned)):

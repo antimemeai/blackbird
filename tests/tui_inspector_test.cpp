@@ -204,6 +204,38 @@ void reading_continuity() {
   accept(widget.act(InspectorAction::last));
   check(widget.detail_scroll() == 8, "detail last line not clamped to viewport");
 }
+void end_follows_growth() {
+  auto owner = host();
+  auto widget = take(CollectionInspector::create(owner, "list", "detail"));
+  accept(widget.act(InspectorAction::focus_detail));
+  ChatGrid grid;
+  const auto grown = [&](std::uint64_t revision, unsigned lines) {
+    auto next = seed(revision);
+    for (unsigned i = 12; i < lines; ++i)
+      next.inspectors[0].lines.push_back({{"line " + std::to_string(i), Ink::normal}});
+    accept(owner.publish(next));
+    grid.reset(30, 5);
+    (void)take(widget.render(grid, {0, 0, 30, 5}));
+  };
+  grown(1, 12);
+  accept(widget.act(InspectorAction::last));
+  check(widget.detail_scroll() == 8, "End did not reach the last page");
+  // Content that arrives after End stays in view, as the transcript follows output.
+  grown(2, 20);
+  check(widget.detail_scroll() == 16, "End did not follow content that grew after it");
+  // Moving away stops following; the reading anchor holds.
+  accept(widget.act(InspectorAction::previous));
+  grown(3, 24);
+  check(widget.detail_scroll() == 15, "moving away from End still followed growth");
+  // A different target never inherits following.
+  accept(widget.act(InspectorAction::last));
+  auto other = seed(4);
+  other.inspectors[0].content_offset = 4096;
+  accept(owner.publish(other));
+  grid.reset(30, 5);
+  (void)take(widget.render(grid, {0, 0, 30, 5}));
+  check(widget.detail_scroll() == 0, "a different source page inherited End");
+}
 void clipping_and_retirement() {
   auto owner = host();
   auto widget = take(CollectionInspector::create(owner, "list", "detail"));
@@ -242,6 +274,7 @@ int main() {
         {"literal layout", literal_layout},
         {"narrow text", narrow_and_text},
         {"reading continuity", reading_continuity},
+        {"end follows growth", end_follows_growth},
         {"independent comparison", independent_detail},
         {"clipping and retirement", clipping_and_retirement}}) {
     try {

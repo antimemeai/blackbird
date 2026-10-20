@@ -11943,3 +11943,19 @@ wins (scripts/blackbird:9-18). It records that exact file's path and SHA-256 in 
 A bad path fails before any output directory is created. I checked the argument handling directly. No
 timing was run, so the script makes no measurement claim, and the bead's precondition ("before using it
 again") is met by the next real use.
+
+## 2026-10-20 — tnn: End follows inspector content that arrives later
+
+`tnn` left a product question open: should End stay at the bottom while inspector content grows
+asynchronously, as the transcript follows output? Yes, decided under the operator's direction to act. End on
+the detail pane now sets `detail_follow_`. While it is set, re-measuring keeps the viewport at the newest rows
+when content grows or the page height changes. Any other movement, or a different source target, clears it.
+
+The `tui_retained_result` PTY check had worked around the race by pressing End repeatedly. It now presses End
+once and requires the pinned window to appear.
+
+Both checks failed on the old code:
+- the new `tui_inspector_test` case, with "End did not follow content that grew after it";
+- `tui_retained_result`, with "pin B exact source window".
+
+Both pass now.
