@@ -1,6 +1,7 @@
 #pragma once
 #include "blackbird/raw_provider.hpp"
 #include <csignal>
+#include <cstdint>
 #include <optional>
 namespace blackbird {
 inline constexpr std::uint64_t raw_command_worker_credit = 2350;
@@ -88,11 +89,29 @@ private:
   int (*shutdown_)(int, int) = nullptr;
   void (*exit_)(int) = nullptr;
 };
+// Process-lifetime SIGTERM state (unit S0b). The first SIGTERM requests
+// termination. Another within raw_terminate_grace of the first only repeats the
+// request, so a sender that signals the pid and then its group (GNU timeout) is
+// one stop. One after the grace window restores the default action and re-raises
+// itself, which kills: a stuck process can still be stopped. Every handler
+// stores to the same static flag, whoever owns the action at that moment.
+inline constexpr std::int64_t raw_terminate_grace_ns = 2'000'000'000;
+// run_session calls this once its arguments select a session loop: a flag-only
+// handler (SA_RESTART) with the grace rule. A SIGTERM inherited as ignored stays
+// ignored, and no later owner installs over it. (RawCommandInterrupt still installs
+// SIGINT over an inherited SIG_IGN; that gap is outside S0b.)
+void raw_terminate_install() noexcept;
+bool raw_terminate_requested() noexcept;
 // The containing session joins all potential handler threads before destruction.
 // Native handler publication itself never binds or registers a producer.
+// SIGINT sets interrupted and notifies the wake. With terminate, SIGTERM also
+// requests termination; the first one then interrupts exactly as SIGINT does,
+// and reset() treats both alike. SIGTERM is installed only when it is not
+// ignored and no termination is requested yet (the early handler already took
+// it); the prior action, normally the early handler, is restored on teardown.
 class RawCommandInterrupt {
 public:
-  explicit RawCommandInterrupt(std::atomic_bool &interrupted);
+  explicit RawCommandInterrupt(std::atomic_bool &interrupted, bool terminate = false);
   ~RawCommandInterrupt();
   RawCommandInterrupt(const RawCommandInterrupt &) = delete;
   RawCommandInterrupt &operator=(const RawCommandInterrupt &) = delete;
@@ -115,14 +134,17 @@ public:
 private:
   Result<void> prepare_reset() noexcept;
   void release_reset() noexcept;
+  void uninstall(bool terminate_installed) noexcept;
   static void handler(int) noexcept;
+  static void terminate_handler(int) noexcept;
   std::optional<RawControlToken> reset_lifecycle_credit_, reset_wake_credit_;
   RawThreadHandle owner_;
   std::optional<RawControlToken> credit_;
   std::unique_ptr<RawCommandWake> wake_;
   RawCommandWake *signal_wake_ = nullptr;
   std::atomic_bool &interrupted_;
-  struct sigaction previous_{};
+  bool terminate_installed_ = false;
+  struct sigaction previous_{}, previous_terminate_{};
 };
 struct RawCommandSignalResult {
   int result, error;

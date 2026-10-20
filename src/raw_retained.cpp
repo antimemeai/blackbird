@@ -662,6 +662,9 @@ Result<void> RetainedState::restore_raw_owner() {
   return Result<void>::success();
 }
 
+Result<void> RetainedState::resume_raw_owner() {
+  return raw_owner_blocked_ ? restore_raw_owner() : Result<void>::success();
+}
 Result<std::unique_ptr<RawRetainedTransfer>>
 RetainedState::prepare_raw_transfer(const RawThreadHandle &child,
                                     RawWorkerDispatch dispatch) {

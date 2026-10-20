@@ -5,6 +5,7 @@
 #include "blackbird/raw_runtime.hpp"
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdarg>
 #include <cstdlib>
@@ -238,6 +239,147 @@ void signal_fields(const Records &all, const struct sigaction &before,
     }
   }
   require(actions == 2 && masks == 2, "actual install/restore and teardown masks");
+}
+// SIGTERM's grace rule in a forked child, so a kill cannot end this test: the
+// early handler keeps the child alive through a first and a repeated SIGTERM
+// and one after raw_terminate_grace_ns kills it. Only async-signal-safe calls.
+void terminate_grace_child() {
+  const auto started = std::chrono::steady_clock::now();
+  const pid_t child = ::fork();
+  require(child >= 0, "fork grace child");
+  if (child == 0) {
+    raw_terminate_install();
+    (void)::raise(SIGTERM);
+    (void)::raise(SIGTERM);
+    if (!raw_terminate_requested())
+      ::_exit(4);
+    const timespec past_grace{2, 200'000'000};
+    (void)::nanosleep(&past_grace, nullptr);
+    (void)::raise(SIGTERM);
+    ::_exit(3); // survived the late SIGTERM
+  }
+  int status = 0;
+  while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
+  }
+  require(std::chrono::steady_clock::now() - started >= std::chrono::seconds{2},
+          "first and repeated SIGTERM inside the grace window do not kill");
+  require(WIFSIGNALED(status) && WTERMSIG(status) == SIGTERM,
+          "a SIGTERM after the grace window takes the default action");
+}
+// A SIGTERM inherited as ignored stays ignored and requests nothing.
+void terminate_ignored_child() {
+  const pid_t child = ::fork();
+  require(child >= 0, "fork ignored child");
+  if (child == 0) {
+    struct sigaction ignore{}, current{};
+    ignore.sa_handler = SIG_IGN;
+    sigemptyset(&ignore.sa_mask);
+    (void)::sigaction(SIGTERM, &ignore, nullptr);
+    raw_terminate_install();
+    (void)::raise(SIGTERM);
+    const bool kept =
+        ::sigaction(SIGTERM, nullptr, &current) == 0 && current.sa_handler == SIG_IGN;
+    ::_exit(kept && !raw_terminate_requested() ? 0 : 1);
+  }
+  int status = 0;
+  while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
+  }
+  require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+          "an inherited SIG_IGN for SIGTERM is left in place");
+}
+// SIGTERM (S0b) is installed beside SIGINT. The real handler requests
+// termination, interrupts and notifies the wake without allocating; a repeat
+// inside the grace window does nothing more. reset() treats the interrupt as
+// SIGINT's. Destruction restores both actions and the owner mask, and the raw
+// records name SIGTERM's install, its restore and a teardown mask that blocks
+// both signals. Runs after the forked children: the request is process-wide.
+void terminate_signal() {
+  terminate_grace_child();
+  terminate_ignored_child();
+  Directory directory;
+  auto runtime = unwrap(RawRuntime::open(directory.path.string(), environment(),
+                                         {{64, 8192, 4096}, 4096}));
+  auto caller = unwrap(runtime->prepare_thread());
+  struct sigaction before_int{}, before_term{}, installed{}, after_raise{}, after_int{},
+      after_term{};
+  sigset_t owner_mask{}, restored_mask{};
+  require(::sigaction(SIGINT, nullptr, &before_int) == 0 &&
+              ::sigaction(SIGTERM, nullptr, &before_term) == 0 &&
+              ::pthread_sigmask(SIG_SETMASK, nullptr, &owner_mask) == 0,
+          "observe prior SIGINT and SIGTERM actions and the owner mask");
+  require(!raw_terminate_requested(), "no termination requested before the case");
+  {
+    RawThreadBinding binding{caller};
+    std::atomic_bool interrupted{false};
+    RawCommandInterrupt interrupt{interrupted, true};
+    require(::sigaction(SIGTERM, nullptr, &installed) == 0 &&
+                installed.sa_handler != SIG_DFL && installed.sa_handler != SIG_IGN,
+            "SIGTERM is caught");
+    const int observer = interrupt.wake().read_fd();
+    pollfd idle{observer, POLLIN, 0};
+    require(native_poll(&idle, 1, 0) == 0, "the wake starts armed");
+    observed_allocations = 0;
+    observe_allocations = true;
+    const int raised = ::raise(SIGTERM);
+    observe_allocations = false;
+    require(raised == 0 && raw_terminate_requested() && interrupted.load() &&
+                observed_allocations == 0,
+            "real SIGTERM requests termination and interrupts without allocating");
+    pollfd notified{observer, POLLIN, 0};
+    require(native_poll(&notified, 1, 0) == 1, "SIGTERM notifies the interrupt wake");
+    require(::sigaction(SIGTERM, nullptr, &after_raise) == 0 &&
+                after_raise.sa_handler == installed.sa_handler,
+            "the handler stays installed for the grace window");
+    unwrap(interrupt.reset());
+    require(!interrupted.load() && raw_terminate_requested(),
+            "reset clears the interrupt as for SIGINT; the request stays");
+    require(::raise(SIGTERM) == 0 && !interrupted.load(),
+            "a repeated SIGTERM inside the grace window does not interrupt again");
+    pollfd rearmed{observer, POLLIN, 0};
+    require(native_poll(&rearmed, 1, 0) == 0, "reset rearms the wake");
+  }
+  require(::sigaction(SIGINT, nullptr, &after_int) == 0 &&
+              ::sigaction(SIGTERM, nullptr, &after_term) == 0 &&
+              ::pthread_sigmask(SIG_SETMASK, nullptr, &restored_mask) == 0 &&
+              after_int.sa_handler == before_int.sa_handler &&
+              after_term.sa_handler == before_term.sa_handler,
+          "both prior handlers restored");
+  for (int signal = 1; signal < NSIG; ++signal)
+    require(sigismember(&owner_mask, signal) == sigismember(&restored_mask, signal),
+            "owner-thread mask restored");
+  caller.reset();
+  runtime.reset();
+  const auto all = records(directory.path);
+  verify(all, 1);
+  sigset_t blocked{};
+  sigemptyset(&blocked);
+  sigaddset(&blocked, SIGINT);
+  sigaddset(&blocked, SIGTERM);
+  unsigned interrupt_actions = 0, terminate_actions = 0, masks = 0;
+  for (const auto &[key, event] : all) {
+    (void)key;
+    ByteView body{event.body};
+    if (event.site == 2062) {
+      (void)ref(body);
+      const auto signal = take<int>(body);
+      (void)take<decltype(installed.sa_handler)>(body);
+      const auto flags = take<decltype(installed.sa_flags)>(body);
+      if (signal == SIGINT)
+        ++interrupt_actions;
+      else if (signal == SIGTERM) {
+        require(terminate_actions != 0 || flags == 0,
+                "the SIGTERM install requests no flags");
+        ++terminate_actions;
+      }
+    } else if (event.site == 2064) {
+      (void)ref(body);
+      if (take<int>(body) == SIG_BLOCK)
+        mask_equal(body, blocked);
+      ++masks;
+    }
+  }
+  require(interrupt_actions == 2 && terminate_actions == 2 && masks == 2,
+          "SIGINT and SIGTERM install and restore, and the two teardown masks");
 }
 void require_flags(const RawCommandWake &wake) {
   for (const int descriptor : {wake.read_fd(), wake.write_fd()}) {
@@ -854,6 +996,7 @@ int main(int argc, char **argv) {
       refused_reset_and_predispatch();
       native_lifecycle_faults();
       native_notice_failure();
+      terminate_signal();
       require(argc == 2, "actual command fixture path provided");
       fatal_native_failure(argv[1]);
     }

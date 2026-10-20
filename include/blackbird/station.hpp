@@ -12,6 +12,10 @@ public:
   bool admit(const Value &event, const RawAdapterContext *capture = nullptr,
              RawEventRef *actual_owner = nullptr);
   void pause(std::string_view reason, const RawAdapterContext *capture = nullptr);
+  // A supervisor stop (SIGTERM): recorded on the log channel, no state change, so
+  // the station resumes where it was on reopen. Operator interrupts pause.
+  void supervisor_stop(std::string_view reason,
+                       const RawAdapterContext *capture = nullptr);
   void finish(const Value &event, bool returned,
               const RawAdapterContext *capture = nullptr);
   std::string prompt(const Value &event, const RawAdapterContext *capture = nullptr,

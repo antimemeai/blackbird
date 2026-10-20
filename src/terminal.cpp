@@ -1854,6 +1854,15 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       if (!transfer)
         return reset;
       RawWaitScope wait{{{interrupt, wake.read_fd()}, {}}};
+#if BLACKBIRD_DEBUG
+      // Developer fault fixture: one SIGTERM inside the admission wait below,
+      // which then refuses fresh owner admission and leaves joined-child debt.
+      static bool fault_raised = false;
+      if (!fault_raised && std::getenv("BLACKBIRD_FAULT_SIGTERM_IN_JOIN") != nullptr) {
+        fault_raised = true;
+        (void)::raise(SIGTERM);
+      }
+#endif
       auto result = transfer->joined(reset.has_value() ? std::nullopt
                                                        : std::optional{reset.error()});
       transfer.reset();
@@ -2254,6 +2263,16 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
       turn_cancel.retire();
       cancelled.store(false);
       launch.stage(2);
+#if BLACKBIRD_DEBUG
+      // Developer fault fixture: one SIGTERM after the loop's exit check and
+      // before the rearm below clears its interrupt.
+      static bool rearm_fault_raised = false;
+      if (!rearm_fault_raised &&
+          std::getenv("BLACKBIRD_FAULT_SIGTERM_BEFORE_REARM") != nullptr) {
+        rearm_fault_raised = true;
+        (void)::raise(SIGTERM);
+      }
+#endif
       auto reset = turn_cancel.clear();
       if (reset.has_value() && reset_interrupt)
         reset = reset_interrupt();
@@ -2270,6 +2289,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                error_name(reset.error().code));
         return returned(false);
       }
+      // An exit requested after the loop's check refuses the launch: a SIGTERM
+      // whose interrupt the rearm just cleared, or a restart or new session that
+      // became pending. The prompt stays queued, or in the composer for a direct
+      // submission or an answer, and the loop exits at its next check.
+      if (exit_requested && exit_requested())
+        return returned(false);
       std::string prompt;
       RawThreadHandle context;
       RawWorkerDispatch dispatch{};
@@ -3518,9 +3543,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
               keyboard_burst.reset();
               keyboard_data.reset();
               keyboard_control.reset();
-              (void)start(result.text, result.source);
+              // A refused launch keeps the answer in the composer.
+              const bool launched = start(result.text, result.source);
+              if (!launched)
+                composer.draft(result.text);
               action_target = last_launch;
-              action_branch = wake_refused ? 4 : 3;
+              action_branch = launched ? 3 : 4;
             }
           } else if (question)
             composer.choices(question->choices, question->heading);
@@ -3755,9 +3783,12 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
                 keyboard_burst.reset();
                 keyboard_data.reset();
                 keyboard_control.reset();
-                (void)start(result.text, result.source);
+                // A refused launch keeps the answer in the composer.
+                const bool launched = start(result.text, result.source);
+                if (!launched)
+                  composer.draft(result.text);
                 action_target = last_launch;
-                action_branch = wake_refused ? 4 : 3;
+                action_branch = launched ? 3 : 4;
               }
             } else {
               composer.draft(std::move(result.text));
@@ -3791,10 +3822,11 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
               keyboard_data.reset();
               keyboard_control.reset();
               wake_refused = false;
-              if (!start(result.text, result.source))
+              const bool launched = start(result.text, result.source);
+              if (!launched)
                 composer.draft(std::move(result.text));
               action_target = last_launch;
-              action_branch = wake_refused ? 4 : 3;
+              action_branch = launched ? 3 : 4;
             } else {
               action_branch = 4;
               composer.draft(std::move(result.text));

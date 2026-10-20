@@ -12140,3 +12140,33 @@ keep-reasoning; it is fixed by making prefix-checked the default.
 
 **Deviation.** The early behaviour rows ship now, recorded in the plan; P2 owns the regression comparison.
 Notes are in `context/clm-rd7-notes/P1a*.md`.
+
+## 2026-10-20 — S0b: SIGTERM is a clean stop
+
+S0b is a serial-lane unit, on branch `work/clm-rd7`.
+
+**The stop.**
+- The first SIGTERM sets a process-lifetime flag and interrupts any running turn, as SIGINT does.
+- The session then leaves through its normal clean exits with status 143, so S0's snapshot runs.
+- A second SIGTERM within 2 s is coalesced, so senders like GNU timeout that signal the pid and then the group
+  stop cleanly. A SIGTERM after the window kills.
+- A flag-only handler covers session open and teardown. An inherited ignored SIGTERM stays ignored.
+
+**The wrapper.** `scripts/blackbird` forwards SIGTERM to the session. It keeps stdin, never relaunches on 75
+after SIGTERM, and marks its child so the session restores default SIGINT and SIGQUIT.
+
+**Station and recorder.**
+- A SIGTERM'd station records `station.supervisor-stop` and is not paused on reopen.
+- The raw recorder now obeys only its supervisor's SIGTERM. Before, a group SIGTERM killed it mid-stop.
+
+**Found along the way.**
+- The clean-stop snapshot failed when a stop landed during the TUI worker-custody join: `block_raw_owner`
+  left the owner blocked. The guard now resumes the owner first.
+- Two beads, `arconaut-mze` and `arconaut-8zr`:
+  - plain-mode Ctrl-C kills the raw supervisor and recorder (pre-existing);
+  - Linux parallel raw and PTY tests time out under shared load.
+
+**Tests.** `clean_stop` has 41 cases and `raw_command_wake` gains the signal mechanics. The changed tests failed
+on the old code. They pass on Mac and on Linux debug and ASan.
+
+**Review.** One review and one recheck. The notes are in `context/clm-rd7-notes/S0b*.md`.

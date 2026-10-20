@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <ctime>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -457,6 +458,44 @@ Result<void> RawCommandWake::clear_paid(RawControlToken *lifecycle_preheld,
 namespace {
 std::atomic<RawCommandInterrupt *> interrupt_owner{nullptr};
 static_assert(decltype(interrupt_owner)::is_always_lock_free);
+// SIGTERM state for the whole process, independent of any owner's lifetime.
+std::atomic_bool terminate_requested{false};
+std::atomic<std::int64_t> terminate_first_ns{0}; // CLOCK_MONOTONIC; 0 = none yet
+std::atomic_bool terminate_ignored{false};
+static_assert(decltype(terminate_first_ns)::is_always_lock_free);
+enum class TerminateArrival : std::uint8_t { first, repeated, late };
+// clock_gettime and the atomics are async-signal-safe.
+TerminateArrival terminate_arrival() noexcept {
+  timespec now{};
+  (void)::clock_gettime(CLOCK_MONOTONIC, &now);
+  const std::int64_t ns =
+      std::max<std::int64_t>(1, static_cast<std::int64_t>(now.tv_sec) * 1'000'000'000 +
+                                    static_cast<std::int64_t>(now.tv_nsec));
+  std::int64_t first = 0;
+  const bool arrived_first = terminate_first_ns.compare_exchange_strong(
+      first, ns, std::memory_order_acq_rel, std::memory_order_acquire);
+  terminate_requested.store(true, std::memory_order_release);
+  if (arrived_first)
+    return TerminateArrival::first;
+  return ns - first < raw_terminate_grace_ns ? TerminateArrival::repeated
+                                             : TerminateArrival::late;
+}
+// SIGTERM is blocked while its handler runs, so the re-raised signal stays
+// pending until the handler returns and then takes the default action. These
+// native calls cannot be captured from a handler and are not.
+void terminate_by_default() noexcept {
+  struct sigaction fallback{};
+  fallback.sa_handler = SIG_DFL;
+  sigemptyset(&fallback.sa_mask);
+  (void)::sigaction(SIGTERM, &fallback, nullptr);
+  (void)::raise(SIGTERM);
+}
+void early_terminate_handler(int) noexcept {
+  const int saved = errno;
+  if (terminate_arrival() == TerminateArrival::late)
+    terminate_by_default();
+  errno = saved;
+}
 ByteView wake_native_mask(const sigset_t &mask) noexcept {
   return std::as_bytes(std::span{&mask, std::size_t{1}})
       .first(RawCommandInterrupt::signal_mask_bytes);
@@ -512,10 +551,32 @@ int raw_command_mask(int how, const sigset_t &requested, sigset_t &previous,
       2065, request, std::span{returned}.first(acquired ? returned.size() : 3), credit);
   return result;
 }
-RawCommandInterrupt::RawCommandInterrupt(std::atomic_bool &interrupted)
-    : owner_(raw_current_thread()), interrupted_(interrupted) {
+void raw_terminate_install() noexcept {
+  struct sigaction current{};
+  if (::sigaction(SIGTERM, nullptr, &current) == 0 && current.sa_handler == SIG_IGN) {
+    terminate_ignored.store(true, std::memory_order_release);
+    return;
+  }
+  // SA_RESTART: outside the owner a SIGTERM only records the request, so the
+  // calls it lands in (open, teardown) resume instead of failing with EINTR.
+  struct sigaction early{};
+  early.sa_handler = &early_terminate_handler;
+  early.sa_flags = SA_RESTART;
+  sigemptyset(&early.sa_mask);
+  (void)::sigaction(SIGTERM, &early, nullptr);
+}
+bool raw_terminate_requested() noexcept {
+  return terminate_requested.load(std::memory_order_acquire);
+}
+RawCommandInterrupt::RawCommandInterrupt(std::atomic_bool &interrupted, bool terminate)
+    : owner_(raw_current_thread()), interrupted_(interrupted),
+      terminate_installed_(terminate &&
+                           !terminate_ignored.load(std::memory_order_acquire) &&
+                           !raw_terminate_requested()) {
   try {
-    credit_ = raw_command_claim(2 * action_credit + 2 * mask_credit);
+    // Install and restore for each handled signal, plus the teardown masks.
+    credit_ = raw_command_claim((terminate_installed_ ? 4 : 2) * action_credit +
+                                2 * mask_credit);
     reset_lifecycle_credit_ = raw_command_claim(raw_wake_lifecycle_credit);
     wake_ = std::make_unique<RawCommandWake>(RawCommandWake::Mode::signal);
     {
@@ -541,6 +602,18 @@ RawCommandInterrupt::RawCommandInterrupt(std::atomic_bool &interrupted)
       wake_->retire();
       throw Error{ErrorCode::io, installed.error};
     }
+    if (terminate_installed_) {
+      struct sigaction stop{};
+      stop.sa_handler = &RawCommandInterrupt::terminate_handler;
+      sigemptyset(&stop.sa_mask);
+      const auto selected =
+          raw_command_action(SIGTERM, stop, previous_terminate_, incarnation,
+                             credit_ ? &*credit_ : nullptr);
+      if (selected.result < 0) {
+        uninstall(false); // SIGINT is installed; its handler may already run.
+        throw Error{ErrorCode::io, selected.error};
+      }
+    }
   } catch (...) {
     release_reset();
     throw;
@@ -548,6 +621,9 @@ RawCommandInterrupt::RawCommandInterrupt(std::atomic_bool &interrupted)
 }
 RawCommandInterrupt::~RawCommandInterrupt() {
   const ErrnoGuard guard;
+  uninstall(terminate_installed_);
+}
+void RawCommandInterrupt::uninstall(bool terminate_installed) noexcept {
   // The containing owner has joined every thread that could have loaded this
   // handler target. Blocking the final owner prevents its own handler crossing
   // target removal, restoration, and endpoint destruction.
@@ -557,6 +633,8 @@ RawCommandInterrupt::~RawCommandInterrupt() {
   sigset_t blocked{}, previous{}, discarded{};
   sigemptyset(&blocked);
   sigaddset(&blocked, SIGINT);
+  if (terminate_installed)
+    sigaddset(&blocked, SIGTERM);
   if (raw_command_mask(SIG_BLOCK, blocked, previous, incarnation,
                        credit_ ? &*credit_ : nullptr) != 0)
     ::_exit(70);
@@ -565,6 +643,12 @@ RawCommandInterrupt::~RawCommandInterrupt() {
   if (raw_command_action(SIGINT, previous_, returned, incarnation,
                          credit_ ? &*credit_ : nullptr)
           .result < 0)
+    ::_exit(70);
+  // A SIGTERM that arrives while blocked meets the restored action on unblock.
+  if (terminate_installed &&
+      raw_command_action(SIGTERM, previous_terminate_, returned, incarnation,
+                         credit_ ? &*credit_ : nullptr)
+              .result < 0)
     ::_exit(70);
   wake_->retire();
   release_reset();
@@ -579,6 +663,23 @@ void RawCommandInterrupt::handler(int) noexcept {
   if (owner != nullptr) {
     owner->interrupted_.store(true, std::memory_order_relaxed);
     owner->signal_wake_->notify(nullptr, &owner->interrupted_);
+  }
+  errno = saved;
+}
+// The process-lifetime request and, for the first SIGTERM only, the same wake
+// notification SIGINT's handler sends; all async-signal-safe. A repeat within
+// the grace window does nothing more; a later one kills (terminate_arrival).
+void RawCommandInterrupt::terminate_handler(int) noexcept {
+  const int saved = errno;
+  const auto arrival = terminate_arrival();
+  if (arrival == TerminateArrival::late)
+    terminate_by_default();
+  else if (arrival == TerminateArrival::first) {
+    auto *owner = interrupt_owner.load(std::memory_order_acquire);
+    if (owner != nullptr) {
+      owner->interrupted_.store(true, std::memory_order_release);
+      owner->signal_wake_->notify(nullptr, &owner->interrupted_);
+    }
   }
   errno = saved;
 }

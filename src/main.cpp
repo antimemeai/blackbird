@@ -40,6 +40,16 @@ using namespace blackbird;
 namespace {
 std::atomic_bool interrupted{false};
 static_assert(std::atomic_bool::is_always_lock_free);
+// 128 + SIGTERM, the status a shell reports for a SIGTERM death. Exiting with
+// it, rather than re-raising, keeps run-one and scripts/blackbird reading the
+// same value as before while a C parent can still tell the clean stop
+// (WIFEXITED) from the second SIGTERM's kill (WIFSIGNALED).
+constexpr int terminated_status = 128 + SIGTERM;
+// Set by the first SIGTERM and never cleared (raw_terminate_requested): the
+// process was asked to stop. A session that sees it leaves through its clean
+// exit, or through the interrupt the SIGTERM raised, with terminated_status, and
+// main() starts no successor session.
+bool termination_requested() noexcept { return raw_terminate_requested(); }
 template <class T> T random_id() {
   IdentityBytes bytes{};
   if (getentropy(bytes.data(), bytes.size()) != 0)
@@ -266,6 +276,13 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                              : "work bound reached; rerun to continue.\n");
       return 0;
     }
+    // A session loop follows (the maintenance and listing modes have returned;
+    // --audit-last returns after its scan). From here a SIGTERM during the open,
+    // between sessions or in teardown is recorded and read, not fatal. The
+    // inspection and application paths keep the default action: no loop there
+    // reads the flag.
+    if (!inspect && application == nullptr)
+      raw_terminate_install();
     std::filesystem::create_directories(session);
     if (::chmod(session.c_str(), 0700) != 0)
       throw Error{ErrorCode::io, errno};
@@ -485,8 +502,19 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         try {
           // An unresolved attempt would leave the snapshot without semantic
           // coverage and force a full replay; recovery settles it from the tail.
-          if (!root.quiescent() || restart_recorded.load() ||
-              !unwrap(root.unresolved_attempts()).empty())
+          if (!root.quiescent() || restart_recorded.load())
+            return;
+          // An interrupt during the TUI worker join's owner admission refuses
+          // it and leaves joined-child debt (the root's raw origin then admits
+          // no new input). That wait scope is gone here; settle the debt as the
+          // next launch would, or report and skip.
+          if (const auto resumed = root.resume_raw_owner(); !resumed.has_value()) {
+            report(std::string{"Clean-stop snapshot skipped (raw owner "} +
+                   error_name(resumed.error().code) +
+                   "); the next open plays back the journal tail.\n");
+            return;
+          }
+          if (!unwrap(root.unresolved_attempts()).empty())
             return;
           const auto *saved = root.saved_state();
           const auto end = root.cursor();
@@ -714,7 +742,10 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       // the guard is not armed here and never retries it.
       return application->run(engine, log, settings, session);
     }
-    RawCommandInterrupt interrupt_owner{interrupted};
+    // From here until the owner is destroyed the first SIGTERM also interrupts
+    // a running turn, as SIGINT does. Before and after, main()'s flag-only
+    // handler records it and the loops and main() read the flag.
+    RawCommandInterrupt interrupt_owner{interrupted, true};
     auto &interrupt_wake = interrupt_owner.wake();
     RawWaitScope interrupt_wait{{{interrupt_wake.read_fd(), -1}, {}}};
     std::atomic_bool cancelled{false};
@@ -724,9 +755,18 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     TerminalUI ui{"Blackbird · " + model + " · " + effort +
                   (settings.effort_pending ? " (choose effort)" : "") + " · " +
                   session.string()};
+    // After a SIGTERM the loops have decided to stop. Rearm the interrupt so the
+    // teardown, and any stop record, runs as on /quit: under the notified wake
+    // every raw claim in this scope is refused (check_wait_control).
+    const auto settle_termination = [&] {
+      if (termination_requested())
+        (void)interrupt_owner.reset();
+    };
     struct ParticipantShutdown {
       CodingEngine &engine;
+      const std::function<void()> settle;
       ~ParticipantShutdown() {
+        settle();
         try {
           engine.shutdown_commands();
         } catch (...) {
@@ -736,7 +776,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         } catch (...) {
         }
       }
-    } participant_shutdown{engine}; // Before UI destruction, on every exit path.
+    } participant_shutdown{engine, settle_termination}; // Before UI destruction.
     ui.raw_capture(tui);
     const RawAdapterContext *output_context = &session_capture;
     auto emit = [&](std::string_view text) {
@@ -870,8 +910,13 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     auto perform = [&](std::string_view prompt) {
       // Plain dispatch is synchronous: the previous foreground owner has
       // returned. Rearm its signal wake before this input's first admission.
-      if (!tui)
+      if (!tui) {
         unwrap(interrupt_owner.reset());
+        // A SIGTERM that arrived after the loop's check was just cleared from
+        // the interrupt; it still stops the session, so nothing is performed.
+        if (termination_requested())
+          return;
+      }
       const auto kind = (resume_turn || resume_requested) && prompt == "continue"
                             ? RawMainInputKind::resume
                         : one ? RawMainInputKind::once
@@ -1432,7 +1477,12 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       startup->outcome(RawRegionOutcome::ready);
       startup->finish();
     }
+    // A requested termination outranks a restart handoff: no successor runs. A
+    // restart this process recorded stays pending (the guard takes no snapshot),
+    // and the next open reports it.
     auto finish_interactive = [&] {
+      if (termination_requested())
+        return terminated_status;
       if (!restart_pending.load())
         return 0;
       if (!switched_session)
@@ -1466,9 +1516,10 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       return 75;
     };
     if (!station_path.empty()) {
+      constexpr std::string_view supervisor_stop_reason = "stopped: SIGTERM";
       // Explicit local file adapter; the existing synchronous owner/cadence stays.
       RawSessionCall station_call{4620, 4621, &session_capture};
-      return clean_stop.arm(station_call.run([&] {
+      const auto station_status = station_call.run([&] {
         const auto station_context = station_call.context();
         station_call.stage(1);
         std::error_code absolute_error;
@@ -1636,8 +1687,12 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         };
         // A station never performs the ordinary implicit restart continue turn.
         resume_turn = false;
+        // An event admitted and not yet finished, or finished without a return,
+        // stays "unknown": the reopen pauses on it, so a stop publishes "blocked".
+        bool event_open = false, event_left_unknown = false;
         try {
-          while (!interrupted.load(std::memory_order_relaxed)) {
+          while (!interrupted.load(std::memory_order_relaxed) &&
+                 !termination_requested()) {
             station_call.stage(4);
             const auto control_path = native_path(adapter, "control.json", 6);
             if (filesystem(control_path, false)) {
@@ -1674,6 +1729,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                   RawEventRef admission{};
                   if (!station.admit(event, &parsed.second, &admission))
                     continue;
+                  event_open = true;
                   log.original(
                       {"station.file-input", bytes,
                        Value::object({{"path", Value{path_text(station_call,
@@ -1709,6 +1765,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                   }
                   station_call.stage(14);
                   station.finish(event, returned, &station_context);
+                  event_open = false;
+                  event_left_unknown = event_left_unknown || !returned;
                   station_call.stage(15);
                   refresh_info(session_capture);
                   if (returned)
@@ -1731,25 +1789,52 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         } catch (...) {
           station_call.require_capture();
           if (root->state() == JournalWriterState::live) {
-            station.pause("native-stop: operator interrupt or adapter failure",
-                          &station_context);
-            publish("blocked");
+            // The interrupt a SIGTERM raised is a supervisor stop, not an
+            // operator interrupt: recorded, no pause, so the station resumes on
+            // reopen. Any other failure keeps its own outcome, a pause.
+            bool supervisor = false;
+            try {
+              std::rethrow_exception(std::current_exception());
+            } catch (const Error &error) {
+              supervisor =
+                  error.code == ErrorCode::interrupted && termination_requested();
+            } catch (...) {
+            }
+            if (supervisor) {
+              settle_termination();
+              station.supervisor_stop(supervisor_stop_reason, &station_context);
+              publish(event_open || event_left_unknown ? "blocked" : "stopped");
+            } else {
+              station.pause("native-stop: operator interrupt or adapter failure",
+                            &station_context);
+              publish("blocked");
+            }
           }
           throw;
         }
-        if (interrupted.load(std::memory_order_relaxed))
+        if (termination_requested()) {
+          settle_termination();
+          station.supervisor_stop(supervisor_stop_reason, &station_context);
+        } else if (interrupted.load(std::memory_order_relaxed))
           station.pause("native-stop: operator interrupt or adapter failure",
                         &station_context);
         station_call.stage(18);
-        publish(restart_pending.load() ? "restart" : "stopped");
+        publish(restart_pending.load()                          ? "restart"
+                : termination_requested() && event_left_unknown ? "blocked"
+                                                                : "stopped");
         return restart_pending.load() ? 75 : 0;
-      }));
+      });
+      // SIGTERM ends the station loop as SIGINT does (the interrupt is set).
+      return clean_stop.arm(termination_requested() ? terminated_status
+                                                    : station_status);
     }
     if (one) {
       perform(resume_turn ? "continue" : once);
       write_plain_output(STDOUT_FILENO, PlainOutputKind::newline,
                          std::array<std::string_view, 1>{"\n"}, &session_capture);
-      return clean_stop.arm(restart_pending.load() ? 75 : 0);
+      return clean_stop.arm(termination_requested()  ? terminated_status
+                            : restart_pending.load() ? 75
+                                                     : 0);
     }
     bool participant_retention_failed = false, command_retention_failed = false;
     if (tui) {
@@ -1816,7 +1901,10 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         } joined{handoff};
         ui.run(
             perform, cancelled,
-            [&] { return restart_pending.load() || new_pending.load(); },
+            [&] {
+              return restart_pending.load() || new_pending.load() ||
+                     termination_requested();
+            },
             std::string{initial}, session / "ui-state.bbm",
             [&] {
               try {
@@ -1857,7 +1945,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
     bool deferred_resume = resume_requested && settings.effort_pending;
     if (resume_turn)
       perform("continue");
-    if (restart_pending.load() || new_pending.load())
+    if (restart_pending.load() || new_pending.load() || termination_requested())
       return clean_stop.arm(finish_interactive());
     std::string pending_input;
     bool input_eof = false;
@@ -1867,6 +1955,9 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
           unwrap(interrupt_owner.reset());
       };
       for (;;) {
+        // After SIGTERM the loop reads nothing more, buffered or not.
+        if (termination_requested())
+          return false;
         // This reader owns no foreground work. An idle SIGINT retires its old
         // wake incarnation before acquiring another input or buffered command.
         rearm_idle();
@@ -1963,14 +2054,16 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
         if (part == "/send")
           raw_main_control(&session_capture, 4, part);
       }
+      if (termination_requested())
+        break;
       cancelled.store(false);
       perform(line);
-      if (restart_pending.load() || new_pending.load())
+      if (restart_pending.load() || new_pending.load() || termination_requested())
         break;
       if (deferred_resume && !session_store.settings().effort_pending) {
         deferred_resume = false;
         perform("continue");
-        if (restart_pending.load() || new_pending.load())
+        if (restart_pending.load() || new_pending.load() || termination_requested())
           break;
       }
     }
@@ -1978,6 +2071,11 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
 
   } catch (const Error &e) {
     std::cerr << "blackbird: " << error_name(e.code) << " (" << e.detail << ").\n";
+    // The interrupt SIGTERM raised, unwinding a turn or the TUI loop as SIGINT's
+    // does, is the stop itself. OrderlyErrors marked it, so the guard has
+    // already run under the same rules as for a clean return.
+    if (e.code == ErrorCode::interrupted && termination_requested())
+      return terminated_status;
     return 1;
   } catch (const std::exception &e) {
     std::cerr << "blackbird: " << safe(e.what()) << '\n';
@@ -1986,6 +2084,24 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
 }
 
 int main(int argc, char **argv) {
+  // scripts/blackbird starts this process as an asynchronous child, which POSIX
+  // shells start with SIGINT and SIGQUIT ignored. The wrapper marks that child;
+  // undo exactly that, so Ctrl-C and Ctrl-\ act as without the wrapper and no
+  // spawned program inherits the ignore. An ignore from any other parent stays.
+  // The marker is not passed on.
+  if (std::getenv("BLACKBIRD_WRAPPED_CHILD") != nullptr) {
+    (void)::unsetenv("BLACKBIRD_WRAPPED_CHILD");
+    for (const int number : {SIGINT, SIGQUIT}) {
+      struct sigaction current{};
+      if (::sigaction(number, nullptr, &current) == 0 &&
+          current.sa_handler == SIG_IGN) {
+        struct sigaction fallback{};
+        fallback.sa_handler = SIG_DFL;
+        sigemptyset(&fallback.sa_mask);
+        (void)::sigaction(number, &fallback, nullptr);
+      }
+    }
+  }
   if (argc > 1 && std::string_view{argv[1]} == "auth")
     return provider_auth_cli(argc - 1, argv + 1);
   if (argc > 1 && std::string_view{argv[1]} == "--application") {
@@ -2030,6 +2146,14 @@ int main(int argc, char **argv) {
       RawSuccessorHandoff handoff;
       const auto status = run_session(
           argc, argv, {.next = next_session, .fallback = fallback_session}, &handoff);
+      // A SIGTERM'd session ends the process: no return to a previous session
+      // and no successor. A clean or restart status means the session finished
+      // before or during the stop; either way the process exits terminated, so
+      // a wrapper never relaunches after a SIGTERM.
+      if (termination_requested()) {
+        std::cerr << "blackbird: stopped by SIGTERM.\n";
+        return status == 0 || status == 75 ? terminated_status : status;
+      }
       if (status != 0 && status != 75) {
         if (return_session.empty())
           return status;
@@ -2047,6 +2171,11 @@ int main(int argc, char **argv) {
         arguments.push_back(argument.data());
       arguments.push_back(nullptr);
       if (status == 75) {
+        // A SIGTERM after the check above still prevents the successor.
+        if (termination_requested()) {
+          std::cerr << "blackbird: stopped by SIGTERM.\n";
+          return terminated_status;
+        }
         // Use the current directory even after /new, and load the published binary.
         (void)handoff.execute(arguments);
         std::cerr << "blackbird: cannot restart current session (" << errno << ")\n";

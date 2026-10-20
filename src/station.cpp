@@ -94,9 +94,10 @@ decltype(auto) with_state(RawSessionCall &call, Prepare &&prepare, F &&body,
     }
   });
 }
-void record(RawSessionCall &call, AuditLog &log, const Value &packet) {
+void record(RawSessionCall &call, AuditLog &log, const Value &packet,
+            ApplicationChannel channel = ApplicationChannel::program) {
   auto credit = call.bytes_credit(32);
-  const auto actual = log.record(ApplicationChannel::program, packet);
+  const auto actual = log.record(channel, packet);
   (void)call.bytes(4604, actual, credit);
 }
 } // namespace
@@ -371,6 +372,28 @@ void StationStore::pause(std::string_view reason, const RawAdapterContext *captu
         paused_ = true;
       },
       state);
+}
+void StationStore::supervisor_stop(std::string_view reason,
+                                   const RawAdapterContext *capture) {
+  const std::uint8_t method = 8;
+  RawSessionCall call{4600, 4601, capture,
+                      std::array{detail::raw_native_field(method),
+                                 detail::raw_native_field(paused_),
+                                 detail::raw_native_field(stopped_)}};
+  call.run([&] {
+    call.stage(1);
+    (void)call.source(8, reason, 4602);
+    call.stage(2);
+    if (reason.empty() || reason.size() > 1024)
+      throw Error{ErrorCode::invalid_range};
+    call.stage(3);
+    // On the log channel: restore replays program records only, so the station
+    // keeps its paused and stopped state across this stop.
+    record(call, log_,
+           Value::object({{"label", Value{"station.supervisor-stop"}},
+                          {"reason", Value{std::string{reason}}}}),
+           ApplicationChannel::log);
+  });
 }
 bool StationStore::admit(const Value &e, const RawAdapterContext *capture,
                          RawEventRef *actual_owner) {
