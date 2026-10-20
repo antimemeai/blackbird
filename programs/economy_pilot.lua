@@ -1,11 +1,17 @@
 -- Finite matched useful-work pilot. Config and raw records remain local.
 -- Same instrumentation and context policy in both arms; one information policy differs.
 local cfg = blackbird.binary.decode(
-  blackbird.call("read_file", { path = "context/pilot-config.bbm" }).content
+  blackbird.call(
+    "read_file",
+    { path = "context/pilot-config.bbm", range = { mode = "bytes", start = 0 } }
+  ).content
 )
 local M = assert(
   load(
-    blackbird.call("read_file", { path = "programs/useful_work.lua" }).content,
+    blackbird.call(
+      "read_file",
+      { path = "programs/useful_work.lua", range = { mode = "bytes", start = 0 } }
+    ).content,
     "@programs/useful_work.lua",
     "t"
   )

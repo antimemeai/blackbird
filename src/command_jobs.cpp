@@ -92,7 +92,8 @@ void validate_control(const Value &value, bool mailbox) {
     const bool allowed =
         key == "op" || key == "job_id" || key == "request_id" ||
         (op == "read" && (key == "count" || key == "offset")) ||
-        (op == "foreground" && (key == "yield_ms" || key == "output_max_bytes")) ||
+        (op == "foreground" && (key == "yield_ms" || key == "output_max_bytes" ||
+                                key == "output_head_bytes")) ||
         (op == "background" && key == "wait_epoch") ||
         (op == "input" && key == "bytes") ||
         (op == "resize" && (key == "rows" || key == "columns")) ||

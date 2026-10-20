@@ -201,11 +201,12 @@ persistent state. The model has a `lua` tool and the same APIs:
   explicit file range bypasses that workflow default. This bounds returned raw
   bytes, not tokens, capture, memory or external encoding. The same defaults apply
   natively to every program, including custom Lua and `ultracode`, and to
-  `process op=foreground` and unranged `read_process_output`; operator `/call`
-  inspection stays complete. Zero or larger explicit limits are accepted.
+  `process op=foreground` and unranged `read_process_output`. The operator's own
+  `/exec`, `/process` and `/fg` stay complete; calls nested in an operator `/lua`
+  program are shaped. Zero or larger explicit limits are accepted.
   `read_file` accepts one optional `range` object: `{mode="lines", start=1,
   ["end"]=20}` (one-based inclusive) or `{mode="bytes", start=0, ["end"]=256}`
-  (zero-based half-open). Omit `range` for the whole file. Only one mode is possible;
+  (zero-based half-open). Omit `range` for the first 16384 bytes; use a range or `output_max_bytes` for more. Only one mode is possible;
   unknown range keys and mixed selectors fail with correction guidance. Historical
   Lua calls using one `line_start`/`line_end` or `byte_start`/`byte_end` pair remain
   supported, but those fields are absent from the advertised model schema.

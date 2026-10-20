@@ -145,6 +145,7 @@ private:
   Value workflow_result_;
   std::optional<Value> operator_arguments_;
   bool operator_call_ = false; // Operator inspection stays exact; programs get budgets.
+  std::vector<std::string> native_defaults_; // Supplied by call(), read by operation().
   std::shared_ptr<CommandJobs> command_jobs_;
   std::unique_ptr<RetainedState::SettlementScope> settlement_;
   CommandTaskMap command_tasks_;

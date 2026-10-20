@@ -11894,3 +11894,41 @@ the copy is truncated. Catalogue rows keep their deliberate 12-byte label.
 The new `command_center_test` case seeds a 300-byte request ID and requires every shown 256-byte prefix to
 carry the marker. It failed on the old code ("clipped participant metadata carries a visible marker") and
 passes now.
+
+## 2026-10-20 — o17 tribunal review and fixes
+
+Kimi was unavailable (HTTP 429), so an independent fresh-context reviewer attacked d786c1d and 870ec8c. It
+raised nine findings.
+
+**Fixed:**
+1. A head with no budget failed with `invalid_range`. A head alone now keeps the default 6144-byte tail after
+   it: budget = max(8192, head + 6144).
+2. The test oracles were upper bounds. `observation_budget_test` now checks exact specification values for
+   exec, bare `read_process_output`, `read_file`, foreground (default, explicit split, explicit 0, wait keys
+   kept), the head-only rule and the explicit-more case.
+3. The operator exemption covered the whole operator turn. Only the operator's own outermost call
+   (`operation_depth_ == 0`) stays exact now; calls nested in an operator `/lua` program or workflow are shaped.
+4. Built-in programs read Lua source and BBM2 steer files with unranged `read_file`, so they would be silently
+   cut past 16 KiB. They now ask explicitly for the whole file (`range = {mode="bytes", start=0}`).
+5. The audit could not tell supplied defaults from the program's own arguments. Each operation's decision
+   continuation now lists `native_defaults`.
+7. Schema and description honesty: the process output keys are documented as foreground-only;
+   `output_head_bytes` is in the foreground allow-list; `next_read` is described as appearing only when bytes
+   are omitted; the docs name `/exec`, `/process` and `/fg`, not a non-existent `/call`; "omit range for the
+   whole file" is corrected.
+9. `operator_arguments_` is set only after the program string is built.
+
+**Not changed:**
+- 6: foreground `output_bytes` reports the retained original that `next_read` pages; `received_bytes` keeps
+  the count actually received.
+
+**Regression guard:**
+- 8: `context_budget_test` now also requires that the triggered guidance names `context_manage`. That
+  behaviour is unchanged, so the check passes on the old code.
+
+**Old-code failures:**
+- The strengthened `observation_budget_test` fails on 870ec8c: the head-only exec makes the turn throw.
+- Given an explicit budget for that call, it then fails at the `native_defaults` check (line 146).
+
+On the new code it passes. A segfault in my first draft was the test holding a reference to
+`workflow_result_` across operator calls; it now copies the result.

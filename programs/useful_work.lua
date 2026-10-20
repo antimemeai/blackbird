@@ -170,7 +170,10 @@ end
 -- Keep this file local (context/), not a command-approval mechanism. Explicit
 -- interrupt is native cancellation. Failed read/parse is visible, not ignored.
 function M.boundary(steer_path)
-  local raw = blackbird.call("read_file", { path = steer_path })
+  local raw = blackbird.call(
+    "read_file",
+    { path = steer_path, range = { mode = "bytes", start = 0 } }
+  )
   local steer = blackbird.binary.decode(raw.content)
   assert(
     type(steer) == "table" and type(steer.direction) == "string",

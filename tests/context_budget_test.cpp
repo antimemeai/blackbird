@@ -37,7 +37,7 @@ public:
               std::to_string(unwrap(encode_packet_string(Value{conversation})).size()) +
               " entries=" + std::to_string(conversation.size()) + " ") !=
           std::string::npos);
-      // Below the trigger the size line informs only; it never invites management.
+      // The size line informs only; it never invites management.
       const auto begin = last_state.find("CONTEXT_SIZE input_bytes=");
       const auto line = last_state.substr(begin, last_state.find('\n', begin) - begin);
       require(line.find("context_view") == std::string::npos &&
@@ -58,6 +58,10 @@ public:
         string_field(input.back(), "content").find("CONTEXT_BUDGET") !=
             std::string::npos;
     require(has_state == expect_trigger);
+    // Only the triggered guidance invites management.
+    if (has_state)
+      require(string_field(input.back(), "content").find("context_manage") !=
+              std::string::npos);
     if (scripted && calls == 1)
       require(string_field(input.back(), "content").find("request-override") !=
               std::string::npos);

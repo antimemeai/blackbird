@@ -20,8 +20,12 @@ Since 2026-10-19 (`arconaut-o17`) these are native defaults for every program,
 not only the default workflow: a custom Lua or built-in workflow call that names
 no `output_max_bytes` gets the same shaped `exec`/`read_file` observation, and so
 do `process op=foreground` and an unranged `read_process_output` (8192 bytes,
-2048 head plus 6144 tail). Explicit ranges and limits stay exact. Operator
-`/call` inspection is not a model observation and stays complete.
+2048 head plus 6144 tail; `output_head_bytes` alone keeps that tail after a larger
+head). Explicit ranges and limits stay exact. The operator's own `/exec`,
+`/process` and `/fg` calls are not model observations and stay complete; calls a
+`/lua` program or workflow makes inside them are shaped like any program's. Each
+operation's decision record lists the keys Blackbird supplied in
+`native_defaults`.
 
 When exec output exceeds a split budget, `output` contains the head, an explicit
 `[... bytes [START,END) omitted ...]` marker, and the tail. For binary excerpts it

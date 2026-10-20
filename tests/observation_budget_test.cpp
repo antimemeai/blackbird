@@ -7,7 +7,8 @@
 using namespace blackbird;
 // arconaut-o17: a program that names no observation budget (ultracode, custom Lua)
 // still gets observations shaped at creation; an explicit request for more, and the
-// operator's own inspection, stay exact.
+// operator's own call, stay exact. Expected values derive from the specification:
+// 8192 bytes split 2048 head + 6144 tail; read_file 16384 head-first.
 namespace {
 void check(bool condition,
            std::source_location where = std::source_location::current()) {
@@ -27,8 +28,21 @@ public:
     throw Error{ErrorCode::unsupported};
   }
 };
-std::size_t count(const Value &result, std::string_view key) {
+std::uint64_t count(const Value &result, std::string_view key) {
   return std::stoull(field(result, key).number().text());
+}
+// 100000 bytes of one letter, no newline: every cut lands exactly on its budget.
+void split(const Value &r, std::uint64_t head, std::uint64_t tail_start) {
+  check(count(r, "output_bytes") == 100000);
+  check(count(r, "returned_bytes") == head + (100000 - tail_start));
+  check(count(r, "byte_start") == 0 && count(r, "byte_end") == head);
+  check(count(r, "tail_byte_start") == tail_start &&
+        count(r, "tail_byte_end") == 100000);
+  const auto &gap = field(r, "omitted_range");
+  check(count(gap, "start") == head && count(gap, "end") == tail_start);
+  const auto &next = field(field(r, "next_read"), "arguments");
+  check(field(next, "output_ref") == field(r, "output_ref"));
+  check(count(next, "byte_start") == head && count(next, "byte_end") == head + 8192);
 }
 } // namespace
 int main() {
@@ -56,46 +70,111 @@ int main() {
     CodingEngine engine{log, context, provider, "test-model"};
     engine.display = [](std::string_view v) { std::cerr << v; };
     const std::string program = R"lua(
-local function sh(script, extra)
+local function sh(letter, extra)
+  local script = "head -c 100000 /dev/zero | tr '\\000' " .. letter
   local args = {argv = blackbird.array({'/bin/sh', '-c', script})}
   for key, value in pairs(extra or {}) do args[key] = value end
   return blackbird.call('exec', args)
 end
-local A = "head -c 100000 /dev/zero | tr '\\000' A"
-local e = sh(A)
-local more = sh(A, {output_max_bytes = 200000})
-local background = sh("sleep 0.2; head -c 100000 /dev/zero | tr '\\000' B", {yield_ms = 0})
-return {
+local function job(letter)
+  return sh(letter, {yield_ms = 0}).job_id
+end
+-- Sequential locals: the operation records below are read in this order.
+local e = sh('A')
+local more = sh('A', {output_max_bytes = 200000})
+local head = sh('A', {output_head_bytes = 10000})
+local results = {
   exec = e,
   more = more,
+  head = head,
   bare = blackbird.call('read_process_output', {output_ref = e.output_ref}),
   ranged = blackbird.call('read_process_output', {output_ref = e.output_ref,
     range = {mode = 'bytes', start = 0, ['end'] = 50000}}),
   file = blackbird.call('read_file', {path = FILE}),
-  foreground = blackbird.call('process', {op = 'foreground', job_id = background.job_id}),
 }
+for key, extra in pairs({foreground = {}, split = {output_max_bytes = 4096,
+    output_head_bytes = 1024}, zero = {output_max_bytes = 0}}) do
+  local args = {op = 'foreground', job_id = job('B')}
+  for k, v in pairs(extra) do args[k] = v end
+  results[key] = blackbird.call('process', args)
+end
+return results
 )lua";
     engine.turn({"", "FILE=" + unwrap(format_value(Value{file})) + "\n" + program});
-    const auto &result = engine.workflow_result();
+    // A copy: each later operator_call replaces the engine's workflow result.
+    const auto result = engine.workflow_result();
+    check(result.find("exec") != nullptr); // the program ran to completion
     const auto &exec = field(result, "exec");
-    check(count(exec, "output_bytes") == 100000);
-    check(count(exec, "returned_bytes") <= 8192);
-    check(exec.find("next_read") != nullptr);
-    check(count(field(result, "more"), "returned_bytes") == 100000);
-    check(count(field(result, "bare"), "returned_bytes") <= 8192);
-    check(count(field(result, "ranged"), "returned_bytes") == 50000);
+    split(exec, 2048, 93856);
+    split(field(result, "bare"), 2048, 93856);
+    // A head alone keeps the default 6144-byte tail after it.
+    split(field(result, "head"), 10000, 93856);
+    const auto &more = field(result, "more");
+    check(count(more, "returned_bytes") == 100000 && !more.find("next_read"));
+    const auto &ranged = field(result, "ranged");
+    check(count(ranged, "returned_bytes") == 50000 &&
+          string_field(ranged, "output") == std::string(50000, 'A'));
     const auto &read = field(result, "file");
-    check(string_field(read, "content").size() <= 16384);
-    check(count(read, "file_bytes") == 40000);
+    check(string_field(read, "content") == std::string(16384, 'F'));
+    check(count(read, "file_bytes") == 40000 && count(read, "omitted_bytes") == 23616);
+    const auto &next_range = field(read, "next_range");
+    check(count(next_range, "start") == 16384 && count(next_range, "end") == 32768);
     const auto &foreground = field(result, "foreground");
-    check(count(foreground, "output_bytes") == 100000);
-    check(count(foreground, "returned_bytes") <= 8192);
-    check(foreground.find("next_read") != nullptr);
-    // The operator's own inspection is not a model observation.
-    const auto exact = engine.operator_call(
+    split(foreground, 2048, 93856);
+    check(string_field(foreground, "state") == "completed" &&
+          count(foreground, "exit_code") == 0 &&
+          field(foreground, "job_id") == field(foreground, "output_ref"));
+    split(field(result, "split"), 1024, 96928);
+    const auto &zero = field(result, "zero");
+    check(string_field(zero, "output").empty() && count(zero, "returned_bytes") == 0 &&
+          count(zero, "omitted_bytes") == 100000);
+    const auto &zero_next = field(field(zero, "next_read"), "arguments");
+    check(count(zero_next, "byte_start") == 0 && count(zero_next, "byte_end") == 8192);
+    // The operation record names the keys Blackbird supplied, and only those.
+    std::vector<Value> supplied;
+    for (const auto &fact : root->committed_facts())
+      if (const auto *d = std::get_if<DecisionEvent>(&fact.event.body)) {
+        const auto meta = unwrap(read_packet(d->continuation));
+        if (const auto *op = meta.find("operation"); op && *op == Value{"exec"}) {
+          const auto *keys = meta.find("native_defaults");
+          supplied.push_back(keys ? *keys : Value{});
+        }
+      }
+    const Value both{
+        Value::Array{Value{"output_max_bytes"}, Value{"output_head_bytes"}}};
+    const Value budget_only{Value::Array{Value{"output_max_bytes"}}};
+    check(supplied.size() == 6);
+    check(supplied[0] == both && supplied[1] == Value{} && supplied[2] == budget_only);
+    for (std::size_t n = 3; n < 6; ++n)
+      check(supplied[n] == both); // background launches of the foreground jobs
+    // The operator's own call is not a model observation and stays complete.
+    const auto script = Value{"head -c 100000 /dev/zero | tr '\\000' A"};
+    const auto argv = Value{Value::Array{Value{"/bin/sh"}, Value{"-c"}, script}};
+    const auto exact_exec =
+        engine.operator_call("exec", Value::object({{"argv", argv}}));
+    check(string_field(exact_exec, "output") == std::string(100000, 'A') &&
+          !exact_exec.find("next_read"));
+    const auto exact_read = engine.operator_call(
         "read_process_output",
         Value::object({{"output_ref", field(exec, "output_ref")}}));
-    check(string_field(exact, "output") == std::string(100000, 'A'));
+    check(string_field(exact_read, "output") == std::string(100000, 'A'));
+    const auto exact_file =
+        engine.operator_call("read_file", Value::object({{"path", Value{file}}}));
+    check(string_field(exact_file, "content") == std::string(40000, 'F'));
+    const auto started = engine.operator_call(
+        "exec", Value::object({{"argv", argv}, {"yield_ms", Value{Number{0}}}}));
+    const auto exact_foreground = engine.operator_call(
+        "process", Value::object({{"op", Value{"foreground"}},
+                                  {"job_id", field(started, "job_id")}}));
+    check(string_field(exact_foreground, "output") == std::string(100000, 'A'));
+    // A program the operator runs is a program again: its nested calls are shaped.
+    const auto nested = engine.operator_call(
+        "lua", Value::object(
+                   {{"code",
+                     Value{"return blackbird.call('exec', {argv = blackbird.array({"
+                           "'/bin/sh', '-c', \"head -c 100000 /dev/zero | tr '\\\\000' "
+                           "A\"})})"}}}));
+    split(nested, 2048, 93856);
     std::filesystem::remove_all(path);
     std::filesystem::remove_all(files);
     return 0;

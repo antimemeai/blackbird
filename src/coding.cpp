@@ -315,29 +315,6 @@ void validate_protocol(const Value::Array &items,
     }
   });
 }
-// A program that names no observation budget still gets an observation shaped at
-// creation, matching the default coding workflow; more is an explicit request.
-void default_observation_budget(std::string_view name, Value &arguments) {
-  if (!std::holds_alternative<Value::Object>(arguments.value()) ||
-      arguments.find("output_max_bytes"))
-    return;
-  const bool selected = arguments.find("range") || arguments.find("byte_start") ||
-                        arguments.find("byte_end") || arguments.find("line_start") ||
-                        arguments.find("line_end");
-  const auto *op = arguments.find("op");
-  const bool foreground = name == "process" && op && *op == Value{"foreground"};
-  if (name == "exec" || foreground || (name == "read_process_output" && !selected)) {
-    const bool head = arguments.find("output_head_bytes") != nullptr;
-    arguments.object().emplace_back("output_max_bytes",
-                                    Value{Number{std::size_t{8192}}});
-    if (!head)
-      arguments.object().emplace_back("output_head_bytes",
-                                      Value{Number{std::size_t{2048}}});
-  } else if (name == "read_file" && !selected) {
-    arguments.object().emplace_back("output_max_bytes",
-                                    Value{Number{std::size_t{16384}}});
-  }
-}
 } // namespace
 void OpenAiCodingProvider::begin_request_group(const Value &,
                                                const RawAdapterContext *context) {
@@ -2119,6 +2096,42 @@ std::uint64_t command_number(const Value &value, std::string_view key,
     throw Error{ErrorCode::invalid_range};
   return number;
 }
+// A program that names no observation budget still gets an observation shaped at
+// creation, matching the default coding workflow; more is an explicit request.
+// Returns the keys it supplied so the operation record can name them.
+std::vector<std::string> default_observation_budget(std::string_view name,
+                                                    Value &arguments) {
+  std::vector<std::string> supplied;
+  if (!std::holds_alternative<Value::Object>(arguments.value()) ||
+      arguments.find("output_max_bytes"))
+    return supplied;
+  const bool selected = arguments.find("range") || arguments.find("byte_start") ||
+                        arguments.find("byte_end") || arguments.find("line_start") ||
+                        arguments.find("line_end");
+  const auto *op = arguments.find("op");
+  const bool foreground = name == "process" && op && *op == Value{"foreground"};
+  constexpr std::uint64_t budget = 8192, head = 2048, tail = budget - head;
+  if (name == "exec" || foreground || (name == "read_process_output" && !selected)) {
+    // A head alone asks for more opening context; keep the default tail after it.
+    const auto *requested = arguments.find("output_head_bytes");
+    const auto shown =
+        requested ? std::max(budget, command_number(arguments, "output_head_bytes",
+                                                    16 * 1024 * 1024 - tail) +
+                                         tail)
+                  : budget;
+    arguments.object().emplace_back("output_max_bytes", Value{Number{shown}});
+    supplied.emplace_back("output_max_bytes");
+    if (!requested) {
+      arguments.object().emplace_back("output_head_bytes", Value{Number{head}});
+      supplied.emplace_back("output_head_bytes");
+    }
+  } else if (name == "read_file" && !selected) {
+    arguments.object().emplace_back("output_max_bytes",
+                                    Value{Number{std::uint64_t{16384}}});
+    supplied.emplace_back("output_max_bytes");
+  }
+  return supplied;
+}
 std::size_t budget_number(const Value &value, std::string_view key) {
   const auto &text = field(value, key).number().text();
   std::size_t n = 0;
@@ -3185,6 +3198,8 @@ Value CodingEngine::operation(
     RawProviderOperationContext *provider_operation,
     const CommandStartStatus *command_start, const DomainAdmission *domain_admission,
     const FileEffectObservation *file_effect) {
+  // Keys call() supplied as native defaults belong to this operation only.
+  const auto native_defaults = std::exchange(native_defaults_, {});
   auto &root = log_.root();
   struct FileObservationFence {
     const FileEffectObservation *effect;
@@ -3338,13 +3353,19 @@ Value CodingEngine::operation(
       result_data.emplace(unwrap(raw_claim_data(49 + ValueLimits{}.bytes)));
     const auto context = parse_id<ContextRevisionId>(context_.head());
     trace.identity(4, context.bytes());
-    const auto meta = Value::object(
+    auto meta = Value::object(
         {{"operation", Value{std::string{name}}},
          {"input_binding", Value{"invocation-v1"}},
          {"input_encoding", Value{"bbm2"}},
          {"invocation", Value{hex_identity(invocation.bytes())}},
          {"revision", Value{context_.head()}},
          {"generation", Value{hex_identity(admitted_generation.bytes())}}});
+    if (!native_defaults.empty()) {
+      Value::Array keys;
+      for (const auto &key : native_defaults)
+        keys.emplace_back(key);
+      meta.object().emplace_back("native_defaults", Value{std::move(keys)});
+    }
     const auto continuation_bytes = unwrap(encode_packet(meta));
     CommandTaskMap staged_tasks;
     CommandTaskMap::node_type task_node;
@@ -4946,8 +4967,11 @@ Value CodingEngine::retained_process_output(const Value &arguments) {
 Value CodingEngine::call(std::string name, Value arguments) {
   if (name == "provider")
     throw Error{ErrorCode::invalid_range};
-  if (!operator_call_)
-    default_observation_budget(name, arguments);
+  // The operator's own call stays exact; anything it nests (a lua program, a
+  // workflow's model loop) is a program observation again.
+  auto supplied = operator_call_ && operation_depth_ == 0
+                      ? std::vector<std::string>{}
+                      : default_observation_budget(name, arguments);
   // Shape a job's result from its retained originals within the selected budget.
   const auto shaped = [this](Value result, const std::string &id,
                              const Value &arguments) {
@@ -4974,6 +4998,7 @@ Value CodingEngine::call(std::string name, Value arguments) {
   CommandStartStatus command_start;
   DomainAdmission domain_admission;
   FileEffectObservation file_effect;
+  native_defaults_ = std::move(supplied);
   return operation(
       name, arguments,
       [&](OperationAttemptId attempt, InvocationId invocation,
@@ -5815,8 +5840,8 @@ Value CodingEngine::operator_call(std::string_view name, const Value &arguments)
     }
     return out + "\"";
   };
-  operator_arguments_ = arguments;
   const auto program = "return blackbird.call(" + literal(name) + ",_native_args)";
+  operator_arguments_ = arguments;
   struct OperatorScope {
     bool &active;
     bool previous;
