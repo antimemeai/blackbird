@@ -83,6 +83,14 @@ tui::SceneHost initial_host() {
   unwrap(host.publish(empty_scene(view, 0)));
   return host;
 }
+// The 256-byte participant copy names its clipping and the original length.
+std::string observed(const ParticipantObservationText &value) {
+  std::string result{value.view()};
+  if (value.truncated)
+    result += " [clipped: " + std::to_string(value.size) + " of " +
+              std::to_string(value.total) + " bytes]";
+  return result;
+}
 std::string safe_label(std::string_view text) {
   std::string result;
   for (const auto &line :
@@ -563,12 +571,11 @@ tui::SceneCandidate prepare(const CommandCenterScope &scope, const tui::Scene &p
     lines(detail, participant_phase(r.phase), Ink::heading);
     lines(detail,
           r.task_id.present && !r.task_id.view().empty()
-              ? "Task: " + std::string{r.task_id.view()}
+              ? "Task: " + observed(r.task_id)
               : "Task: unbound",
           Ink::muted);
     lines(detail,
-          "Provider: " + std::string{r.provider.view()} +
-              " | model: " + std::string{r.model.view()},
+          "Provider: " + observed(r.provider) + " | model: " + observed(r.model),
           Ink::muted);
     lines(detail,
           "Queued " + std::to_string(r.queued) + " | accepted " +
@@ -583,12 +590,10 @@ tui::SceneCandidate prepare(const CommandCenterScope &scope, const tui::Scene &p
               (o.result.result_original ? "present" : "unavailable") + " | retained " +
               (o.result.result_retained ? "present" : "unavailable"),
           Ink::muted);
-    lines(detail, "Current request: " + std::string{o.result.current_request.view()},
+    lines(detail, "Current request: " + observed(o.result.current_request), Ink::muted);
+    lines(detail, "Last answered: " + observed(o.result.last_answered_request),
           Ink::muted);
-    lines(detail,
-          "Last answered: " + std::string{o.result.last_answered_request.view()},
-          Ink::muted);
-    lines(detail, "Result: " + std::string{o.result.result_status.view()}, Ink::muted);
+    lines(detail, "Result: " + observed(o.result.result_status), Ink::muted);
     lines(detail,
           "Bytes " + std::to_string(o.window.begin) + ".." +
               std::to_string(o.window.next) + "/" + std::to_string(o.window.total),

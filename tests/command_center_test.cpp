@@ -126,11 +126,11 @@ Value answer() {
                         {"model", Value{"fixture-model"}},
                         {"output", Value{Value::Array{std::move(message)}}}});
 }
-Value participant_arguments() {
+Value participant_arguments(const std::string &request_id = "initial") {
   return Value::object(
       {{"request",
         Value::object(
-            {{"request_id", Value{"initial"}},
+            {{"request_id", Value{request_id}},
              {"from", Value{"operator"}},
              {"to", Value{"expert"}},
              {"provider", Value{"openai"}},
@@ -148,8 +148,9 @@ std::unique_ptr<Participants> pool() {
       Value{}, [](const OriginalCapture &) { return std::optional<SourceReference>{}; },
       [](const Value &) { return std::optional<ApplicationRecordId>{}; });
 }
-void start(Participants &participants, std::string key) {
-  participants.start(std::move(key), participant_arguments(),
+void start(Participants &participants, std::string key,
+           const std::string &request_id = "initial") {
+  participants.start(std::move(key), participant_arguments(request_id),
                      [](const Value &, const ColleagueCapture &,
                         const std::function<bool()> &,
                         const RawAdapterContext *) { return answer(); });
@@ -218,6 +219,28 @@ void semantic(const Path &executable) {
               shown(participants).find("waiting") != std::string::npos,
           "actual participant waiting/unbound and bounded more-rows coverage are "
           "visible");
+  {
+    // A legal request ID longer than the 256-byte observation copy is shown with a
+    // visible clipping marker and its full length, never as an unmarked prefix.
+    auto clipped_owner = pool();
+    start(*clipped_owner, "expert/clipped", std::string(300, 'R'));
+    auto clipped_reader = clipped_owner->observer();
+    auto clipped_inputs = sources(empty_ui, jobs, clipped_reader);
+    CommandCenter clipped{scope()};
+    clipped.toggle();
+    adopt(clipped, clipped_inputs, false, "PARTICIPANT_RESULT");
+    const auto text = shown(clipped);
+    const std::string prefix(256, 'R');
+    std::size_t marked = 0;
+    for (auto at = text.find(prefix); at != std::string::npos;
+         at = text.find(prefix, at + 1)) {
+      require(text.compare(at + prefix.size(), 28, " [clipped: 256 of 300 bytes]") == 0,
+              "clipped participant metadata carries a visible marker and total");
+      ++marked;
+      at += prefix.size();
+    }
+    require(marked > 0, "clipped participant request ID is shown");
+  }
   owner.reset();
   (void)participants.refresh(participant_inputs, false);
   require(participants.host().snapshot()->collections.front().items.empty() &&

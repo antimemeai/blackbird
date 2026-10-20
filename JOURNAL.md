@@ -11883,3 +11883,14 @@ exact-commit codeload ZIPs were captured to `../quarantine_proj/archives/` with 
 Kimi review now fails with HTTP 429 ("Your current subscription does not have access to Kimi Code right
 now"), tracked in its own bead. A fresh-context independent reviewer stands in for the tribunal on d786c1d and
 870ec8c. The JSMNTL review step had been skipped for both commits; it is now running.
+
+## 2026-10-20 — 5z4: clipped participant metadata is marked
+
+The command-center participant detail showed the 256-byte observation copies of the request ID, provider,
+model, task and result status with no sign of clipping. A legal 300-byte request ID appeared as an unmarked
+prefix. Each of those fields now goes through `observed()`, which appends `[clipped: N of TOTAL bytes]` when
+the copy is truncated. Catalogue rows keep their deliberate 12-byte label.
+
+The new `command_center_test` case seeds a 300-byte request ID and requires every shown 256-byte prefix to
+carry the marker. It failed on the old code ("clipped participant metadata carries a visible marker") and
+passes now.
