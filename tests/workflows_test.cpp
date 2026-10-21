@@ -84,10 +84,11 @@ struct FakeProvider : CodingProvider {
     return response;
   }
 };
-// Layer 1 (B-M2): a session that recorded the pre-S2 built-in program (revision
-// builtin-ultracode-v1, kept by a budget change) runs the current built-in on reopen,
-// records the upgrade, and its ultracode brief is a protected instruction. A
-// supplied program (a definition-generation revision) is kept as recorded.
+// Layer 1 (B-M2): a session that recorded an earlier built-in program (the pre-S2
+// builtin-ultracode-v1, or S2's v2, kept by a budget change) runs the current
+// built-in on reopen, records the upgrade, and its ultracode brief is a protected
+// instruction. A supplied program (a definition-generation revision) is kept as
+// recorded.
 void builtin_upgrade() {
   char path[] = "/tmp/blackbird-upgrade-XXXXXX";
   check(mkdtemp(path) != nullptr);
@@ -113,7 +114,10 @@ void builtin_upgrade() {
         found = packet;
     return found;
   };
-  for (const bool supplied : {false, true}) {
+  for (const std::string &recorded :
+       {std::string{"builtin-ultracode-v1"}, std::string{"builtin-ultracode-v2"},
+        std::string(32, 'a')}) {
+    const bool supplied = !recorded.starts_with("builtin-");
     std::filesystem::remove_all(path);
     std::filesystem::create_directory(path);
     std::filesystem::permissions(path, std::filesystem::perms::owner_all);
@@ -126,6 +130,24 @@ void builtin_upgrade() {
       ContextStore context{log};
       FakeProvider provider;
       CodingEngine engine{log, context, provider, "fake"};
+      // Under v2, ultracode ran S2's source, which appends its brief on every run.
+      if (recorded == "builtin-ultracode-v2") {
+        const auto current =
+            string_field(default_workflows().array().front(), "source");
+        const auto open_brief = current.find("content='") + 9;
+        const auto brief_text =
+            current.substr(open_brief, current.find('\'', open_brief) - open_brief);
+        const auto loop = current.find("for step=1,64 do");
+        const auto v2 = "blackbird.append({{role='developer',content='" + brief_text +
+                        "'}}, {class='instruction'})\n" + current.substr(loop);
+        eval(engine, v2);
+        std::size_t v2_briefs = 0;
+        for (const auto &entry : field(context.view(), "entries").array())
+          if (const auto *content = field(entry, "item").find("content");
+              content && content->string().starts_with("Ultracode:"))
+            ++v2_briefs;
+        check(v2_briefs == 1); // the v2 run itself left the brief the v3 runs must find
+      }
       // A budget change records the effective program config with it.
       eval(engine, "local v=blackbird.call('context_budget',{}); "
                    "assert(blackbird.call('context_budget',{proposal={base=v.revision,"
@@ -136,8 +158,7 @@ void builtin_upgrade() {
       check(packet != Value{});
       for (auto &[key, value] : packet.object()) {
         if (key == "program_revision")
-          value = Value{supplied ? std::string(32, 'a')
-                                 : std::string{"builtin-ultracode-v1"}};
+          value = Value{recorded};
         if (key != "program_config")
           continue;
         for (auto &[name, workflows] : value.object())
@@ -160,12 +181,21 @@ void builtin_upgrade() {
     FakeProvider provider;
     CodingEngine engine{log, context, provider, "fake"};
     check(engine.operator_turn("ultracode build useful code", "error('wrong route')"));
+    check(engine.operator_turn("ultracode build useful code", "error('wrong route')"));
     std::string brief;
+    std::size_t briefs = 0;
     for (const auto &entry : field(context.view(), "entries").array())
       if (const auto *content = field(entry, "item").find("content");
-          content && content->string().starts_with("Ultracode:"))
+          content && content->string().starts_with("Ultracode:")) {
         brief = string_field(entry, "id");
-    check(!brief.empty());
+        ++briefs;
+      }
+    // c3f: a v2 brief left live is the same brief, so v3 runs add no copy. The
+    // supplied program declares no class, so its result-class brief never counts.
+    if (briefs != (supplied ? 2U : 1U)) {
+      std::cerr << recorded << " session holds " << briefs << " ultracode briefs\n";
+      check(false);
+    }
     const auto result =
         context.manage(Value::object({{"base", Value{context.head()}},
                                       {"mode", Value{"archive"}},
@@ -184,10 +214,169 @@ void builtin_upgrade() {
     // a supplied revision is kept.
     const auto latest = latest_config(*root);
     const auto revision = string_field(latest, "program_revision");
-    check(revision == (supplied ? std::string(32, 'a') : "builtin-ultracode-v2"));
+    check(revision == (supplied ? recorded : "builtin-ultracode-v3"));
     if (!supplied)
       check(string_field(latest, "activation") == "builtin-current" &&
-            string_field(latest, "replaced_revision") == "builtin-ultracode-v1");
+            string_field(latest, "replaced_revision") == recorded);
+  }
+  std::filesystem::remove_all(path);
+}
+// c3f: the built-in ultracode appends its brief only when no live instruction entry
+// holds an equal item (object key order ignored), so repeated runs keep one copy per
+// brief revision.
+void brief_once() {
+  char path[] = "/tmp/blackbird-brief-XXXXXX";
+  check(mkdtemp(path) != nullptr);
+  const JournalHeader h{id<EnvironmentId>(75),
+                        id<AuditStreamId>(76),
+                        3,
+                        {1048576, 4194304},
+                        std::nullopt};
+  const JournalCapacity capacity{64 * 1024 * 1024, 10000};
+  const auto source = string_field(default_workflows().array().front(), "source");
+  const auto from = source.find("content='") + 9;
+  const auto brief = source.substr(from, source.find('\'', from) - from);
+  check(brief.starts_with("Ultracode:"));
+  const auto session =
+      [&](const std::function<void(ContextStore &, CodingEngine &)> &body) {
+        std::filesystem::remove_all(path);
+        std::filesystem::create_directory(path);
+        std::filesystem::permissions(path, std::filesystem::perms::owner_all);
+        auto root = unwrap(
+            RetainedState::create(std::make_unique<NativeJournalDirectory>(
+                                      unwrap(NativeJournalDirectory::open(path))),
+                                  "audit", h, capacity));
+        AuditLog log{*root};
+        ContextStore context{log};
+        FakeProvider provider;
+        CodingEngine engine{log, context, provider, "fake"};
+        body(context, engine);
+      };
+  const auto copies = [](ContextStore &context, std::string_view text) {
+    std::vector<std::string> ids;
+    for (const auto &entry : field(context.view(), "entries").array())
+      if (const auto *content = field(entry, "item").find("content");
+          content && std::holds_alternative<std::string>(content->value()) &&
+          content->string() == text)
+        ids.push_back(string_field(entry, "id"));
+    return ids;
+  };
+  const auto run = [](CodingEngine &engine) {
+    check(engine.operator_turn("ultracode build useful code", "error('wrong route')"));
+  };
+  const auto archive = [](ContextStore &context, const std::string &entry) {
+    const auto result =
+        context.manage(Value::object({{"base", Value{context.head()}},
+                                      {"mode", Value{"archive"}},
+                                      {"reason", Value{"t"}},
+                                      {"source", Value{"test"}},
+                                      {"ids", Value{Value::Array{Value{entry}}}}}));
+    return field(result, "accepted") == Value{true} ? std::string{"accepted"}
+                                                    : string_field(result, "reason");
+  };
+  // The plan's specification: ten runs leave one brief entry.
+  session([&](ContextStore &context, CodingEngine &engine) {
+    for (int i = 0; i < 10; ++i)
+      run(engine);
+    if (copies(context, brief).size() != 1) {
+      std::cerr << "ten ultracode runs left " << copies(context, brief).size()
+                << " brief entries\n";
+      check(false);
+    }
+    // Once the brief is not live (an edit removed it), the next run appends it
+    // again, once. A result entry with the same bytes is not an instruction and
+    // does not count.
+    const auto first = copies(context, brief).front();
+    auto view = context.view();
+    std::erase_if(view.object()[1].second.array(), [&](const Value &entry) {
+      return string_field(entry, "id") == first;
+    });
+    check(field(context.edit(view), "accepted") == Value{true});
+    eval(engine,
+         "blackbird.append({{role='developer',content=[==[" + brief + "]==]}})");
+    const auto result_copy = copies(context, brief);
+    check(result_copy.size() == 1);
+    run(engine);
+    run(engine);
+    const auto after = copies(context, brief);
+    check(after.size() == 2 && after.front() == result_copy.front());
+    check(archive(context, after.back()) == "protected-unit");
+    check(archive(context, result_copy.front()) == "accepted");
+  });
+  // A changed brief revision appends the new brief once beside the old one.
+  session([&](ContextStore &context, CodingEngine &engine) {
+    const std::string earlier_brief = "Ultracode: an earlier revision of the brief.";
+    auto earlier = source;
+    earlier.replace(from, brief.size(), earlier_brief);
+    for (int i = 0; i < 2; ++i)
+      eval(engine, earlier);
+    check(copies(context, earlier_brief).size() == 1 && copies(context, brief).empty());
+    for (int i = 0; i < 3; ++i)
+      run(engine);
+    check(copies(context, earlier_brief).size() == 1 &&
+          copies(context, brief).size() == 1);
+  });
+  std::filesystem::remove_all(path);
+}
+// c3f layer 1 (M1): live_instruction compares items with object keys sorted at
+// every depth, so a native item matches the table Lua passes for it.
+void instruction_query() {
+  char path[] = "/tmp/blackbird-query-XXXXXX";
+  check(mkdtemp(path) != nullptr);
+  const JournalHeader h{id<EnvironmentId>(77),
+                        id<AuditStreamId>(78),
+                        3,
+                        {1048576, 4194304},
+                        std::nullopt};
+  {
+    auto root =
+        unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(
+                                         unwrap(NativeJournalDirectory::open(path))),
+                                     "audit", h, {64 * 1024 * 1024, 10000}));
+    AuditLog log{*root};
+    ContextStore context{log};
+    FakeProvider provider;
+    CodingEngine engine{log, context, provider, "fake"};
+    // The operator prompt is stored {role, content}; Lua tables arrive key-sorted.
+    engine.turn({"c3f probe prompt", R"lua(
+local read
+for _,e in ipairs(blackbird.context().entries) do
+  if e.item.content=='c3f probe prompt' then read=e.item end
+end
+return {literal=blackbird.live_instruction({role='user',content='c3f probe prompt'}),
+        read=blackbird.live_instruction(read),
+        value=blackbird.live_instruction({role='user',content='c3f probe prompt.'}),
+        role=blackbird.live_instruction({role='developer',content='c3f probe prompt'})}
+)lua"});
+    const auto answers = engine.workflow_result();
+    if (answers.find("literal") == nullptr ||
+        field(answers, "literal") != Value{true} ||
+        field(answers, "read") != Value{true} ||
+        field(answers, "value") != Value{false} ||
+        field(answers, "role") != Value{false}) {
+      std::cerr << "live_instruction answers: " << unwrap(dump_json(answers)) << "\n";
+      check(false);
+    }
+    // Nested objects: key order is ignored at every depth, array order is not.
+    const auto part = [](std::string text, bool sorted) {
+      return sorted ? Value::object({{"text", Value{std::move(text)}},
+                                     {"type", Value{"input_text"}}})
+                    : Value::object({{"type", Value{"input_text"}},
+                                     {"text", Value{std::move(text)}}});
+    };
+    const auto message = [&](bool sorted, std::string first, std::string second) {
+      Value::Array parts{part(std::move(first), sorted),
+                         part(std::move(second), sorted)};
+      return sorted ? Value::object({{"content", Value{std::move(parts)}},
+                                     {"role", Value{"developer"}}})
+                    : Value::object({{"role", Value{"developer"}},
+                                     {"content", Value{std::move(parts)}}});
+    };
+    context.append({message(false, "one", "two")}, "operator");
+    check(context.live_instruction(message(false, "one", "two")));
+    check(context.live_instruction(message(true, "one", "two")));
+    check(!context.live_instruction(message(true, "two", "one")));
+    check(!context.live_instruction(message(true, "one", "three")));
   }
   std::filesystem::remove_all(path);
 }
@@ -504,6 +693,8 @@ int main() {
   publish_workflows({});
   std::filesystem::remove_all(path);
   builtin_upgrade();
+  brief_once();
+  instruction_query();
   std::cout << "workflow registry, boundary, fake provider, completion and "
                "colored-cell oracles passed\n";
 }

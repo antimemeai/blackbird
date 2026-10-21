@@ -185,6 +185,11 @@ public:
               RawContextOrigin origin = {});
   // The live units (design §3, §5.1): handles, classes, open, superseded, pinned.
   std::vector<Unit> units(RawContextOrigin origin = {}) const;
+  // Whether a live entry whose creating record classes it an instruction holds an
+  // item equal to this one, the order of object keys at any depth aside: both are
+  // compared with keys sorted (the built-in ultracode appends its brief only when
+  // none does).
+  bool live_instruction(const Value &item, RawContextOrigin origin = {}) const;
   // Pins (design §5.4): expand the selection (Error{invalid_range} when it does not
   // parse) and record the live pinned units at once as the latest-wins program
   // record context-pins-v1. Returns {accepted: [handle], refused: [{unit, reason}],
@@ -362,5 +367,8 @@ private:
     ItemPrint print;
   };
   mutable std::map<std::string, Print, std::less<>> prints_;
+  // Prints of instruction items with object keys sorted, by entry ID, kept the same
+  // way (live_instruction compares them).
+  mutable std::map<std::string, Print, std::less<>> sorted_prints_;
 };
 } // namespace blackbird

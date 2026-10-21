@@ -40,7 +40,8 @@ enum class RawContextAction : std::uint8_t {
   repair,
   pins,
   units,
-  origins
+  origins,
+  instructions
 };
 struct RawContextState {
   std::string_view head;

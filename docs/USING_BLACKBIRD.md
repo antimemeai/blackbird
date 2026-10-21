@@ -271,6 +271,13 @@ persistent state. The model has a `lua` tool and the same APIs:
   append holding function calls or reasoning takes no class and is a `round`,
   atomic with the outputs that answer its calls; outputs take no class either and
   join their call's round. Any other option or class is refused.
+- `blackbird.live_instruction(item)` returns true when a live entry whose creating
+  record makes it an instruction holds an item equal to `item`, ignoring the order of
+  object keys at every depth (both are compared with keys sorted; every other byte,
+  and array order, must match). A result entry with an equal item does not count.
+  The built-in ultracode appends its brief only when this is false, so repeated runs
+  keep one copy of each brief revision. Only this query ignores key order: a
+  superseded copy, and an entry's comparison with its original, need exact bytes.
 - `blackbird.json.decode/encode` import/export JSON at external boundaries; native values preserve null, arrays and exact numeric values.
   Use `blackbird.binary.encode/decode` for BBM2 persistence, and `blackbird.format` for text.
   Use `blackbird.array({})` for a new empty array.
