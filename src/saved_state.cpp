@@ -76,9 +76,11 @@ Result<SavedPayload> decode_saved_payload(ByteView body, std::uint64_t file_vers
     };
     // Only malformed bytes are corrupt: a decode that runs out of memory, or meets
     // a value past its limits (capacity) or a form it does not read (unsupported),
-    // keeps its own error.
+    // keeps its own error. Any other decode error (invalid_range included) is
+    // malformed bytes.
     const auto kept = [](const Error &error) {
-      return error.code != ErrorCode::corrupt;
+      return error.code == ErrorCode::allocation || error.code == ErrorCode::capacity ||
+             error.code == ErrorCode::unsupported;
     };
     auto context = packet_blob(context_size);
     auto programs = packet_blob(program_size);
