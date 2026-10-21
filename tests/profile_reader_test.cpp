@@ -328,6 +328,26 @@ void roundtrip() {
     check(again.has_value() && again.value() == first.value(),
           "zero round trip " + zero);
   }
+  // The 128-character numeral bound holds for the presented form too: dropping the
+  // point for `e-25`, or padding `e16` with zeros, may lengthen a numeral past it
+  // (arconaut-c6d). Such a value is refused; one presented in 128 characters reads.
+  const std::string ones(128, '1');
+  for (const auto &[numeral, accepted] : std::vector<std::pair<std::string, bool>>{
+           {ones.substr(0, 104) + "." + ones.substr(0, 20), true},
+           {ones.substr(0, 100) + "." + ones.substr(0, 25), false},
+           {"-" + ones.substr(0, 100) + "." + ones.substr(0, 25), false},
+           {ones.substr(0, 112) + "e16", true},
+           {ones.substr(0, 113) + "e16", false}}) {
+    const auto first = read("return { " + numeral + " }");
+    check(first.has_value() == accepted &&
+              (accepted || first.error().subject == "numeral"),
+          "presented numeral bound " + numeral + " -> " + shown(first));
+    if (accepted) {
+      const auto again = read("return " + format_value(first.value()).value());
+      check(again.has_value() && again.value() == first.value(),
+            "presented numeral round trip " + numeral + " -> " + shown(again));
+    }
+  }
   Generator g{0x5eed};
   for (int i = 0; i < 4000; ++i) {
     const auto v = g.container(0, g.below(2) == 0);

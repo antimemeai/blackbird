@@ -28,6 +28,9 @@ struct Refusal {
   std::string construct;
   std::string reason;
 };
+// A numeral's bound, in characters without its sign, applies both to its spelling and
+// to the form format_value presents, so every accepted number reads back.
+constexpr std::size_t numeral_characters = 128;
 struct Position {
   std::size_t offset = 0;
   std::size_t line = 1;
@@ -320,8 +323,10 @@ private:
       } else {
         break;
       }
-      if (text.size() > 128)
-        refuse(start, "numeral", "numeral longer than 128 characters");
+      if (text.size() > numeral_characters)
+        refuse(start, "numeral",
+               "numeral longer than " + std::to_string(numeral_characters) +
+                   " characters");
     }
     if (text.starts_with("0x") || text.starts_with("0X"))
       refuse(start, "numeral", "hexadecimal numerals are not accepted");
@@ -484,6 +489,14 @@ private:
     if (const auto *d = std::get_if<Decimal>(&parsed.value().storage());
         d && d->limbs.size() == 1 && d->limbs[0] == 0)
       return Number{Decimal{false, 0, {0}}};
+    // Presentation may be longer than this spelling: `e-25` replaces a point, and an
+    // exponent up to 16 is written out as zeros.
+    if (const auto shown = parsed.value().text();
+        shown.size() - (negative ? 1 : 0) > numeral_characters)
+      refuse(at, "numeral",
+             "numeral `" + std::string{negative ? "-" : ""} + std::string{spelled} +
+                 "` is presented in more than " + std::to_string(numeral_characters) +
+                 " characters");
     return std::move(parsed).value();
   }
   void count_value(Position at) {
