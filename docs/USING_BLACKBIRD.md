@@ -204,6 +204,27 @@ persistent state. The model has a `lua` tool and the same APIs:
   `process op=foreground` and unranged `read_process_output`. The operator's own
   `/exec`, `/process` and `/fg` stay complete; calls nested in an operator `/lua`
   program are shaped. Zero or larger explicit limits are accepted.
+  Results of the other tools (not `write_file`/`edit_file` or the paged readers)
+  are shaped once, where they reach the model (T1): the output of the model's own
+  call, a drained workflow continuation, host observations. When such a result's
+  text (a UTF-8 string as is, otherwise its JSON) exceeds 16384 bytes it returns as
+  one string: the first 4096 bytes, a marker line naming the omitted range, total and
+  `result_ref`, and the last 12288 bytes.
+  `blackbird.call("read_process_output", {result_ref=REF, range={mode="bytes",
+  start=H, ["end"]=T}})` pages the original's text, 8192 bytes per page unless
+  `output_max_bytes` asks for more. A program relaying a model call declares it:
+  `blackbird.call(item.name, args, {call_id = item.call_id})` makes the result the
+  model's own and shaped, even when the relay changes the arguments; an unknown or
+  already answered call_id is refused and not run. Without the declaration a relayed
+  call is shaped only while its name and arguments equal an undispatched model call
+  and the turn has made no declaration yet; otherwise its whole result enters
+  context. A program's own `blackbird.call` (at any nesting) returns these tools'
+  results whole, so recipes that read fields such
+  as `program_config`'s `revision` keep working; `blackbird.append` content is the
+  program's own and is never shaped. On the model's call, `output_max_bytes` and
+  `output_head_bytes` set the budget and never reach the tool; a Lua-defined tool
+  takes its shape from `definition.shape`. See
+  [economical defaults](ECONOMICAL_DEFAULTS.md).
   `read_file` accepts one optional `range` object: `{mode="lines", start=1,
   ["end"]=20}` (one-based inclusive) or `{mode="bytes", start=0, ["end"]=256}`
   (zero-based half-open). Omit `range` for the first 16384 bytes; use a range or `output_max_bytes` for more. Only one mode is possible;

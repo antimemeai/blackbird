@@ -78,7 +78,8 @@ for step = 1, 8 do
     if item.type == "function_call" then
       calls = calls + 1
       local t = clock()
-      local success, result = pcall(blackbird.call, item.name, item.arguments)
+      local success, result =
+        pcall(blackbird.call, item.name, item.arguments, { call_id = item.call_id })
       local u = clock()
       rec.tools[#rec.tools + 1] =
         { name = item.name, wall_seconds = u - t, completed = success }

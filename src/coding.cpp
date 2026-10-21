@@ -1634,7 +1634,12 @@ struct CodingEngine::Runtime {
         case call_op: {
           auto name = bridge_string(L, 1, frame, 1);
           auto args = read_value(L, 2, {0, &nodes});
-          frame.value = self->engine.call(std::move(name), std::move(args));
+          // blackbird.call(name, args[, {call_id = ID}]): a relay declares the model
+          // call it answers (T1).
+          const auto options =
+              lua_isnoneornil(L, 3) ? Value{} : read_value(L, 3, {0, &nodes});
+          frame.value =
+              self->engine.dispatch(std::move(name), std::move(args), options);
           break;
         }
         case manage_op:
@@ -1675,6 +1680,7 @@ struct CodingEngine::Runtime {
               throw Error{ErrorCode::invalid_range};
             self->engine.context_.append(items.array(), "lua.synthetic", *declared);
           }
+          self->engine.note_answered(items.array());
           frame.value = self->engine.context_.view();
           break;
         }
@@ -2128,7 +2134,20 @@ std::vector<std::string> default_observation_budget(std::string_view name,
   const auto *op = arguments.find("op");
   const bool foreground = name == "process" && op && *op == Value{"foreground"};
   constexpr std::uint64_t budget = 8192, head = 2048, tail = budget - head;
-  if (name == "exec" || foreground || (name == "read_process_output" && !selected)) {
+  if (name == "read_process_output" && arguments.find("result_ref")) {
+    // Fetch-back is a bounded page (design §5.7): 8192 bytes from the range's start,
+    // ranged or not; only an explicit output_max_bytes asks for more (T1). A head
+    // alone keeps the default 6144-byte tail after it, as an output_ref read does.
+    const auto *requested = arguments.find("output_head_bytes");
+    const auto shown =
+        requested ? std::max(budget, command_number(arguments, "output_head_bytes",
+                                                    16 * 1024 * 1024 - tail) +
+                                         tail)
+                  : budget;
+    arguments.object().emplace_back("output_max_bytes", Value{Number{shown}});
+    supplied.emplace_back("output_max_bytes");
+  } else if (name == "exec" || foreground ||
+             (name == "read_process_output" && !selected)) {
     // A head alone asks for more opening context; keep the default tail after it.
     const auto *requested = arguments.find("output_head_bytes");
     const auto shown =
@@ -2148,6 +2167,46 @@ std::vector<std::string> default_observation_budget(std::string_view name,
     supplied.emplace_back("output_max_bytes");
   }
   return supplied;
+}
+// Equal as the model sent them: object keys in any order (a Lua table round trip
+// reorders them), everything else as Value equality.
+bool equivalent(const Value &a, const Value &b) {
+  if (a.same(b))
+    return true;
+  const auto *left = std::get_if<Value::Object>(&a.value());
+  const auto *right = std::get_if<Value::Object>(&b.value());
+  if (!left || !right) {
+    const auto *first = std::get_if<Value::Array>(&a.value());
+    const auto *second = std::get_if<Value::Array>(&b.value());
+    if (!first || !second)
+      return a == b;
+    return first->size() == second->size() &&
+           std::equal(first->begin(), first->end(), second->begin(), equivalent);
+  }
+  if (left->size() != right->size())
+    return false;
+  return std::all_of(left->begin(), left->end(), [&](const auto &entry) {
+    const auto *other = b.find(entry.first);
+    return other && equivalent(entry.second, *other);
+  });
+}
+// Native tools that bound their own output: o17's process and file shapes, the paged
+// readers of design §9 (their arguments choose the page) and the file-effect
+// confirmations. Every other native tool's result is shaped generically (T1).
+bool own_result_bound(std::string_view name) {
+  constexpr std::array<std::string_view, 12> own{"exec",
+                                                 "process",
+                                                 "read_process_output",
+                                                 "read_file",
+                                                 "write_file",
+                                                 "edit_file",
+                                                 "context_inspect",
+                                                 "audit_inspect",
+                                                 "trajectory_read",
+                                                 "variables_read",
+                                                 "tasks_read",
+                                                 "git_observe"};
+  return std::find(own.begin(), own.end(), name) != own.end();
 }
 std::size_t budget_number(const Value &value, std::string_view key) {
   const auto &text = field(value, key).number().text();
@@ -2414,8 +2473,20 @@ Value CodingEngine::define_tool(const Value &arguments) {
     const auto &definition = field(arguments, "definition");
     for (const auto &[k, v] : definition.object()) {
       (void)v;
-      if (k != "name" && k != "description" && k != "parameters" && k != "source")
+      if (k != "name" && k != "description" && k != "parameters" && k != "source" &&
+          k != "shape")
         throw Error{ErrorCode::invalid_range};
+    }
+    // How the tool's results are cut (T1): exec's budget keys, nothing else.
+    if (const auto *shape = definition.find("shape")) {
+      if (!std::holds_alternative<Value::Object>(shape->value()))
+        throw Error{ErrorCode::invalid_range};
+      for (const auto &[key, value] : shape->object()) {
+        (void)value;
+        if (key != "output_max_bytes" && key != "output_head_bytes")
+          throw Error{ErrorCode::invalid_range};
+      }
+      (void)result_shape(*shape);
     }
     const auto &name = string_field(definition, "name");
     if (name.empty() || name.size() > 64 || name == "provider" ||
@@ -2598,9 +2669,11 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
     program_config_.object().emplace_back("workflows", default_workflows());
     program_config_.object().emplace_back("workflow_prefix", Value{""});
     // The built-in program's revision names its exact source: v2 declares the
-    // ultracode brief an instruction (unit S2).
+    // ultracode brief an instruction (unit S2); v3 appends it only when no live
+    // instruction holds it (unit c3f, on work/clm-rd7); v4 declares the call_id of each
+    // model call it dispatches (unit T1).
     constexpr std::string_view builtin_prefix = "builtin-ultracode-v";
-    const std::string builtin = std::string{builtin_prefix} + "2";
+    const std::string builtin = std::string{builtin_prefix} + "4";
     program_revision_ = builtin;
     budget_ = default_context_budget();
     std::optional<Value> recorded_config;
@@ -3256,9 +3329,18 @@ Value CodingEngine::operation(
                               CommandTaskActivity *, RawRetainedExec *)> &body,
     RawProviderOperationContext *provider_operation,
     const CommandStartStatus *command_start, const DomainAdmission *domain_admission,
-    const FileEffectObservation *file_effect) {
-  // Keys call() supplied as native defaults belong to this operation only.
-  const auto native_defaults = std::exchange(native_defaults_, {});
+    const FileEffectObservation *file_effect, OperationShaping shaping) {
+  const auto &native_defaults = shaping.native_defaults;
+  const auto &shape = shaping.shape;
+  // Inside a model-boundary operation, a nested call answers only model calls from
+  // responses that arrive after it began (T1).
+  struct BoundaryFloor {
+    std::uint64_t &floor;
+    std::uint64_t previous;
+    ~BoundaryFloor() { floor = previous; }
+  } boundary_floor{boundary_floor_, boundary_floor_};
+  if (shape)
+    boundary_floor_ = response_generation_;
   auto &root = log_.root();
   struct FileObservationFence {
     const FileEffectObservation *effect;
@@ -3425,6 +3507,10 @@ Value CodingEngine::operation(
         keys.emplace_back(key);
       meta.object().emplace_back("native_defaults", Value{std::move(keys)});
     }
+    if (!shaping.declared.empty())
+      meta.object().emplace_back("declared_call_id", Value{shaping.declared});
+    if (!shaping.refusal.empty())
+      meta.object().emplace_back("call_id_refused", Value{shaping.refusal});
     const auto continuation_bytes = unwrap(encode_packet(meta));
     CommandTaskMap staged_tasks;
     CommandTaskMap::node_type task_node;
@@ -3545,6 +3631,16 @@ Value CodingEngine::operation(
       result = effect_error ? error_value(*effect_error) : std::move(adapter_result);
       if (effect_error && file_effect && file_effect->applied())
         result.object().emplace_back("effect_outcome", Value{"applied"});
+      if (effect_error && !shaping.refusal.empty()) {
+        result.object().emplace_back("reason", Value{shaping.refusal});
+        result.object().emplace_back("call_id", Value{shaping.declared});
+        result.object().emplace_back(
+            "message",
+            Value{shaping.refusal == "call_id_answered"
+                      ? "An output already answers this call_id; the call was not run."
+                      : "No model call with this call_id was received in this turn; "
+                        "the call was not run."});
+      }
       domain_refused = domain_admission && domain_admission->refusal() &&
                        effect_error && effect_error->code == ErrorCode::capacity &&
                        !operation_capture.error() && !root.raw_owner_blocked();
@@ -3565,6 +3661,13 @@ Value CodingEngine::operation(
                       "and "
                       "powerwords. No candidate was staged."});
       }
+      if (name == "read_process_output" && effect_error &&
+          effect_error->code == ErrorCode::unsupported && input.find("result_ref"))
+        result.object().emplace_back(
+            "message",
+            Value{"This result_ref names a result with no text form within the "
+                  "provider limits; it has no pages. Its original stays retained for "
+                  "audit_inspect."});
       if (name == "read_file" && effect_error &&
           effect_error->code == ErrorCode::invalid_range) {
         result.object().emplace_back(
@@ -3994,12 +4097,20 @@ Value CodingEngine::operation(
     };
     std::string result_id;
     std::size_t result_record = 0;
+    // A failure shaped to text keeps its status in its original's metadata, which
+    // the failed selector reads by result_ref (T1).
+    const bool failed_result =
+        shape && failed_output(Value::object(
+                     {{"type", Value{"function_call_output"}}, {"output", result}}));
     try {
+      auto result_metadata =
+          Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
+                         {"source_encoding", Value{"bbm2"}},
+                         {"operation", Value{std::string{name}}}});
+      if (failed_result)
+        result_metadata.object().emplace_back("failed", Value{true});
       const auto identity =
-          retain(0, {"operation.result", output,
-                     Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
-                                    {"source_encoding", Value{"bbm2"}},
-                                    {"operation", Value{std::string{name}}}})});
+          retain(0, {"operation.result", output, std::move(result_metadata)});
       result_id = hex_identity(identity.bytes());
       result_record = root.fact_count() - 1;
       file_observation.retained = true;
@@ -4045,13 +4156,35 @@ Value CodingEngine::operation(
               Value::object({{"attempt", Value{hex_identity(attempt.bytes())}},
                              {"unretained_bytes", Value{Number{unretained_bytes_}}}})});
     }
+    // Shaped once where the result becomes visible to the model (T1), after its whole
+    // original is retained; the settlement records the shape applied.
+    std::optional<ShapedResult> shaped;
+    if (shape && !result_id.empty()) {
+      const auto *text = std::get_if<std::string>(&result.value());
+      const auto inner = text ? shaped_texts_.find(*text) : shaped_texts_.end();
+      if (inner != shaped_texts_.end()) {
+        // Itself one shaped result passed through whole: not cut again.
+        shaped = ShapedResult{
+            result, Value::object({{"pass_through", Value{inner->second}},
+                                   {"text_bytes", Value{Number{text->size()}}}})};
+      } else {
+        shaped = shape_result(result, *shape, result_id);
+        if (const auto *cut = std::get_if<std::string>(&shaped->presented.value());
+            cut && shaped->summary.find("omitted"))
+          shaped_texts_.insert_or_assign(*cut, result_id);
+      }
+      if (failed_result)
+        shaped->summary.object().emplace_back("failed", Value{true});
+    }
     // The result original is already retained. Settlement carries its locator,
     // not another complete response. On capture refusal retain the bounded error.
-    const auto observed = unwrap(encode_packet(
-        result_id.empty()
-            ? result
-            : Value::object({{"result_id", Value{result_id}},
-                             {"result_record", Value{Number{result_record}}}})));
+    auto settled = Value::object({{"result_id", Value{result_id}},
+                                  {"result_record", Value{Number{result_record}}}});
+    if (shaped)
+      settled.object().emplace_back("shape", shaped->summary);
+    if (shaped && !shaping.call_id.empty())
+      settled.object().emplace_back("call_id", Value{shaping.call_id});
+    const auto observed = unwrap(encode_packet(result_id.empty() ? result : settled));
     auto disposition =
         boundary.error ? AttemptDisposition::failure : AttemptDisposition::success;
     if (boundary.error && !adapter_capacity &&
@@ -4211,11 +4344,14 @@ Value CodingEngine::operation(
       if (stopped && std::get<bool>(stopped->value()))
         throw Error{ErrorCode::interrupted};
     }
+    if (shaped)
+      return std::move(shaped->presented);
     return result;
   });
 }
 
-Value CodingEngine::execute_workflow(WorkflowContinuation &invocation) {
+Value CodingEngine::execute_workflow(WorkflowContinuation &invocation,
+                                     bool continuation) {
   try {
     const RawProgramContext origin{invocation.selection, generation_.bytes()};
     RawProgramCall trace{3820, 3821, &origin,
@@ -4247,6 +4383,11 @@ Value CodingEngine::execute_workflow(WorkflowContinuation &invocation) {
           guard);
       if (workflow_invocations_ > 64)
         throw Error{ErrorCode::capacity};
+      // A drained continuation's result enters context as a developer item, outside
+      // any tool call: its own operation shapes it (design §9).
+      OperationShaping shaping;
+      if (continuation)
+        shaping.shape = invocation.shape.value_or(ResultShape{});
       auto result = operation(
           "workflow_execute", invocation.arguments,
           [&](OperationAttemptId attempt, InvocationId invocation_id,
@@ -4287,7 +4428,8 @@ Value CodingEngine::execute_workflow(WorkflowContinuation &invocation) {
             return child.invoke_tool({.definition = invocation.definition,
                                       .arguments = invocation.arguments,
                                       .origin = &wrapper_origin});
-          });
+          },
+          nullptr, nullptr, nullptr, nullptr, std::move(shaping));
       end(RawOperationBranch::returned);
       return result;
     } catch (const Error &error) {
@@ -4337,13 +4479,14 @@ void CodingEngine::drain_workflows() {
         throw Error{ErrorCode::interrupted};
       auto next = std::move(workflow_continuations_.front());
       workflow_continuations_.erase(workflow_continuations_.begin());
-      const auto result = execute_workflow(next);
+      const auto result = execute_workflow(next, true);
+      // The same text a tool output's provider receives, so result_ref offsets agree.
       context_.append(
           {Value::object(
               {{"role", Value{"developer"}},
                {"content",
                 Value{"Registered workflow " + string_field(next.definition, "name") +
-                      " completed in this turn: " + unwrap(format_value(result))}}})},
+                      " completed in this turn: " + result_text(result)}}})},
           "workflow-continuation");
     }
   });
@@ -4958,6 +5101,16 @@ Value CodingEngine::request(Value options) {
         const std::array fields{raw_native(size), raw_text(head)};
         final_acceptance.scalar(31, 7, fields);
       });
+      // The model's own calls in this response: dispatching one is a model boundary.
+      ++response_generation_;
+      for (const auto &item : field(response, "output").array())
+        if (const auto *type = item.find("type");
+            type && *type == Value{"function_call"} && item.find("call_id") &&
+            item.find("name") && item.find("arguments"))
+          model_calls_.insert_or_assign(
+              string_field(item, "call_id"),
+              ModelCall{string_field(item, "name"), field(item, "arguments"),
+                        response_generation_, ++call_sequence_});
       return response;
     });
   });
@@ -5066,14 +5219,163 @@ Value CodingEngine::retained_process_output(const Value &arguments) {
     throw;
   }
 }
-Value CodingEngine::call(std::string name, Value arguments) {
+// The full original behind a shaped result (T1): the operation.result record named by
+// result_ref, read by identity (also from the archive) and paged as the same text the
+// shaping measured, with read_process_output's ranges and budgets.
+Value CodingEngine::retained_result_output(const Value &arguments) {
+  const auto *reference = arguments.find("result_ref");
+  if (arguments.find("output_ref") || !reference ||
+      !std::holds_alternative<std::string>(reference->value()))
+    throw Error{ErrorCode::invalid_range};
+  if (arguments.find("output_max_bytes")) // At most 16777216 per page.
+    (void)command_number(arguments, "output_max_bytes", 16 * 1024 * 1024);
+  const auto &ref = reference->string();
+  if (ref.empty())
+    throw Error{ErrorCode::invalid_range};
+  if (ref != cached_result_ref_) {
+    const auto identity = [&] {
+      try {
+        return parse_id<ApplicationRecordId>(ref);
+      } catch (const Error &) {
+        throw Error{ErrorCode::invalid_range};
+      }
+    }();
+    auto &root = log_.root();
+    const auto fact =
+        root.lookup(root.visible(), 1, RetainedKind::application, identity.bytes());
+    if (!fact)
+      throw Error{ErrorCode::invalid_range};
+    const auto *record = std::get_if<ApplicationRecordEvent>(&fact->event.body);
+    if (!record || record->identity != identity ||
+        record->channel != ApplicationChannel::log ||
+        fact->event.dependencies.size() != 1)
+      throw Error{ErrorCode::invalid_range};
+    const auto packet = unwrap(read_packet(record->payload));
+    const auto &label = string_field(packet, "label");
+    if (label != "operation.result" && label != "application.observations")
+      throw Error{ErrorCode::invalid_range};
+    const auto source = unwrap(root.source(fact->event.dependencies.front()));
+    // One decoded original per turn: paging it does not decode it again.
+    cached_result_ref_.clear();
+    cached_result_text_.clear();
+    const auto decoded = unwrap(decode_packet(source));
+    if (const auto *string = std::get_if<std::string>(&decoded.value());
+        string && valid_utf8(*string))
+      cached_result_text_ = *string;
+    else if (auto text = dump_json(decoded, result_text_limits); text.has_value())
+      cached_result_text_ = std::move(text).value();
+    else // No text form within the provider limits: a recorded refusal.
+      throw Error{ErrorCode::unsupported};
+    cached_result_ref_ = ref;
+  }
+  return process_output_presentation(cached_result_text_, arguments);
+}
+void CodingEngine::note_answered(const Value::Array &items) {
+  for (const auto &item : items) {
+    const auto *type = item.find("type");
+    const auto *call = item.find("call_id");
+    if (!type || *type != Value{"function_call_output"} || !call ||
+        !std::holds_alternative<std::string>(call->value()))
+      continue;
+    if (const auto found = model_calls_.find(call->string());
+        found != model_calls_.end()) {
+      answered_calls_.insert(found->first);
+      model_calls_.erase(found);
+    }
+  }
+}
+Value CodingEngine::dispatch(std::string name, Value arguments, const Value &options) {
   if (name == "provider")
     throw Error{ErrorCode::invalid_range};
   // The operator's own call stays exact; anything it nests (a lua program, a
   // workflow's model loop) is a program observation again.
-  auto supplied = operator_call_ && operation_depth_ == 0
-                      ? std::vector<std::string>{}
-                      : default_observation_budget(name, arguments);
+  const bool exact = operator_call_ && operation_depth_ == 0;
+  auto supplied =
+      exact ? std::vector<std::string>{} : default_observation_budget(name, arguments);
+  // Generic shaping (T1) happens once, where a result becomes visible to the model:
+  // the output of the model's own function call. A program's own calls (any nesting)
+  // return whole results; o17's native defaults above still apply to them. A call is
+  // the model's when it dispatches an unclaimed model call by name and arguments.
+  std::optional<ResultShape> shape;
+  std::string call_id, refusal, declared_id;
+  bool shape_refused = false;
+  if (options != Value{}) {
+    // A relay declares the model call it answers: a recorded call no output has
+    // answered yet. Anything else is refused and recorded with its reason.
+    const auto *fields = std::get_if<Value::Object>(&options.value());
+    const auto *declared =
+        fields && fields->size() == 1 ? options.find("call_id") : nullptr;
+    if (!declared || !std::holds_alternative<std::string>(declared->value()))
+      throw Error{ErrorCode::invalid_range};
+    declared_turn_ = true;
+    const auto &id = declared->string();
+    declared_id = id;
+    if (const auto found = model_calls_.find(id); found != model_calls_.end()) {
+      found->second.dispatched = true;
+      call_id = id;
+    } else
+      refusal = answered_calls_.contains(id) ? "call_id_answered" : "call_id_unknown";
+  } else if (!exact && !declared_turn_) {
+    // Undeclared: the first undispatched model call with this name and equivalent
+    // arguments, until the turn's dispatcher declares.
+    auto claimed = model_calls_.end();
+    for (auto entry = model_calls_.begin(); entry != model_calls_.end(); ++entry) {
+      const auto &candidate = entry->second;
+      if (!candidate.dispatched && candidate.generation > boundary_floor_ &&
+          candidate.name == name && equivalent(candidate.arguments, arguments) &&
+          (claimed == model_calls_.end() ||
+           candidate.sequence < claimed->second.sequence))
+        claimed = entry;
+    }
+    if (claimed != model_calls_.end()) {
+      claimed->second.dispatched = true;
+      call_id = claimed->first;
+    }
+  }
+  const bool model_call = !call_id.empty();
+  // A Lua-defined tool's arguments are its own: its shape comes only from its
+  // definition. A native tool's budget keys never reach its body; the operation input
+  // keeps them as requested.
+  Value requested;
+  bool stripped = false;
+  const auto lua_tool =
+      std::find_if(lua_tools_.array().begin(), lua_tools_.array().end(),
+                   [&](const Value &d) { return string_field(d, "name") == name; });
+  if (lua_tool != lua_tools_.array().end()) {
+    if (model_call) {
+      try {
+        const auto *declared = lua_tool->find("shape");
+        shape = declared ? result_shape(*declared) : ResultShape{};
+      } catch (const Error &) {
+        shape_refused = true;
+      }
+    }
+  } else if (!own_result_bound(name)) {
+    const bool object = std::holds_alternative<Value::Object>(arguments.value());
+    const bool keys = object && (arguments.find("output_max_bytes") ||
+                                 arguments.find("output_head_bytes"));
+    if (model_call) {
+      try {
+        shape = result_shape(object ? arguments : Value::object({}));
+      } catch (const Error &) {
+        shape_refused = true;
+      }
+      if (!keys)
+        supplied = {"output_max_bytes", "output_head_bytes"};
+    }
+    if (keys) {
+      // Shares the argument values (copy-on-write storage); only the top-level entry
+      // list without the two keys is built.
+      requested = std::move(arguments);
+      stripped = true;
+      Value::Object rest;
+      for (const auto &entry : std::as_const(requested).object())
+        if (entry.first != "output_max_bytes" && entry.first != "output_head_bytes")
+          rest.push_back(entry);
+      arguments = Value::object(std::move(rest));
+    }
+  }
+  const auto continuation_shape = shape;
   // Shape a job's result from its retained originals within the selected budget.
   const auto shaped = [this](Value result, const std::string &id,
                              const Value &arguments) {
@@ -5100,12 +5402,14 @@ Value CodingEngine::call(std::string name, Value arguments) {
   CommandStartStatus command_start;
   DomainAdmission domain_admission;
   FileEffectObservation file_effect;
-  native_defaults_ = std::move(supplied);
+  const Value &input = stripped ? requested : arguments;
   return operation(
-      name, arguments,
+      name, input,
       [&](OperationAttemptId attempt, InvocationId invocation,
           DefinitionGenerationId admitted_generation, CommandTaskActivity *activity,
           RawRetainedExec *raw_exec) {
+        if (shape_refused || !refusal.empty())
+          throw Error{ErrorCode::invalid_range};
         if (name == "exec") {
           const auto id = hex_identity(attempt.bytes());
           const auto limits = log_.root().journal_limits();
@@ -5228,7 +5532,8 @@ Value CodingEngine::call(std::string name, Value arguments) {
                                               workflows_->revision(),
                                               hex_identity(attempt.bytes()),
                                               selected,
-                                              {}};
+                                              {},
+                                              continuation_shape};
             const auto selection = Value::object(
                 {{"name", field(definition, "name")},
                  {"revision", Value{workflows_->revision()}},
@@ -5331,8 +5636,13 @@ Value CodingEngine::call(std::string name, Value arguments) {
             return Value::object({{"scheduled", Value{true}}});
           });
         }
-        if (name == "read_process_output")
+        if (name == "read_process_output") {
+          if (arguments.find("result_ref"))
+            return retained_result_output(arguments);
+          if (!arguments.find("output_ref"))
+            throw Error{ErrorCode::invalid_range};
           return retained_process_output(arguments);
+        }
         if (name == "context_repair") {
           if (string_field(arguments, "base") != context_.head() ||
               operation_depth_ != 1 || detail::owned_children.load() != 0 ||
@@ -5366,6 +5676,7 @@ Value CodingEngine::call(std::string name, Value arguments) {
           // Reject duplicates/orphan outputs before publishing anything.
           validate_protocol(candidate);
           const auto count = outputs.size();
+          note_answered(outputs);
           if (!outputs.empty())
             context_.append(std::move(outputs), "workflow.protocol-repair");
           return Value::object({{"repaired", Value{Number{count}}},
@@ -5786,7 +6097,7 @@ Value CodingEngine::call(std::string name, Value arguments) {
         return result;
       },
       nullptr, name == "exec" ? &command_start : nullptr, &domain_admission,
-      &file_effect);
+      &file_effect, {std::move(supplied), shape, call_id, declared_id, refusal});
 }
 Value CodingEngine::stats() const {
   auto result = context_.stats();
@@ -6059,6 +6370,15 @@ bool CodingEngine::operator_turn(std::string_view prompt, std::string_view fallb
                        {"origin", Value{"operator"}}});
     operator_arguments_ = invocation;
     const auto program = "return blackbird.call('workflow_invoke',_native_args)";
+    // The operator's own invocation is its outermost call: its result stays exact.
+    // The workflow's own calls return whole results; only calls that answer a model
+    // call are shaped (T1).
+    struct OperatorScope {
+      bool &active;
+      bool previous;
+      ~OperatorScope() { active = previous; }
+    } scope{operator_call_, operator_call_};
+    operator_call_ = true;
     turn({prompt, program});
     return true;
   });
@@ -6121,6 +6441,15 @@ void CodingEngine::turn(TurnInput input) {
     const decltype(state) &capture;
     ~Running() {
       engine.turn_running_ = false;
+      if (!previous) {
+        // Model calls and the decoded result_ref page source live for one turn.
+        engine.model_calls_.clear();
+        engine.answered_calls_.clear();
+        engine.declared_turn_ = false;
+        engine.shaped_texts_.clear();
+        engine.cached_result_ref_.clear();
+        engine.cached_result_text_ = std::string{};
+      }
       for (auto &continuation : engine.workflow_continuations_)
         continuation.parked.finish(1);
       engine.workflow_continuations_.clear();

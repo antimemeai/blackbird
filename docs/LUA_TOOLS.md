@@ -9,7 +9,19 @@ configuration; Lua globals/closures are not persisted.
 The model tool is `tool_define({definition: {...}, base?: REVISION})`. Lua also
 has `arco.define_tool(definition)`, a convenience for the same retained call.
 `arco.call('tool_registry', {})` returns the effective revision, effective
-complete definitions, pending complete definitions and pending revision.
+complete definitions, pending complete definitions and pending revision. Called from
+a program these results are whole (T1).
+
+A definition may carry `shape = {output_max_bytes = N, output_head_bytes = H}`: when
+the tool answers the model's own call, a result whose text (a string as is,
+otherwise its JSON) exceeds N bytes comes back as its first H bytes, a marker with
+`result_ref`, and its last N - H bytes; N alone keeps a head of N bytes; H alone
+makes the budget the larger of 16384 and H + 12288, so the tail is 16384 - H for a
+head under 4096, else 12288. Without `shape` the default is 16384 bytes, 4096 head
+and 12288 tail; budgets are at most 16777216 text bytes. A result whose cut would not
+be shorter than its text comes back whole. The tool's own arguments are
+never read for this, even ones named `output_max_bytes`. Called from a program, the
+tool's result is whole.
 
 ```lua
 local result = arco.define_tool({

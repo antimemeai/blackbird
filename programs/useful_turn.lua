@@ -23,7 +23,8 @@ for step = 1, 64 do
   for _, item in ipairs(response.output) do
     if item.type == "function_call" then
       calls = calls + 1
-      local result = blackbird.call(item.name, item.arguments)
+      local result =
+        blackbird.call(item.name, item.arguments, { call_id = item.call_id })
       blackbird.append({
         { type = "function_call_output", call_id = item.call_id, output = result },
       })

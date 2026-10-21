@@ -2980,6 +2980,50 @@ bool ContextStore::live_origin(std::string_view label, RawContextOrigin origin) 
     return false;
   });
 }
+bool ContextStore::recorded_failure(const Value &item) const {
+  const auto *output = item.find("output");
+  const auto *text = output ? std::get_if<std::string>(&output->value()) : nullptr;
+  if (!text)
+    return false;
+  // The shaping marker sits right after the head it follows: "[... bytes [H," at
+  // offset H names the result_ref of the shaped original (T1).
+  constexpr std::string_view lead = "\n[... bytes [";
+  constexpr std::string_view named = " omitted; read_process_output with result_ref ";
+  for (auto at = text->find(lead); at != std::string::npos;
+       at = text->find(lead, at + 1)) {
+    std::size_t head = 0;
+    const auto *first = text->data() + at + lead.size();
+    const auto parsed = std::from_chars(first, text->data() + text->size(), head);
+    if (parsed.ec != std::errc{} || head != at)
+      continue;
+    const auto ref_at = text->find(named, at);
+    if (ref_at == std::string::npos || ref_at + named.size() + 32 > text->size())
+      return false;
+    IdentityBytes bytes{};
+    for (std::size_t i = 0; i < 16; ++i) {
+      unsigned value = 0;
+      const auto *digits = text->data() + ref_at + named.size() + 2 * i;
+      const auto read = std::from_chars(digits, digits + 2, value, 16);
+      if (read.ec != std::errc{} || read.ptr != digits + 2)
+        return false;
+      bytes[i] = static_cast<std::byte>(value);
+    }
+    // One indexed lookup of the original record; no history scan.
+    auto &root = log_.root();
+    const auto fact = root.lookup(root.visible(), 1, RetainedKind::application, bytes);
+    const auto *record =
+        fact ? std::get_if<ApplicationRecordEvent>(&fact->event.body) : nullptr;
+    if (!record || record->identity.bytes() != bytes)
+      return false;
+    const auto packet = read_packet(record->payload);
+    if (!packet.has_value())
+      return false;
+    const auto *metadata = packet.value().find("metadata");
+    const auto *failed = metadata ? metadata->find("failed") : nullptr;
+    return failed && *failed == Value{true};
+  }
+  return false;
+}
 Value ContextStore::pin(std::string_view selection, RawContextOrigin origin) {
   return write_pins(selection, true, origin);
 }
@@ -2997,8 +3041,15 @@ Value ContextStore::write_pins(std::string_view selection, bool pin,
     if (const auto *error = std::get_if<UnitSelectionError>(&parsed))
       throw Error{ErrorCode::invalid_range, static_cast<std::int64_t>(error->at)};
     const auto units = live_units(trace.fresh());
-    const auto expansion = expand(std::get<UnitSelection>(parsed), units, entries_,
-                                  pin ? ExpandPurpose::pin : ExpandPurpose::unpin);
+    const auto failed = [&](const Value &item) {
+      if (failed_output(item))
+        return true;
+      const auto *type = item.find("type");
+      return type && *type == Value{"function_call_output"} && recorded_failure(item);
+    };
+    const auto expansion =
+        expand(std::get<UnitSelection>(parsed), units, entries_,
+               pin ? ExpandPurpose::pin : ExpandPurpose::unpin, failed);
     // The record lists live pinned units only; a pin on a unit no longer live lapses.
     std::set<ContextRef> live, next;
     for (const auto &unit : units)

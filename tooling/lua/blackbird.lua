@@ -16,8 +16,9 @@ blackbird = {}
 function blackbird.request(options) end
 ---@param name string
 ---@param arguments table Native arguments; decode external interchange explicitly.
+---@param options? {call_id: string} Declares the model function call a relay answers.
 ---@return any result
-function blackbird.call(name, arguments) end
+function blackbird.call(name, arguments, options) end
 ---@return BlackbirdContext
 function blackbird.context() end
 ---@param candidate BlackbirdContext

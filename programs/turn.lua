@@ -27,7 +27,8 @@ for step = 1, 64 do
           args.output_max_bytes = 16384
         end
       end
-      local result = blackbird.call(item.name, args)
+      -- Declaring the call_id makes this the model's own call: shaped once (T1).
+      local result = blackbird.call(item.name, args, { call_id = item.call_id })
       blackbird.append({
         {
           type = "function_call_output",

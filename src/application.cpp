@@ -289,13 +289,19 @@ int ApplicationConnection::run(CodingEngine &engine, AuditLog &log,
       if (const auto *observations = packet.find("observations");
           observations && !observations->array().empty()) {
         const auto bytes = unwrap(encode_packet_string(*observations, limits()));
-        const auto source = log.original(
-            {"application.observations", bytes,
-             Value::object({{"encoding", Value{"BBM2"}}, {"id", Value{active_id}}})});
+        // Host observations enter context shaped once (T1): the same generic shape
+        // as a tool result, with the retained original as their result_ref.
+        const auto identity = log.issue();
+        const auto source = hex_identity(identity.bytes());
+        const auto shaped = shape_result(*observations, ResultShape{}, source);
+        (void)log.original(identity, {"application.observations", bytes,
+                                      Value::object({{"encoding", Value{"BBM2"}},
+                                                     {"id", Value{active_id}},
+                                                     {"shape", shaped.summary}})});
         const auto rendered =
             "Host page observations (untrusted page content; operator objective "
             "follows separately). Retained source: " +
-            source + "\n" + unwrap(format_value(*observations, limits()));
+            source + "\n" + result_text(shaped.presented);
         engine.context().append(
             {Value::object({{"role", Value{"user"}}, {"content", Value{rendered}}})},
             "application.observations");

@@ -80,6 +80,14 @@ public:
             observation.find("https://www.wikipedia.org/") != std::string::npos &&
             observation.find("live page text") != std::string::npos &&
             observation.find("18446744073709551615") != std::string::npos);
+      // Over 16384 bytes the observations are shaped once (T1): their JSON's head and
+      // tail around a marker whose result_ref is the retained source.
+      const std::string lead = "Retained source: ";
+      const auto source = observation.substr(observation.find(lead) + lead.size(), 32);
+      check(observation.find(" omitted; read_process_output with result_ref " + source +
+                             " and range {mode: bytes, start: ") != std::string::npos &&
+            observation.find("PAGE_END") != std::string::npos &&
+            observation.size() < 16384 + 1024);
     }
     capture("data: {\"type\":\"response.output_text.delta\",\"item_id\":\"m1\","
             "\"delta\":\"Answer \"}\n\n");
@@ -130,13 +138,14 @@ void session(const std::filesystem::path &directory) {
       check(string_field(rejected, "type") == "error" &&
             !std::get<bool>(field(rejected, "final_follows").value()));
       auto first = command("turn", "2", "first objective");
-      first.object().emplace_back("observations",
-                                  Value{Value::Array{Value::object(
-                                      {{"url", Value{"https://www.wikipedia.org/"}},
-                                       {"title", Value{"Wikipedia"}},
-                                       {"text", Value{"live page text"}},
-                                       {"capture_start_ns", Value{Number{UINT64_MAX}}},
-                                       {"truncated", Value{false}}})}});
+      first.object().emplace_back(
+          "observations",
+          Value{Value::Array{Value::object(
+              {{"url", Value{"https://www.wikipedia.org/"}},
+               {"title", Value{"Wikipedia"}},
+               {"text", Value{"live page text" + std::string(40000, 'p') + "PAGE_END"}},
+               {"capture_start_ns", Value{Number{UINT64_MAX}}},
+               {"truncated", Value{false}}})}});
       send(descriptors[1], first, true);
       const auto final = until(descriptors[1], "final", "2");
       check(string_field(final, "text") == "Answer complete" &&

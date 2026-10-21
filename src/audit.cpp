@@ -202,7 +202,7 @@ Value summary(const RetainedFact &fact, std::size_t i, RetainedKind kind,
           if (e.observation.size() <= 4096) {
             const auto packet = query_packet(trace, fact.record, e.observation);
             if (packet.has_value())
-              for (const auto key : {"result_id", "result_record"})
+              for (const auto key : {"result_id", "result_record", "shape", "call_id"})
                 if (const auto *v = packet.value().find(key))
                   add(key, *v);
           }

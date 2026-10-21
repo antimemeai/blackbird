@@ -1,5 +1,6 @@
 #include "blackbird/coding.hpp"
 #include "blackbird/json.hpp"
+#include <charconv>
 #include <iostream>
 #include <source_location>
 #include <unistd.h>
@@ -22,7 +23,8 @@ class Provider final : public CodingProvider {
 public:
   std::string file, marker, build;
   std::size_t calls = 0;
-  Value snapshot, output_ref;
+  Value snapshot, output_ref, result_ref;
+  std::size_t result_bytes = 0;
   Value respond(const Value &request,
                 const std::function<void(std::string_view)> &) override {
     ++calls;
@@ -112,9 +114,36 @@ public:
         } else if (call_id == "6") {
           check(string_field(result, "content").size() == 40000);
         } else if (call_id == "9") {
-          // Custom Lua naming no budget still gets a shaped observation (o17).
-          check(string_field(result, "content") == std::string(16384, 'A'));
-          check(field(result, "file_bytes") == Value{Number{40000}});
+          // Custom Lua naming no budget still gets o17's 16384-byte read; the lua
+          // tool's own result, whose JSON text is over 16384 bytes, is then shaped
+          // generically (T1): its first 4096 and last 12288 bytes around a marker
+          // that names the omitted range and the result_ref of the whole original.
+          check(std::holds_alternative<std::string>(result.value()));
+          const auto &shown = result.string();
+          const std::string opening = R"({"byte_end":16384,"byte_start":0,"content":")";
+          const auto head = opening + std::string(4096 - opening.size(), 'A');
+          const std::string lead = "\n[... bytes [4096,";
+          check(shown.starts_with(head + lead));
+          std::size_t tail_start = 0, total = 0;
+          const auto *cursor = shown.data() + head.size() + lead.size();
+          const auto *last = shown.data() + shown.size();
+          cursor = std::from_chars(cursor, last, tail_start).ptr;
+          const std::string of = ") of ";
+          check(std::string_view{cursor, of.size()} == of);
+          cursor = std::from_chars(cursor + of.size(), last, total).ptr;
+          const std::string named = " omitted; read_process_output with result_ref ";
+          check(std::string_view{cursor, named.size()} == named);
+          const std::string ref{cursor + named.size(), 32};
+          const auto rest = " and range {mode: bytes, start: 4096, end: " +
+                            std::to_string(tail_start) +
+                            "} pages them, 8192 bytes each with next_read ...]\n";
+          check(std::string_view{cursor + named.size() + 32, rest.size()} == rest);
+          const std::string_view tail{cursor + named.size() + 32 + rest.size()};
+          check(total - tail_start == 12288 && tail.size() == 12288);
+          check(tail.starts_with(std::string(64, 'A')) && tail.ends_with("}}"));
+          result_ref = Value{ref};
+          result_bytes = total;
+        } else if (call_id == "7") {
         } else if (call_id == "7") {
           check(string_field(result, "output").empty());
           check(field(result, "omitted_bytes") == Value{Number{1}});
@@ -140,11 +169,37 @@ public:
                          {"call_id", Value{"recover-middle"}},
                          {"name", Value{"read_process_output"}},
                          {"arguments", Value{unwrap(dump_json(recovery_args))}}}));
+      // The whole original behind the shaped lua result, as one page: fetch-back is
+      // 8192 bytes by default, so the whole needs an explicit output_max_bytes.
+      const auto whole_args = Value::object(
+          {{"result_ref", result_ref},
+           {"output_max_bytes", Value{Number{result_bytes}}},
+           {"range", Value::object({{"mode", Value{"bytes"}},
+                                    {"start", Value{Number{0}}},
+                                    {"end", Value{Number{result_bytes}}}})}});
+      output.push_back(
+          Value::object({{"type", Value{"function_call"}},
+                         {"call_id", Value{"recover-result"}},
+                         {"name", Value{"read_process_output"}},
+                         {"arguments", Value{unwrap(dump_json(whole_args))}}}));
     } else {
       check(calls == 3);
-      bool recovered = false;
+      bool recovered = false, whole = false;
       for (const auto &item : field(request, "input").array()) {
         const auto *type = item.find("type");
+        if (type && *type == Value{"function_call_output"} &&
+            string_field(item, "call_id") == "recover-result") {
+          const auto &result = field(item, "output");
+          check(field(result, "output_bytes") == Value{Number{result_bytes}});
+          check(field(result, "returned_bytes") == Value{Number{result_bytes}});
+          check(field(result, "result_ref") == result_ref && !result.find("next_read"));
+          const auto original = unwrap(parse_json(string_field(result, "output")));
+          check(string_field(original, "content") == std::string(16384, 'A'));
+          check(field(original, "file_bytes") == Value{Number{40000}});
+          check(field(original, "omitted_bytes") == Value{Number{23616}});
+          whole = true;
+          continue;
+        }
         if (!type || *type != Value{"function_call_output"} ||
             string_field(item, "call_id") != "recover-middle")
           continue;
@@ -154,7 +209,7 @@ public:
         check(field(result, "byte_end") == Value{Number{600033}});
         recovered = true;
       }
-      check(recovered);
+      check(recovered && whole);
     }
     return Value::object({{"output", Value{std::move(output)}}});
   }

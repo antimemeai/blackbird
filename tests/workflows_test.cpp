@@ -184,7 +184,7 @@ void builtin_upgrade() {
     // a supplied revision is kept.
     const auto latest = latest_config(*root);
     const auto revision = string_field(latest, "program_revision");
-    check(revision == (supplied ? std::string(32, 'a') : "builtin-ultracode-v2"));
+    check(revision == (supplied ? std::string(32, 'a') : "builtin-ultracode-v4"));
     if (!supplied)
       check(string_field(latest, "activation") == "builtin-current" &&
             string_field(latest, "replaced_revision") == "builtin-ultracode-v1");
