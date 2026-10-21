@@ -1379,9 +1379,11 @@ Value tool_definitions() {
           {{"type", Value{"function"}},
            {"name", Value{"context_edit"}},
            {"description",
-            Value{"Publish candidate {base,entries:[{id,item}]} with CAS. Reorder, "
-                  "replace or remove entries. Retained originals are immutable. Keep "
-                  "active tool call/result pairs in context."}},
+            Value{"Publish candidate {base,entries:[{id,item[,ancestry]}]} with CAS. "
+                  "Reorder, replace or remove entries. A new or changed entry has only "
+                  "id, item and an array ancestry; an entry identical to the current "
+                  "one passes as it is. Retained originals are immutable. Keep active "
+                  "tool call/result pairs in context."}},
            {"parameters",
             Value::object(
                 {{"type", Value{"object"}},
@@ -1485,7 +1487,8 @@ Value tool_definitions() {
            {"name", Value{"lua"}},
            {"description",
             Value{"Run a Lua transformation or experiment in the current workflow. "
-                  "blackbird.context(), blackbird.stats(), blackbird.edit(candidate), "
+                  "blackbird.context(), blackbird.stats(), blackbird.edit(candidate) "
+                  "(entries as context_edit), "
                   "blackbird.originals(), blackbird.restore(id), "
                   "blackbird.append(items), blackbird.json.encode/decode, "
                   "blackbird.call(name,args) are available. Return a native value. "

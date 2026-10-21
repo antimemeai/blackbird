@@ -334,7 +334,7 @@ std::vector<std::byte> raw_context_read(const ImmutableBytes &payload,
 }
 std::string_view raw_context_description() noexcept {
   return R"raw(BBRAWABI v1 native64 little-endian; Ref=lane16+ordinal8; Text=size_t+bytes. No padding.
-Actions: reconstruct0/checkpoint1/view2/stats3/items4/append5/validate_seed6/seed7/edit8/restore9/originals10/manage11/inspect12/budget13/pending14/begin15/finish16/reject17/publish18/original19.
+Actions: reconstruct0/checkpoint1/view2/stats3/items4/append5/validate_seed6/seed7/edit8/restore9/originals10/manage11/inspect12/budget13/pending14/begin15/finish16/reject17/publish18/original19/cut20/repair21.
 Labels: origin0/entry1/reason2/query_kind3/format4/managed_source5. Input purpose: Original0/replay1/archive2/history3; source_kind resident0/retained_packet1.
 1800:action:u8,parent:bool,[Ref],instance: head Text,entries/originals/captured:size_t,workflow/pending/archive_loaded:bool; static validation omits instance.
 1801:owner Ref,actual ApplicationRecordId16,channel:uint16,actual journal16/sequence/end:uint64 before publication.
@@ -357,7 +357,7 @@ Labels: origin0/entry1/reason2/query_kind3/format4/managed_source5. Input purpos
 1818:page Ref,branch:u8,[actual rows:size_t],[ErrorCode/i64] before decode.
 1819:owner Ref,family:u8,kind:uint16,actual parsed identity16,actual root cursor32 before lookup.
 1820:lookup Ref,branch:u8; found0 actual record24/channel:uint16, failure1 ErrorCode/i64, missing2, non-application3 actual record24.
-1821:reconstruct Ref,saved/fallback/accepted/rejected/invalid:u8,[ErrorCode/i64] actual branch.
+1821:reconstruct Ref,saved0/fallback1/accepted2/rejected3/invalid4/skipped-by-repair5/after-bad6/read-only7:u8,[ErrorCode/i64] actual branch; fallback1 is followed by whole-history playback, read-only7 names the frame that did not apply.
 1822:reconstruct Ref,actual saved cursor32,existing version/source-present flags.
 1823:managed Ref,existing mode Text,actual selected count:size_t,existing stage Text.
 1824:reserved; no fabricated physical reference.

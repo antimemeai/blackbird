@@ -160,6 +160,23 @@ int main() {
       programs = Value{root->current_programs()};
       unwrap(ctx.checkpoint());
       CHECK(root->saved_state() && root->saved_state()->unresolved.empty());
+      // Version 2 (unit S1): no live_originals copy; each live entry equal to its
+      // original is a ref [record identity, ordinal] to the retained record.
+      {
+        const auto &saved = root->saved_state()->context;
+        CHECK(field(saved, "version") == Value{Number{"2"}} &&
+              !saved.find("live_originals") && saved.find("sections"));
+        const auto live_view = ctx.view();
+        const auto &live = field(live_view, "entries").array();
+        const auto &refs = field(saved, "entries").array();
+        CHECK(refs.size() == live.size());
+        for (std::size_t i = 0; i < refs.size(); ++i)
+          CHECK(std::holds_alternative<Value::Array>(refs[i].value()) &&
+                refs[i].array().size() == 2 &&
+                refs[i].array()[0].string() + "." +
+                        refs[i].array()[1].number().text() ==
+                    string_field(live[i], "id"));
+      }
       CHECK(std::filesystem::file_size(std::string(path) + "/audit.state." +
                                        std::to_string(root->saved_state()->slot)) <
             16384);

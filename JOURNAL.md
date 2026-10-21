@@ -12201,3 +12201,46 @@ intermittent message, with no overlap and a load of 7. It passed alone 3/3 and i
 recorded on r5n.
 
 Integration proposal 1 follows: S0, S0b, P1a, P1b and the a1v branch's units.
+
+## 2026-10-21 — S1: context persistence (rd7.7, yc4)
+
+S1 is a serial-lane unit, on branch `work/clm-rd7`.
+
+**Cut frames.** Every context change is recorded as a delta cut frame carrying the entry count, a CRC32C and
+the byte size. One shared routine applies it on the live, restore and playback paths.
+
+**Snapshot v2.**
+- A snapshot references originals instead of holding the live context inline, so contexts over 8 MiB now
+  snapshot (yc4). An entry whose bytes differ from its original is written inline; "equals" is exact
+  encoded-byte equality.
+- Restore decodes only the originals field of each creating record; a checkpoint decodes nothing.
+- Refused slots are reported with their slot number. The older slot is tried before whole history, and
+  state-file errors keep their class: only malformed bytes are `corrupt`.
+
+**Read-only safe mode.**
+- A frame that fails to apply opens the session read-only, with `/repair` and `/repair --list`.
+- A repair may not add an unpaired call or output, honours its saved skip set, is written outside the
+  resident-tail cap, and raises the format level.
+- Every open-time write of a read-only open goes outside the cap, so `/repair` is always reachable.
+  Open-time records repeat only for a new observation.
+
+**Entries.** One entry rule for the store and both validators. New edits refuse unknown keys; an unchanged
+entry passes through with its legacy keys. The model-facing descriptions say exactly this.
+
+**Measured.**
+- A 32 MiB all-inline checkpoint: peak 33.8 MB and 158 ms, down from 67.4 MB and 498 ms at layer 1.
+- Reopen still reads the whole creating record: 112 ms for 10 summaries over 10.3 MB of records, against
+  28.6 ms for the old inline snapshot. That is `arconaut-4m5`, to measure on natural sessions first.
+
+**Checks.** Every new or changed test failed on the old code (layer 1 against e5ffa6e, layer 2 against the
+layer-1 tree, saved as `context/clm-rd7-notes/S1-layer1.patch`). Mac gate; Linux debug and ASan on the
+touched suites. The context_cut and saved_payload fuzzers each ran 1,000,000 executions on Neuroses with no
+artifact.
+
+**Review.** One review in two halves and one recheck in two halves. The notes are in
+`context/clm-rd7-notes/S1*.md`.
+
+**Beads.**
+- `arconaut-x0g`: a torn tail shorter than a frame header fails every open (pre-existing).
+- `arconaut-8zr`: storage_raw and clean_stop's `tui` case are load-sensitive under parallel Linux runs.
+- `arconaut-r5n`: one more no-overlap failure of `tui_retained_result` in the first S1 gate.

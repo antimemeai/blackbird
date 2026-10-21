@@ -1,6 +1,7 @@
 #include "blackbird/context.hpp"
 #include "blackbird/json.hpp"
 #include "blackbird/packet.hpp"
+#include "blackbird/saved_context.hpp"
 #include "blackbird/saved_state.hpp"
 #include <algorithm>
 #include <charconv>
@@ -53,6 +54,57 @@ bool accepted(const Value &packet) {
   if (b == nullptr)
     throw Error{ErrorCode::corrupt};
   return *b;
+}
+// Cut and repair originals are {item, class}; their ID is <revision>.<index>
+// (design §4.2). Legacy append and managed originals carry their IDs.
+bool derived_ids(const Value &packet) {
+  const auto *op = packet.find("op");
+  return op && (*op == Value{"cut"} || *op == Value{"repair"});
+}
+// The original at ordinal of a decoded frame, checked against its expected ID;
+// empty when the frame has no such original.
+std::optional<Value> packet_original(const Value &packet, std::size_t ordinal,
+                                     std::string_view id) {
+  const auto *fresh = packet.find("originals");
+  if (!fresh || !std::holds_alternative<Value::Array>(fresh->value()) ||
+      ordinal >= fresh->array().size())
+    return std::nullopt;
+  const auto &entry = fresh->array()[ordinal];
+  if (derived_ids(packet)) {
+    if (string_field(packet, "revision") + "." + std::to_string(ordinal) != id)
+      throw Error{ErrorCode::corrupt};
+    return Value::object(
+        {{"id", Value{std::string{id}}}, {"item", field(entry, "item")}});
+  }
+  if (string_field(entry, "id") != id)
+    throw Error{ErrorCode::corrupt};
+  return entry;
+}
+// A creating record decoded for its originals only: everything else it carries
+// (a legacy record's whole entries list, a managed candidate, a cut's lists) is
+// skipped, not built.
+Value creating_projection(ByteView bytes) {
+  constexpr std::array<std::string_view, 19> omitted{
+      "entries", "candidate", "outcome",  "insert",   "replace",   "lineage", "chapter",
+      "pending", "refused",   "archived", "swept",    "reasoning", "result",  "sizes",
+      "cause",   "skipped",   "stage",    "proposal", "basis"};
+  return unwrap(decode_packet_projection(bytes, omitted));
+}
+// Every {id, item} original a frame created, in ordinal order.
+Value::Array packet_originals(const Value &packet) {
+  const auto *fresh = packet.find("originals");
+  if (!fresh)
+    return {};
+  if (!derived_ids(packet))
+    return fresh->array();
+  Value::Array out;
+  const auto &revision = string_field(packet, "revision");
+  std::size_t index = 0;
+  for (const auto &entry : fresh->array())
+    out.push_back(
+        Value::object({{"id", Value{revision + "." + std::to_string(index++)}},
+                       {"item", field(entry, "item")}}));
+  return out;
 }
 } // namespace
 std::string AuditLog::record(ApplicationChannel channel, const Value &packet) {
@@ -235,14 +287,12 @@ bool ContextStore::valid_entries(const Value &entries, RawContextOrigin origin) 
     return false;
   std::set<std::string> ids;
   for (const auto &entry : *array) {
-    const auto *id = entry.find("id");
-    const auto *item = entry.find("item");
-    if (id == nullptr || item == nullptr ||
-        !std::holds_alternative<std::string>(id->value()) ||
-        !std::holds_alternative<Value::Object>(item->value()))
+    // The one entry rule the validators apply too (saved_context.hpp).
+    if (!saved_entry_shape(entry))
       return false;
-    if ((!originals_.contains(id->string()) && !original_entry(id->string(), origin)) ||
-        !ids.insert(id->string()).second)
+    const auto &id = entry.find("id")->string();
+    if ((!originals_.contains(id) && !original_entry(id, origin)) ||
+        !ids.insert(id).second)
       return false;
   }
   return true;
@@ -258,15 +308,21 @@ ContextStore::Original::Original(const Value &entry,
 Value ContextStore::Original::entry(RawContextOrigin origin) const {
   if (payload.size() > ValueLimits{}.bytes)
     throw Error{ErrorCode::capacity};
-  const auto decoded = unwrap(decode_packet(raw_context_read(
-      payload, {0, packet, record, application, ApplicationChannel::context, index},
-      origin)));
   if (!packet)
-    return decoded;
-  const auto &fresh = field(decoded, "originals").array();
-  if (index >= fresh.size() || string_field(fresh[index], "id") != id)
+    return unwrap(decode_packet(raw_context_read(
+        payload, {0, packet, record, application, ApplicationChannel::context, index},
+        origin)));
+  auto found = packet_original(packet_value(origin), index, id);
+  if (!found)
     throw Error{ErrorCode::corrupt};
-  return fresh[index];
+  return std::move(*found);
+}
+Value ContextStore::Original::packet_value(RawContextOrigin origin) const {
+  if (!packet || payload.size() > ValueLimits{}.bytes)
+    throw Error{ErrorCode::corrupt};
+  return creating_projection(raw_context_read(
+      payload, {0, packet, record, application, ApplicationChannel::context, index},
+      origin));
 }
 namespace {
 template <class T> void reserve_append(std::vector<T> &values, std::size_t count) {
@@ -314,193 +370,521 @@ Value::Array ContextStore::captured_entries(RawContextOrigin origin) const {
   refresh_history();
   Value::Array result;
   visit_context_records(historical_, origin, [&](const Value &packet) {
-    if (!accepted(packet))
+    // A frame a repair skipped created nothing (design §4.5).
+    if (!accepted(packet) || skipped_frame(string_field(packet, "revision")))
       return;
-    if (const auto *fresh = packet.find("originals"))
-      for (const auto &entry : fresh->array())
-        result.push_back(entry);
+    for (auto &entry : packet_originals(packet))
+      result.push_back(std::move(entry));
   });
   return result;
 }
+namespace {
+// Errors that mean a frame or snapshot does not hold: they enter whole-history
+// playback (a snapshot) or the read-only state (a frame). Every other error,
+// such as a failed read or allocation, propagates as before.
+bool fault_error(const Error &error) noexcept {
+  return error.code == ErrorCode::corrupt || error.code == ErrorCode::invalid_range;
+}
+std::uint64_t level_number(const Value &value) {
+  const auto *n = std::get_if<Number>(&value.value());
+  if (!n)
+    throw Error{ErrorCode::corrupt};
+  if (const auto *u = std::get_if<std::uint64_t>(&n->storage()))
+    return *u;
+  if (const auto *s = std::get_if<std::int64_t>(&n->storage()); s && *s >= 0)
+    return static_cast<std::uint64_t>(*s);
+  throw Error{ErrorCode::corrupt};
+}
+} // namespace
 ContextStore::ContextStore(AuditLog &log, RawContextOrigin origin)
-    : ContextStore(log, true, origin) {}
+    : ContextStore(log, ContextOpen{}, origin) {}
 ContextStore::ContextStore(AuditLog &log, DeferOpenCheckpoint, RawContextOrigin origin)
-    : ContextStore(log, true, origin, true) {}
+    : ContextStore(log, ContextOpen{.defer_checkpoint = true}, origin) {}
 void ContextStore::finish_open(RawContextOrigin origin) { maybe_checkpoint(origin); }
-ContextStore::ContextStore(AuditLog &log, bool restore_saved, RawContextOrigin origin,
-                           bool defer_open_checkpoint)
-    : log_(log) {
+ContextStore::ContextStore(AuditLog &log, ContextOpen open, RawContextOrigin origin)
+    : open_(open), log_(log) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::reconstruct, 450, origin, &initial};
   trace.run([&]() -> void {
-    std::uint64_t boundary = 0;
-    if (restore_saved)
-      if (const auto *saved = log.root().saved_state()) {
-        auto saved_branch = trace.control_credit(50);
-        try {
-          const auto *version = saved->context.find("version"),
-                     *originals = saved->context.find("live_originals");
-          const bool has_version = version != nullptr,
-                     has_originals = originals != nullptr;
-          trace.event(1822,
-                      std::array{ByteView{saved->boundary.journal.bytes()},
-                                 detail::raw_native_field(saved->boundary.sequence),
-                                 detail::raw_native_field(saved->boundary.end_offset),
-                                 detail::raw_native_field(has_version),
-                                 detail::raw_native_field(has_originals)});
-          if (!version || !originals)
-            throw Error{ErrorCode::corrupt};
-          if (version->number().text() != "1")
-            throw Error{ErrorCode::corrupt};
-          head_ = string_field(saved->context, "base");
-          if (head_.size() != 32)
-            throw Error{ErrorCode::corrupt};
-          entries_ = field(saved->context, "entries").array();
-          for (const auto &entry : originals->array()) {
-            if (!originals_.emplace(string_field(entry, "id"), Original{entry}).second)
-              throw Error{ErrorCode::corrupt};
-          }
-          if (!valid_entries(Value{entries_}, trace.fresh()))
-            throw Error{ErrorCode::corrupt};
-          boundary = saved->boundary.sequence;
-          archive_loaded_ = false;
-          const std::uint8_t branch = 0;
+    auto &root = log.root();
+    for (const auto &program : root.current_programs())
+      if (string_field(program, "label") == "context-format-level")
+        level_ = level_number(field(program, "level"));
+    // A newer format than this binary reads: refuse before any playback.
+    if (level_ > format_level)
+      throw Error{ErrorCode::unsupported, level_refused};
+    // Every slot the loader refused, with its reason (A-M3).
+    if (!open_.whole_history) {
+      report_.slot_refusals = root.saved_load().refusals;
+      report_.catalogue_faults = root.saved_load().catalogue_faults;
+    }
+    // The selected snapshot, then the older accepted slot, then whole history.
+    std::vector<const SavedState *> candidates;
+    if (!open_.whole_history) {
+      if (const auto *saved = root.saved_state())
+        candidates.push_back(saved);
+      if (const auto &older = root.saved_load().alternate; older)
+        candidates.push_back(&*older);
+    }
+    const SavedState *restored = nullptr;
+    for (const auto *saved : candidates) {
+      auto saved_branch = trace.control_credit(50);
+      const auto *version = saved->context.find("version"),
+                 *originals = saved->context.find("live_originals");
+      const bool has_version = version != nullptr, has_originals = originals != nullptr;
+      trace.event(1822, std::array{ByteView{saved->boundary.journal.bytes()},
+                                   detail::raw_native_field(saved->boundary.sequence),
+                                   detail::raw_native_field(saved->boundary.end_offset),
+                                   detail::raw_native_field(has_version),
+                                   detail::raw_native_field(has_originals)});
+      const auto control = [&](std::uint8_t branch, const Error *error) {
+        if (error)
+          trace.control(1821,
+                        std::array{detail::raw_native_field(branch),
+                                   detail::raw_native_field(error->code),
+                                   detail::raw_native_field(error->detail)},
+                        saved_branch ? &*saved_branch : nullptr);
+        else
           trace.control(1821, std::array{detail::raw_native_field(branch)},
                         saved_branch ? &*saved_branch : nullptr);
-          trace.state(1, raw_state());
-        } catch (const Error &error) {
-          const std::uint8_t branch = 1;
-          trace.control(1821,
-                        std::array{detail::raw_native_field(branch),
-                                   detail::raw_native_field(error.code),
-                                   detail::raw_native_field(error.detail)},
-                        saved_branch ? &*saved_branch : nullptr);
-          head_.clear();
-          entries_.clear();
-          originals_.clear();
-        } catch (const std::bad_variant_access &) {
-          const std::uint8_t branch = 1;
-          const Error error{ErrorCode::corrupt};
-          trace.control(1821,
-                        std::array{detail::raw_native_field(branch),
-                                   detail::raw_native_field(error.code),
-                                   detail::raw_native_field(error.detail)},
-                        saved_branch ? &*saved_branch : nullptr);
-          head_.clear();
-          entries_.clear();
-          originals_.clear();
-        } catch (...) {
-          Error error{ErrorCode::external_unknown};
-          try {
-            throw;
-          } catch (const std::bad_alloc &) {
-            error = {ErrorCode::allocation};
-          } catch (...) {
-          }
-          const std::uint8_t branch = 4;
-          trace.control(1821,
-                        std::array{detail::raw_native_field(branch),
-                                   detail::raw_native_field(error.code),
-                                   detail::raw_native_field(error.detail)},
-                        saved_branch ? &*saved_branch : nullptr);
+      };
+      const auto refused = [&](const Error &error) {
+        control(1, &error);
+        head_.clear();
+        entries_.clear();
+        originals_.clear();
+        differing_.clear();
+        skipped_.clear();
+        restored_sections_.clear();
+        archive_loaded_ = true;
+        lookup_boundary_.reset();
+        if (!report_.snapshot_refusal)
+          report_.snapshot_refusal = error;
+        report_.store_refusals.emplace_back(saved->slot, error);
+        report_.refused_by_store = true;
+      };
+      try {
+        restore_snapshot(*saved, trace);
+        restored = saved;
+        control(0, nullptr);
+        trace.state(1, raw_state());
+        break;
+      } catch (const Error &error) {
+        if (!fault_error(error)) {
+          control(4, &error);
           throw;
         }
-      }
-    for (const auto &fact : log.root().tail_facts()) {
-      if (boundary && fact.record.journal == log.root().cursor().journal &&
-          fact.record.sequence <= boundary)
-        continue;
-      const auto *record = std::get_if<ApplicationRecordEvent>(&fact.event.body);
-      if (record == nullptr || record->channel != ApplicationChannel::context)
-        continue;
-      auto branch_credit = trace.control_credit(50);
-      try {
-        constexpr std::array<std::string_view, 1> omitted{"candidate"};
-        const auto packet = unwrap(decode_packet_projection(
-            raw_context_read(
-                record->payload,
-                {1, true, fact.record, record->identity, record->channel, 0},
-                trace.fresh()),
-            omitted));
-        const auto revision = hex_identity(record->identity.bytes());
-        if (string_field(packet, "revision") != revision ||
-            string_field(packet, "observed") != head_)
-          throw Error{ErrorCode::corrupt};
-        const auto op = string_field(packet, "op");
-        if (op != "append" && op != "edit" && op != "managed")
-          throw Error{ErrorCode::corrupt};
-        const bool publishes = accepted(packet);
-        if (publishes) {
-          if (string_field(packet, "base") != head_)
-            throw Error{ErrorCode::corrupt};
-          if (op == "append" || op == "managed") {
-            const auto &fresh = field(packet, "originals");
-            if (!std::holds_alternative<Value::Array>(fresh.value()))
-              throw Error{ErrorCode::corrupt};
-            std::size_t ordinal = 0;
-            for (const auto &entry : fresh.array()) {
-              const auto &id = string_field(entry, "id");
-              Original original{record->payload, ordinal++, id, fact.record,
-                                record->identity};
-              captured_.push_back(original);
-              if (original_entry(id, trace.fresh()) ||
-                  !originals_.emplace(id, std::move(original)).second)
-                throw Error{ErrorCode::corrupt};
-            }
-          }
-          if (const auto *format = packet.find("format")) {
-            if (op != "append" || *format != Value{"append-delta-v1"} ||
-                packet.find("entries"))
-              throw Error{ErrorCode::corrupt};
-            auto next = entries_;
-            const auto &fresh = field(packet, "originals").array();
-            next.insert(next.end(), fresh.begin(), fresh.end());
-            if (!valid_entries(Value{next}, trace.fresh()))
-              throw Error{ErrorCode::corrupt};
-            entries_.swap(next);
-          } else {
-            const auto &entries = field(packet, "entries");
-            if (!valid_entries(entries, trace.fresh()))
-              throw Error{ErrorCode::corrupt};
-            entries_ = entries.array();
-          }
-          head_ = revision;
-        }
-        const std::uint8_t branch = publishes ? 2 : 3;
-        trace.control(1821, std::array{detail::raw_native_field(branch)},
-                      branch_credit ? &*branch_credit : nullptr);
+        refused(error);
+      } catch (const std::bad_variant_access &) {
+        refused(Error{ErrorCode::corrupt});
       } catch (...) {
         Error error{ErrorCode::external_unknown};
         try {
           throw;
-        } catch (const Error &failure) {
-          error = failure;
         } catch (const std::bad_alloc &) {
           error = {ErrorCode::allocation};
-        } catch (const std::bad_variant_access &) {
-          error = {ErrorCode::corrupt};
         } catch (...) {
         }
-        const std::uint8_t branch = 4;
-        trace.control(1821,
-                      std::array{detail::raw_native_field(branch),
-                                 detail::raw_native_field(error.code),
-                                 detail::raw_native_field(error.detail)},
-                      branch_credit ? &*branch_credit : nullptr);
+        control(4, &error);
         throw;
       }
     }
+    report_.older_slot = restored && restored != root.saved_state();
+    if (restored)
+      report_.restored_slot = restored->slot;
+    report_.playback = restored ? ContextOpenReport::Playback::suffix
+                       : (report_.snapshot_refusal || !report_.slot_refusals.empty() ||
+                          open_.whole_history)
+                           ? ContextOpenReport::Playback::whole_history
+                           : ContextOpenReport::Playback::journal;
+    play_facts(trace, restored);
     trace.state(2, raw_state());
-    if (restore_saved && !defer_open_checkpoint)
+    if (!open_.probe && !open_.defer_checkpoint)
       maybe_checkpoint(trace.fresh());
-    historical_ = log_.root().history_snapshot();
-    root_lifetime_ = log_.root().lifetime();
-    log_.root().set_maintenance_checkpoint(
-        [this](const RawEventRef &parent) { return checkpoint({parent}); });
+    historical_ = root.history_snapshot();
+    root_lifetime_ = root.lifetime();
+    if (!open_.probe)
+      root.set_maintenance_checkpoint(
+          [this](const RawEventRef &parent) { return checkpoint({parent}); });
   });
 }
+void ContextStore::restore_snapshot(const SavedState &saved, RawContextTrace &trace) {
+  unwrap(validate_saved_context(saved.context));
+  const auto &context = saved.context;
+  head_ = string_field(context, "base");
+  if (field(context, "version").number().text() == "1") {
+    entries_ = field(context, "entries").array();
+    for (const auto &entry : field(context, "live_originals").array())
+      if (!originals_.emplace(string_field(entry, "id"), Original{entry}).second)
+        throw Error{ErrorCode::corrupt};
+    if (!valid_entries(Value{entries_}, trace.fresh()))
+      throw Error{ErrorCode::corrupt};
+    // Which entries differ from their originals, by exact encoding; both are in
+    // the snapshot, so this reads nothing.
+    for (const auto &entry : entries_) {
+      const auto &id = string_field(entry, "id");
+      if (unwrap(encode_packet(entry)) != unwrap(originals_.at(id).payload.read()))
+        differing_.insert(id);
+    }
+    archive_loaded_ = false;
+    lookup_boundary_ = saved.boundary;
+    return;
+  }
+  // Version 2: a ref names the retained creating record, which holds the entry
+  // exactly; an inline entry differs from its original. Each creating record is
+  // read once and decoded for its originals only.
+  const auto &descriptors = field(context, "entries").array();
+  std::vector<ContextRef> refs;
+  refs.reserve(descriptors.size());
+  std::set<IdentityBytes> needed;
+  for (const auto &descriptor : descriptors) {
+    const auto ref = std::holds_alternative<Value::Array>(descriptor.value())
+                         ? decode_ref(descriptor)
+                         : parse_entry_id(string_field(descriptor, "id"));
+    if (!ref)
+      throw Error{ErrorCode::corrupt};
+    refs.push_back(*ref);
+    needed.insert(ref->record);
+  }
+  if (const auto *skipped = context.find("skipped"))
+    for (const auto &revision : skipped->array())
+      skipped_.insert(revision.string());
+  struct Creating {
+    RetainedFact fact;
+    Value packet;
+  };
+  std::map<IdentityBytes, Creating> records;
+  auto &root = log_.root();
+  const auto accept = [&](const RetainedFact &fact) {
+    const auto *record = std::get_if<ApplicationRecordEvent>(&fact.event.body);
+    if (!record || record->channel != ApplicationChannel::context ||
+        fact.record.journal != saved.boundary.journal ||
+        fact.record.sequence > saved.boundary.sequence ||
+        !needed.contains(record->identity.bytes()) ||
+        records.contains(record->identity.bytes()) ||
+        skipped_.contains(hex_identity(record->identity.bytes())))
+      return;
+    auto packet = creating_projection(raw_context_read(
+        record->payload, {2, true, fact.record, record->identity, record->channel, 0},
+        trace.fresh()));
+    if (accepted(packet))
+      records.emplace(record->identity.bytes(), Creating{fact, std::move(packet)});
+  };
+  if (!root.compact_recovery()) {
+    // Every fact is resident: one pass instead of a lookup per record.
+    for (const auto &fact : root.tail_facts())
+      accept(fact);
+  } else
+    for (const auto &bytes : needed) {
+      const std::uint8_t family = 1;
+      const auto kind = RetainedKind::application;
+      const auto cursor = root.cursor();
+      RawContextPair lookup{trace.fresh(),
+                            158,
+                            {1819, 1820},
+                            std::array{detail::raw_native_field(family),
+                                       detail::raw_native_field(kind), ByteView{bytes},
+                                       ByteView{cursor.journal.bytes()},
+                                       detail::raw_native_field(cursor.sequence),
+                                       detail::raw_native_field(cursor.end_offset)}};
+      const auto fact =
+          lookup.run([&] { return root.lookup(root.visible(), family, kind, bytes); });
+      if (!fact) {
+        lookup.finish(2);
+        throw Error{ErrorCode::corrupt};
+      }
+      const auto *application = std::get_if<ApplicationRecordEvent>(&fact->event.body);
+      if (application)
+        lookup.finish(0, std::array{ByteView{fact->record.journal.bytes()},
+                                    detail::raw_native_field(fact->record.sequence),
+                                    detail::raw_native_field(application->channel)});
+      else
+        lookup.finish(3, std::array{ByteView{fact->record.journal.bytes()},
+                                    detail::raw_native_field(fact->record.sequence)});
+      accept(*fact);
+    }
+  Value::Array entries;
+  entries.reserve(descriptors.size());
+  for (std::size_t i = 0; i < descriptors.size(); ++i) {
+    const auto &ref = refs[i];
+    const auto found = records.find(ref.record);
+    if (found == records.end())
+      throw Error{ErrorCode::corrupt};
+    const auto id = entry_id(ref);
+    const auto original = packet_original(found->second.packet, ref.ordinal, id);
+    if (!original)
+      throw Error{ErrorCode::corrupt};
+    const auto *record =
+        std::get_if<ApplicationRecordEvent>(&found->second.fact.event.body);
+    originals_.emplace(id, Original{record->payload, ref.ordinal, id,
+                                    found->second.fact.record, record->identity});
+    const bool inline_entry =
+        !std::holds_alternative<Value::Array>(descriptors[i].value());
+    if (inline_entry)
+      differing_.insert(id);
+    entries.push_back(inline_entry ? descriptors[i] : *original);
+  }
+  entries_ = std::move(entries);
+  restored_sections_ = field(context, "sections").array();
+  archive_loaded_ = false;
+  lookup_boundary_ = saved.boundary;
+}
+void ContextStore::play_facts(RawContextTrace &trace, const SavedState *restored) {
+  auto &root = log_.root();
+  const auto journal = root.cursor().journal;
+  const auto boundary = restored ? restored->boundary.sequence : 0;
+  std::optional<RetainedState::FactHistory> history;
+  std::size_t first_fact = 0;
+  if (root.compact_recovery() && restored != root.saved_state()) {
+    // The resident tail is only the suffix after the selected snapshot. From the
+    // older slot, play the facts after its boundary through the archive
+    // catalogue; with no snapshot, play the whole history, under the launcher's
+    // automatic replay bound.
+    if (!restored && root.cursor().end_offset > open_.whole_history_limit)
+      throw Error{ErrorCode::unsupported, whole_history_refused};
+    history = root.history_snapshot();
+    if (restored)
+      first_fact = static_cast<std::size_t>(restored->fact_count);
+  }
+  const auto visit = [&](const auto &body) {
+    const auto one = [&](const RetainedFact &fact) {
+      if (restored && fact.record.journal == journal &&
+          fact.record.sequence <= boundary)
+        return;
+      if (const auto *record = std::get_if<ApplicationRecordEvent>(&fact.event.body);
+          record && record->channel == ApplicationChannel::context)
+        body(fact, *record);
+    };
+    if (history) {
+      for (std::size_t first = std::min(first_fact, history->count);
+           first < history->count;) {
+        auto page = unwrap(history->page(first, 16));
+        if (page.empty())
+          throw Error{ErrorCode::corrupt};
+        first += page.size();
+        for (const auto &fact : page)
+          one(fact);
+      }
+    } else
+      for (const auto &fact : root.tail_facts())
+        one(fact);
+  };
+  // Every repair frame's skip list first (design §4.5), from frames that decode
+  // as repair frames under their own record identity; the snapshot's list was
+  // restored with it.
+  visit([&](const RetainedFact &fact, const ApplicationRecordEvent &record) {
+    constexpr std::array<std::string_view, 8> omitted{
+        "candidate", "entries", "originals", "insert",
+        "replace",   "refused", "pending",   "chapter"};
+    try {
+      const auto bytes = raw_context_read(
+          record.payload, {1, true, fact.record, record.identity, record.channel, 0},
+          trace.fresh());
+      const auto head = unwrap(decode_packet_projection(bytes, omitted));
+      const auto *op = head.find("op");
+      if (!op || *op != Value{"repair"})
+        return;
+      const auto frame = decode_cut_frame(unwrap(decode_packet(bytes)));
+      if (frame.accepted && frame.revision == hex_identity(record.identity.bytes()))
+        skipped_.insert(frame.skipped.begin(), frame.skipped.end());
+    } catch (const Error &error) {
+      if (!fault_error(error))
+        throw;
+    } catch (const std::bad_variant_access &) {
+    }
+  });
+  visit([&](const RetainedFact &fact, const ApplicationRecordEvent &record) {
+    play_frame(fact, record, trace);
+  });
+}
+void ContextStore::play_frame(const RetainedFact &fact,
+                              const ApplicationRecordEvent &record,
+                              RawContextTrace &trace) {
+  const auto revision = hex_identity(record.identity.bytes());
+  auto branch_credit = trace.control_credit(50);
+  const auto control = [&](std::uint8_t branch, const Error *error) {
+    if (error)
+      trace.control(1821,
+                    std::array{detail::raw_native_field(branch),
+                               detail::raw_native_field(error->code),
+                               detail::raw_native_field(error->detail)},
+                    branch_credit ? &*branch_credit : nullptr);
+    else
+      trace.control(1821, std::array{detail::raw_native_field(branch)},
+                    branch_credit ? &*branch_credit : nullptr);
+  };
+  const auto decode = [&] {
+    constexpr std::array<std::string_view, 1> omitted{"candidate"};
+    return unwrap(decode_packet_projection(
+        raw_context_read(record.payload,
+                         {1, true, fact.record, record.identity, record.channel, 0},
+                         trace.fresh()),
+        omitted));
+  };
+  // After the bad frame nothing applies: keep the revision and what it created,
+  // which a repair skips and may copy from.
+  const auto set_aside = [&] {
+    skipped_revisions_.push_back(revision);
+    try {
+      const auto packet = decode();
+      if (accepted(packet))
+        for (auto &original : packet_originals(packet))
+          skipped_originals_.push_back(std::move(original));
+    } catch (const Error &error) {
+      if (!fault_error(error))
+        throw;
+    } catch (const std::bad_variant_access &) {
+    }
+  };
+  if (read_only_) {
+    ++report_.after_bad;
+    set_aside();
+    control(6, nullptr);
+    return;
+  }
+  if (skipped_.contains(revision)) {
+    ++report_.skipped;
+    control(5, nullptr);
+    return;
+  }
+  std::vector<std::string> inserted;
+  const auto discard = [&] {
+    for (const auto &id : inserted)
+      originals_.erase(id);
+  };
+  const auto enter_read_only = [&](const Error &failure) {
+    discard();
+    // The read-only state (design §4.5): playback stops at the last good frame.
+    read_only_ = true;
+    report_.read_only = true;
+    report_.bad_revision = revision;
+    report_.bad_error = failure;
+    control(7, &failure);
+    set_aside();
+  };
+  try {
+    const auto packet = decode();
+    if (string_field(packet, "revision") != revision)
+      throw Error{ErrorCode::corrupt};
+    const auto op = string_field(packet, "op");
+    std::vector<Original> captured;
+    std::optional<Value::Array> next;
+    std::optional<std::set<std::string>> status;
+    bool publishes = false;
+    if (op == "append" || op == "edit" || op == "managed") {
+      if (string_field(packet, "observed") != head_)
+        throw Error{ErrorCode::corrupt};
+      publishes = accepted(packet);
+      if (publishes) {
+        if (string_field(packet, "base") != head_)
+          throw Error{ErrorCode::corrupt};
+        if (op == "append" || op == "managed") {
+          const auto &fresh = field(packet, "originals");
+          if (!std::holds_alternative<Value::Array>(fresh.value()))
+            throw Error{ErrorCode::corrupt};
+          std::size_t ordinal = 0;
+          for (const auto &entry : fresh.array()) {
+            const auto &id = string_field(entry, "id");
+            Original original{record.payload, ordinal++, id, fact.record,
+                              record.identity};
+            if (original_entry(id, trace.fresh()) ||
+                !originals_.emplace(id, original).second)
+              throw Error{ErrorCode::corrupt};
+            inserted.push_back(id);
+            captured.push_back(std::move(original));
+          }
+        }
+        if (const auto *format = packet.find("format")) {
+          if (op != "append" || *format != Value{"append-delta-v1"} ||
+              packet.find("entries"))
+            throw Error{ErrorCode::corrupt};
+          // An append adds entries equal to their originals: nothing to settle.
+          next = entries_;
+          const auto &fresh = field(packet, "originals").array();
+          next->insert(next->end(), fresh.begin(), fresh.end());
+          if (!valid_entries(Value{*next}, trace.fresh()))
+            throw Error{ErrorCode::corrupt};
+        } else {
+          const auto &entries = field(packet, "entries");
+          if (!valid_entries(entries, trace.fresh()))
+            throw Error{ErrorCode::corrupt};
+          next = entries.array();
+          status = settle(*next, trace.fresh());
+        }
+      }
+    } else if (op == "cut" || op == "repair") {
+      const auto frame = decode_cut_frame(packet);
+      if (frame.observed != head_)
+        throw Error{ErrorCode::corrupt};
+      publishes = frame.accepted;
+      if (publishes) {
+        if (frame.base != head_)
+          throw Error{ErrorCode::corrupt};
+        std::map<std::string, Value> fresh;
+        for (std::size_t i = 0; i < frame.originals.size(); ++i) {
+          const auto id = revision + "." + std::to_string(i);
+          if (originals_.contains(id) || original_entry(id, trace.fresh()))
+            throw Error{ErrorCode::corrupt};
+          fresh.emplace(id, Value::object({{"id", Value{id}},
+                                           {"item", frame.originals[i].item}}));
+          captured.emplace_back(record.payload, i, id, fact.record, record.identity);
+        }
+        next = apply_cut(frame, entries_, fresh, trace.fresh());
+        for (const auto &original : captured) {
+          originals_.emplace(original.id, original);
+          inserted.push_back(original.id);
+        }
+        status = settle(*next, trace.fresh());
+      }
+    } else
+      throw Error{ErrorCode::corrupt};
+    if (publishes) {
+      reserve_append(captured_, captured.size());
+      for (auto &original : captured)
+        captured_.push_back(std::move(original));
+      entries_.swap(*next);
+      if (status)
+        differing_.swap(*status);
+      head_ = revision;
+    }
+    ++report_.frames;
+    control(publishes ? 2 : 3, nullptr);
+  } catch (const Error &failure) {
+    if (!fault_error(failure)) {
+      discard();
+      control(4, &failure);
+      throw;
+    }
+    enter_read_only(failure);
+  } catch (const std::bad_variant_access &) {
+    enter_read_only(Error{ErrorCode::corrupt});
+  } catch (...) {
+    discard();
+    Error error{ErrorCode::external_unknown};
+    try {
+      throw;
+    } catch (const std::bad_alloc &) {
+      error = {ErrorCode::allocation};
+    } catch (...) {
+    }
+    control(4, &error);
+    throw;
+  }
+}
+Value::Array ContextStore::apply_cut(const CutFrame &frame, const Value::Array &entries,
+                                     const std::map<std::string, Value> &fresh,
+                                     RawContextOrigin origin) const {
+  auto next = apply_frame(frame, entries);
+  // Step 7: every entry has an original; this frame's fresh ones it carries.
+  for (const auto &entry : next) {
+    const auto &id = string_field(entry, "id");
+    if (!fresh.contains(id) && !originals_.contains(id) && !original_entry(id, origin))
+      throw Error{ErrorCode::corrupt};
+  }
+  return next;
+}
 ContextStore::~ContextStore() {
-  if (!root_lifetime_.expired())
+  if (!open_.probe && !root_lifetime_.expired())
     log_.root().set_maintenance_checkpoint({});
 }
 std::optional<Value> ContextStore::original_entry(std::string_view id,
@@ -509,10 +893,13 @@ std::optional<Value> ContextStore::original_entry(std::string_view id,
   RawContextTrace trace{RawContextAction::original, 209, origin, &initial};
   return trace.run([&]() -> std::optional<Value> {
     auto result = [&]() -> std::optional<Value> {
+      // A frame a repair skipped (or one set aside read-only) created nothing.
+      if (id.size() >= 32 && skipped_frame(id.substr(0, 32)))
+        return std::nullopt;
       if (const auto found = originals_.find(std::string{id});
           found != originals_.end())
         return found->second.entry(trace.fresh());
-      if (archive_loaded_ || !log_.root().saved_state())
+      if (archive_loaded_ || !lookup_boundary_)
         return std::nullopt;
       if (id.size() < 34 || id.size() > 53 || id[32] != '.')
         return std::nullopt;
@@ -562,27 +949,20 @@ std::optional<Value> ContextStore::original_entry(std::string_view id,
                                       detail::raw_native_field(fact->record.sequence)});
       } else
         lookup.finish(2);
-      if (!fact ||
-          fact->record.journal != log_.root().saved_state()->boundary.journal ||
-          fact->record.sequence > log_.root().saved_state()->boundary.sequence)
+      if (!fact || fact->record.journal != lookup_boundary_->journal ||
+          fact->record.sequence > lookup_boundary_->sequence)
         return std::nullopt;
       const auto *record = std::get_if<ApplicationRecordEvent>(&fact->event.body);
       if (!record || record->identity != identity.value() ||
           record->channel != ApplicationChannel::context)
         return std::nullopt;
-      const auto packet = unwrap(decode_packet(raw_context_read(
+      const auto packet = creating_projection(raw_context_read(
           record->payload,
           {2, true, fact->record, record->identity, record->channel, ordinal},
-          trace.fresh())));
+          trace.fresh()));
       if (!accepted(packet))
         return std::nullopt;
-      const auto *fresh = packet.find("originals");
-      if (!fresh || ordinal >= fresh->array().size())
-        return std::nullopt;
-      const auto &entry = fresh->array()[ordinal];
-      if (string_field(entry, "id") != id)
-        throw Error{ErrorCode::corrupt};
-      return entry;
+      return packet_original(packet, ordinal, id);
     }();
     trace.rows(4, result ? 1 : 0);
     return result;
@@ -595,13 +975,43 @@ Result<void> ContextStore::checkpoint(RawContextOrigin origin) {
     return trace.run([&]() -> Result<void> {
       if (raw_enabled() && origin.input == RawContextOrigin::Input::no_new)
         throw Error{ErrorCode::capacity};
-      Value::Array live;
+      // Nothing may record a state past a frame that did not apply (design §4.5).
+      if (read_only_)
+        throw Error{ErrorCode::audit_unavailable};
+      // Version 2: an entry whose encoding equals its original's is a ref to the
+      // retained creating record; only an entry in differing_ is written out. The
+      // checkpoint reads no original and decodes nothing.
+      Value::Array entries;
+      entries.reserve(entries_.size());
       for (const auto &entry : entries_) {
-        const auto found = original_entry(string_field(entry, "id"), trace.fresh());
-        if (!found)
+        const auto &id = string_field(entry, "id");
+        const auto ref = parse_entry_id(id);
+        if (!ref)
           throw Error{ErrorCode::corrupt};
-        live.push_back(*found);
+        entries.push_back(differing_.contains(id) ? entry : encode_ref(*ref));
       }
+      Value::Array sections;
+      std::set<std::string> names;
+      for (const auto &writer : section_writers) {
+        if (!writer.write || !saved_section_registered(writer.name) ||
+            !names.insert(writer.name).second)
+          throw Error{ErrorCode::invalid_range};
+        sections.push_back(
+            Value::object({{"name", Value{writer.name}}, {"value", writer.write()}}));
+      }
+      auto saved_context = Value::object({{"version", Value{Number{"2"}}},
+                                          {"base", Value{head_}},
+                                          {"entries", Value{std::move(entries)}},
+                                          {"sections", Value{std::move(sections)}}});
+      if (!skipped_.empty()) {
+        Value::Array skipped;
+        for (const auto &revision : skipped_)
+          skipped.push_back(Value{revision});
+        saved_context.object().emplace_back("skipped", Value{std::move(skipped)});
+      }
+      // The writer never saves what the shared validator would refuse. An empty
+      // head with no entries is a valid empty context.
+      unwrap(validate_saved_context(saved_context));
       const auto before = log_.root().cursor();
       const auto *previous = log_.root().saved_state();
       const bool had_saved = previous != nullptr;
@@ -645,11 +1055,7 @@ Result<void> ContextStore::checkpoint(RawContextOrigin origin) {
       };
       auto save = [&]() -> Result<void> {
         try {
-          auto result = log_.root().save_current_state(
-              Value::object({{"version", Value{Number{"1"}}},
-                             {"base", Value{head_}},
-                             {"entries", Value{entries_}},
-                             {"live_originals", Value{std::move(live)}}}));
+          auto result = log_.root().save_current_state(saved_context);
           if (result.has_value())
             save_return(nullptr);
           else {
@@ -679,8 +1085,12 @@ Result<void> ContextStore::checkpoint(RawContextOrigin origin) {
           live_ids.insert(string_field(entry, "id"));
         std::erase_if(originals_,
                       [&](const auto &pair) { return !live_ids.contains(pair.first); });
+        std::erase_if(differing_,
+                      [&](const auto &id) { return !live_ids.contains(id); });
         captured_.clear();
         archive_loaded_ = false;
+        // Originals pruned here are found by lookup, up to this snapshot.
+        lookup_boundary_ = log_.root().saved_state()->boundary;
         trace.state(1, raw_state());
       } else
         trace.branch(1);
@@ -908,6 +1318,7 @@ void ContextStore::seed_successor(const Value &seed, RawContextOrigin origin) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::seed, 1481, origin, &initial};
   trace.run([&]() -> void {
+    require_writable();
     validate_successor_seed(seed, trace.child());
     if (workflow_ || pending_ || !entries_.empty() || log_.root().fact_count() != 0 ||
         log_.root().state() != JournalWriterState::live ||
@@ -940,6 +1351,7 @@ void ContextStore::append_impl(Value::Array items, std::string_view label,
                                                                         : 1228ULL,
                         origin, &initial};
   trace.run([&]() -> void {
+    require_writable();
     trace.label(0, label,
                 origin.input == RawContextOrigin::Input::no_new &&
                     label == "stop.linkage");
@@ -1019,29 +1431,66 @@ void ContextStore::notify(std::optional<ContextChange> change) const noexcept {
   } catch (...) {
   } // Presentation cannot undo a published revision.
 }
-Value ContextStore::edit(const Value &candidate, RawContextOrigin origin) {
+Value ContextStore::edit(const Value &candidate, RawContextOrigin origin,
+                         EditKeys keys) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::edit, 1228, origin, &initial};
   std::optional<ContextChange> change;
   auto result = trace.run([&]() -> Value {
+    require_writable();
     const auto *base = candidate.find("base");
     const auto *entries = candidate.find("entries");
-    const bool representation =
-        base != nullptr && std::holds_alternative<std::string>(base->value()) &&
-        entries != nullptr && valid_entries(*entries, trace.fresh());
+    // A new edit names only the keys entries have: an unknown key is refused here,
+    // not carried into every later snapshot.
+    // A new or changed entry names only the keys entries have: an unknown key is
+    // refused here, not carried into every later snapshot. An entry byte-identical
+    // to the current entry under its ID passes through as it is, legacy keys
+    // included, so an edit of the unchanged context is never refused.
+    std::string unknown_key;
+    if (keys == EditKeys::strict && entries)
+      if (const auto *list = std::get_if<Value::Array>(&entries->value())) {
+        std::map<std::string_view, const Value *> current;
+        for (const auto &entry : entries_)
+          current.emplace(string_field(entry, "id"), &entry);
+        for (const auto &entry : *list) {
+          if (!saved_entry_shape(entry) || edit_entry_shape(entry))
+            continue;
+          const auto &id = entry.find("id")->string();
+          if (const auto found = current.find(id);
+              found != current.end() &&
+              (found->second->same(entry) ||
+               unwrap(encode_packet(*found->second)) == unwrap(encode_packet(entry))))
+            continue;
+          for (const auto &[key, value] : entry.object())
+            if (key != "id" && key != "item" &&
+                !(key == "ancestry" &&
+                  std::holds_alternative<Value::Array>(value.value())))
+              unknown_key = "entry " + id + ": key " + key +
+                            (key == "ancestry" ? " must be an array of entry IDs"
+                                               : " is not id, item or ancestry");
+          break;
+        }
+      }
+    const bool representation = unknown_key.empty() && base != nullptr &&
+                                std::holds_alternative<std::string>(base->value()) &&
+                                entries != nullptr &&
+                                valid_entries(*entries, trace.fresh());
     const bool publishes = representation && base->string() == head_;
     auto identity = log_.issue();
     auto revision = hex_identity(identity.bytes());
     Value::Array next;
     if (publishes)
       next = entries->array();
-    auto outcome =
-        Value::object({{"accepted", Value{publishes}},
-                       {"revision", Value{revision}},
-                       {"current", Value{publishes ? revision : head_}},
-                       {"reason", Value{publishes        ? "published"
-                                        : representation ? "stale-base"
-                                                         : "invalid-representation"}}});
+    auto outcome = Value::object(
+        {{"accepted", Value{publishes}},
+         {"revision", Value{revision}},
+         {"current", Value{publishes ? revision : head_}},
+         {"reason", Value{publishes              ? "published"
+                          : representation       ? "stale-base"
+                          : !unknown_key.empty() ? "unknown-entry-key"
+                                                 : "invalid-representation"}}});
+    if (!unknown_key.empty())
+      outcome.object().emplace_back("detail", Value{unknown_key});
     auto details = candidate;
     if (std::holds_alternative<Value::Object>(details.value()))
       std::erase_if(details.object(),
@@ -1060,11 +1509,13 @@ Value ContextStore::edit(const Value &candidate, RawContextOrigin origin) {
       });
     const auto before =
         publishes && changed ? input_bytes() : std::optional<std::size_t>{};
+    auto status = publishes ? settle(next, trace.fresh()) : differing_;
     auto publication = trace.publication();
     (void)log_.record(identity, ApplicationChannel::context, packet, &publication);
     history_stale_ = true;
     if (publishes) {
       entries_.swap(next);
+      differing_.swap(status);
       head_.swap(revision);
       if (changed)
         change = ContextChange{next_kind_, head_, {}, before, input_bytes()};
@@ -1150,6 +1601,41 @@ bool protocol_complete(const Value::Array &entries) {
   }
   return pending.empty();
 }
+// The pairing faults of a context: "call:<id>" for a call no output answers,
+// "output:<id>" for an output with no open call, "duplicate:<id>" for a call ID
+// used twice, "malformed" for a non-string type. A repair may not add one the head
+// before the bad frame did not already have.
+std::set<std::string> pairing_faults(const Value::Array &entries) {
+  std::set<std::string> seen, pending, faults;
+  for (const auto &entry : entries) {
+    const auto &item = field(entry, "item");
+    const auto *type = item.find("type");
+    if (!type)
+      continue;
+    if (!std::holds_alternative<std::string>(type->value())) {
+      faults.insert("malformed");
+      continue;
+    }
+    if (type->string() == "function_call") {
+      const auto &id = string_field(item, "call_id");
+      if (!seen.insert(id).second)
+        faults.insert("duplicate:" + id);
+      pending.insert(id);
+    } else if (type->string() == "function_call_output") {
+      const auto &id = string_field(item, "call_id");
+      if (pending.erase(id) != 1)
+        faults.insert("output:" + id);
+    }
+  }
+  for (const auto &id : pending)
+    faults.insert("call:" + id);
+  return faults;
+}
+bool adds_no_pairing_fault(const Value::Array &before, const Value::Array &after) {
+  const auto had = pairing_faults(before);
+  const auto has = pairing_faults(after);
+  return std::includes(had.begin(), had.end(), has.begin(), has.end());
+}
 // Entries of one append share its revision, the ID before the last '.'.
 std::string_view append_of(const Value &entry) {
   const std::string_view id = string_field(entry, "id");
@@ -1221,6 +1707,7 @@ Value ContextStore::reject_managed(const Value &proposal, std::string_view why,
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::reject, 513, origin, &initial};
   return trace.run([&]() -> Value {
+    require_writable();
     auto identity = log_.issue();
     auto revision = hex_identity(identity.bytes());
     auto outcome = Value::object({{"accepted", Value{false}},
@@ -1357,6 +1844,7 @@ void ContextStore::begin_workflow(RawContextOrigin origin) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::begin, 268, origin, &initial};
   trace.run([&]() -> void {
+    require_writable();
     if (workflow_)
       throw Error{ErrorCode::conflict};
     workflow_ = true;
@@ -1367,6 +1855,7 @@ Value ContextStore::manage(const Value &proposal, RawContextOrigin origin) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::manage, 2894, origin, &initial};
   return trace.run([&]() -> Value {
+    require_writable();
     try {
       if (string_field(proposal, "base") != head_)
         return reject_managed(proposal, "stale-base", trace.child());
@@ -1663,6 +2152,10 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
     const bool has_boundary =
         !std::holds_alternative<std::nullptr_t>(boundary_program.value());
     const auto before = changed ? input_bytes() : std::optional<std::size_t>{};
+    std::map<std::string, Value> created;
+    for (const auto &entry : fresh)
+      created.emplace(string_field(entry, "id"), entry);
+    auto status = settle(next, trace.fresh(), &created);
     auto publication = trace.publication();
     (void)log_.record_boundary(identity, packet, boundary_program, &publication);
     if (acceptance) {
@@ -1675,6 +2168,7 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
     for (auto &entry : captured)
       captured_.push_back(std::move(entry));
     entries_.swap(next);
+    differing_.swap(status);
     head_.swap(revision);
     if (changed)
       change =
@@ -1763,12 +2257,9 @@ Value ContextStore::inspect(const Value &query, RawContextOrigin origin) const {
         emit("[");
       std::size_t capture_index = 0;
       visit_context_records(historical_, trace.fresh(), [&](const Value &packet) {
-        if (!accepted(packet))
+        if (!accepted(packet) || skipped_frame(string_field(packet, "revision")))
           return;
-        const auto *fresh = packet.find("originals");
-        if (!fresh)
-          return;
-        for (const auto &entry : fresh->array()) {
+        for (const auto &entry : packet_originals(packet)) {
           if (json_export && capture_index != 0)
             emit(",");
           auto item = Value::object(
@@ -1798,12 +2289,9 @@ Value ContextStore::inspect(const Value &query, RawContextOrigin origin) const {
           emit("[");
         bool first = true;
         visit_context_records(historical_, trace.fresh(), [&](const Value &packet) {
-          if (!accepted(packet))
+          if (!accepted(packet) || skipped_frame(string_field(packet, "revision")))
             return;
-          const auto *fresh = packet.find("originals");
-          if (!fresh)
-            return;
-          for (const auto &entry : fresh->array()) {
+          for (const auto &entry : packet_originals(packet)) {
             if (json_export && !first)
               emit(",");
             first = false;
@@ -1846,6 +2334,274 @@ Value ContextStore::inspect(const Value &query, RawContextOrigin origin) const {
                                  detail::raw_string_field(head_)});
     return result;
   });
+}
+
+void ContextStore::require_writable() const {
+  if (read_only_)
+    throw Error{ErrorCode::audit_unavailable};
+}
+void ContextStore::write_format_level(RawContextTrace &trace) {
+  // Written once, before the first frame an older format cannot read.
+  if (level_ >= format_level)
+    return;
+  const auto identity = log_.issue();
+  auto publication = trace.publication();
+  (void)log_.record(identity, ApplicationChannel::program,
+                    Value::object({{"label", Value{"context-format-level"}},
+                                   {"level", Value{Number{format_level}}}}),
+                    &publication);
+  level_ = format_level;
+  history_stale_ = true;
+}
+const Value *ContextStore::restored_section(std::string_view name) const noexcept {
+  for (const auto &section : restored_sections_)
+    if (const auto *n = section.find("name");
+        n && std::holds_alternative<std::string>(n->value()) && n->string() == name)
+      return section.find("value");
+  return nullptr;
+}
+Value::Array ContextStore::skipped_originals() const {
+  return Value::Array{skipped_originals_.begin(), skipped_originals_.end()};
+}
+void AuditLog::begin_reserved() { reserved_.emplace(root_); }
+bool ContextStore::skipped_frame(std::string_view revision) const noexcept {
+  return skipped_.contains(std::string{revision}) ||
+         std::find(skipped_revisions_.begin(), skipped_revisions_.end(), revision) !=
+             skipped_revisions_.end();
+}
+std::optional<std::vector<std::byte>>
+ContextStore::original_bytes(const std::string &id,
+                             std::map<IdentityBytes, Value> &decoded,
+                             RawContextOrigin origin) const {
+  if (const auto found = originals_.find(id); found != originals_.end()) {
+    const auto &held = found->second;
+    if (!held.packet)
+      return unwrap(held.payload.read()); // the encoded original itself
+    if (!held.application)
+      throw Error{ErrorCode::corrupt};
+    auto at = decoded.find(held.application->bytes());
+    if (at == decoded.end())
+      at = decoded.emplace(held.application->bytes(), held.packet_value(origin)).first;
+    const auto original = packet_original(at->second, held.index, id);
+    if (!original)
+      throw Error{ErrorCode::corrupt};
+    return unwrap(encode_packet(*original));
+  }
+  const auto original = original_entry(id, origin);
+  if (!original)
+    return std::nullopt;
+  return unwrap(encode_packet(*original));
+}
+std::set<std::string>
+ContextStore::settle(const Value::Array &next, RawContextOrigin origin,
+                     const std::map<std::string, Value> *created) const {
+  std::map<std::string_view, const Value *> prior;
+  for (const auto &entry : entries_)
+    prior.emplace(string_field(entry, "id"), &entry);
+  std::set<std::string> status;
+  std::map<IdentityBytes, Value> decoded;
+  for (const auto &entry : next) {
+    const auto &id = string_field(entry, "id");
+    if (const auto found = prior.find(id); found != prior.end()) {
+      const auto &previous = *found->second;
+      // Shared storage is the same encoding; unequal values never encode alike;
+      // equal values may still encode differently (a number's representation).
+      if (previous.same(entry) ||
+          (previous == entry &&
+           unwrap(encode_packet(previous)) == unwrap(encode_packet(entry)))) {
+        if (differing_.contains(id))
+          status.insert(id);
+        continue;
+      }
+    }
+    if (created && created->contains(id))
+      continue;
+    const auto original = original_bytes(id, decoded, origin);
+    if (!original || *original != unwrap(encode_packet(entry)))
+      status.insert(id);
+  }
+  return status;
+}
+Value ContextStore::cut(CutFrame frame, RawContextOrigin origin) {
+  const auto initial = raw_state();
+  RawContextTrace trace{RawContextAction::cut, 1809, origin, &initial};
+  return trace.run([&]() -> Value {
+    require_writable();
+    // The frame and the next entries are built from values this call owns: a
+    // maintenance checkpoint inside the record call may prune originals_ and
+    // clear captured_ (design §4.3).
+    const auto identity = log_.issue();
+    frame.op = CutOp::cut;
+    frame.accepted = true;
+    frame.reason.clear();
+    frame.revision = hex_identity(identity.bytes());
+    frame.base = head_;
+    frame.observed = head_;
+    frame.result.reset();
+    std::map<std::string, Value> fresh;
+    std::map<std::string, Original> originals;
+    std::vector<Original> captured;
+    for (std::size_t i = 0; i < frame.originals.size(); ++i) {
+      const auto id = frame.revision + "." + std::to_string(i);
+      if (originals_.contains(id))
+        throw Error{ErrorCode::conflict};
+      auto entry =
+          Value::object({{"id", Value{id}}, {"item", frame.originals[i].item}});
+      originals.emplace(id, Original{entry, identity});
+      captured.emplace_back(entry, identity);
+      fresh.emplace(id, std::move(entry));
+    }
+    auto next = apply_cut(frame, entries_, fresh, trace.fresh());
+    frame.result = measure_entries(next, true);
+    const auto packet = recordable(frame);
+    auto status = settle(next, trace.fresh(), &fresh);
+    reserve_append(captured_, captured.size());
+    if (protect)
+      trace.protection([&](const RawEventRef &request) {
+        protect(next, pending_proposal(trace.child()), request);
+      });
+    write_format_level(trace);
+    auto publication = trace.publication();
+    const auto reference =
+        log_.record(identity, ApplicationChannel::context, packet, &publication);
+    history_stale_ = true;
+    for (auto &original : captured) {
+      original.record = reference;
+      captured_.push_back(std::move(original));
+    }
+    for (auto &[id, original] : originals)
+      original.record = reference;
+    originals_.merge(originals);
+    entries_.swap(next);
+    differing_.swap(status);
+    head_ = frame.revision;
+    trace.state(1, raw_state());
+    refresh_history();
+    maybe_checkpoint(trace.child());
+    return Value::object({{"accepted", Value{true}}, {"revision", Value{head_}}});
+  });
+}
+Value ContextStore::repair_preview() const {
+  if (!read_only_)
+    return Value{};
+  Value::Array skipped, offered;
+  for (const auto &revision : skipped_revisions_)
+    skipped.push_back(Value{revision});
+  for (const auto &original : skipped_originals_) {
+    // Whether this pick alone adds no pairing fault to the head (a call left
+    // unanswered before the bad frame is the head's, not the pick's).
+    auto alone = entries_;
+    alone.push_back(original);
+    offered.push_back(
+        Value::object({{"id", field(original, "id")},
+                       {"item", field(original, "item")},
+                       {"pairs", Value{adds_no_pairing_fault(entries_, alone)}}}));
+  }
+  Value::Array head_faults;
+  for (const auto &fault : pairing_faults(entries_))
+    head_faults.push_back(Value{fault});
+  return Value::object(
+      {{"head_faults", Value{std::move(head_faults)}},
+       {"bad_revision", Value{report_.bad_revision}},
+       {"bad_error", Value{std::string{error_name(report_.bad_error.code)}}},
+       {"bad_detail", Value{Number{report_.bad_error.detail}}},
+       {"skipped", Value{std::move(skipped)}},
+       {"originals", Value{std::move(offered)}}});
+}
+Value ContextStore::repair(const Value::Array &picks, RawContextOrigin origin) {
+  const auto initial = raw_state();
+  RawContextTrace trace{RawContextAction::repair, 1809, origin, &initial};
+  return trace.run([&]() -> Value {
+    if (!read_only_ || skipped_revisions_.empty())
+      throw Error{ErrorCode::conflict};
+    // Bounded writes (one level record, one frame) that must be possible at the
+    // resident-tail cap, which the read-only state cannot clear by a snapshot.
+    std::optional<RetainedState::MaintenanceScope> reserved;
+    reserved.emplace(log_.root());
+    const auto identity = log_.issue();
+    CutFrame frame;
+    frame.op = CutOp::repair;
+    frame.revision = hex_identity(identity.bytes());
+    frame.base = head_;
+    frame.observed = head_;
+    frame.skipped = skipped_revisions_;
+    frame.cause.source = CutSource::operator_;
+    // Copies of the picked originals, appended in the order picked.
+    std::map<std::string, Value> fresh;
+    std::map<std::string, Original> originals;
+    std::vector<Original> captured;
+    std::optional<ContextRef> anchor;
+    if (!entries_.empty()) {
+      anchor = parse_entry_id(string_field(entries_.back(), "id"));
+      if (!anchor)
+        throw Error{ErrorCode::corrupt};
+    }
+    std::set<std::string> chosen;
+    for (const auto &pick : picks) {
+      const auto *wanted = std::get_if<std::string>(&pick.value());
+      if (!wanted || !chosen.insert(*wanted).second)
+        throw Error{ErrorCode::invalid_identity};
+      const auto found = std::find_if(
+          skipped_originals_.begin(), skipped_originals_.end(),
+          [&](const Value &o) { return string_field(o, "id") == *wanted; });
+      if (found == skipped_originals_.end())
+        throw Error{ErrorCode::invalid_identity};
+      const auto index = static_cast<std::uint32_t>(frame.originals.size());
+      frame.originals.push_back({field(*found, "item"), 0});
+      frame.insert.push_back({anchor, index});
+      const auto id = frame.revision + "." + std::to_string(index);
+      auto entry = Value::object({{"id", Value{id}}, {"item", field(*found, "item")}});
+      originals.emplace(id, Original{entry, identity});
+      captured.emplace_back(entry, identity);
+      fresh.emplace(id, std::move(entry));
+      anchor = ContextRef{identity.bytes(), index};
+    }
+    auto next = apply_cut(frame, entries_, fresh, trace.fresh());
+    // The pairing rule: the repair may not create an unpaired call or output the
+    // head before the bad frame did not already have. A call that head left
+    // unanswered (valid as written) is kept as is and does not block the repair.
+    if (!adds_no_pairing_fault(entries_, next))
+      throw Error{ErrorCode::conflict, repair_unpaired};
+    frame.result = measure_entries(next, true);
+    const auto packet = recordable(frame);
+    auto status = settle(next, trace.fresh(), &fresh);
+    reserve_append(captured_, captured.size());
+    write_format_level(trace);
+    auto publication = trace.publication();
+    const auto reference =
+        log_.record(identity, ApplicationChannel::context, packet, &publication);
+    reserved.reset();
+    history_stale_ = true;
+    for (auto &original : captured) {
+      original.record = reference;
+      captured_.push_back(std::move(original));
+    }
+    for (auto &[id, original] : originals)
+      original.record = reference;
+    originals_.merge(originals);
+    entries_.swap(next);
+    differing_.swap(status);
+    head_ = frame.revision;
+    // Playback continues from the repair frame; snapshots resume.
+    skipped_.insert(skipped_revisions_.begin(), skipped_revisions_.end());
+    read_only_ = false;
+    skipped_revisions_.clear();
+    skipped_originals_.clear();
+    trace.state(1, raw_state());
+    refresh_history();
+    maybe_checkpoint(trace.child());
+    return Value::object({{"accepted", Value{true}},
+                          {"revision", Value{head_}},
+                          {"skipped", Value{Number{frame.skipped.size()}}}});
+  });
+}
+// A frame as it will be recorded, checked to decode back to itself: the writer
+// never records what playback would read differently.
+Value ContextStore::recordable(const CutFrame &frame) {
+  auto packet = encode_cut_frame(frame);
+  if (!(encode_cut_frame(decode_cut_frame(packet)) == packet))
+    throw Error{ErrorCode::corrupt};
+  return packet;
 }
 
 } // namespace blackbird

@@ -1647,7 +1647,8 @@ struct CodingEngine::Runtime {
           frame.value = self->engine.context_.view();
           break;
         case edit_op:
-          frame.value = self->engine.context_.edit(read_value(L, 1, {0, &nodes}));
+          frame.value = self->engine.context_.edit(read_value(L, 1, {0, &nodes}), {},
+                                                   ContextStore::EditKeys::strict);
           break;
         case originals_op:
           frame.value = self->engine.context_.originals();
@@ -2575,6 +2576,9 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
   RawProgramCall trace{0, &bootstrap};
   trace.run([&] {
     command_jobs_ = std::make_shared<CommandJobs>();
+    // While the context is read-only the launcher holds AuditLog::begin_reserved
+    // over the whole open, this constructor included: its identity reservation
+    // (generation_ above) and this clock record go outside the tail cap.
     observations_ = std::make_unique<Observations>(log_);
     program_config_.object().emplace_back("workflows", default_workflows());
     program_config_.object().emplace_back("workflow_prefix", Value{""});
@@ -2652,7 +2656,9 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
     const auto origin = trace.context();
     workflows_ =
         std::make_shared<WorkflowRegistry>(program_config_, program_revision_, &origin);
-    if (context_.head().empty())
+    // Never over a head playback has not established (design §4.5): a read-only
+    // context stays as playback left it.
+    if (context_.head().empty() && !context_.read_only())
       context_.append({}, "initial");
   });
 }
@@ -4311,6 +4317,9 @@ Value CodingEngine::request(Value options) {
     assembly.start(1);
     if (request_group_active_ || provider_.request_group_owned_)
       throw Error{ErrorCode::busy};
+    // No request leaves a read-only context.
+    if (context_.read_only())
+      throw Error{ErrorCode::audit_unavailable};
     assembly.stage(10);
     RawRegion preparation{raw_regions::provider_prepare};
     if (restart_note_)
@@ -5654,7 +5663,8 @@ Value CodingEngine::call(std::string name, Value arguments) {
         if (name == "context_view")
           return context_.view();
         if (name == "context_edit")
-          return context_.edit(field(arguments, "candidate"));
+          return context_.edit(field(arguments, "candidate"), {},
+                               ContextStore::EditKeys::strict);
         if (name == "context_originals")
           return context_.originals();
         if (name == "context_restore") {
@@ -6019,6 +6029,11 @@ void CodingEngine::turn(TurnInput input) {
   if (file_effect_unretained_) {
     branch = 1;
     terminal_error = Error{ErrorCode::incomplete};
+    throw *terminal_error;
+  }
+  if (context_.read_only()) {
+    branch = 1;
+    terminal_error = Error{ErrorCode::audit_unavailable};
     throw *terminal_error;
   }
   const auto is_null = [](const Value &value) noexcept {
