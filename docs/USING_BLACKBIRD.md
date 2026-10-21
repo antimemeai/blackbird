@@ -262,7 +262,15 @@ persistent state. The model has a `lua` tool and the same APIs:
   Last request/usage are scoped to this process; null means unavailable. No token
   estimates or model-limit guesses are made.
 - `blackbird.originals()` lists originals; `blackbird.restore(id)` repairs an item.
-  `blackbird.append(items)` adds synthetic items with fresh original IDs.
+  `blackbird.append(items[, {class = "instruction" | "result"}])` adds synthetic
+  items with fresh original IDs. The class belongs to the appended record and an
+  edit cannot change it: an instruction is never archived, summarised or left out
+  by `context_manage`, except an older copy whose bytes equal a later live
+  instruction, which may be archived or left out by a select; the default,
+  `result`, can be archived. An
+  append holding function calls or reasoning takes no class and is a `round`,
+  atomic with the outputs that answer its calls; outputs take no class either and
+  join their call's round. Any other option or class is refused.
 - `blackbird.json.decode/encode` import/export JSON at external boundaries; native values preserve null, arrays and exact numeric values.
   Use `blackbird.binary.encode/decode` for BBM2 persistence, and `blackbird.format` for text.
   Use `blackbird.array({})` for a new empty array.
@@ -380,8 +388,25 @@ is mechanism evidence; readiness for daily self-development depends on operator 
 
 `/compact JSON` accepts `{base,mode,ids,reason,source}`; mode is `archive`, `select`,
 `summarize` or `restore`. Summary also requires `summary:{role:"assistant",content:...}`.
-Use `/context` for entry IDs/revision. Complete call/result intervals are atomic;
-all live user/system/developer instructions are mandatory. Restore merges exact
+Use `/context` for entry IDs/revision. `ids` name whole units. A response round is
+one unit: the reasoning, messages and calls of one record plus every output that
+answers those calls, wherever the outputs sit; a Lua append of calls or reasoning is
+a round too. Every other entry is its own unit. The class comes from the record that
+created the entry, never from an edit:
+- never archived, summarised or left out of a select: instructions (operator prompts,
+  restart notes, backstop instructions, Lua appends declared `instruction`, the
+  built-in ultracode brief, seeded user/system/developer entries, and user, system
+  or developer entries of Lua appends written before S2 or of other legacy records),
+  and pinned units. An older instruction whose item bytes equal a later live
+  instruction may be archived or left out of a select, never summarised;
+- archivable: rounds, results (the Lua default, workflow continuations, protocol
+  repairs, stop linkage, `operator.beads`, application observations), request state
+  and summaries.
+Refusals: `partial-tool-group` (a call without its output, or a call no output
+answers yet), then `partial-round` (reasoning without the rest of its round), both
+over the whole selection; then, at the first unit in context order with a problem,
+`protected-unit`, `pinned-unit` or `partial-unit` (part of a unit), checked in that
+order for that unit. A select keeps the open round at the tail. Restore merges exact
 originals in capture order and repairs selected edited/reordered presentations.
 Archive only changes presentation. Summaries have fresh IDs and source ancestry;
 structural acceptance cannot establish fact accuracy. Management never runs

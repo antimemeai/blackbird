@@ -1,4 +1,7 @@
 #include "blackbird/context.hpp"
+#if !defined(S2_RED_OLD_CODE)
+#include "blackbird/context_units.hpp"
+#endif
 #include "blackbird/journal_storage.hpp"
 #include "blackbird/json.hpp"
 #include <filesystem>
@@ -167,6 +170,147 @@ int main() {
       check(refused && context.items().empty());
       for (const auto &fact : root->committed_facts())
         check(std::holds_alternative<IssuerReservationEvent>(fact.event.body));
+    }
+    // Unit S2 (design §5.2): a seeded context groups its entries by source round.
+    // Each source revision prefix is its own round; seeded user, system and
+    // developer entries are instructions; an output joins its call. The old code
+    // bound every later entry of the one seed append to its first reasoning item, so
+    // no source round could be archived alone (partial-round).
+    const auto grouped = std::string{path} + "/grouped";
+    std::filesystem::create_directory(grouped);
+    std::filesystem::permissions(grouped, std::filesystem::perms::owner_all);
+    {
+      auto rounds = unwrap(parse_json(R"({"version":1,"source":{
+        "session":"/retained/predecessor","environment":"11000000000000000000000000000000",
+        "journal":"22000000000000000000000000000000","prefix_sequence":17,
+        "prefix_end":8192,"context_revision":"4a000000000000000000000000000000",
+        "status":"settled","reason":"successor seed"},
+        "entries":[
+        {"id":"44000000000000000000000000000000.0","item":{"role":"user","content":"Do the task"}},
+        {"id":"45000000000000000000000000000000.0","item":{"type":"reasoning","encrypted_content":"R1","summary":[]}},
+        {"id":"45000000000000000000000000000000.1","item":{"type":"function_call","call_id":"a","name":"exec","arguments":"{}"}},
+        {"id":"46000000000000000000000000000000.0","item":{"type":"function_call_output","call_id":"a","output":"one"}},
+        {"id":"47000000000000000000000000000000.0","item":{"role":"assistant","content":"step done"}},
+        {"id":"48000000000000000000000000000000.0","item":{"role":"developer","content":"Keep going"}},
+        {"id":"49000000000000000000000000000000.0","item":{"type":"reasoning","encrypted_content":"R2","summary":[]}},
+        {"id":"49000000000000000000000000000000.1","item":{"type":"function_call","call_id":"b","name":"read_file","arguments":"{}"}},
+        {"id":"4a000000000000000000000000000000.0","item":{"type":"function_call_output","call_id":"b","output":"two"}}]})"));
+      auto root =
+          unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(unwrap(
+                                           NativeJournalDirectory::open(grouped))),
+                                       "audit", header, capacity));
+      AuditLog log{*root};
+      ContextStore context{log};
+      context.seed_successor(rounds);
+      const auto entries = field(context.view(), "entries").array();
+      const auto id = [&](std::size_t i) { return field(entries[i], "id"); };
+      const auto archive = [&](Value::Array ids) {
+        const auto result =
+            context.manage(Value::object({{"base", Value{context.head()}},
+                                          {"mode", Value{"archive"}},
+                                          {"reason", Value{"seeded round"}},
+                                          {"source", Value{"test"}},
+                                          {"ids", Value{std::move(ids)}}}));
+        return field(result, "accepted") == Value{true}
+                   ? std::string{"accepted"}
+                   : string_field(result, "reason");
+      };
+#if !defined(S2_RED_OLD_CODE)
+      // Units: instruction 0, round {1,2,3}, round 4, instruction 5, round {6,7,8}.
+      const auto units = context.units();
+      const std::vector<std::pair<UnitClass, std::vector<std::size_t>>> expected{
+          {UnitClass::instruction, {0}},
+          {UnitClass::round, {1, 2, 3}},
+          {UnitClass::round, {4}},
+          {UnitClass::instruction, {5}},
+          {UnitClass::round, {6, 7, 8}}};
+      check(units.size() == expected.size());
+      const auto stem = units[0].handle;
+      for (std::size_t i = 0; i < units.size(); ++i)
+        check(units[i].unit_class == expected[i].first &&
+              units[i].entries == expected[i].second &&
+              units[i].handle == stem.substr(0, stem.find('.')) + "." +
+                                     std::to_string(expected[i].second.front()));
+#endif
+      check(archive({id(0)}) != "accepted"); // a seeded user entry is an instruction
+      check(archive({id(1), id(2)}) == "partial-tool-group"); // its output stays
+      if (const auto first = archive({id(1), id(2), id(3)}); first != "accepted") {
+        std::cerr << "a seeded source round is not archivable alone: " << first << "\n";
+        check(false);
+      }
+      check(archive({id(7), id(8)}) == "partial-round"); // reasoning 6 binds 7
+      check(archive({id(4)}) == "accepted");
+      check(archive({id(6), id(7), id(8)}) == "accepted");
+      check(field(context.view(), "entries").array().size() == 2);
+    }
+    // Layer 1 (A-M1): a seed of a seeded session. Its source IDs share one prefix
+    // (the predecessor's seed record), so only the unit each entry names keeps the
+    // inherited rounds apart; a seed without units groups by that prefix.
+    for (const bool named : {true, false}) {
+      const auto dir = std::string{path} + (named ? "/units" : "/prefix");
+      std::filesystem::create_directory(dir);
+      std::filesystem::permissions(dir, std::filesystem::perms::owner_all);
+      const std::string p = "50000000000000000000000000000000";
+      const auto unit = [&](const char *key) {
+        return named ? std::string{R"(,"unit":")"} + p + "." + key + "\"" : "";
+      };
+      auto again = unwrap(parse_json(
+          std::string{R"({"version":1,"source":{
+        "session":"/retained/successor","environment":"11000000000000000000000000000000",
+        "journal":"22000000000000000000000000000000","prefix_sequence":3,
+        "prefix_end":8192,"context_revision":"50000000000000000000000000000000",
+        "status":"settled","reason":"successor of a successor"},
+        "entries":[
+        {"id":")"} +
+          p + R"(.0","item":{"role":"user","content":"Do the task"})" + unit("0") +
+          R"(},
+        {"id":")" +
+          p +
+          R"(.1","item":{"type":"reasoning","encrypted_content":"R1","summary":[]})" +
+          unit("1") + R"(},
+        {"id":")" +
+          p +
+          R"(.2","item":{"type":"function_call","call_id":"a","name":"exec","arguments":"{}"})" +
+          unit("1") + R"(},
+        {"id":")" +
+          p +
+          R"(.3","item":{"type":"function_call_output","call_id":"a","output":"one"})" +
+          unit("1") + R"(},
+        {"id":")" +
+          p +
+          R"(.4","item":{"type":"reasoning","encrypted_content":"R2","summary":[]})" +
+          unit("4") + R"(},
+        {"id":")" +
+          p +
+          R"(.5","item":{"type":"function_call","call_id":"b","name":"exec","arguments":"{}"})" +
+          unit("4") + R"(},
+        {"id":")" +
+          p +
+          R"(.6","item":{"type":"function_call_output","call_id":"b","output":"two"})" +
+          unit("4") + R"(}]})"));
+      auto root =
+          unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(
+                                           unwrap(NativeJournalDirectory::open(dir))),
+                                       "audit", header, capacity));
+      AuditLog log{*root};
+      ContextStore context{log};
+      context.seed_successor(again);
+      const auto entries = field(context.view(), "entries").array();
+      const auto result = context.manage(Value::object(
+          {{"base", Value{context.head()}},
+           {"mode", Value{"archive"}},
+           {"reason", Value{"inherited round"}},
+           {"source", Value{"test"}},
+           {"ids", Value{Value::Array{field(entries[1], "id"), field(entries[2], "id"),
+                                      field(entries[3], "id")}}}}));
+      const auto reason = field(result, "accepted") == Value{true}
+                              ? std::string{"accepted"}
+                              : string_field(result, "reason");
+      if (reason != (named ? "accepted" : "partial-round")) {
+        std::cerr << (named ? "a named" : "an unnamed")
+                  << " inherited round archived alone: " << reason << "\n";
+        check(false);
+      }
     }
     std::filesystem::remove_all(path);
   } catch (const Error &e) {

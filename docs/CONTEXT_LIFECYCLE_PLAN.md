@@ -1317,6 +1317,8 @@ rd7.3's four row steps (20 attempts), and rd7.3's tokens (§4.4).
 ### 6.2 Tools, instructions and profile digests on existing sessions
 
 - V1, E1 and R1 change tool definitions. T1 does as well, but lands before chapters exist.
+  S2 changes the `context_manage` and `lua` descriptions, also before chapters exist: one
+  prompt-prefix change per existing session, with no cut.
 - 5st, P2, K1 and every probe-row step that changes a behavioural value change behavioural profile
   digests. Every edit, provenance included, changes the set's content digest, which trial records
   carry (§7.3).
@@ -1330,6 +1332,9 @@ rd7.3's four row steps (20 attempts), and rd7.3's tokens (§4.4).
   master builds until integration. Live checks, probes and trials use scratch sessions and scratch
   install prefixes.
 - **Before S1:** any binary opens any session.
+- **From S2 on, back to S1:** an S1 binary refuses every S2 snapshot (the `classes` section is
+  not registered there) and replays the whole journal, which above 64 MiB needs
+  `--rebuild-session`.
 - **From S1 to before S3b:** a master binary still opens these sessions. But once both slots are
   version 2, it ignores them (src/saved_state.cpp:146-153) and needs a full replay. That replay is
   automatic only while the journal is at most 64 MiB (src/retained_state.cpp:340-342); larger

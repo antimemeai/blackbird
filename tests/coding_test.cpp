@@ -1652,6 +1652,74 @@ void file_selector_test(const std::string &path) {
   if (failed != 1)
     throw Error{ErrorCode::corrupt};
 }
+// Unit S2 (design §5.2): arco.append(items, {class = "instruction"}) is protected;
+// the default is a result, whatever the role; any other class or option is refused.
+void append_class_test(const std::string &path) {
+  std::filesystem::create_directory(path);
+  std::filesystem::permissions(path, std::filesystem::perms::owner_all);
+  const JournalHeader h{id<EnvironmentId>(93),
+                        id<AuditStreamId>(94),
+                        3,
+                        {1024 * 1024, 4 * 1024 * 1024},
+                        std::nullopt};
+  auto root =
+      unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(
+                                       unwrap(NativeJournalDirectory::open(path))),
+                                   "audit", h, {8 * 1024 * 1024, 4000}));
+  AuditLog log{*root};
+  ContextStore context{log};
+  Scripted provider;
+  CodingEngine engine{log, context, provider, "test"};
+  const auto last = [&] {
+    return string_field(field(context.view(), "entries").array().back(), "id");
+  };
+  const auto archive = [&](const std::string &entry) {
+    const auto result =
+        context.manage(Value::object({{"base", Value{context.head()}},
+                                      {"mode", Value{"archive"}},
+                                      {"reason", Value{"class test"}},
+                                      {"source", Value{"test"}},
+                                      {"ids", Value{Value::Array{Value{entry}}}}}));
+    return field(result, "accepted") == Value{true} ? std::string{"accepted"}
+                                                    : string_field(result, "reason");
+  };
+  engine.turn({"", "arco.append({{role='assistant',content='brief'}}, "
+                   "{class='instruction'})"});
+  const auto brief = archive(last());
+  if (brief != "protected-unit")
+    throw std::runtime_error("a declared instruction must be protected: " + brief);
+  engine.turn({"", "arco.append({{role='developer',content='program note'}})"});
+  if (archive(last()) != "accepted")
+    throw std::runtime_error("a default Lua append is a result the model may archive");
+  engine.turn(
+      {"", "arco.append({{role='user',content='declared'}}, {class='result'})"});
+  if (archive(last()) != "accepted")
+    throw std::runtime_error("a declared result is archivable");
+  for (const auto *spoof :
+       {"{class='round'}", "{class='operator'}", "{origin='operator'}",
+        "{class='instruction', origin='operator'}", "{class=1}", "'instruction'"}) {
+    const auto before = context.view();
+    bool refused = false;
+    try {
+      engine.turn({"", std::string{"arco.append({{role='assistant',content='x'}}, "} +
+                           spoof + ")"});
+    } catch (const Error &) {
+      refused = true;
+    }
+    if (!refused || context.view() != before)
+      throw std::runtime_error(std::string{"a spoofed append option is refused: "} +
+                               spoof);
+  }
+  bool refused = false;
+  try {
+    engine.turn({"", "arco.append({{type='function_call',call_id='k',name='exec',"
+                     "arguments='{}'}}, {class='instruction'})"});
+  } catch (const Error &) {
+    refused = true;
+  }
+  if (!refused)
+    throw std::runtime_error("a declared class on a function_call is refused");
+}
 int main(int argc, char **argv) {
   const std::string_view selected_mode = argc == 1 ? "ordinary" : argv[1];
   if (argc > 2 || (selected_mode != "ordinary" && selected_mode != "capacity" &&
@@ -1782,6 +1850,8 @@ int main(int argc, char **argv) {
       enter_stage("complete");
       return 0;
     }
+    enter_stage("append_class_test");
+    append_class_test(std::string{path} + "/append-class");
     enter_stage("file_selector_test");
     file_selector_test(std::string{path} + "/file-selector");
     enter_stage("retained_output_test");

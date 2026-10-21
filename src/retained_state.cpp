@@ -3015,7 +3015,7 @@ Value::Array RetainedState::current_programs() const {
                  name == "session.recovery" || name.starts_with("station.") ||
                  name == "participants-state-v1" || name == "provider-profile-set-v1" ||
                  name == "provider-profile-override-v1" ||
-                 name == "context-format-level")
+                 name == "context-format-level" || name == "context-pins-v1")
         latest[name] = packet;
       else if (name == "workflow-config-effective-v1") {
         if (const auto *value = packet.find("program_config"))

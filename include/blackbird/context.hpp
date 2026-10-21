@@ -1,5 +1,6 @@
 #pragma once
 #include "blackbird/context_cut.hpp"
+#include "blackbird/context_units.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/raw_context.hpp"
 #include "blackbird/retained_state.hpp"
@@ -177,6 +178,23 @@ public:
   Value stats(RawContextOrigin origin = {}) const;
   Value::Array items(RawContextOrigin origin = {}) const;
   void append(Value::Array items, std::string_view label, RawContextOrigin origin = {});
+  // An append whose class the program declares (design §5.2): instruction or
+  // result, never on function_call, function_call_output or reasoning items
+  // (Error{invalid_range}). The record carries the class.
+  void append(Value::Array items, std::string_view label, UnitClass declared,
+              RawContextOrigin origin = {});
+  // The live units (design §3, §5.1): handles, classes, open, superseded, pinned.
+  std::vector<Unit> units(RawContextOrigin origin = {}) const;
+  // Pins (design §5.4): expand the selection (Error{invalid_range} when it does not
+  // parse) and record the live pinned units at once as the latest-wins program
+  // record context-pins-v1. Returns {accepted: [handle], refused: [{unit, reason}],
+  // pinned: count}. A pin changes no context bytes.
+  Value pin(std::string_view selection, RawContextOrigin origin = {});
+  Value unpin(std::string_view selection, RawContextOrigin origin = {});
+  const std::set<ContextRef> &pins() const noexcept { return pins_; }
+  // Whether a live entry's creating record carries this origin label, read by
+  // identity lookup (the RRC check, design §19).
+  bool live_origin(std::string_view label, RawContextOrigin origin = {}) const;
   static void validate_successor_seed(const Value &seed, RawContextOrigin origin = {});
   void seed_successor(const Value &seed, RawContextOrigin origin = {});
   // strict (the model's context_edit and Lua's blackbird.edit): a new or changed
@@ -283,7 +301,10 @@ private:
   };
   mutable std::map<std::string, Original> originals_;
   mutable std::vector<Original> captured_;
-  Value::Array captured_entries(RawContextOrigin origin = {}) const;
+  // With classes, also the classes of every record visited, from the packets the
+  // visit decodes anyway (restore-mode manage).
+  Value::Array captured_entries(RawContextOrigin origin = {},
+                                ClassMap *classes = nullptr) const;
   bool workflow_ = false;
   struct Pending {
     Value proposal;
@@ -299,6 +320,47 @@ private:
                        RawContextOrigin origin = {}, bool *settled = nullptr);
   bool valid_entries(const Value &entries, RawContextOrigin origin) const;
   void append_impl(Value::Array items, std::string_view label, const Value *lineage,
-                   RawContextOrigin origin);
+                   RawContextOrigin origin, std::optional<UnitClass> declared = {});
+  // Classes of live creating records (design §5.2): set by every writer and by
+  // playback from the record, restored from the classes section, derived on demand
+  // by identity lookup for a record the map does not hold.
+  mutable ClassMap classes_;
+  std::set<ContextRef> pins_;
+  // The creating record, decoded for its class fields (op, origin, class,
+  // originals, lineage): from a held packet, else by identity lookup. Empty when it
+  // cannot be read, did not publish or was skipped.
+  // skipped: read a frame a repair skipped too (its originals were never live).
+  std::optional<Value> creating_record(const IdentityBytes &record,
+                                       RawContextOrigin origin,
+                                       bool skipped = false) const;
+  const RecordClasses &record_classes_of(const IdentityBytes &record,
+                                         const Value::Array &entries,
+                                         RawContextOrigin origin) const;
+  std::vector<Unit> live_units(RawContextOrigin origin) const;
+  // Derives and keeps the classes of every live record the map does not hold, by
+  // identity lookup; a record that cannot be read is classed by the role of its
+  // live originals (a version-1 restore).
+  void derive_live_classes(RawContextOrigin origin);
+  Value write_pins(std::string_view selection, bool pin, RawContextOrigin origin);
+  // Records classed by role, for one pass over one entry list (by_role_source_):
+  // each such record is classed once per pass.
+  mutable std::map<IdentityBytes, RecordClasses> by_role_;
+  mutable const Value::Array *by_role_source_ = nullptr;
+  // The live items of each record in by_role_source_, grouped once per pass.
+  mutable std::map<IdentityBytes, std::map<std::uint32_t, Value>> by_role_live_;
+  void begin_class_pass() const noexcept {
+    by_role_.clear();
+    by_role_live_.clear();
+    by_role_source_ = nullptr;
+  }
+  // Records no read found: classed by role on every call without a new lookup.
+  mutable std::set<IdentityBytes> unreadable_;
+  // Fingerprints of instruction items by entry ID, kept while the entry holds the
+  // same item storage (units() compares them for superseded copies).
+  struct Print {
+    Value item;
+    ItemPrint print;
+  };
+  mutable std::map<std::string, Print, std::less<>> prints_;
 };
 } // namespace blackbird

@@ -1659,7 +1659,22 @@ struct CodingEngine::Runtime {
           break;
         case append_op: {
           auto items = read_value(L, 1, {0, &nodes});
-          self->engine.context_.append(items.array(), "lua.synthetic");
+          // blackbird.append(items[, {class = "instruction" | "result"}]): the one
+          // option a program has; the class goes into the record (design §5.2).
+          if (lua_isnoneornil(L, 2))
+            self->engine.context_.append(items.array(), "lua.synthetic");
+          else {
+            const auto options = read_value(L, 2, {0, &nodes});
+            const auto *fields = std::get_if<Value::Object>(&options.value());
+            const auto *named =
+                fields && fields->size() == 1 && fields->front().first == "class"
+                    ? std::get_if<std::string>(&fields->front().second.value())
+                    : nullptr;
+            const auto declared = named ? class_named(*named) : std::nullopt;
+            if (!declared)
+              throw Error{ErrorCode::invalid_range};
+            self->engine.context_.append(items.array(), "lua.synthetic", *declared);
+          }
           frame.value = self->engine.context_.view();
           break;
         }
@@ -2582,8 +2597,13 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
     observations_ = std::make_unique<Observations>(log_);
     program_config_.object().emplace_back("workflows", default_workflows());
     program_config_.object().emplace_back("workflow_prefix", Value{""});
-    program_revision_ = "builtin-ultracode-v1";
+    // The built-in program's revision names its exact source: v2 declares the
+    // ultracode brief an instruction (unit S2).
+    constexpr std::string_view builtin_prefix = "builtin-ultracode-v";
+    const std::string builtin = std::string{builtin_prefix} + "2";
+    program_revision_ = builtin;
     budget_ = default_context_budget();
+    std::optional<Value> recorded_config;
     for (const auto &packet : log_.root().current_programs()) {
       if (packet.find("label") && string_field(packet, "label") == "session.recovery")
         if (const auto *metadata = packet.find("metadata"))
@@ -2594,6 +2614,7 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
         if (const auto *config = packet.find("program_config")) {
           program_config_ = *config;
           program_revision_ = string_field(packet, "program_revision");
+          recorded_config = packet;
         }
         lua_tools_ = field(packet, "tools");
         tools_revision_ = string_field(packet, "tools_revision");
@@ -2625,6 +2646,37 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
         }
         restore.finish(0);
       });
+    }
+    // A recorded built-in revision is the built-in program, never a session choice.
+    // Any built-in revision other than this binary's (older, or newer from a later
+    // binary whose source may use API this one refuses) is replaced with this
+    // binary's built-in workflows, and the replacement is recorded with the revision
+    // it replaced. A supplied program (a definition-generation revision) is kept.
+    if (recorded_config && program_revision_.starts_with(builtin_prefix) &&
+        program_revision_ != builtin) {
+      auto &workflows = program_config_.object();
+      std::erase_if(workflows,
+                    [](const auto &pair) { return pair.first == "workflows"; });
+      workflows.emplace_back("workflows", default_workflows());
+      auto current = *recorded_config;
+      bool activation = false;
+      for (auto &[key, value] : current.object()) {
+        if (key == "program_config")
+          value = program_config_;
+        if (key == "program_revision")
+          value = Value{builtin};
+        if (key == "activation") {
+          value = Value{"builtin-current"};
+          activation = true;
+        }
+      }
+      if (!activation)
+        current.object().emplace_back("activation", Value{"builtin-current"});
+      std::erase_if(current.object(),
+                    [](const auto &pair) { return pair.first == "replaced_revision"; });
+      current.object().emplace_back("replaced_revision", Value{program_revision_});
+      log_.record(log_.issue(), ApplicationChannel::program, current);
+      program_revision_ = builtin;
     }
     Value participants_saved;
     for (const auto &packet : log_.root().current_programs())
