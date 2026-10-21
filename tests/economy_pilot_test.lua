@@ -25,9 +25,14 @@ local function run(policy, provider_fail)
     stats = function()
       return { entries = {}, input_bytes = 10, last_request_bytes = 20 }
     end,
-    append = function(items)
+    append = function(items, options)
       for _, i in ipairs(items) do
         if i.role == "developer" then
+          -- The arm's policy is an instruction (unit S2), never archived.
+          assert(
+            options and options.class == "instruction",
+            "policy declared instruction"
+          )
           policies[#policies + 1] = i.content
         end
       end

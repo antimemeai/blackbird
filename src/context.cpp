@@ -90,6 +90,15 @@ Value creating_projection(ByteView bytes) {
       "cause",   "skipped",   "stage",    "proposal", "basis"};
   return unwrap(decode_packet_projection(bytes, omitted));
 }
+// A creating record decoded for its classes (derive_classes): what
+// creating_projection keeps plus a seeded append's lineage and a repair's skip list.
+Value class_projection(ByteView bytes) {
+  constexpr std::array<std::string_view, 17> omitted{
+      "entries", "candidate", "outcome",  "insert",   "replace",   "chapter",
+      "pending", "refused",   "archived", "swept",    "reasoning", "result",
+      "sizes",   "cause",     "stage",    "proposal", "basis"};
+  return unwrap(decode_packet_projection(bytes, omitted));
+}
 // Every {id, item} original a frame created, in ordinal order.
 Value::Array packet_originals(const Value &packet) {
   const auto *fresh = packet.find("originals");
@@ -366,13 +375,17 @@ void visit_context_records(const RetainedState::FactHistory &history,
   }
 }
 } // namespace
-Value::Array ContextStore::captured_entries(RawContextOrigin origin) const {
+Value::Array ContextStore::captured_entries(RawContextOrigin origin,
+                                            ClassMap *classes) const {
   refresh_history();
   Value::Array result;
   visit_context_records(historical_, origin, [&](const Value &packet) {
     // A frame a repair skipped created nothing (design §4.5).
     if (!accepted(packet) || skipped_frame(string_field(packet, "revision")))
       return;
+    if (classes)
+      if (const auto ref = parse_entry_id(string_field(packet, "revision") + ".0"))
+        classes->set(ref->record, derive_classes(packet));
     for (auto &entry : packet_originals(packet))
       result.push_back(std::move(entry));
   });
@@ -407,9 +420,16 @@ ContextStore::ContextStore(AuditLog &log, ContextOpen open, RawContextOrigin ori
   RawContextTrace trace{RawContextAction::reconstruct, 450, origin, &initial};
   trace.run([&]() -> void {
     auto &root = log.root();
-    for (const auto &program : root.current_programs())
-      if (string_field(program, "label") == "context-format-level")
+    for (const auto &program : root.current_programs()) {
+      const auto &label = string_field(program, "label");
+      if (label == "context-format-level")
         level_ = level_number(field(program, "level"));
+      // Pins are a latest-wins program record (design §5.4): every reader sees
+      // the same set, whatever restored the context.
+      if (label == "context-pins-v1")
+        for (const auto &unit : field(program, "units").array())
+          pins_.insert(decode_ref(unit));
+    }
     // A newer format than this binary reads: refuse before any playback.
     if (level_ > format_level)
       throw Error{ErrorCode::unsupported, level_refused};
@@ -456,6 +476,8 @@ ContextStore::ContextStore(AuditLog &log, ContextOpen open, RawContextOrigin ori
         differing_.clear();
         skipped_.clear();
         restored_sections_.clear();
+        classes_.clear();
+        unreadable_.clear();
         archive_loaded_ = true;
         lookup_boundary_.reset();
         if (!report_.snapshot_refusal)
@@ -528,6 +550,9 @@ void ContextStore::restore_snapshot(const SavedState &saved, RawContextTrace &tr
     }
     archive_loaded_ = false;
     lookup_boundary_ = saved.boundary;
+    // A version-1 snapshot holds no classes: each live record's are derived from
+    // the record, read by identity lookup (design §4.4).
+    derive_live_classes(trace.fresh());
     return;
   }
   // Version 2: a ref names the retained creating record, which holds the entry
@@ -626,6 +651,26 @@ void ContextStore::restore_snapshot(const SavedState &saved, RawContextTrace &tr
   }
   entries_ = std::move(entries);
   restored_sections_ = field(context, "sections").array();
+  if (const auto *section = restored_section(classes_section))
+    classes_ = ClassMap::read_section(*section);
+  else
+    // An S1 snapshot has no classes section: derive them from the creating records
+    // just read. A seeded record is read again for its lineage, which the
+    // projection above skips.
+    for (const auto &[bytes, creating] : records) {
+      const auto *label = creating.packet.find("origin");
+      if (!label || *label != Value{"session.successor"}) {
+        classes_.set(bytes, derive_classes(creating.packet));
+        continue;
+      }
+      const auto *record =
+          std::get_if<ApplicationRecordEvent>(&creating.fact.event.body);
+      classes_.set(bytes, derive_classes(class_projection(
+                              raw_context_read(record->payload,
+                                               {2, true, creating.fact.record,
+                                                record->identity, record->channel, 0},
+                                               trace.fresh()))));
+    }
   archive_loaded_ = false;
   lookup_boundary_ = saved.boundary;
 }
@@ -770,6 +815,9 @@ void ContextStore::play_frame(const RetainedFact &fact,
     std::vector<Original> captured;
     std::optional<Value::Array> next;
     std::optional<std::set<std::string>> status;
+    // The classes of what the frame created, derived from the frame itself as the
+    // writer did (design §5.2).
+    ClassMap made;
     bool publishes = false;
     if (op == "append" || op == "edit" || op == "managed") {
       if (string_field(packet, "observed") != head_)
@@ -793,6 +841,7 @@ void ContextStore::play_frame(const RetainedFact &fact,
             inserted.push_back(id);
             captured.push_back(std::move(original));
           }
+          made.set(record.identity.bytes(), derive_classes(packet));
         }
         if (const auto *format = packet.find("format")) {
           if (op != "append" || *format != Value{"append-delta-v1"} ||
@@ -830,6 +879,7 @@ void ContextStore::play_frame(const RetainedFact &fact,
           captured.emplace_back(record.payload, i, id, fact.record, record.identity);
         }
         next = apply_cut(frame, entries_, fresh, trace.fresh());
+        made.set(record.identity.bytes(), derive_classes(packet));
         for (const auto &original : captured) {
           originals_.emplace(original.id, original);
           inserted.push_back(original.id);
@@ -845,6 +895,7 @@ void ContextStore::play_frame(const RetainedFact &fact,
       entries_.swap(*next);
       if (status)
         differing_.swap(*status);
+      classes_.merge(made);
       head_ = revision;
     }
     ++report_.frames;
@@ -983,15 +1034,23 @@ Result<void> ContextStore::checkpoint(RawContextOrigin origin) {
       // checkpoint reads no original and decodes nothing.
       Value::Array entries;
       entries.reserve(entries_.size());
+      std::set<IdentityBytes> live;
       for (const auto &entry : entries_) {
         const auto &id = string_field(entry, "id");
         const auto ref = parse_entry_id(id);
         if (!ref)
           throw Error{ErrorCode::corrupt};
+        live.insert(ref->record);
         entries.push_back(differing_.contains(id) ? entry : encode_ref(*ref));
       }
-      Value::Array sections;
-      std::set<std::string> names;
+      // The classes of the live creating records (design §5.2), which this store
+      // owns; a record whose classes could not be derived is derived again on
+      // restore.
+      classes_.retain(live);
+      Value::Array sections{
+          Value::object({{"name", Value{std::string{classes_section}}},
+                         {"value", classes_.section()}})};
+      std::set<std::string> names{std::string{classes_section}};
       for (const auto &writer : section_writers) {
         if (!writer.write || !saved_section_registered(writer.name) ||
             !names.insert(writer.name).second)
@@ -1087,6 +1146,8 @@ Result<void> ContextStore::checkpoint(RawContextOrigin origin) {
                       [&](const auto &pair) { return !live_ids.contains(pair.first); });
         std::erase_if(differing_,
                       [&](const auto &id) { return !live_ids.contains(id); });
+        std::erase_if(prints_,
+                      [&](const auto &pair) { return !live_ids.contains(pair.first); });
         captured_.clear();
         archive_loaded_ = false;
         // Originals pruned here are found by lookup, up to this snapshot.
@@ -1229,6 +1290,12 @@ void ContextStore::validate_successor_seed(const Value &seed, RawContextOrigin o
         throw Error{ErrorCode::invalid_range};
       seed_hex(std::string_view{id}.substr(0, 32));
       (void)seed_number(Value{Number{id.substr(33)}});
+      // The source entry's unit, "<record>.<unit key>" in the source session (unit
+      // S2): entries of one source unit stay one unit here.
+      if (const auto *unit = entry.find("unit"))
+        if (!std::holds_alternative<std::string>(unit->value()) ||
+            !parse_entry_id(unit->string()))
+          throw Error{ErrorCode::invalid_range};
       const auto &item = field(entry, "item");
       if (!std::holds_alternative<Value::Object>(item.value()))
         throw Error{ErrorCode::invalid_range};
@@ -1325,17 +1392,23 @@ void ContextStore::seed_successor(const Value &seed, RawContextOrigin origin) {
         string_field(field(seed, "source"), "journal") ==
             hex_identity(log_.root().cursor().journal.bytes()))
       throw Error{ErrorCode::conflict};
-    Value::Array items, locators;
+    Value::Array items, locators, units;
+    bool named = false;
     for (const auto &entry : field(seed, "entries").array()) {
       items.push_back(field(entry, "item"));
       locators.push_back(Value{string_field(entry, "id")});
+      const auto *unit = entry.find("unit");
+      named |= unit != nullptr;
+      units.push_back(unit ? *unit : Value{});
     }
-    const auto lineage = Value::object(
+    auto lineage = Value::object(
         {{"version", Value{Number{"1"}}},
          {"scope",
           Value{"declared source; no inherited admissions or settlement verification"}},
          {"source", field(seed, "source")},
          {"source_entries", Value{std::move(locators)}}});
+    if (named)
+      lineage.object().emplace_back("source_units", Value{std::move(units)});
     append_impl(std::move(items), "session.successor", &lineage, trace.child());
   });
 }
@@ -1343,8 +1416,13 @@ void ContextStore::append(Value::Array items, std::string_view label,
                           RawContextOrigin origin) {
   append_impl(std::move(items), label, nullptr, origin);
 }
+void ContextStore::append(Value::Array items, std::string_view label,
+                          UnitClass declared, RawContextOrigin origin) {
+  append_impl(std::move(items), label, nullptr, origin, declared);
+}
 void ContextStore::append_impl(Value::Array items, std::string_view label,
-                               const Value *lineage, RawContextOrigin origin) {
+                               const Value *lineage, RawContextOrigin origin,
+                               std::optional<UnitClass> declared) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::append,
                         origin.input == RawContextOrigin::Input::no_new ? 1080ULL
@@ -1358,6 +1436,7 @@ void ContextStore::append_impl(Value::Array items, std::string_view label,
     for (const auto &item : items)
       if (!std::holds_alternative<Value::Object>(item.value()))
         throw Error{ErrorCode::corrupt};
+    const auto recorded = recorded_class(label, items, declared);
     auto identity = log_.issue();
     auto revision = hex_identity(identity.bytes());
     auto next = entries_;
@@ -1382,6 +1461,14 @@ void ContextStore::append_impl(Value::Array items, std::string_view label,
                                  {"originals", Value{std::move(fresh)}}});
     if (lineage)
       packet.object().emplace_back("lineage", *lineage);
+    // The class comes from this record: its label, or the class a lua.synthetic
+    // append declared or defaulted to (which the label does not carry). Playback
+    // derives it the same way.
+    if (recorded)
+      packet.object().emplace_back("class",
+                                   Value{Number{static_cast<std::uint8_t>(*recorded)}});
+    ClassMap made;
+    made.set(identity.bytes(), derive_classes(packet));
     std::vector<Original> captured;
     for (const auto &entry : field(packet, "originals").array())
       captured.emplace_back(entry, identity);
@@ -1405,6 +1492,7 @@ void ContextStore::append_impl(Value::Array items, std::string_view label,
       pending_->expected.swap(expected);
     entries_.swap(next);
     originals_.merge(originals);
+    classes_.merge(made);
     head_.swap(revision);
     trace.state(1, raw_state());
     refresh_history();
@@ -1642,50 +1730,77 @@ std::string_view append_of(const Value &entry) {
   return id.substr(0, id.rfind('.'));
 }
 // A response round is atomic: a reasoning item stays with every later entry of its
-// append (message, calls), and whole_groups then binds those calls' outputs.
+// unit (message, calls), and whole_groups then binds those calls' outputs.
 // Providers reject reasoning or thinking separated from the items that follow it.
-bool whole_rounds(const Value::Array &entries, const std::set<std::string> &ids) {
+// slot names an entry's unit key in its creating record, before outputs join their
+// calls (design §5.2): a seeded record's source rounds are separate.
+bool whole_rounds(const Value::Array &entries, const std::set<std::string> &ids,
+                  const std::function<ContextRef(const Value &)> &slot) {
   for (std::size_t i = 0; i < entries.size(); ++i) {
     const auto *type = field(entries[i], "item").find("type");
     if (!type || *type != Value{"reasoning"})
       continue;
     const bool chosen = ids.contains(string_field(entries[i], "id"));
-    for (auto j = i + 1;
-         j < entries.size() && append_of(entries[j]) == append_of(entries[i]); ++j)
+    const auto unit = slot(entries[i]);
+    for (auto j = i + 1; j < entries.size() && slot(entries[j]) == unit; ++j)
       if (ids.contains(string_field(entries[j], "id")) != chosen)
         return false;
   }
   return true;
 }
+// Membership by call ID (design §5.1): a call and its output are selected together
+// wherever they sit, so a call and an output separated by an instruction can be
+// archived without it. An output with no earlier call, a second output, and a
+// selected call that no output answers yet are refused.
 bool whole_groups(const Value::Array &entries, const std::set<std::string> &ids) {
-  std::set<std::string> pending;
-  std::size_t start = 0;
-  for (std::size_t i = 0; i < entries.size(); ++i) {
-    const auto &item = field(entries[i], "item");
+  std::map<std::string, bool> open; // call_id -> selected
+  for (const auto &entry : entries) {
+    const auto &item = field(entry, "item");
+    const auto *type = item.find("type");
+    if (!type || !std::holds_alternative<std::string>(type->value()))
+      continue;
+    const bool selected = ids.contains(string_field(entry, "id"));
+    if (type->string() == "function_call") {
+      if (!open.emplace(string_field(item, "call_id"), selected).second)
+        return false;
+    } else if (type->string() == "function_call_output") {
+      const auto call = open.find(string_field(item, "call_id"));
+      if (call == open.end() || call->second != selected)
+        return false;
+      open.erase(call);
+    }
+  }
+  // Open current tool calls are allowed only if untouched.
+  return std::none_of(open.begin(), open.end(),
+                      [](const auto &call) { return call.second; });
+}
+// The open call's whole round at the tail of basis, which a select keeps: from the
+// first call no output answers, back over the reasoning and message of its append,
+// to the end.
+std::set<std::string> active_round(const Value::Array &basis) {
+  std::set<std::string> pending_calls, active;
+  std::size_t open_start = 0;
+  for (std::size_t i = 0; i < basis.size(); ++i) {
+    const auto &item = field(basis[i], "item");
     const auto *type = item.find("type");
     if (!type || !std::holds_alternative<std::string>(type->value()))
       continue;
     if (type->string() == "function_call") {
-      if (pending.empty())
-        start = i;
-      pending.insert(string_field(item, "call_id"));
+      if (pending_calls.empty())
+        open_start = i;
+      pending_calls.insert(string_field(item, "call_id"));
     } else if (type->string() == "function_call_output") {
-      if (pending.erase(string_field(item, "call_id")) != 1)
-        return false;
-      if (pending.empty()) {
-        const bool selected = ids.contains(string_field(entries[start], "id"));
-        for (std::size_t j = start; j <= i; ++j)
-          if (ids.contains(string_field(entries[j], "id")) != selected)
-            return false;
-      }
+      pending_calls.erase(string_field(item, "call_id"));
     }
   }
-  // Open current tool batches are allowed only if untouched.
-  if (!pending.empty())
-    for (std::size_t j = start; j < entries.size(); ++j)
-      if (ids.contains(string_field(entries[j], "id")))
-        return false;
-  return true;
+  if (pending_calls.empty())
+    return active;
+  while (open_start > 0 &&
+         append_of(basis[open_start - 1]) == append_of(basis[open_start]))
+    --open_start;
+  for (std::size_t i = open_start; i < basis.size(); ++i)
+    active.insert(string_field(basis[i], "id"));
+  return active;
 }
 Value number(std::size_t n) { return Value{Number{n}}; }
 std::size_t index_field(const Value &q, std::string_view key, std::size_t fallback) {
@@ -1899,23 +2014,52 @@ Value ContextStore::manage(const Value &proposal, RawContextOrigin origin) {
       }
       // Only restore reads captured originals; otherwise use entries_ without a copy.
       std::optional<Value::Array> captured;
+      // The classes of historical records, derived from the packets the capture
+      // visit decodes, so no record is read twice.
+      ClassMap historical;
       if (mode == "restore")
-        captured = captured_entries(trace.fresh());
+        captured = captured_entries(trace.fresh(), &historical);
       const auto &candidates = captured ? *captured : entries_;
       if (!whole_groups(candidates, selected))
         return reject_managed(proposal, "partial-tool-group", trace.child());
-      if (!whole_rounds(candidates, selected))
+      begin_class_pass();
+      const auto slot = [&](const Value &entry) {
+        const auto ref = parse_entry_id(string_field(entry, "id"));
+        if (!ref)
+          throw Error{ErrorCode::corrupt};
+        const auto *known = historical.find(ref->record);
+        const auto &classes =
+            known ? *known : record_classes_of(ref->record, candidates, trace.fresh());
+        return ContextRef{ref->record, classes.key(ref->ordinal)};
+      };
+      if (!whole_rounds(candidates, selected, slot))
         return reject_managed(proposal, "partial-round", trace.child());
-      for (const auto &entry : entries_) {
-        const auto &id = string_field(entry, "id");
-        const auto *role = field(entry, "item").find("role");
-        const bool pinned =
-            role && (*role == Value{"user"} || *role == Value{"system"} ||
-                     *role == Value{"developer"});
-        if (pinned &&
-            ((mode == "select" && !selected.contains(id)) ||
-             ((mode == "archive" || mode == "summarize") && selected.contains(id))))
-          return reject_managed(proposal, "mandatory-entry", trace.child());
+      // Selections are whole units, protected by the creating record's class
+      // (design §5.1-§5.3), not by role: instructions and tool state are never
+      // archived, summarised or left out of a select, except that a superseded
+      // instruction copy may be archived or left out; pinned units are never
+      // removed. A select keeps the open round at the tail as it always has.
+      if (mode != "restore") {
+        const auto kept =
+            mode == "select" ? active_round(entries_) : std::set<std::string>{};
+        for (const auto &unit : live_units(trace.fresh())) {
+          std::size_t removed = 0;
+          for (const auto position : unit.entries) {
+            const auto &id = string_field(entries_[position], "id");
+            removed += mode == "select" ? !selected.contains(id) && !kept.contains(id)
+                                        : selected.contains(id);
+          }
+          if (removed == 0)
+            continue;
+          if ((unit.unit_class == UnitClass::instruction &&
+               (!unit.superseded || mode == "summarize")) ||
+              unit.unit_class == UnitClass::tool_state)
+            return reject_managed(proposal, "protected-unit", trace.child());
+          if (unit.pinned)
+            return reject_managed(proposal, "pinned-unit", trace.child());
+          if (removed != unit.entries.size())
+            return reject_managed(proposal, "partial-unit", trace.child());
+        }
       }
       const auto mode_length = mode.size(), selected_count = selected.size();
       const std::size_t stage_length = 0;
@@ -2031,37 +2175,52 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
     auto identity = log_.issue();
     auto revision = hex_identity(identity.bytes());
     Value::Array next, fresh;
-    std::set<std::string> pending_calls, active_entries;
-    std::size_t open_start = 0;
-    for (std::size_t i = 0; i < basis.size(); ++i) {
-      const auto &item = field(basis[i], "item");
-      const auto *type = item.find("type");
-      if (!type || !std::holds_alternative<std::string>(type->value()))
-        continue;
-      if (type->string() == "function_call") {
-        if (pending_calls.empty())
-          open_start = i;
-        pending_calls.insert(string_field(item, "call_id"));
-      } else if (type->string() == "function_call_output") {
-        pending_calls.erase(string_field(item, "call_id"));
+    const auto active_entries = active_round(basis);
+    // Pins are rechecked at settlement (design §5.4): a unit pinned after this
+    // proposal staged stays live, and the outcome lists it as refused.
+    Value::Array refused_units;
+    if (!stage.empty() && !pins_.empty() && mode != "restore") {
+      std::set<std::string> staged;
+      for (const auto &entry : basis)
+        staged.insert(string_field(entry, "id"));
+      for (const auto &unit : live_units(trace.fresh())) {
+        if (!unit.pinned)
+          continue;
+        bool touched = false;
+        for (const auto position : unit.entries) {
+          const auto &id = string_field(entries_[position], "id");
+          touched |= mode == "select" ? staged.contains(id) && !selected.contains(id) &&
+                                            !active_entries.contains(id)
+                                      : selected.contains(id);
+        }
+        if (!touched)
+          continue;
+        for (const auto position : unit.entries) {
+          const auto &id = string_field(entries_[position], "id");
+          if (mode == "select")
+            selected.insert(id);
+          else
+            selected.erase(id);
+        }
+        refused_units.push_back(
+            Value::object({{"unit", Value{unit.handle}}, {"reason", Value{"pinned"}}}));
       }
+      if (mode != "select" && selected.empty())
+        return reject_managed(proposal, "pinned", trace.child(),
+                              acceptance ? &acceptance->context_settlement_accepted
+                                         : nullptr);
     }
-    if (!pending_calls.empty()) {
-      // Keep the open call's whole round: reasoning and message precede it in its
-      // append.
-      while (open_start > 0 &&
-             append_of(basis[open_start - 1]) == append_of(basis[open_start]))
-        --open_start;
-      for (std::size_t i = open_start; i < basis.size(); ++i)
-        active_entries.insert(string_field(basis[i], "id"));
-    }
+    Value::Array ancestry;
+    for (const auto &id : field(proposal, "ids").array())
+      if (selected.contains(id.string()))
+        ancestry.push_back(id);
     bool inserted = false;
     for (const auto &entry : basis) {
       const bool chosen = selected.contains(string_field(entry, "id"));
       if (mode == "summarize" && chosen && !inserted) {
         auto summary = Value::object({{"id", Value{revision + ".0"}},
                                       {"item", field(proposal, "summary")},
-                                      {"ancestry", field(proposal, "ids")}});
+                                      {"ancestry", Value{ancestry}}});
         next.push_back(summary);
         fresh.push_back(summary);
         inserted = true;
@@ -2136,6 +2295,8 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
                                   {"reason", Value{"published"}},
                                   {"revision", Value{revision}},
                                   {"current", Value{revision}}});
+    if (!refused_units.empty())
+      outcome.object().emplace_back("refused", Value{std::move(refused_units)});
     auto packet = Value::object({{"op", Value{"managed"}},
                                  {"base", Value{head_}},
                                  {"observed", Value{head_}},
@@ -2156,6 +2317,8 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
     for (const auto &entry : fresh)
       created.emplace(string_field(entry, "id"), entry);
     auto status = settle(next, trace.fresh(), &created);
+    ClassMap made;
+    made.set(identity.bytes(), derive_classes(packet));
     auto publication = trace.publication();
     (void)log_.record_boundary(identity, packet, boundary_program, &publication);
     if (acceptance) {
@@ -2165,6 +2328,7 @@ Value ContextStore::publish_managed(const Value &proposal, const Value::Array &b
     }
     history_stale_ = true;
     originals_.merge(originals);
+    classes_.merge(made);
     for (auto &entry : captured)
       captured_.push_back(std::move(entry));
     entries_.swap(next);
@@ -2455,6 +2619,8 @@ Value ContextStore::cut(CutFrame frame, RawContextOrigin origin) {
     frame.result = measure_entries(next, true);
     const auto packet = recordable(frame);
     auto status = settle(next, trace.fresh(), &fresh);
+    ClassMap made;
+    made.set(identity.bytes(), derive_classes(packet));
     reserve_append(captured_, captured.size());
     if (protect)
       trace.protection([&](const RawEventRef &request) {
@@ -2472,6 +2638,7 @@ Value ContextStore::cut(CutFrame frame, RawContextOrigin origin) {
     for (auto &[id, original] : originals)
       original.record = reference;
     originals_.merge(originals);
+    classes_.merge(made);
     entries_.swap(next);
     differing_.swap(status);
     head_ = frame.revision;
@@ -2565,6 +2732,9 @@ Value ContextStore::repair(const Value::Array &picks, RawContextOrigin origin) {
     frame.result = measure_entries(next, true);
     const auto packet = recordable(frame);
     auto status = settle(next, trace.fresh(), &fresh);
+    // The copies are classed by role (class byte 0), as an unreadable record is.
+    ClassMap made;
+    made.set(identity.bytes(), derive_classes(packet));
     reserve_append(captured_, captured.size());
     write_format_level(trace);
     auto publication = trace.publication();
@@ -2579,6 +2749,7 @@ Value ContextStore::repair(const Value::Array &picks, RawContextOrigin origin) {
     for (auto &[id, original] : originals)
       original.record = reference;
     originals_.merge(originals);
+    classes_.merge(made);
     entries_.swap(next);
     differing_.swap(status);
     head_ = frame.revision;
@@ -2593,6 +2764,276 @@ Value ContextStore::repair(const Value::Array &picks, RawContextOrigin origin) {
     return Value::object({{"accepted", Value{true}},
                           {"revision", Value{head_}},
                           {"skipped", Value{Number{frame.skipped.size()}}}});
+  });
+}
+std::optional<Value> ContextStore::creating_record(const IdentityBytes &record,
+                                                   RawContextOrigin origin,
+                                                   bool skipped) const {
+  const auto revision = hex_identity(record);
+  // A frame a repair skipped (or one set aside read-only) created nothing.
+  if (!skipped && skipped_frame(revision))
+    return std::nullopt;
+  try {
+    // Playback and restore hold the creating record itself.
+    const auto prefix = revision + ".";
+    if (const auto held = originals_.lower_bound(prefix);
+        held != originals_.end() && held->first.starts_with(prefix) &&
+        held->second.packet) {
+      const auto &original = held->second;
+      auto packet = class_projection(
+          raw_context_read(original.payload,
+                           {0, true, original.record, original.application,
+                            ApplicationChannel::context, original.index},
+                           origin));
+      return accepted(packet) ? std::optional{std::move(packet)} : std::nullopt;
+    }
+    const std::uint8_t family = 1;
+    const auto kind = RetainedKind::application;
+    const auto cursor = log_.root().cursor();
+    RawContextPair lookup{origin,
+                          158,
+                          {1819, 1820},
+                          std::array{detail::raw_native_field(family),
+                                     detail::raw_native_field(kind), ByteView{record},
+                                     ByteView{cursor.journal.bytes()},
+                                     detail::raw_native_field(cursor.sequence),
+                                     detail::raw_native_field(cursor.end_offset)}};
+    const auto fact = lookup.run([&] {
+      return log_.root().lookup(log_.root().visible(), family, kind, record);
+    });
+    if (!fact) {
+      lookup.finish(2);
+      return std::nullopt;
+    }
+    const auto *application = std::get_if<ApplicationRecordEvent>(&fact->event.body);
+    if (application)
+      lookup.finish(0, std::array{ByteView{fact->record.journal.bytes()},
+                                  detail::raw_native_field(fact->record.sequence),
+                                  detail::raw_native_field(application->channel)});
+    else
+      lookup.finish(3, std::array{ByteView{fact->record.journal.bytes()},
+                                  detail::raw_native_field(fact->record.sequence)});
+    if (!application || application->identity.bytes() != record ||
+        application->channel != ApplicationChannel::context)
+      return std::nullopt;
+    auto packet = class_projection(raw_context_read(
+        application->payload,
+        {2, true, fact->record, application->identity, application->channel, 0},
+        origin));
+    return accepted(packet) ? std::optional{std::move(packet)} : std::nullopt;
+  } catch (const Error &error) {
+    if (!fault_error(error))
+      throw;
+    return std::nullopt;
+  } catch (const std::bad_variant_access &) {
+    return std::nullopt;
+  }
+}
+namespace {
+// The legacy role rule over the live originals or entries of one record that
+// cannot be read: ordinals with no live entry count as results.
+RecordClasses role_classes(const std::map<std::uint32_t, Value> &live) {
+  if (live.empty())
+    return {};
+  Value::Array items(static_cast<std::size_t>(live.rbegin()->first) + 1,
+                     Value::object({}));
+  for (const auto &[ordinal, item] : live)
+    items[ordinal] = item;
+  return record_classes({UnitClass::by_role}, items);
+}
+} // namespace
+const RecordClasses &ContextStore::record_classes_of(const IdentityBytes &record,
+                                                     const Value::Array &entries,
+                                                     RawContextOrigin origin) const {
+  if (const auto *found = classes_.find(record))
+    return *found;
+  if (!unreadable_.contains(record)) {
+    if (const auto packet = creating_record(record, origin)) {
+      try {
+        classes_.set(record, derive_classes(*packet));
+        return *classes_.find(record);
+      } catch (const Error &error) {
+        if (!fault_error(error))
+          throw;
+      }
+    }
+    unreadable_.insert(record);
+  }
+  // Classed by role from the live entries and never saved, so every path (this
+  // open, a restore, a v1 restore) gives the same classes for the same entries.
+  // Within one pass over one entry list each record is classed once.
+  // The entries are grouped by record once per pass, on the first such record.
+  if (by_role_source_ != &entries) {
+    by_role_.clear();
+    by_role_live_.clear();
+    for (const auto &entry : entries)
+      if (const auto ref = parse_entry_id(string_field(entry, "id")))
+        by_role_live_[ref->record].emplace(ref->ordinal, field(entry, "item"));
+    by_role_source_ = &entries;
+  }
+  if (const auto found = by_role_.find(record); found != by_role_.end())
+    return found->second;
+  const auto live = by_role_live_.find(record);
+  return by_role_
+      .emplace(record, live == by_role_live_.end() ? RecordClasses{}
+                                                   : role_classes(live->second))
+      .first->second;
+}
+void ContextStore::derive_live_classes(RawContextOrigin origin) {
+  // The same path a later units() takes: a record that cannot be read is classed by
+  // role from the live entries and not saved.
+  begin_class_pass();
+  std::set<IdentityBytes> done;
+  for (const auto &entry : entries_)
+    if (const auto ref = parse_entry_id(string_field(entry, "id"));
+        ref && done.insert(ref->record).second)
+      (void)record_classes_of(ref->record, entries_, origin);
+}
+std::vector<Unit> ContextStore::live_units(RawContextOrigin origin) const {
+  begin_class_pass();
+  return blackbird::units(
+      entries_,
+      [&](const IdentityBytes &record) -> const RecordClasses & {
+        return record_classes_of(record, entries_, origin);
+      },
+      pins_,
+      [&](std::size_t position) {
+        const auto &entry = entries_[position];
+        const auto &item = field(entry, "item");
+        const auto &id = string_field(entry, "id");
+        if (const auto found = prints_.find(id);
+            found != prints_.end() && found->second.item.same(item))
+          return found->second.print;
+        const auto print = item_fingerprint(item);
+        prints_.insert_or_assign(id, Print{item, print});
+        return print;
+      });
+}
+std::vector<Unit> ContextStore::units(RawContextOrigin origin) const {
+  const auto initial = raw_state();
+  RawContextTrace trace{RawContextAction::units, 209, origin, &initial};
+  return trace.run([&] {
+    auto result = live_units(trace.fresh());
+    trace.rows(5, result.size());
+    return result;
+  });
+}
+bool ContextStore::live_origin(std::string_view label, RawContextOrigin origin) const {
+  const auto initial = raw_state();
+  RawContextTrace trace{RawContextAction::origins, 209, origin, &initial};
+  return trace.run([&] {
+    trace.label(0, label);
+    const auto labelled = [&](const Value &packet) {
+      const auto *found = packet.find("origin");
+      return found && std::holds_alternative<std::string>(found->value()) &&
+             found->string() == label;
+    };
+    std::set<IdentityBytes> seen;
+    for (const auto &entry : entries_) {
+      const auto ref = parse_entry_id(string_field(entry, "id"));
+      if (!ref || !seen.insert(ref->record).second)
+        continue;
+      const auto packet = creating_record(ref->record, trace.fresh());
+      if (!packet)
+        continue;
+      if (labelled(*packet)) {
+        trace.rows(6, 1);
+        return true;
+      }
+      // A repair copy carries no origin: it counts when its item equals an original
+      // of a skipped frame with this label, the frame the operator copied it from.
+      const auto *op = packet->find("op");
+      const auto *skipped = packet->find("skipped");
+      if (!op || *op != Value{"repair"} || !skipped ||
+          !std::holds_alternative<Value::Array>(skipped->value()))
+        continue;
+      std::set<std::string> copies;
+      for (const auto &live : entries_)
+        if (const auto at = parse_entry_id(string_field(live, "id"));
+            at && at->record == ref->record)
+          copies.insert(unwrap(encode_packet_string(field(live, "item"))));
+      for (const auto &revision : skipped->array()) {
+        const auto source = std::get_if<std::string>(&revision.value());
+        const auto source_ref = source ? parse_entry_id(*source + ".0") : std::nullopt;
+        if (!source_ref)
+          continue;
+        const auto original = creating_record(source_ref->record, trace.fresh(), true);
+        if (!original || !labelled(*original))
+          continue;
+        // A skipped frame is one that did not apply: one whose originals do not
+        // parse simply does not match, as creating_record treats a record that does
+        // not decode.
+        try {
+          for (const auto &item : packet_originals(*original))
+            if (copies.contains(unwrap(encode_packet_string(field(item, "item"))))) {
+              trace.rows(6, 1);
+              return true;
+            }
+        } catch (const Error &error) {
+          if (!fault_error(error))
+            throw;
+        } catch (const std::bad_variant_access &) {
+        }
+      }
+    }
+    trace.rows(6, 0);
+    return false;
+  });
+}
+Value ContextStore::pin(std::string_view selection, RawContextOrigin origin) {
+  return write_pins(selection, true, origin);
+}
+Value ContextStore::unpin(std::string_view selection, RawContextOrigin origin) {
+  return write_pins(selection, false, origin);
+}
+Value ContextStore::write_pins(std::string_view selection, bool pin,
+                               RawContextOrigin origin) {
+  const auto initial = raw_state();
+  RawContextTrace trace{RawContextAction::pins, 1228, origin, &initial};
+  return trace.run([&]() -> Value {
+    require_writable();
+    trace.label(6, selection);
+    const auto parsed = parse_selection(selection);
+    if (const auto *error = std::get_if<UnitSelectionError>(&parsed))
+      throw Error{ErrorCode::invalid_range, static_cast<std::int64_t>(error->at)};
+    const auto units = live_units(trace.fresh());
+    const auto expansion = expand(std::get<UnitSelection>(parsed), units, entries_,
+                                  pin ? ExpandPurpose::pin : ExpandPurpose::unpin);
+    // The record lists live pinned units only; a pin on a unit no longer live lapses.
+    std::set<ContextRef> live, next;
+    for (const auto &unit : units)
+      live.insert(unit.key);
+    std::copy_if(pins_.begin(), pins_.end(), std::inserter(next, next.end()),
+                 [&](const ContextRef &ref) { return live.contains(ref); });
+    Value::Array accepted;
+    for (const auto index : expansion.units) {
+      if (pin)
+        next.insert(units[index].key);
+      else
+        next.erase(units[index].key);
+      accepted.push_back(Value{units[index].handle});
+    }
+    if (next != pins_) {
+      Value::Array refs;
+      for (const auto &ref : next)
+        refs.push_back(encode_ref(ref));
+      const auto identity = log_.issue();
+      auto publication = trace.publication();
+      (void)log_.record(identity, ApplicationChannel::program,
+                        Value::object({{"label", Value{"context-pins-v1"}},
+                                       {"units", Value{std::move(refs)}}}),
+                        &publication);
+      history_stale_ = true;
+      pins_.swap(next);
+      trace.state(1, raw_state());
+    }
+    Value::Array refused;
+    for (const auto &one : expansion.refused)
+      refused.push_back(
+          Value::object({{"unit", Value{one.unit}}, {"reason", Value{one.reason}}}));
+    return Value::object({{"accepted", Value{std::move(accepted)}},
+                          {"refused", Value{std::move(refused)}},
+                          {"pinned", Value{Number{pins_.size()}}}});
   });
 }
 // A frame as it will be recorded, checked to decode back to itself: the writer

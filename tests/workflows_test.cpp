@@ -84,6 +84,113 @@ struct FakeProvider : CodingProvider {
     return response;
   }
 };
+// Layer 1 (B-M2): a session that recorded the pre-S2 built-in program (revision
+// builtin-ultracode-v1, kept by a budget change) runs the current built-in on reopen,
+// records the upgrade, and its ultracode brief is a protected instruction. A
+// supplied program (a definition-generation revision) is kept as recorded.
+void builtin_upgrade() {
+  char path[] = "/tmp/blackbird-upgrade-XXXXXX";
+  check(mkdtemp(path) != nullptr);
+  const JournalHeader h{id<EnvironmentId>(73),
+                        id<AuditStreamId>(74),
+                        3,
+                        {1048576, 4194304},
+                        std::nullopt};
+  const JournalCapacity capacity{64 * 1024 * 1024, 10000};
+  const auto open = [&] {
+    auto root =
+        unwrap(RetainedState::open(std::make_unique<NativeJournalDirectory>(
+                                       unwrap(NativeJournalDirectory::open(path))),
+                                   "audit", h, capacity));
+    unwrap(root->confirm_recovery());
+    recover_coding_session(*root);
+    return root;
+  };
+  const auto latest_config = [](RetainedState &root) {
+    Value found;
+    for (const auto &packet : root.current_programs())
+      if (string_field(packet, "label") == "workflow-config-effective-v1")
+        found = packet;
+    return found;
+  };
+  for (const bool supplied : {false, true}) {
+    std::filesystem::remove_all(path);
+    std::filesystem::create_directory(path);
+    std::filesystem::permissions(path, std::filesystem::perms::owner_all);
+    {
+      auto root =
+          unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(
+                                           unwrap(NativeJournalDirectory::open(path))),
+                                       "audit", h, capacity));
+      AuditLog log{*root};
+      ContextStore context{log};
+      FakeProvider provider;
+      CodingEngine engine{log, context, provider, "fake"};
+      // A budget change records the effective program config with it.
+      eval(engine, "local v=blackbird.call('context_budget',{}); "
+                   "assert(blackbird.call('context_budget',{proposal={base=v.revision,"
+                   "enabled=true,trigger_bytes=500000,target_bytes=200000,reason='t'}})"
+                   ".staged)");
+      // Rewrite it as a88c1c2 recorded it: the old brief, the old revision.
+      auto packet = latest_config(*root);
+      check(packet != Value{});
+      for (auto &[key, value] : packet.object()) {
+        if (key == "program_revision")
+          value = Value{supplied ? std::string(32, 'a')
+                                 : std::string{"builtin-ultracode-v1"}};
+        if (key != "program_config")
+          continue;
+        for (auto &[name, workflows] : value.object())
+          if (name == "workflows")
+            for (auto &definition : workflows.array())
+              for (auto &[field_name, source] : definition.object())
+                if (field_name == "source") {
+                  auto text = source.string();
+                  const std::string declared = ", {class='instruction'})";
+                  if (const auto at = text.find(declared); at != std::string::npos)
+                    text.replace(at, declared.size(), ")");
+                  source = Value{text};
+                }
+      }
+      log.record(ApplicationChannel::program, packet);
+    }
+    auto root = open();
+    AuditLog log{*root};
+    ContextStore context{log};
+    FakeProvider provider;
+    CodingEngine engine{log, context, provider, "fake"};
+    check(engine.operator_turn("ultracode build useful code", "error('wrong route')"));
+    std::string brief;
+    for (const auto &entry : field(context.view(), "entries").array())
+      if (const auto *content = field(entry, "item").find("content");
+          content && content->string().starts_with("Ultracode:"))
+        brief = string_field(entry, "id");
+    check(!brief.empty());
+    const auto result =
+        context.manage(Value::object({{"base", Value{context.head()}},
+                                      {"mode", Value{"archive"}},
+                                      {"reason", Value{"t"}},
+                                      {"source", Value{"test"}},
+                                      {"ids", Value{Value::Array{Value{brief}}}}}));
+    const auto reason = field(result, "accepted") == Value{true}
+                            ? std::string{"accepted"}
+                            : string_field(result, "reason");
+    if (reason != (supplied ? "accepted" : "protected-unit")) {
+      std::cerr << (supplied ? "supplied" : "built-in")
+                << " ultracode brief: " << reason << "\n";
+      check(false);
+    }
+    // The replacement is recorded, naming what it did and the revision it replaced;
+    // a supplied revision is kept.
+    const auto latest = latest_config(*root);
+    const auto revision = string_field(latest, "program_revision");
+    check(revision == (supplied ? std::string(32, 'a') : "builtin-ultracode-v2"));
+    if (!supplied)
+      check(string_field(latest, "activation") == "builtin-current" &&
+            string_field(latest, "replaced_revision") == "builtin-ultracode-v1");
+  }
+  std::filesystem::remove_all(path);
+}
 int main() {
   std::setlocale(LC_ALL, "en_US.UTF-8");
   auto c = config({definition()});
@@ -396,6 +503,7 @@ int main() {
   check(restored.workflows()->discover() == engine.workflows()->discover());
   publish_workflows({});
   std::filesystem::remove_all(path);
+  builtin_upgrade();
   std::cout << "workflow registry, boundary, fake provider, completion and "
                "colored-cell oracles passed\n";
 }

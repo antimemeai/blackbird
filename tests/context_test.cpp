@@ -192,8 +192,16 @@ int main() {
     check(!ok(restored.manage(summarize))); // stale
     check(kinds() == "ERM:summarize");
     const auto summarized = restored.view();
-    check(!ok(restored.manage(proposal(
-        "archive", {field(field(summarized, "entries").array().back(), "id")}))));
+    // A summary is class summary (unit S2), not an instruction: it may be archived,
+    // shown here by staging the archive and cancelling it. The old role rule pinned
+    // it as a developer entry (mandatory-entry).
+    restored.begin_workflow();
+    check(field(restored.manage(proposal(
+                    "archive",
+                    {field(field(summarized, "entries").array().back(), "id")})),
+                "staged") == Value{true});
+    (void)restored.finish_workflow(false);
+    check(restored.view() == summarized);
     check(field(field(summarized, "entries").array().back(), "ancestry") ==
           Value{Value::Array{call, output}});
     check(ok(restored.manage(proposal("restore", {call, output}))));

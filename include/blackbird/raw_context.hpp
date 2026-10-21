@@ -37,7 +37,10 @@ enum class RawContextAction : std::uint8_t {
   publish,
   original,
   cut,
-  repair
+  repair,
+  pins,
+  units,
+  origins
 };
 struct RawContextState {
   std::string_view head;

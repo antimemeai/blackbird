@@ -27,8 +27,8 @@ blackbird.append({
     content = policies[cfg.policy]
       .. " Common rules: only inspect declared project sources and write the declared local deliverable. No delegates, network commands, checkout changes, background programs, builds, restart or context compaction. Same access and up to 8 requests in either arm. No command approvals. Feedback is advisory; correctness comes first.",
   },
-  { role = "assistant", content = blackbird.format(M.feedback()) },
-})
+}, { class = "instruction" })
+blackbird.append({ { role = "assistant", content = blackbird.format(M.feedback()) } })
 local records = {
   id = cfg.id,
   policy = cfg.policy,

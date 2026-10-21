@@ -1,5 +1,6 @@
 #include "blackbird/saved_context.hpp"
 #include "blackbird/context_cut.hpp"
+#include "blackbird/context_units.hpp"
 #include <map>
 #include <mutex>
 #include <set>
@@ -11,9 +12,12 @@ struct Registry {
   std::map<std::string, SavedSectionValidator, std::less<>> validators;
 };
 // Production sections register here when their owning unit lands (S2 classes,
-// S3a chapter, S3b pending, E1 review). S1 owns none.
+// S3a chapter, S3b pending, E1 review), so every reader of a snapshot (the loader
+// included, in any binary) knows them.
 Registry &registry() {
-  static Registry instance;
+  static Registry instance{{},
+                           {{std::string{classes_section},
+                             SavedSectionValidator{validate_classes_section}}}};
   return instance;
 }
 Result<void> fault(SavedContextFault which) {

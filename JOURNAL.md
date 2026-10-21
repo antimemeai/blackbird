@@ -12263,3 +12263,42 @@ S2's build overlapping, peak load 26). On Neuroses, debug and ASan pass on the t
 (run-wdamqv1k), and all three fuzzers ran 1,000,000 executions with no artifact (run-814ksad0):
 profile_reader 935 s, context_cut 362 s, saved_payload 211 s. This also completes S1's fuzz check on its
 final code. Notes: `context/clm-rd7-notes/c6d.md`.
+
+## 2026-10-21 — S2: units and classes (rd7.8)
+
+S2 is a serial-lane unit, on branch `work/clm-rd7`.
+
+**Classes.** Every entry's class comes from its creating record and is not editable: instruction, round,
+result, and the rest of design §5.2. The map is built at append and at playback and saved in the
+snapshot's `classes` section. Sessions written before S2 derive it, and a `lua.synthetic` record with no
+class field is classed by role, so an older ultracode brief stays protected. Every S2 Lua append records
+its class.
+
+**Units.** Entries group into units by round, with handles `r<counter>[.k]`, a selection grammar and
+`expand`. Manage refuses protected, pinned and partial units, reporting the first unit in context order
+with a problem. Pins are the latest-wins `context-pins-v1` record, rechecked when a staged proposal
+settles. Seeds carry each source entry's unit. Before S2, a repaired round was refused as
+`partial-tool-group` and `operator.beads` as `mandatory-entry`; both are now selectable.
+
+**Built-in ultracode.** It declares `instruction` for its brief and is now `builtin-ultracode-v2`. At open,
+any other recorded built-in revision is replaced by this binary's, recorded as `builtin-current` with the
+replaced revision. Supplied sources are kept.
+
+**Model-facing text.** The `context_manage` and `lua` descriptions and `docs/USING_BLACKBIRD.md` state
+exactly what is protected, archivable and refused.
+
+**Measured.**
+- Manage at 6560 entries: 5.1 ms before S2, 7.2-7.5 ms at layer 0. A journal sync of about 4 ms
+  dominates every write.
+- Unreadable records were classed in quadratic time at layer 1, linear at layer 2. At 8000 such
+  records: open 2178 → 30 ms, `units()` 4323 → 9.7 ms.
+
+**Checks.** Every new or changed test failed on the code before it, except the plan's RRC case: its
+premise does not occur on the old code, so it stays as a check of the new path. Mac gate;
+`scripts/check-rrc`; Linux debug and ASan on the touched suites, with storage_raw and clean_stop alone.
+`coding_capacity` failed once under parallel ASan load and passed alone; that is recorded on
+`arconaut-8zr`.
+
+**Review.** One review in two halves and one recheck in two halves. The notes are in
+`context/clm-rd7-notes/S2*.md`. Left for S3a: repair and cut originals carry no unit key (a format
+change). Left for V1: protection on model and Lua edits, and a pin entry point.

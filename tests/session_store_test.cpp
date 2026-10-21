@@ -157,6 +157,58 @@ int main() {
       SessionStore replay{log};
       check(!replay.resume(context));
     }
+    // Unit S2 (design §19): the rrc:<token> check reads the label of each live entry's
+    // creating record by identity lookup, not the resident tail. A checkpoint between
+    // the note and `consumed` leaves one note. (The old tail scan passes this too: a
+    // pending session.restart withholds semantic coverage, so that snapshot never
+    // reopens compactly; the lookup itself is checked compactly in context_units.)
+    const auto compact = std::string{path} + "/compact";
+    std::filesystem::create_directory(compact);
+    std::filesystem::permissions(compact, std::filesystem::perms::owner_all);
+    {
+      auto root =
+          unwrap(RetainedState::create(std::make_unique<NativeJournalDirectory>(unwrap(
+                                           NativeJournalDirectory::open(compact))),
+                                       "audit", header, capacity));
+      AuditLog log{*root};
+      ContextStore context{log};
+      SessionStore store{log};
+      (void)session_identity(log);
+      context.append({Value::object({{"role", Value{"user"}},
+                                     {"content", Value{"FIRST_PROMPT"}}})},
+                     "operator");
+      store.restart("Compact note");
+      const auto &fact = root->committed_facts().back();
+      const auto &record = std::get<ApplicationRecordEvent>(fact.event.body);
+      const auto token = string_field(unwrap(read_packet(record.payload)), "token");
+      context.append({Value::object({{"role", Value{"user"}},
+                                     {"content", Value{"continue\nCompact note"}}})},
+                     "rrc:" + token);
+      unwrap(context.checkpoint()); // then a crash before `consumed`
+    }
+    {
+      auto root =
+          unwrap(RetainedState::open(std::make_unique<NativeJournalDirectory>(
+                                         unwrap(NativeJournalDirectory::open(compact))),
+                                     "audit", header, capacity));
+      unwrap(root->confirm_recovery());
+      recover_coding_session(*root);
+      AuditLog log{*root};
+      ContextStore context{log};
+      SessionStore store{log};
+      if (root->compact_recovery()) {
+        std::cerr << "a pending restart must withhold compact coverage\n";
+        throw Error{ErrorCode::corrupt};
+      }
+      check(context.items().size() == 2);
+      const bool consumed = store.resume(context);
+      if (!consumed || context.items().size() != 2) {
+        std::cerr << "a checkpoint between the note and consumed hid the note: "
+                  << context.items().size() << " entries\n";
+        throw Error{ErrorCode::corrupt};
+      }
+      check(!store.resume(context));
+    }
     std::filesystem::remove_all(path);
   } catch (const Error &e) {
     std::cerr << error_name(e.code) << '\n';

@@ -29,8 +29,9 @@ function blackbird.originals() end
 ---@return BlackbirdContext
 function blackbird.restore(id) end
 ---@param items table[]
+---@param options? {class: "instruction"|"result"}
 ---@return BlackbirdContext
-function blackbird.append(items) end
+function blackbird.append(items, options) end
 ---@param text string
 function blackbird.display(text) end
 ---@generic T: table

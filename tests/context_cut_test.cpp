@@ -9,9 +9,11 @@
 //   across reopens of the journal;
 // - a maintenance checkpoint fired inside the cut writer's record call leaves the
 //   state consistent (ASan on Linux catches a dangling reference);
-// - the format-level record is written once, and a higher level is refused.
+// - the format-level record is written once, and a higher level is refused;
+// - units and their classes (unit S2) agree live, restored and played back.
 #include "blackbird/context.hpp"
 #include "blackbird/context_cut.hpp"
+#include "blackbird/context_units.hpp"
 #include "blackbird/journal.hpp"
 #include "blackbird/saved_state.hpp"
 #include <algorithm>
@@ -505,6 +507,20 @@ struct Settled final : CustodyVerifier {
                             : Result<void>::failure({ErrorCode::conflict});
   }
 };
+// Units and their classes (unit S2) as text: they persist with the context.
+Value units_text(const ContextStore &context) {
+  const auto entries = field(context.view(), "entries").array();
+  std::string out;
+  for (const auto &unit : context.units()) {
+    out += unit.handle + ":" + std::string{class_name(unit.unit_class)};
+    for (const auto position : unit.entries)
+      out += " " + string_field(entries[position], "id");
+    out += unit.open ? " open" : "";
+    out += unit.superseded ? " superseded" : "";
+    out += unit.pinned ? " pinned\n" : "\n";
+  }
+  return Value{std::move(out)};
+}
 struct Session {
   fs::path path;
   std::unique_ptr<RetainedState> root;
@@ -540,6 +556,7 @@ struct Session {
     ContextStore other{*log, ContextOpen{.whole_history = whole, .probe = true}};
     return Value::object({{"view", other.view()},
                           {"originals", other.originals()},
+                          {"units", units_text(other)},
                           {"read_only", Value{other.read_only()}}});
   }
 };
@@ -639,6 +656,7 @@ void metamorphic(const fs::path &base) {
     const auto compare = [&](const std::string &what) {
       const auto live = Value::object({{"view", session.context->view()},
                                        {"originals", session.context->originals()},
+                                       {"units", units_text(*session.context)},
                                        {"read_only", Value{false}}});
       check(session.probe(false) == live,
             "seed " + std::to_string(seed) + " after " + what +

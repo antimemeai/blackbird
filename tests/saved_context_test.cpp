@@ -118,7 +118,7 @@ void save_both(Session &session, const Value &context) {
   unwrap(session.root->save_current_state(context));
   unwrap(session.root->save_current_state(context));
 }
-// A small session whose last write is a snapshot: entries from two appends, an
+// A small session whose last write is a snapshot: entries from three appends, an
 // edited entry and a managed summary.
 struct Fixture {
   fs::path template_path;
@@ -129,7 +129,10 @@ Fixture build(const fs::path &path) {
   Session session{path};
   auto &context = *session.context;
   context.append({item("question", "user"), item("first answer")}, "fixture");
-  context.append({item("second answer"), item("third answer")}, "fixture");
+  // Separate records: two assistant answers of one record are one round (unit S2),
+  // and the summary below takes one whole unit.
+  context.append({item("second answer")}, "fixture");
+  context.append({item("third answer")}, "fixture");
   auto edited = context.view();
   auto &entries = edited.object()[1].second.array();
   entries[1] =
@@ -324,10 +327,13 @@ void v2_loader_faults(const fs::path &base) {
     check(field(session.context->edit(edited), "accepted") == Value{true}, "edit");
     unwrap(session.context->checkpoint());
     const auto saved = core(session.root->saved_state()->context);
+    // The store's own classes section (unit S2), then the test section.
+    const auto &sections = field(saved, "sections").array();
     check(field(saved, "version") == Value{Number{"2"}} &&
-              !saved.find("live_originals") &&
-              field(saved, "sections").array().size() == 1,
-          "the fixture snapshot is version 2 with the test section");
+              !saved.find("live_originals") && sections.size() == 2 &&
+              string_field(sections[0], "name") == "classes" &&
+              string_field(sections[1], "name") == "test.section",
+          "the fixture snapshot is version 2 with the classes and test sections");
     return Fixture{session.path, session.context->view(), session.context->head()};
   }();
   Value good;

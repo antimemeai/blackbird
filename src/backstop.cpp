@@ -5,6 +5,7 @@
 #include "blackbird/raw_session.hpp"
 #include "blackbird/raw_storage.hpp"
 #include <limits.h>
+#include <map>
 
 #include <set>
 #include <sys/random.h>
@@ -278,6 +279,23 @@ Value run_backstop(CodingEngine &source_engine, AuditLog &source_log,
                           "inherited admissions"}}});
     Value::Array selected;
     const auto view = source_engine.context().view(RawContextOrigin{whole.reference()});
+    // Each selected entry carries its source unit, so the successor keeps the
+    // predecessor's units (unit S2) whatever records they now share.
+    std::map<std::string, std::string> unit_of;
+    {
+      const auto &live = field(view, "entries").array();
+      for (const auto &unit :
+           source_engine.context().units(RawContextOrigin{whole.reference()}))
+        for (const auto position : unit.entries)
+          unit_of.emplace(string_field(live[position], "id"), entry_id(unit.key));
+    }
+    const auto with_unit = [&](const Value &entry) {
+      auto copy = entry;
+      if (const auto found = unit_of.find(string_field(entry, "id"));
+          found != unit_of.end())
+        copy.object().emplace_back("unit", Value{found->second});
+      return copy;
+    };
     // Preserve all governing messages and the latest operator prompt, not the huge
     // predecessor working presentation. Refuse oversized authority, never truncate.
     const auto &entries = field(view, "entries").array();
@@ -291,12 +309,12 @@ Value run_backstop(CodingEngine &source_engine, AuditLog &source_log,
         continue;
       (void)source(whole, 15, role->string());
       if (role->string() == "system" || role->string() == "developer")
-        selected.push_back(entry);
+        selected.push_back(with_unit(entry));
       if (role->string() == "user")
         last_user = &entry;
     }
     if (predicate(whole, 44, [&] { return last_user != nullptr; }))
-      selected.push_back(*last_user);
+      selected.push_back(with_unit(*last_user));
     if (predicate(whole, 5, [&] { return selected.empty(); }) ||
         predicate(whole, 6,
                   [&] { return encoded(whole, 4, Value{selected}).size() > 65536; }))
