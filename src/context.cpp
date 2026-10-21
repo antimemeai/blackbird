@@ -1148,6 +1148,8 @@ Result<void> ContextStore::checkpoint(RawContextOrigin origin) {
                       [&](const auto &id) { return !live_ids.contains(id); });
         std::erase_if(prints_,
                       [&](const auto &pair) { return !live_ids.contains(pair.first); });
+        std::erase_if(sorted_prints_,
+                      [&](const auto &pair) { return !live_ids.contains(pair.first); });
         captured_.clear();
         archive_loaded_ = false;
         // Originals pruned here are found by lookup, up to this snapshot.
@@ -2916,6 +2918,98 @@ std::vector<Unit> ContextStore::units(RawContextOrigin origin) const {
     auto result = live_units(trace.fresh());
     trace.rows(5, result.size());
     return result;
+  });
+}
+namespace {
+// The value with object keys in sorted order at every depth (a repeated key keeps
+// its order); a subtree already in order is shared, not copied.
+Value sorted_keys(const Value &value) {
+  if (const auto *array = std::get_if<Value::Array>(&value.value())) {
+    std::optional<Value::Array> changed;
+    for (std::size_t i = 0; i < array->size(); ++i) {
+      auto child = sorted_keys((*array)[i]);
+      if (child.same((*array)[i]))
+        continue;
+      if (!changed)
+        changed = *array;
+      (*changed)[i] = std::move(child);
+    }
+    return changed ? Value{std::move(*changed)} : value;
+  }
+  const auto *object = std::get_if<Value::Object>(&value.value());
+  if (object == nullptr)
+    return value;
+  std::optional<Value::Object> changed;
+  for (std::size_t i = 0; i < object->size(); ++i) {
+    auto child = sorted_keys((*object)[i].second);
+    if (child.same((*object)[i].second))
+      continue;
+    if (!changed)
+      changed = *object;
+    (*changed)[i].second = std::move(child);
+  }
+  const auto before = [](const auto &a, const auto &b) { return a.first < b.first; };
+  const auto &fields = changed ? *changed : *object;
+  if (std::is_sorted(fields.begin(), fields.end(), before))
+    return changed ? Value::object(std::move(*changed)) : value;
+  // Sorted by key, then by position, so a repeated key keeps its order; through an
+  // index, without the temporary buffer std::stable_sort allocates.
+  std::vector<std::size_t> order(fields.size());
+  for (std::size_t i = 0; i < order.size(); ++i)
+    order[i] = i;
+  std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+    return fields[a].first != fields[b].first ? fields[a].first < fields[b].first
+                                              : a < b;
+  });
+  Value::Object sorted;
+  sorted.reserve(fields.size());
+  for (const auto i : order)
+    sorted.push_back(fields[i]);
+  return Value::object(std::move(sorted));
+}
+} // namespace
+bool ContextStore::live_instruction(const Value &item, RawContextOrigin origin) const {
+  const auto initial = raw_state();
+  RawContextTrace trace{RawContextAction::instructions, 261, origin, &initial};
+  return trace.run([&] {
+    // Equal items, whatever the order of object keys at any depth: both sides are
+    // compared with keys sorted. This is the query's contract only; superseded
+    // copies and originals compare exact bytes. Prints find the candidates; only a
+    // candidate is encoded and compared whole.
+    const auto canonical = sorted_keys(item);
+    const auto print = item_fingerprint(canonical);
+    trace.event(1828, std::array{detail::raw_native_field(print.first),
+                                 detail::raw_native_field(print.second)});
+    std::optional<std::string> bytes;
+    begin_class_pass();
+    for (const auto &entry : entries_) {
+      const auto &id = string_field(entry, "id");
+      const auto ref = parse_entry_id(id);
+      if (!ref)
+        throw Error{ErrorCode::corrupt};
+      // The class of the entry, from its creating record. An instruction is always a
+      // unit of its own (outputs join only rounds), so no units are built.
+      if (record_classes_of(ref->record, entries_, trace.fresh()).at(ref->ordinal) !=
+          UnitClass::instruction)
+        continue;
+      const auto &live = field(entry, "item");
+      auto found = sorted_prints_.find(id);
+      if (found == sorted_prints_.end() || !found->second.item.same(live))
+        found =
+            sorted_prints_
+                .insert_or_assign(id, Print{live, item_fingerprint(sorted_keys(live))})
+                .first;
+      if (found->second.print != print)
+        continue;
+      if (!bytes)
+        bytes = unwrap(encode_packet_string(canonical));
+      if (unwrap(encode_packet_string(sorted_keys(live))) == *bytes) {
+        trace.rows(7, 1);
+        return true;
+      }
+    }
+    trace.rows(7, 0);
+    return false;
   });
 }
 bool ContextStore::live_origin(std::string_view label, RawContextOrigin origin) const {

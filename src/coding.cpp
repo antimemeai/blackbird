@@ -988,7 +988,8 @@ struct CodingEngine::Runtime {
     inspect_op,
     packet_decode_op,
     packet_encode_op,
-    format_op
+    format_op,
+    live_instruction_op
   };
   static int install(lua_State *L) {
     auto *self = static_cast<Runtime *>(lua_touserdata(L, 1));
@@ -1058,8 +1059,8 @@ struct CodingEngine::Runtime {
         "request", "call",          "context",       "edit",   "originals",
         "restore", "append",        "decode",        "encode", "display",
         "array",   "present",       "restarting",    "stats",  "manage",
-        "inspect", "decode_packet", "encode_packet", "format"};
-    for (int i = 0; i < 19; ++i) {
+        "inspect", "decode_packet", "encode_packet", "format", "live_instruction"};
+    for (int i = 0; i < 20; ++i) {
       lua_pushlightuserdata(L, self);
       lua_pushinteger(L, i);
       lua_pushcclosure(L, bridge, 2);
@@ -1622,6 +1623,10 @@ struct CodingEngine::Runtime {
           break;
         case stats_op:
           frame.value = self->engine.stats();
+          break;
+        case live_instruction_op:
+          frame.value = Value{
+              self->engine.context_.live_instruction(read_value(L, 1, {0, &nodes}))};
           break;
         case restarting_op:
           frame.value = Value{self->engine.restart_note_.has_value()};
@@ -2598,9 +2603,10 @@ CodingEngine::CodingEngine(AuditLog &log, ContextStore &context,
     program_config_.object().emplace_back("workflows", default_workflows());
     program_config_.object().emplace_back("workflow_prefix", Value{""});
     // The built-in program's revision names its exact source: v2 declares the
-    // ultracode brief an instruction (unit S2).
+    // ultracode brief an instruction (unit S2); v3 appends it only when no live
+    // instruction holds an equal item, object key order ignored (unit c3f).
     constexpr std::string_view builtin_prefix = "builtin-ultracode-v";
-    const std::string builtin = std::string{builtin_prefix} + "2";
+    const std::string builtin = std::string{builtin_prefix} + "3";
     program_revision_ = builtin;
     budget_ = default_context_budget();
     std::optional<Value> recorded_config;

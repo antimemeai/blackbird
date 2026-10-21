@@ -12302,3 +12302,23 @@ premise does not occur on the old code, so it stays as a check of the new path. 
 **Review.** One review in two halves and one recheck in two halves. The notes are in
 `context/clm-rd7-notes/S2*.md`. Left for S3a: repair and cut originals carry no unit key (a format
 change). Left for V1: protection on model and Lua edits, and a pin entry point.
+
+## 2026-10-21 — c3f: the ultracode brief once per revision
+
+c3f is a parallel-lane unit after S2, on branch `work/clm-rd7`.
+
+Ultracode appended its developer brief on every run, so protected copies accumulated for the life of a
+session. A new read-only Lua query, `blackbird.live_instruction(item)`, answers whether a live
+instruction entry holds an equal item, ignoring object key order at every depth. Only this query ignores
+key order; S1's and S2's comparisons stay exact bytes. Ultracode appends its brief only when the query is
+false, and the built-in revision is now `builtin-ultracode-v3`: S2's open-time rule replaces v1 and v2.
+
+- Ten runs leave one brief, where they left ten. A brief that is no longer live is appended once again.
+- The query scans entries by cached class, with no live units: about 190 µs at 6000 entries, against
+  1.3 ms at layer 0. Its raw trace (site 1828) records the queried item's size and CRC32C.
+- The first Linux ASan run caught an alloc/dealloc mismatch from `std::stable_sort`'s temporary buffer
+  against the test binaries' replaced `operator delete`; the sort now uses an index vector.
+
+**Checks.** Each new test failed on the code before it. Mac gate; Linux debug and ASan on the touched
+suites. One review and one recheck, notes in `context/clm-rd7-notes/c3f*.md`. The `lua` tool description
+does not yet name the query; that follows T1, which owns `src/tools.cpp`.

@@ -334,7 +334,7 @@ std::vector<std::byte> raw_context_read(const ImmutableBytes &payload,
 }
 std::string_view raw_context_description() noexcept {
   return R"raw(BBRAWABI v1 native64 little-endian; Ref=lane16+ordinal8; Text=size_t+bytes. No padding.
-Actions: reconstruct0/checkpoint1/view2/stats3/items4/append5/validate_seed6/seed7/edit8/restore9/originals10/manage11/inspect12/budget13/pending14/begin15/finish16/reject17/publish18/original19/cut20/repair21/pins22/units23/origins24.
+Actions: reconstruct0/checkpoint1/view2/stats3/items4/append5/validate_seed6/seed7/edit8/restore9/originals10/manage11/inspect12/budget13/pending14/begin15/finish16/reject17/publish18/original19/cut20/repair21/pins22/units23/origins24/instructions25.
 Labels: origin0/entry1/reason2/query_kind3/format4/managed_source5/selection6. Input purpose: Original0/replay1/archive2/history3; source_kind resident0/retained_packet1.
 1800:action:u8,parent:bool,[Ref],instance: head Text,entries/originals/captured:size_t,workflow/pending/archive_loaded:bool; static validation omits instance.
 1801:owner Ref,actual ApplicationRecordId16,channel:uint16,actual journal16/sequence/end:uint64 before publication.
@@ -364,6 +364,7 @@ Labels: origin0/entry1/reason2/query_kind3/format4/managed_source5/selection6. I
 1825:budget Ref,actual max_payload/max_batch:u32,computed capacity two u64.
 1826:inspect Ref,actual requested/limit:size_t,json_export:bool.
 1827:finish Ref,actual success:bool,boundary_program_present:bool before workflow transfer.
+1828:instructions Ref,queried item's sorted-key packet size:u64,CRC32C:u32 before the scan.
 )raw";
 }
 } // namespace blackbird

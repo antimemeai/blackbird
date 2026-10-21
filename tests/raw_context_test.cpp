@@ -432,7 +432,7 @@ void verify_pairs(const std::vector<Record> &records) {
       {1813, 1814}, {1817, 1818}, {1819, 1820}};
   std::map<std::uint64_t, unsigned> terminals;
   for (const auto &record : records) {
-    if (record.site < 1800 || record.site > 1827 || record.site == 1800)
+    if (record.site < 1800 || record.site > 1828 || record.site == 1800)
       continue;
     auto bytes = ByteView{record.body};
     const auto ref = take_ref(bytes);
@@ -836,6 +836,8 @@ void owner() {
       require(context.items() == Value::Array{item}, "exact original business bytes");
       (void)context.stats();
       (void)context.originals();
+      // c3f: a result-class item is no live instruction; the query is recorded.
+      require(!context.live_instruction(item), "result item is no live instruction");
       (void)context.cancellation_budget(field(first_view, "entries").array(), Value{});
       const auto entry =
           string_field(field(first_view, "entries").array().front(), "id");
@@ -1251,6 +1253,21 @@ void owner() {
   };
   require(owners(RawContextAction::cut) == 1 && owners(RawContextAction::repair) == 1,
           "cut20 and repair21 owner requests emitted once each");
+  // The query's item is recorded as the print of its sorted-key form.
+  const auto print = item_fingerprint(Value::object(
+      {{"content", Value{std::string{"a\0b", 3}}}, {"role", Value{"assistant"}}}));
+  const auto queried =
+      std::count_if(records.begin(), records.end(), [&](const auto &r) {
+        if (r.site != 1828)
+          return false;
+        auto bytes = ByteView{r.body};
+        (void)take_ref(bytes);
+        const auto size = take<std::uint64_t>(bytes);
+        const auto crc = take<std::uint32_t>(bytes);
+        return size == print.first && crc == print.second && bytes.empty();
+      });
+  require(owners(RawContextAction::instructions) == 1 && queried == 1,
+          "instructions25 records the queried item's sorted-key print once");
   const auto branches = [&](std::uint8_t wanted) {
     return std::count_if(records.begin(), records.end(), [&](const auto &r) {
       if (r.site != 1821)
