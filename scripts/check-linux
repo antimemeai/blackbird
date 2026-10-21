@@ -107,6 +107,84 @@ for name, mode, instrumentation in [('debug', 'Debug', 'none'), ('release', 'Rel
         artifacts.mkdir(exist_ok=True)
         print('Fuzz artifacts (remote): ' + str(artifacts), flush=True)
         subprocess.run([str(build / 'profile_reader_fuzz'), '-runs=' + str(fuzz_runs), '-max_len=8192', '-seed=1', '-artifact_prefix=' + str(artifacts) + '/', str(corpus)], check=True)
+        # The cut and repair frame decoder (unit S1): seeded with BBM2 frames written
+        # by the development packet writer, bounded by the same executions.
+        subprocess.run(['/usr/bin/cmake', '--build', str(build), '--parallel', '16', '--target', 'context_cut_fuzz'], check=True)
+        import runpy, struct
+        writer = runpy.run_path(str(root / 'scripts/native-packet.py'))['write_packet']
+        def crc32c(data, crc=0):
+            crc ^= 0xffffffff
+            for byte in data:
+                crc ^= byte
+                for _ in range(8):
+                    crc = (crc >> 1) ^ (0x82f63b78 if crc & 1 else 0)
+            return crc ^ 0xffffffff
+        def refs_crc(refs):
+            crc = 0
+            for record, ordinal in refs:
+                crc = crc32c(bytes.fromhex(record) + struct.pack('<I', ordinal), crc)
+            return crc
+        cut_corpus = build / 'context-cut-corpus'
+        cut_corpus.mkdir(exist_ok=True)
+        rev = lambda n: format(n, '032x')
+        fixed = '11' + '00' * 15  # the fuzz entry's fixed entries: record 0x11..., ordinals 0-2
+        ref = lambda k: [fixed, k]
+        item = lambda text: {'role': 'assistant', 'content': text}
+        # Remove e0, replace e1, insert a fresh original at the start, re-insert e0
+        # after e2: every apply step, with the result's CRC32C over the refs.
+        cut_refs = [(rev(9), 0), (fixed, 1), (fixed, 2), (fixed, 0)]
+        cut = {'op': 'cut', 'format': 'cut-delta-v1', 'revision': rev(9), 'base': rev(1), 'observed': rev(1), 'accepted': True,
+               'kind': 'archival', 'changes': ['archive', 'edit', 'summary'], 'chapter': None, 'archived': [ref(0)], 'swept': [], 'reasoning': [],
+               'replace': [{'ref': ref(1), 'item': item('x')}],
+               'insert': [{'anchor': 'start', 'fresh': 0}, {'anchor': ref(2), 'existing': ref(0)}],
+               'originals': [{'item': {'role': 'developer', 'content': 'note'}, 'class': 1}], 'refused': [], 'pending': None,
+               'result': {'count': 4, 'crc32c': refs_crc(cut_refs), 'encoded_bytes': 0},
+               'sizes': {'before': 10, 'prefix': 2}, 'cause': {'source': 'model', 'forced': True}}
+        swept = dict(cut, archived=[], swept=[ref(2)], reasoning=[ref(1)], replace=[], insert=[{'anchor': ref(0), 'fresh': 0}],
+                     result={'count': 2, 'crc32c': refs_crc([(fixed, 0), (rev(9), 0)]), 'encoded_bytes': 0})
+        repair_refs = [(fixed, 0), (fixed, 1), (fixed, 2), (rev(8), 0)]
+        repair = {'op': 'repair', 'format': 'repair-v1', 'revision': rev(8), 'base': None, 'observed': None, 'accepted': True,
+                  'skipped': [rev(5), rev(6)], 'insert': [{'anchor': ref(2), 'fresh': 0}],
+                  'originals': [{'item': {'role': 'user', 'content': 'kept'}, 'class': 0}],
+                  'result': {'count': 4, 'crc32c': refs_crc(repair_refs), 'encoded_bytes': 0}, 'cause': {'source': 'operator'}}
+        staged = {'op': 'cut', 'format': 'cut-delta-v1', 'revision': rev(7), 'observed': rev(1), 'accepted': False, 'reason': 'staged'}
+        for name, packet in (('cut', cut), ('swept', swept), ('repair', repair), ('staged', staged)):
+            writer(cut_corpus / name, packet)
+        print('Fuzz artifacts (remote, context cut): ' + str(artifacts), flush=True)
+        subprocess.run([str(build / 'context_cut_fuzz'), '-runs=' + str(fuzz_runs), '-max_len=8192', '-seed=1', '-artifact_prefix=' + str(artifacts) + '/cut-', str(cut_corpus)], check=True)
+        # The state-file body and the saved-context validator (unit S1): seeds are
+        # file-version-2 bodies, [u8 version][u32 core][u32 programs][body].
+        subprocess.run(['/usr/bin/cmake', '--build', str(build), '--parallel', '16', '--target', 'saved_payload_fuzz'], check=True)
+        payload_corpus = build / 'saved-payload-corpus'
+        payload_corpus.mkdir(exist_ok=True)
+        def packet_bytes(value):
+            scratch = build / 'packet.tmp'
+            writer(scratch, value)
+            return scratch.read_bytes()
+        def body(core, programs, entries, sections):
+            out = bytearray(packet_bytes(core)) + packet_bytes(programs)
+            core_size, program_size = len(packet_bytes(core)), len(packet_bytes(programs))
+            for parts in (entries, sections):
+                if parts is None:
+                    out += struct.pack('<Q', 0)
+                    continue
+                out += struct.pack('<Q', len(parts) + 1)
+                for part in parts:
+                    encoded = packet_bytes(part)
+                    out += struct.pack('<Q', len(encoded)) + encoded
+            return bytes([2]) + struct.pack('<II', core_size, program_size) + bytes(out)
+        programs = [{'label': 'session.identity'}]
+        refs = [[fixed, 0], [fixed, 1]]
+        inline = {'id': fixed + '.2', 'item': item('edited'), 'origin': 'legacy'}
+        seeds = {
+            'refs': body({'version': 2, 'base': rev(1), 'physical_records': 9}, programs, refs + [inline], []),
+            'skipped': body({'version': 2, 'base': rev(1), 'skipped': [rev(5)]}, programs, refs, []),
+            'empty': body({'version': 2, 'base': ''}, programs, [], []),
+            'core-entries': body({'version': 2, 'base': rev(1), 'entries': 'x'}, programs, None, []),
+        }
+        for name, data in seeds.items():
+            (payload_corpus / name).write_bytes(data)
+        subprocess.run([str(build / 'saved_payload_fuzz'), '-runs=' + str(fuzz_runs), '-max_len=8192', '-seed=1', '-artifact_prefix=' + str(artifacts) + '/payload-', str(payload_corpus)], check=True)
         continue
     build_command = ['/usr/bin/cmake', '--build', str(build), '--parallel', '16']
     if build_targets:

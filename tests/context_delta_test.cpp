@@ -172,13 +172,12 @@ int main() {
       if (hybrid)
         packet.object().emplace_back("entries", Value{Value::Array{}});
       log.record(identity, ApplicationChannel::context, packet);
-      bool rejected = false;
-      try {
-        ContextStore invalid{log};
-      } catch (const Error &e) {
-        rejected = e.code == ErrorCode::corrupt;
-      }
-      CHECK(rejected);
+      // A frame that does not apply opens the context read-only at the last good
+      // frame (unit S1, design §4.5), instead of refusing the open.
+      ContextStore invalid{log};
+      CHECK(invalid.read_only() && invalid.head() == ctx.head() &&
+            invalid.open_report().bad_revision == revision &&
+            invalid.open_report().bad_error.code == ErrorCode::corrupt);
     }
     std::filesystem::remove_all(path);
   } catch (const std::exception &e) {

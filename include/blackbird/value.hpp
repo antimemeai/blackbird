@@ -83,6 +83,8 @@ public:
   const Object &object() const { return std::get<Object>(value()); }
   Object &object() { return std::get<Object>(write()); }
   const Value *find(std::string_view key) const noexcept;
+  // The same shared storage: equal values with identical encodings, at no cost.
+  bool same(const Value &other) const noexcept { return data_ == other.data_; }
   bool operator==(const Value &other) const {
     return data_ == other.data_ || value() == other.value();
   }

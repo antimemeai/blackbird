@@ -35,7 +35,9 @@ enum class RawContextAction : std::uint8_t {
   finish,
   reject,
   publish,
-  original
+  original,
+  cut,
+  repair
 };
 struct RawContextState {
   std::string_view head;

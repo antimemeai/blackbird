@@ -101,11 +101,22 @@ int hex_digit(char c) {
 }
 class Encoder {
 public:
-  explicit Encoder(ValueLimits limits) : limits_(limits) {}
+  // count_only: the size the encoding would have, with nothing built.
+  explicit Encoder(ValueLimits limits, bool count_only = false)
+      : limits_(limits), count_only_(count_only) {}
+  // Appends to target (from its current end) instead of an owned buffer.
+  Encoder(ValueLimits limits, std::vector<std::byte> &target)
+      : limits_(limits), out_(&target), base_(target.size()) {}
   void byte(unsigned char b) {
-    if (out_.size() == limits_.bytes)
+    if (size() == limits_.bytes)
       throw Error{ErrorCode::capacity};
-    out_.push_back(static_cast<std::byte>(b));
+    if (count_only_)
+      ++counted_;
+    else
+      out_->push_back(static_cast<std::byte>(b));
+  }
+  std::size_t size() const noexcept {
+    return count_only_ ? counted_ : out_->size() - base_;
   }
   void varint(std::uint64_t n) {
     do {
@@ -116,10 +127,14 @@ public:
   }
   void raw_text(std::string_view s) {
     varint(s.size());
-    if (s.size() > limits_.bytes - out_.size())
+    if (s.size() > limits_.bytes - size())
       throw Error{ErrorCode::capacity};
+    if (count_only_) {
+      counted_ += s.size();
+      return;
+    }
     const auto data = std::as_bytes(std::span{s.data(), s.size()});
-    out_.insert(out_.end(), data.begin(), data.end());
+    out_->insert(out_->end(), data.begin(), data.end());
   }
   void string(std::string_view s) {
     if (const auto id = word_id(s)) {
@@ -194,11 +209,15 @@ public:
         },
         v.value());
   }
-  std::vector<std::byte> finish() { return std::move(out_); }
+  std::vector<std::byte> finish() { return std::move(own_); }
 
 private:
   ValueLimits limits_;
-  std::vector<std::byte> out_;
+  bool count_only_ = false;
+  std::size_t counted_ = 0;
+  std::vector<std::byte> own_;
+  std::vector<std::byte> *out_ = &own_;
+  std::size_t base_ = 0;
   std::size_t nodes_ = 0;
 };
 class Decoder {
@@ -379,6 +398,36 @@ Result<std::vector<std::byte>> encode_packet(const Value &value, ValueLimits lim
     return Result<std::vector<std::byte>>::failure(e);
   } catch (const std::bad_alloc &) {
     return Result<std::vector<std::byte>>::failure({ErrorCode::allocation});
+  }
+}
+Result<std::size_t> encode_packet_into(std::vector<std::byte> &out, const Value &value,
+                                       ValueLimits limits) {
+  const auto start = out.size();
+  try {
+    Encoder e{limits, out};
+    for (const auto b : {'B', 'B', 'M', '\2'})
+      e.byte(static_cast<unsigned char>(b));
+    e.value(value, 0);
+    return Result<std::size_t>::success(e.size());
+  } catch (const Error &e) {
+    out.resize(start);
+    return Result<std::size_t>::failure(e);
+  } catch (const std::bad_alloc &) {
+    out.resize(start);
+    return Result<std::size_t>::failure({ErrorCode::allocation});
+  }
+}
+Result<std::size_t> encoded_packet_size(const Value &value, ValueLimits limits) {
+  try {
+    Encoder e{limits, true};
+    for (const auto b : {'B', 'B', 'M', '\2'})
+      e.byte(static_cast<unsigned char>(b));
+    e.value(value, 0);
+    return Result<std::size_t>::success(e.size());
+  } catch (const Error &e) {
+    return Result<std::size_t>::failure(e);
+  } catch (const std::bad_alloc &) {
+    return Result<std::size_t>::failure({ErrorCode::allocation});
   }
 }
 Result<Value> decode_packet_projection(ByteView bytes,

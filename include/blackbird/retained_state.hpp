@@ -9,6 +9,7 @@
 
 namespace blackbird {
 struct SavedState;
+struct SavedStateLoad;
 struct RawEventRef;
 class RawCapacityClaim;
 class ArchiveCatalog;
@@ -91,6 +92,10 @@ public:
   // Current projection only. Full ledger replay remains the safe fallback until
   // archive-locator migration covers all semantic predicates.
   const SavedState *saved_state() const noexcept { return saved_.get(); }
+  // What the open's slot load found besides the selected slot: every refused slot
+  // with its reason (a catalogue that does not open included), and the older
+  // accepted slot until the next save overwrites it.
+  const SavedStateLoad &saved_load() const noexcept { return *saved_load_; }
   Result<void> save_current_state(const Value &context);
   RawStorageSelection raw_storage_selection() const noexcept;
   Result<std::unique_ptr<RawRetainedTransfer>>
@@ -252,6 +257,7 @@ private:
   friend class RetainedEnvironment;
   friend class CodingEngine;
   friend class ContextStore;
+  friend class AuditLog;
   class MaintenanceScope {
   public:
     explicit MaintenanceScope(RetainedState &owner)
@@ -341,6 +347,8 @@ private:
   Result<IdentityBytes> reserve_identity();
   std::string journal_name_;
   std::unique_ptr<SavedState> saved_;
+  std::unique_ptr<SavedStateLoad> saved_load_;
+  void note_catalogue_fault(unsigned slot, Error error);
   std::shared_ptr<ArchiveCatalog> archive_;
   std::unique_ptr<JournalDirectory> directory_;
   std::vector<std::unique_ptr<FramedJournal>> historical_;

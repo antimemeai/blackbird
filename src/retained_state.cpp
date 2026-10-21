@@ -203,8 +203,8 @@ RetainedState::~RetainedState() {
 }
 RetainedState::RetainedState(std::unique_ptr<JournalDirectory> directory,
                              JournalCapacity capacity)
-    : directory_(std::move(directory)), capacity_(capacity),
-      max_history_entries_(capacity.max_records) {
+    : saved_load_(std::make_unique<SavedStateLoad>()), directory_(std::move(directory)),
+      capacity_(capacity), max_history_entries_(capacity.max_records) {
   committed_.facts.reserve(std::min<std::size_t>(capacity.max_records, 64));
   committed_.sources.reserve(std::min<std::size_t>(capacity.max_records, 64));
 }
@@ -291,6 +291,12 @@ RetainedState::create(std::unique_ptr<JournalDirectory> directory,
     trace.result(answer);
   return answer;
 }
+void RetainedState::note_catalogue_fault(unsigned slot, Error error) {
+  auto &faults = saved_load_->catalogue_faults;
+  if (std::none_of(faults.begin(), faults.end(),
+                   [&](const auto &fault) { return fault.first == slot; }))
+    faults.emplace_back(slot, error);
+}
 Result<std::unique_ptr<RetainedState>>
 RetainedState::open(std::unique_ptr<JournalDirectory> directory, std::string_view name,
                     JournalHeader header, JournalCapacity capacity,
@@ -340,7 +346,7 @@ RetainedState::open(std::unique_ptr<JournalDirectory> directory, std::string_vie
             allow_full_replay &&
             locked.recovery_report().available_end <= max_full_replay_bytes;
         auto saved = load_saved_state(*owner->directory_, name, locked, capacity, true,
-                                      owner->raw_origin_);
+                                      owner->raw_origin_, owner->saved_load_.get());
         if (!saved.has_value())
           return Result<std::optional<JournalResume>>::failure(saved.error());
         auto &saved_value = saved.value();
@@ -355,6 +361,24 @@ RetainedState::open(std::unique_ptr<JournalDirectory> directory, std::string_vie
             owner->saved_ =
                 std::make_unique<SavedState>(std::move(saved_value.value()));
             owner->archive_ = std::move(catalog).value();
+          } else {
+            owner->note_catalogue_fault(saved_value.value().slot, catalog.error());
+            // The older accepted slot with its own catalogue still resumes compactly
+            // (as the store falls back to it when it refuses the newer one).
+            auto &older = owner->saved_load_->alternate;
+            if (older) {
+              auto older_catalog = ArchiveCatalog::open(
+                  *owner->directory_,
+                  std::string{name} + ".archive." + std::to_string(older->slot), header,
+                  older->boundary, static_cast<std::uint64_t>(capacity.max_records) * 6,
+                  owner->raw_origin_);
+              if (older_catalog.has_value()) {
+                owner->saved_ = std::make_unique<SavedState>(std::move(*older));
+                owner->archive_ = std::move(older_catalog).value();
+                older.reset();
+              } else
+                owner->note_catalogue_fault(older->slot, older_catalog.error());
+            }
           }
         }
         if (owner->saved_ && owner->archive_ && owner->saved_->unresolved.empty()) {
@@ -420,8 +444,9 @@ RetainedState::open(std::unique_ptr<JournalDirectory> directory, std::string_vie
       owner->saved_ = std::move(selected_saved);
       owner->archive_ = std::move(selected_archive);
     } else {
-      auto saved = load_saved_state(*owner->directory_, name, *owner->journal_,
-                                    capacity, false, owner->raw_origin_);
+      auto saved =
+          load_saved_state(*owner->directory_, name, *owner->journal_, capacity, false,
+                           owner->raw_origin_, owner->saved_load_.get());
       if (!saved.has_value())
         return Result<std::unique_ptr<RetainedState>>::failure(saved.error());
       auto &saved_value = saved.value();
@@ -434,6 +459,9 @@ RetainedState::open(std::unique_ptr<JournalDirectory> directory, std::string_vie
             static_cast<std::uint64_t>(capacity.max_records) * 6, owner->raw_origin_);
         if (archive.has_value())
           owner->archive_ = std::move(archive).value();
+        else
+          // The slot is still used (its lookups scan the resident journal).
+          owner->note_catalogue_fault(owner->saved_->slot, archive.error());
       }
     }
     owner->raw_end_ = std::move(end).value();
@@ -2986,7 +3014,8 @@ Value::Array RetainedState::current_programs() const {
       } else if (name == "session.settings" || name == "session.restart" ||
                  name == "session.recovery" || name.starts_with("station.") ||
                  name == "participants-state-v1" || name == "provider-profile-set-v1" ||
-                 name == "provider-profile-override-v1")
+                 name == "provider-profile-override-v1" ||
+                 name == "context-format-level")
         latest[name] = packet;
       else if (name == "workflow-config-effective-v1") {
         if (const auto *value = packet.find("program_config"))
@@ -3186,6 +3215,7 @@ Result<void> RetainedState::save_current_state(const Value &context) {
       selected_archive->raw_origin_ = raw_origin_;
       archive_ = std::move(selected_archive);
       saved_ = std::move(selected_saved);
+      saved_load_->alternate.reset(); // that slot now holds this snapshot
       maintenance_error_.reset();
       maintenance_retry_sequence_ = 0;
       if (compact_ && saved_->unresolved.empty()) {

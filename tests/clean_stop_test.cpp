@@ -8,6 +8,7 @@
 // ContextStore is built. SIGTERM (unit S0b) is a clean stop with exit status 143;
 // a second SIGTERM kills, and the next open reports the suffix.
 #include "blackbird/context.hpp"
+#include "blackbird/context_cut.hpp"
 #include "blackbird/journal_storage.hpp"
 #include "blackbird/journal_writer.hpp"
 #include "blackbird/packet.hpp"
@@ -22,7 +23,9 @@
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <map>
 #include <poll.h>
 #include <random>
 #include <sstream>
@@ -1076,6 +1079,393 @@ void application_snapshot_failure_case() {
 
 // SIGKILL is unclean: the reopen writes exactly one record naming the suffix it
 // found, and a clean reopen after that writes none.
+// Unit S1. Opens the session journal in this process, as the binary does, and
+// runs body with its log and a probe of its context (no write at open).
+// keep_unresolved: reconcile with a verifier that leaves open attempts unresolved
+// (they still need recovery's settlement) so the fixture can write past them.
+void with_journal(const fs::path &session,
+                  const std::function<void(AuditLog &, const ContextStore &)> &body,
+                  bool keep_unresolved = false) {
+  std::array<std::byte, journal_header_size> bytes{};
+  std::ifstream file{session / "audit", std::ios::binary};
+  file.read(reinterpret_cast<char *>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+  check(bool(file), "journal header read failed: " + session.string());
+  const auto header = unwrap(decode_journal_header(bytes));
+  auto root =
+      unwrap(RetainedState::open(std::make_unique<NativeJournalDirectory>(unwrap(
+                                     NativeJournalDirectory::open(session.string()))),
+                                 "audit", header, capacity));
+  unwrap(root->confirm_recovery());
+  struct Settled final : CustodyVerifier {
+    bool keep = false;
+    Result<void> verify(std::span<const AttemptState> attempts) override {
+      return attempts.empty() || keep ? Result<void>::success()
+                                      : Result<void>::failure({ErrorCode::conflict});
+    }
+  } custody;
+  custody.keep = keep_unresolved;
+  unwrap(root->reconcile(custody));
+  AuditLog log{*root};
+  ContextStore probe{log, ContextOpen{.probe = true}};
+  body(log, probe);
+}
+// A cut frame that does not apply (its recorded result is wrong), then an append
+// chained on it; returns the append's original ID.
+std::string write_bad_frames(const fs::path &session) {
+  std::string later_id;
+  with_journal(session, [&](AuditLog &log, const ContextStore &probe) {
+    const auto bad = log.issue();
+    CutFrame frame;
+    frame.revision = hex_identity(bad.bytes());
+    frame.base = frame.observed = probe.head();
+    frame.result = CutResult{99, 0, 0};
+    (void)log.record(bad, ApplicationChannel::context, encode_cut_frame(frame));
+    const auto later = log.issue();
+    const auto revision = hex_identity(later.bytes());
+    later_id = revision + ".0";
+    (void)log.record(
+        later, ApplicationChannel::context,
+        Value::object(
+            {{"op", Value{"append"}},
+             {"base", Value{frame.revision}},
+             {"observed", Value{frame.revision}},
+             {"revision", Value{revision}},
+             {"accepted", Value{true}},
+             {"origin", Value{"later"}},
+             {"format", Value{"append-delta-v1"}},
+             {"originals",
+              Value{Value::Array{Value::object(
+                  {{"id", Value{later_id}},
+                   {"item", Value::object({{"role", Value{"user"}},
+                                           {"content", Value{"REPAIR_KEPT"}}})}})}}}}));
+  });
+  return later_id;
+}
+// A frame that does not apply opens the session read-only: the open writes one
+// context.recovery record, a prompt is refused, /quit writes no snapshot. An
+// approved /repair keeps the picked original, and snapshots resume.
+// Context-channel records in the journal, and the session's state files (the
+// journal, both slots, both catalogues, session info and diagnostics; raw/ holds
+// each run's own instrumentation).
+std::size_t context_records(const fs::path &session) {
+  auto disk = read_disk(session);
+  std::size_t count = 0;
+  for (const auto &record : disk.journal->staged_records()) {
+    if (record.kind != FrameKind::semantic)
+      continue;
+    const auto payload = unwrap(disk.journal->read_payload(record));
+    const auto event = unwrap(
+        decode_retained_event(payload, disk.journal->header().limits.max_payload));
+    if (const auto *application = std::get_if<ApplicationRecordEvent>(&event.body);
+        application && application->channel == ApplicationChannel::context)
+      ++count;
+  }
+  return count;
+}
+std::map<std::string, std::string> session_files(const fs::path &session) {
+  std::map<std::string, std::string> files;
+  for (const auto &entry : fs::recursive_directory_iterator{session}) {
+    const auto name = fs::relative(entry.path(), session).string();
+    if (entry.is_regular_file() && !name.starts_with("raw"))
+      files.emplace(name, contents(entry.path()));
+  }
+  return files;
+}
+// A frame that does not apply opens the session read-only: the open writes one
+// context.recovery record, inspection works, a prompt is refused, /quit writes no
+// snapshot, and later opens write nothing again. An unattended open is refused.
+// An approved /repair keeps the picked original; a reopen after an unclean stop
+// plays back across the bad frame and the repair frame.
+void read_only_quit_case() {
+  constexpr std::string_view label = "read-only quit";
+  Fixture fixture{"read-only"};
+  const auto session = fixture.session("s");
+  const std::vector<std::string> plain{"--plain", "--session", session.string(),
+                                       "--workflow", fixture.workflow.string()};
+  std::string output;
+  auto status = run(fixture, label, plain, append_line + "/quit\n", &output);
+  check(status == 0, std::string{label} + ": first run status\n" + output);
+  const auto picked = write_bad_frames(session);
+  // read_disk holds the journal open: it is released before the binary runs.
+  auto saved_boundary = [&] {
+    const auto before = read_disk(session);
+    if (!before.saved)
+      throw std::runtime_error(std::string{label} +
+                               ": no snapshot after the first run");
+    check(before.saved->boundary.sequence < before.journal->cursor().sequence,
+          std::string{label} + ": frames after snapshot");
+    return before.saved->boundary;
+  }();
+  const auto context_before = context_records(session);
+  status =
+      run(fixture, label, plain,
+          "/context\n/originals\n/profile\n/repair --list\n/checkpoint\nhello\n/quit\n",
+          &output);
+  check(status == 0, std::string{label} + ": read-only run status " +
+                         std::to_string(status) + "\n" + output);
+  check(output.find("the session is read-only") != std::string::npos &&
+            output.find("no snapshot is written until /repair") != std::string::npos &&
+            output.find("snapshots are withheld while the session is read-only") !=
+                std::string::npos,
+        std::string{label} + ": no read-only notice\n" + output);
+  check(output.find("CLEAN_STOP_CONTEXT") != std::string::npos &&
+            output.find("/repair skips these context frames") != std::string::npos &&
+            output.find(picked) != std::string::npos &&
+            output.find("binding sha256:") != std::string::npos,
+        std::string{label} + ": inspection and the repair preview\n" + output);
+  check(context_records(session) == context_before,
+        std::string{label} + ": the read-only run wrote a context record");
+  auto records = log_records(session, "context.recovery");
+  check(records.size() == 1 && metadata_flag(records.back(), "read_only"),
+        std::string{label} + ": expected one context.recovery record, found " +
+            std::to_string(records.size()));
+  {
+    const auto after = read_disk(session);
+    check(after.saved && after.saved->boundary.sequence == saved_boundary.sequence &&
+              after.saved->boundary.end_offset == saved_boundary.end_offset,
+          std::string{label} + ": the read-only run wrote a snapshot");
+  }
+  // Later opens of the same read-only state repeat none of the open-time records.
+  const auto repeated = [&] {
+    return log_records(session, "session.reopen-suffix").size() +
+           log_records(session, "context.recovery").size() +
+           log_records(session, "station.profile").size();
+  };
+  const auto open_records = repeated();
+  for (int open = 0; open < 3; ++open) {
+    status = run(fixture, label, plain, "/quit\n", &output);
+    check(status == 0, std::string{label} + ": reopen status\n" + output);
+  }
+  check(repeated() == open_records,
+        std::string{label} + ": a repeated read-only open repeated its records");
+  // A newly refused snapshot slot is a new observation: recorded once, then not
+  // again. (A torn tail is part of the observation too, but a journal with a torn
+  // tail refuses writes at open here, before and after S1, so it is not driven.)
+  {
+    const auto disk = read_disk(session);
+    const auto slot = disk.saved ? disk.saved->slot : 0;
+    std::fstream state{session / ("audit.state." + std::to_string(slot)),
+                       std::ios::binary | std::ios::in | std::ios::out};
+    state.seekp(200);
+    state.put('\x5a');
+  }
+  const auto new_before = log_records(session, "context.recovery").size();
+  status = run(fixture, label, plain, "/quit\n", &output);
+  check(status == 0 && output.find("refused") != std::string::npos,
+        std::string{label} + ": reopen with a refused slot\n" + output);
+  const auto new_records = log_records(session, "context.recovery");
+  const auto *metadata =
+      new_records.empty() ? nullptr : new_records.back().find("metadata");
+  check(new_records.size() == new_before + 1 && metadata &&
+            metadata->find("slot_refusals"),
+        std::string{label} + ": the newly refused slot was not recorded once");
+  status = run(fixture, label, plain, "/quit\n", &output);
+  check(status == 0 &&
+            log_records(session, "context.recovery").size() == new_before + 1,
+        std::string{label} + ": the new observation was recorded twice");
+  // The older slot is the selected snapshot now.
+  {
+    const auto disk = read_disk(session);
+    if (!disk.saved)
+      throw std::runtime_error(std::string{label} + ": no slot after the refusal");
+    saved_boundary = disk.saved->boundary;
+  }
+  // An unattended open is refused and writes nothing.
+  const auto journal = contents(session / "audit");
+  status = run(fixture, label, {"--session", session.string(), "--once", "hello"}, "",
+               &output);
+  check(status != 0 && output.find("cannot run unattended") != std::string::npos &&
+            contents(session / "audit") == journal,
+        std::string{label} + ": --once on a read-only session, status " +
+            std::to_string(status) + "\n" + output);
+  // Repair, then stop uncleanly: the reopen plays back across both frames.
+  {
+    Process process{fixture, plain, Stdio::pipe, "read-only-repair"};
+    process.send("/repair " + picked + "\n/lua print('REPAIRED')\n");
+    const auto at = process.await_text("REPAIRED");
+    (void)process.await_text("blackbird> ", at);
+    check(process.text().find("Repair frame ") != std::string::npos,
+          std::string{label} + ": repair run\n" + process.text());
+    process.kill9();
+  }
+  {
+    const auto after = read_disk(session);
+    check(after.saved && after.saved->boundary.sequence == saved_boundary.sequence,
+          std::string{label} + ": the snapshot moved; the reopen would not play "
+                               "across the repair");
+  }
+  status = run(fixture, label, {"--session", session.string(), "--once", "/context"},
+               "", &output);
+  check(status == 0 && output.find("is read-only") == std::string::npos &&
+            output.find("REPAIR_KEPT") != std::string::npos,
+        std::string{label} + ": reopen after repair\n" + output);
+  require_clean(fixture, session, std::string{label} + " after repair");
+}
+// A read-only session whose resident tail is full (no snapshot can clear it) still
+// opens, and /repair is accepted.
+void read_only_cap_case() {
+  constexpr std::string_view label = "read-only at the tail cap";
+  Fixture fixture{"read-only-cap"};
+  const auto session = fixture.session("s");
+  const std::vector<std::string> plain{"--plain", "--session", session.string(),
+                                       "--workflow", fixture.workflow.string()};
+  std::string output;
+  auto status = run(fixture, label, plain, append_line + "/quit\n", &output);
+  check(status == 0, std::string{label} + ": first run status\n" + output);
+  const auto picked = write_bad_frames(session);
+  std::size_t filled = 0;
+  with_journal(session, [&](AuditLog &log, const ContextStore &) {
+    for (unsigned i = 0; i < 1200; ++i)
+      try {
+        log.record(ApplicationChannel::log,
+                   Value::object({{"label", Value{"filler"}}}));
+        ++filled;
+      } catch (const Error &error) {
+        if (error.code != ErrorCode::capacity)
+          throw;
+        return;
+      }
+    throw std::runtime_error("the tail never reached its cap");
+  });
+  // Two read-only opens at the cap: the first records its observation, the second
+  // changes the settings (--model). Neither may fail on the cap.
+  status = run(fixture, label, plain, "/quit\n", &output);
+  check(status == 0, std::string{label} + ": first open at the cap after " +
+                         std::to_string(filled) + " filler records, status " +
+                         std::to_string(status) + "\n" + output);
+  auto changed = plain;
+  changed.insert(changed.end(), {"--model", "gpt-6.1-sol-cap"});
+  status = run(fixture, label, changed, "/repair " + picked + "\n/context\n/quit\n",
+               &output);
+  check(status == 0 && output.find("Repair frame ") != std::string::npos &&
+            output.find("REPAIR_KEPT") != std::string::npos,
+        std::string{label} + ": second open at the cap with a changed model, status " +
+            std::to_string(status) + "\n" + output);
+  status = run(fixture, label, {"--session", session.string(), "--once", "/context"},
+               "", &output);
+  check(status == 0 && output.find("is read-only") == std::string::npos,
+        std::string{label} + ": the next open is writable\n" + output);
+  require_clean(fixture, session, label);
+}
+// Recheck-B N1: the head before the bad frame ends with an unanswered call; /repair
+// with no picks keeps it and leaves read-only, and the preview names it.
+void read_only_pending_call_case() {
+  constexpr std::string_view label = "read-only pending call";
+  Fixture fixture{"read-only-pending"};
+  const auto session = fixture.session("s");
+  const std::vector<std::string> plain{"--plain", "--session", session.string(),
+                                       "--workflow", fixture.workflow.string()};
+  std::string output;
+  auto status = run(fixture, label, plain,
+                    "/lua blackbird.append({{type='function_call',call_id='c1',"
+                    "name='exec',arguments='{}'}})\n/quit\n",
+                    &output);
+  check(status == 0, std::string{label} + ": first run status\n" + output);
+  (void)write_bad_frames(session);
+  status = run(fixture, label, plain, "/repair --list\n/repair\n/quit\n", &output);
+  check(status == 0 &&
+            output.find("already has these unpaired calls or outputs") !=
+                std::string::npos &&
+            output.find("call:c1") != std::string::npos &&
+            output.find("on its own it leaves") == std::string::npos &&
+            output.find("Repair frame ") != std::string::npos,
+        std::string{label} + ": preview and repair\n" + output);
+  status = run(fixture, label, {"--session", session.string(), "--once", "/context"},
+               "", &output);
+  check(status == 0 && output.find("is read-only") == std::string::npos,
+        std::string{label} + ": the next open is writable\n" + output);
+}
+// A-M3: both slots refused by the store reach context.recovery and the notice.
+void both_slots_refused_case() {
+  constexpr std::string_view label = "both slots refused";
+  Fixture fixture{"both-refused"};
+  const auto session = fixture.session("s");
+  std::string output;
+  auto status = run(fixture, label,
+                    {"--plain", "--session", session.string(), "--workflow",
+                     fixture.workflow.string()},
+                    append_line + "/quit\n", &output);
+  check(status == 0, std::string{label} + ": first run status\n" + output);
+  with_journal(session, [](AuditLog &log, const ContextStore &) {
+    auto bad = log.root().saved_state()->context;
+    std::erase_if(bad.object(), [](const auto &pair) {
+      return pair.first == "physical_records" || pair.first == "archive_entries" ||
+             pair.first == "semantic_coverage" || pair.first == "entries";
+    });
+    bad.object().emplace_back(
+        "entries", Value{Value::Array{Value{
+                       Value::Array{Value{std::string(32, 'e')}, Value{Number{0}}}}}});
+    unwrap(log.root().save_current_state(bad));
+    unwrap(log.root().save_current_state(bad));
+  });
+  status = run(fixture, label, {"--session", session.string(), "--once", "/context"},
+               "", &output);
+  check(status == 0 &&
+            output.find("Snapshot slot 0 refused when restored") != std::string::npos &&
+            output.find("Snapshot slot 1 refused when restored") != std::string::npos &&
+            output.find("CLEAN_STOP_CONTEXT") != std::string::npos,
+        std::string{label} + ": notice\n" + output);
+  const auto records = log_records(session, "context.recovery");
+  const auto *metadata = records.empty() ? nullptr : records.back().find("metadata");
+  const auto *refused = metadata ? metadata->find("store_refusals") : nullptr;
+  check(refused && std::holds_alternative<Value::Array>(refused->value()) &&
+            refused->array().size() == 2,
+        std::string{label} + ": context.recovery does not name both slots");
+}
+// A session at a higher context-format-level is refused before recovery writes
+// anything. The session holds an unresolved attempt (a provider request killed in
+// flight), which recovery would settle with abandonment records; every state file
+// is byte for byte unchanged after the refused open.
+void format_level_case() {
+  constexpr std::string_view label = "format level";
+  Fixture fixture{"format-level"};
+  const auto curl = fixture.bin / "curl";
+  const auto in_flight = fixture.root / "request-in-flight";
+  write_text(curl, "#!/bin/sh\ntouch '" + in_flight.string() +
+                       "'\ncat > /dev/null\nsleep 30\n");
+  fs::permissions(curl, fs::perms::owner_all);
+  fixture.extra = {"OPENROUTER_API_KEY=fixture-secret",
+                   "BLACKBIRD_OPENROUTER_CURL=" + curl.string()};
+  const auto session = fixture.session("s");
+  {
+    auto arguments = provider_once;
+    arguments.insert(arguments.begin(), {"--session", session.string()});
+    Process process{fixture, arguments, Stdio::pipe, "format-level-kill"};
+    process.close_input();
+    const auto deadline = Clock::now() + std::chrono::seconds{20};
+    while (!fs::exists(in_flight)) {
+      check(process.running() && Clock::now() < deadline,
+            std::string{label} + ": the provider request never started\n" +
+                process.text());
+      process.pump(std::chrono::milliseconds{20});
+    }
+    process.kill9();
+  }
+  with_journal(
+      session,
+      [](AuditLog &log, const ContextStore &) {
+        check(!unwrap(log.root().unresolved_attempts()).empty(),
+              "format level: the fixture leaves an unresolved attempt");
+        log.record(ApplicationChannel::program,
+                   Value::object({{"label", Value{"context-format-level"}},
+                                  {"level", Value{Number{std::uint64_t{2}}}}}));
+      },
+      true);
+  const auto before = session_files(session);
+  std::string output;
+  const auto status =
+      run(fixture, label, {"--session", session.string(), "--once", "/context"}, "",
+          &output);
+  check(status == 1 && output.find("newer Blackbird") != std::string::npos,
+        std::string{label} + ": status " + std::to_string(status) + "\n" + output);
+  const auto after = session_files(session);
+  for (const auto &[name, bytes] : before)
+    check(after.contains(name) && after.at(name) == bytes,
+          std::string{label} + ": the refused open changed " + name);
+  check(after.size() == before.size(),
+        std::string{label} + ": the refused open added a file");
+}
 void kill_case() {
   Fixture fixture{"kill"};
   const auto session = fixture.session("s");
@@ -1908,7 +2298,7 @@ int main(int argc, char **argv) {
       (fs::temp_directory_path() / "blackbird-clean-stop-XXXXXX").string();
   check(::mkdtemp(pattern.data()) != nullptr, "mkdtemp failed");
   workspace = fs::canonical(pattern);
-  const std::array<std::pair<std::string_view, void (*)()>, 41> cases{{
+  const std::array<std::pair<std::string_view, void (*)()>, 46> cases{{
       {"quit", quit_case},
       {"exit", exit_case},
       {"eof", eof_case},
@@ -1950,6 +2340,11 @@ int main(int argc, char **argv) {
       {"wrapper-sigquit-child", wrapper_sigquit_child_case},
       {"term-tui-running", term_tui_running_case},
       {"term-restart-race", term_restart_race_case},
+      {"read-only-quit", read_only_quit_case},
+      {"read-only-cap", read_only_cap_case},
+      {"read-only-pending-call", read_only_pending_call_case},
+      {"both-slots-refused", both_slots_refused_case},
+      {"format-level", format_level_case},
   }};
   for (const auto &[name, body] : cases) {
     bool selected = argc == 2;

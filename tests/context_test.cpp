@@ -1,5 +1,6 @@
 #include "blackbird/context.hpp"
 #include "blackbird/json.hpp"
+#include "blackbird/saved_state.hpp"
 #include <filesystem>
 #include <iostream>
 #include <source_location>
@@ -486,6 +487,23 @@ int main() {
         break;
       history_offset = next;
     }
+    // Snapshot round trip (unit S1): the checkpoint is version 2 with refs, and the
+    // reopened store restores the same view and originals from it.
+    unwrap(native_restored.checkpoint());
+    check(field(root->saved_state()->context, "version") == Value{Number{"2"}} &&
+          !root->saved_state()->context.find("live_originals"));
+    const auto snapshot_view = native_restored.view();
+    const auto snapshot_originals = native_restored.originals();
+    root.reset();
+    root = take(RetainedState::open(std::make_unique<NativeJournalDirectory>(
+                                        take(NativeJournalDirectory::open(path))),
+                                    "audit", h, cap));
+    check(root->saved_state() && root->confirm_recovery().has_value());
+    check(root->reconcile(custody).has_value());
+    AuditLog snapshot_log{*root};
+    ContextStore snapshot_restored{snapshot_log};
+    check(snapshot_restored.view() == snapshot_view &&
+          snapshot_restored.originals() == snapshot_originals);
   } catch (const Error &e) {
     std::cerr << error_name(e.code) << '\n';
     std::filesystem::remove_all(path);
