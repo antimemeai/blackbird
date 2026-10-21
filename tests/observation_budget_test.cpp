@@ -8,7 +8,9 @@ using namespace blackbird;
 // arconaut-o17: a program that names no observation budget (ultracode, custom Lua)
 // still gets observations shaped at creation; an explicit request for more, and the
 // operator's own call, stay exact. Expected values derive from the specification:
-// 8192 bytes split 2048 head + 6144 tail; read_file 16384 head-first.
+// 8192 bytes split 2048 head + 6144 tail; read_file 16384 head-first. T1 shapes every
+// other tool only where its result reaches the model: a program's own calls of those
+// tools return whole results, whatever budget keys they pass.
 namespace {
 void check(bool condition,
            std::source_location where = std::source_location::current()) {
@@ -98,6 +100,20 @@ for key, extra in pairs({foreground = {}, split = {output_max_bytes = 4096,
   for k, v in pairs(extra) do args[k] = v end
   results[key] = blackbird.call('process', args)
 end
+-- Non-exec tools (T1): a program's own lua call returns its 40000 bytes whole; budget
+-- keys are kept out of the code's view and change nothing.
+local function text(extra)
+  local args = {code = "return string.rep('L', 40000)"}
+  for k, v in pairs(extra or {}) do args[k] = v end
+  return blackbird.call('lua', args)
+end
+results.lua = text()
+results.lua_more = text({output_max_bytes = 50000})
+results.lua_split = text({output_max_bytes = 5000, output_head_bytes = 1000})
+results.lua_head = text({output_head_bytes = 10000})
+results.lua_first = text({output_max_bytes = 3000})
+results.lua_zero = text({output_max_bytes = 0})
+results.lua_bad = text({output_max_bytes = 10, output_head_bytes = 11})
 return results
 )lua";
     engine.turn({"", "FILE=" + unwrap(format_value(Value{file})) + "\n" + program});
@@ -125,6 +141,10 @@ return results
           count(foreground, "exit_code") == 0 &&
           field(foreground, "job_id") == field(foreground, "output_ref"));
     split(field(result, "split"), 1024, 96928);
+    // Generic shaping of a non-exec tool, exactly by the rule.
+    for (const auto *key : {"lua", "lua_more", "lua_split", "lua_head", "lua_first",
+                            "lua_zero", "lua_bad"})
+      check(field(result, key) == Value{std::string(40000, 'L')});
     const auto &zero = field(result, "zero");
     check(string_field(zero, "output").empty() && count(zero, "returned_bytes") == 0 &&
           count(zero, "omitted_bytes") == 100000);
@@ -147,6 +167,19 @@ return results
     check(supplied[0] == both && supplied[1] == Value{} && supplied[2] == budget_only);
     for (std::size_t n = 3; n < 6; ++n)
       check(supplied[n] == both); // background launches of the foreground jobs
+    // The lua calls: the default names both keys; explicit keys are the program's.
+    std::vector<Value> lua_supplied;
+    for (const auto &fact : root->committed_facts())
+      if (const auto *d = std::get_if<DecisionEvent>(&fact.event.body)) {
+        const auto meta = unwrap(read_packet(d->continuation));
+        if (const auto *op = meta.find("operation"); op && *op == Value{"lua"}) {
+          const auto *keys = meta.find("native_defaults");
+          lua_supplied.push_back(keys ? *keys : Value{});
+        }
+      }
+    check(lua_supplied.size() == 7);
+    for (const auto &keys : lua_supplied)
+      check(keys == Value{}); // Blackbird supplies no budget to a program's own call
     // The operator's own call is not a model observation and stays complete.
     const auto script = Value{"head -c 100000 /dev/zero | tr '\\000' A"};
     const auto argv = Value{Value::Array{Value{"/bin/sh"}, Value{"-c"}, script}};
@@ -175,6 +208,15 @@ return results
                            "'/bin/sh', '-c', \"head -c 100000 /dev/zero | tr '\\\\000' "
                            "A\"})})"}}}));
     split(nested, 2048, 93856);
+    // The operator's own lua call stays exact; a lua call nested in it is the
+    // program's own and whole too.
+    const auto code = Value{"return string.rep('L', 40000)"};
+    check(engine.operator_call("lua", Value::object({{"code", code}})) ==
+          Value{std::string(40000, 'L')});
+    const auto inner = engine.operator_call(
+        "lua", Value::object({{"code", Value{"return blackbird.call('lua', {code = "
+                                             "\"return string.rep('L', 40000)\"})"}}}));
+    check(inner == Value{std::string(40000, 'L')});
     std::filesystem::remove_all(path);
     std::filesystem::remove_all(files);
     return 0;

@@ -370,5 +370,9 @@ private:
   // Prints of instruction items with object keys sorted, by entry ID, kept the same
   // way (live_instruction compares them).
   mutable std::map<std::string, Print, std::less<>> sorted_prints_;
+  // A shaped output is text; its failure (an error key or a nonzero exit_code before
+  // shaping) is read from its original's metadata, found by the marker's result_ref
+  // with one indexed lookup, so the failed selector still matches it (T1).
+  bool recorded_failure(const Value &item) const;
 };
 } // namespace blackbird

@@ -27,6 +27,77 @@ head). Explicit ranges and limits stay exact. The operator's own `/exec`,
 operation's decision record lists the keys Blackbird supplied in
 `native_defaults`.
 
+Since T1 (`arconaut-rd7.9`, design CONTEXT_LIFECYCLE §9) a result is shaped once,
+where it becomes visible to the model, after its whole result is retained as its
+original:
+- the output of the model's own function call, when a program dispatches it. A
+  relay declares the call it answers, `blackbird.call(name, args, {call_id =
+  item.call_id})`, as `programs/turn.lua`, `ultracode`, `useful_turn.lua` and
+  `economy_pilot.lua` do; the engine accepts a call_id it recorded from this turn's
+  responses that no output has answered yet, and refuses an unknown or answered one
+  with `reason` `call_id_unknown` or `call_id_answered` (the call is not run).
+  An undeclared call counts as the model's only when its name and arguments equal an
+  undispatched model call, and only until the turn's first declaration; otherwise
+  its whole result enters context;
+- a drained workflow continuation, inside its developer item;
+- host page observations from the application connection.
+
+Calls a program makes inside its own execution (`blackbird.call` at any nesting,
+inside `lua`, a workflow or a Lua-defined tool) return whole results; o17's defaults
+above still apply to `exec`, `process`, `read_process_output` and `read_file`.
+Content a program adds with `blackbird.append` is its own authored context and is
+not shaped. The operator's outermost call, including an operator workflow
+invocation, stays exact.
+
+The tools shaped this way are every tool except `exec`, `process`,
+`read_process_output` and `read_file` (their own shapes above) and `write_file`,
+`edit_file`, `context_inspect`, `audit_inspect`, `trajectory_read`,
+`variables_read`, `tasks_read` and `git_observe` (they bound their own output). A
+result's text is the string itself when it is a UTF-8 string, otherwise its JSON,
+which is what the provider receives for a structured output. Within its budget, or
+when the cut would not be shorter than that text, the result returns unchanged,
+structure included. Over it, the result becomes one string: the first 4096 bytes of
+that text, the line `[... bytes [H,T) of N omitted; read_process_output with
+result_ref R and range {mode: bytes, start: H, end: T} pages them, 8192 bytes each
+with next_read ...]`, and the last 12288 bytes. Cuts keep UTF-8 characters and JSON
+escape sequences whole and prefer a nearby newline. A result with no text form
+within the provider limits (96 MiB, 500000 JSON nodes) becomes an error result
+`{error: "result_text_unavailable", reason, result_ref, detail}`; its original stays
+retained.
+
+Budgets count bytes of that text, at most 16777216: `output_max_bytes` alone keeps
+a head of that many bytes, `output_head_bytes` with it splits head and tail, and
+`output_head_bytes` alone keeps a tail of 16384 minus the head for a head under 4096,
+else 12288 (the budget is the larger of 16384 and head + 12288); a head above the
+budget is `invalid_range`. A result whose cut would not be shorter than its text
+comes back whole. Native tools take these keys on the model's call and
+never pass them to the tool itself; inside a program they change nothing.
+`colleague`, `participant_read`, `participant_await`, `participant_join`,
+`workflow_invoke` and `lua` list them in their schemas. A Lua-defined tool's
+arguments are its own: its shape is `definition.shape = {output_max_bytes,
+output_head_bytes}` from `tool_define`, the default otherwise.
+
+`read_process_output` with `result_ref` (instead of `output_ref`) pages the
+original's text with the same ranges, 8192 bytes per page from the range's start by
+default, more only with an explicit `output_max_bytes` (at most 16777216);
+`output_head_bytes` alone keeps a 6144-byte tail after it, as an `output_ref` read
+does. `next_read` pages within the requested range only, so following the marker
+stops where the tail the model holds begins. An empty `result_ref` is
+`invalid_range`; a result with no text form has no pages and its read is refused as
+`unsupported` with a message. The decoded text is kept for the turn, so paging does
+not decode the original again. A value that is itself one result shaped in this turn,
+passed through whole as another result or a continuation, is not cut again; its
+settlement records `pass_through` with the inner result_ref. Mixed with other content
+and over budget, it is cut normally, and the outer original holds the inner marker. Each shaped operation's settlement (for host observations, their
+original's metadata) records the shape applied
+(`max_bytes`, `head_bytes`, `tail_bytes`, `text_bytes`, and `whole` or `omitted`
+with `result_ref`, `failed` for an error result, or `error`) and the model's
+`call_id`; `native_defaults` still names the keys Blackbird supplied. A shaped
+failure (an error key or a nonzero `exit_code` before shaping) also records
+`failed: true` in its original's metadata; the `failed` selector finds that original
+by the marker's result_ref with one indexed lookup, so a shaped failure still
+matches and no history is scanned.
+
 When exec output exceeds a split budget, `output` contains the head, an explicit
 `[... bytes [START,END) omitted ...]` marker, and the tail. For binary excerpts it
 is `{head: <text-or-hex>, tail: <text-or-hex>}` instead. `byte_start`/`byte_end`

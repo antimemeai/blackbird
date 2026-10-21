@@ -42,6 +42,13 @@ and `origin='operator'`. Full operator text is retained as a user context entry,
 not replaced by extracted arguments. Explicit slash/bare selection wins over
 powerwords. Unknown slash commands never activate embedded powerwords.
 
+Inside a workflow or `/lua`, `blackbird.call` returns whole results, so the recipe
+above reads `current.effective` and keeps `current.revision` as its base however large
+the configuration is. Only a result that reaches the model is shaped (T1): the
+model's own `program_config` or `workflow_invoke` call, and a workflow's drained
+continuation, over 16384 bytes of text come back as head, marker with `result_ref`,
+and tail ([economical defaults](ECONOMICAL_DEFAULTS.md)).
+
 `blackbird.call('workflow_registry', {})` returns the effective revision, prefix,
 and retained definitions/source. `blackbird.call('workflow_invoke',
 {name='research', arguments='...', prompt='...'})` selects by canonical name.

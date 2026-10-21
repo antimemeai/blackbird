@@ -188,7 +188,40 @@ private:
   Value workflow_result_;
   std::optional<Value> operator_arguments_;
   bool operator_call_ = false; // Operator inspection stays exact; programs get budgets.
-  std::vector<std::string> native_defaults_; // Supplied by call(), read by operation().
+  // What call() (or a drained continuation) hands one operation: the budget keys
+  // Blackbird supplied, and the shape applied where the result becomes visible to
+  // the model, once its original is retained (T1, design §9). Passed by value, so
+  // nothing stays armed for a later operation.
+  struct OperationShaping {
+    std::vector<std::string> native_defaults;
+    std::optional<ResultShape> shape;
+    std::string call_id;  // The model's function call this operation answers.
+    std::string declared; // The call_id a relay declared, accepted or not.
+    std::string refusal;  // Why a declared call_id is refused, if it is.
+  };
+  // The model's function calls from provider responses in this turn, by call_id. A
+  // relay declares the call it answers (blackbird.call(name, args, {call_id = ID}));
+  // an undeclared call matches one by name and arguments only until the turn's first
+  // declaration. generation orders responses: a call nested inside a model-boundary
+  // operation matches only calls from responses that arrived after it began. An
+  // appended output answers its call, which then can no longer be declared.
+  struct ModelCall {
+    std::string name;
+    Value arguments;
+    std::uint64_t generation = 0, sequence = 0;
+    bool dispatched = false;
+  };
+  std::map<std::string, ModelCall, std::less<>> model_calls_;
+  std::set<std::string, std::less<>> answered_calls_;
+  bool declared_turn_ = false;
+  std::uint64_t response_generation_ = 0, boundary_floor_ = 0, call_sequence_ = 0;
+  void note_answered(const Value::Array &items);
+  // The texts shaped in this turn and their result_ref: a value that is itself one of
+  // them, passed through whole, is not cut again (T1).
+  std::map<std::string, std::string, std::less<>> shaped_texts_;
+  // The last result_ref read's text, kept for the turn so paging does not decode the
+  // original again (released at turn end or on another reference).
+  std::string cached_result_ref_, cached_result_text_;
   std::shared_ptr<CommandJobs> command_jobs_;
   std::unique_ptr<RetainedState::SettlementScope> settlement_;
   CommandTaskMap command_tasks_;
@@ -237,11 +270,12 @@ private:
     std::string revision, selection_attempt;
     RawEventRef selection{};
     RawProgramLifetime parked;
+    std::optional<ResultShape> shape; // The invoking call's; default when absent.
   };
   std::vector<WorkflowContinuation> workflow_continuations_;
   bool draining_workflows_ = false;
   std::optional<Error> workflow_failure_;
-  Value execute_workflow(WorkflowContinuation &invocation);
+  Value execute_workflow(WorkflowContinuation &invocation, bool continuation = false);
   void drain_workflows();
   Value pending_program_config_;
   std::string program_revision_ = "initial-empty", pending_program_revision_;
@@ -272,7 +306,11 @@ private:
   std::unique_ptr<Observations> observations_;
   std::unique_ptr<Runtime> runtime_;
   Value request(Value options = Value::object({}));
-  Value call(std::string name, Value arguments);
+  Value call(std::string name, Value arguments) {
+    return dispatch(std::move(name), std::move(arguments), Value{});
+  }
+  // call() with options: {call_id = ID} declares the model call a relay answers (T1).
+  Value dispatch(std::string name, Value arguments, const Value &options);
   struct ProcessOriginalIndex {
     bool known = false;
     std::vector<std::pair<RecordReference, SourceReference>> chunks;
@@ -280,6 +318,7 @@ private:
   std::size_t process_original_cursor_ = 0;
   std::map<std::string, ProcessOriginalIndex> process_originals_;
   Value retained_process_output(const Value &arguments);
+  Value retained_result_output(const Value &arguments);
   Value operation(std::string_view name, const Value &input,
                   const std::function<
                       Value(OperationAttemptId, InvocationId, DefinitionGenerationId,
@@ -287,7 +326,8 @@ private:
                   RawProviderOperationContext *provider_operation = nullptr,
                   const CommandStartStatus *command_start = nullptr,
                   const DomainAdmission *domain_admission = nullptr,
-                  const FileEffectObservation *file_effect = nullptr);
+                  const FileEffectObservation *file_effect = nullptr,
+                  OperationShaping shaping = {});
   friend struct Runtime;
 };
 } // namespace blackbird

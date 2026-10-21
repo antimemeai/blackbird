@@ -536,6 +536,7 @@ bool is_handle(std::string_view text) noexcept {
   return handle_stem(text.substr(0, dot)) &&
          decimal<std::uint32_t>(text.substr(dot + 1));
 }
+} // namespace
 bool failed_output(const Value &item) noexcept {
   if (!type_is(item, "function_call_output"))
     return false;
@@ -559,7 +560,6 @@ bool failed_output(const Value &item) noexcept {
       },
       n->storage());
 }
-} // namespace
 std::variant<UnitSelection, UnitSelectionError> parse_selection(std::string_view text) {
   UnitSelection selection;
   std::size_t offset = 0;
@@ -644,7 +644,8 @@ std::variant<UnitSelection, UnitSelectionError> parse_selection(std::string_view
   return selection;
 }
 Expansion expand(const UnitSelection &selection, const std::vector<Unit> &units,
-                 const Value::Array &entries, ExpandPurpose purpose) {
+                 const Value::Array &entries, ExpandPurpose purpose,
+                 const std::function<bool(const Value &item)> &failed_item) {
   std::vector<bool> matched(units.size(), false);
   std::vector<std::string> absent;
   const auto holds = [&](const Unit &unit, const UnitSelectionItem &item) {
@@ -661,7 +662,8 @@ Expansion expand(const UnitSelection &selection, const std::vector<Unit> &units,
         if (const auto *name = text_member(entry_item, "name");
             name && *name == *item.tool)
           tool = true;
-      if (!failed && failed_output(entry_item))
+      if (!failed &&
+          (failed_item ? failed_item(entry_item) : failed_output(entry_item)))
         failed = true;
     }
     return tool && failed;

@@ -184,6 +184,10 @@ struct Expansion {
 // instruction that is not a superseded copy, or tool state) and pinned units are
 // refused, in that order of reasons; pin accepts any live unit; unpin accepts
 // pinned units. An ambiguous unit is refused for every purpose.
+// failed decides the failed term per item; absent, it is failed_output.
 Expansion expand(const UnitSelection &selection, const std::vector<Unit> &units,
-                 const Value::Array &entries, ExpandPurpose purpose);
+                 const Value::Array &entries, ExpandPurpose purpose,
+                 const std::function<bool(const Value &item)> &failed = {});
+// An output that is an object with an error key or a nonzero numeric exit_code.
+bool failed_output(const Value &item) noexcept;
 } // namespace blackbird

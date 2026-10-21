@@ -116,7 +116,7 @@ void builtin_upgrade() {
   };
   for (const std::string &recorded :
        {std::string{"builtin-ultracode-v1"}, std::string{"builtin-ultracode-v2"},
-        std::string(32, 'a')}) {
+        std::string{"builtin-ultracode-v3"}, std::string(32, 'a')}) {
     const bool supplied = !recorded.starts_with("builtin-");
     std::filesystem::remove_all(path);
     std::filesystem::create_directory(path);
@@ -146,7 +146,8 @@ void builtin_upgrade() {
           if (const auto *content = field(entry, "item").find("content");
               content && content->string().starts_with("Ultracode:"))
             ++v2_briefs;
-        check(v2_briefs == 1); // the v2 run itself left the brief the v3 runs must find
+        check(v2_briefs ==
+              1); // the v2 run itself left the brief the current runs must find
       }
       // A budget change records the effective program config with it.
       eval(engine, "local v=blackbird.call('context_budget',{}); "
@@ -190,7 +191,7 @@ void builtin_upgrade() {
         brief = string_field(entry, "id");
         ++briefs;
       }
-    // c3f: a v2 brief left live is the same brief, so v3 runs add no copy. The
+    // c3f: a v2 brief left live is the same brief, so current runs add no copy. The
     // supplied program declares no class, so its result-class brief never counts.
     if (briefs != (supplied ? 2U : 1U)) {
       std::cerr << recorded << " session holds " << briefs << " ultracode briefs\n";
@@ -214,7 +215,7 @@ void builtin_upgrade() {
     // a supplied revision is kept.
     const auto latest = latest_config(*root);
     const auto revision = string_field(latest, "program_revision");
-    check(revision == (supplied ? recorded : "builtin-ultracode-v3"));
+    check(revision == (supplied ? recorded : "builtin-ultracode-v4"));
     if (!supplied)
       check(string_field(latest, "activation") == "builtin-current" &&
             string_field(latest, "replaced_revision") == recorded);

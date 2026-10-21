@@ -12322,3 +12322,43 @@ false, and the built-in revision is now `builtin-ultracode-v3`: S2's open-time r
 **Checks.** Each new test failed on the code before it. Mac gate; Linux debug and ASan on the touched
 suites. One review and one recheck, notes in `context/clm-rd7-notes/c3f*.md`. The `lua` tool description
 does not yet name the query; that follows T1, which owns `src/tools.cpp`.
+
+## 2026-10-21 — T1: shaping at creation (rd7.9)
+
+T1 is a serial-lane unit, on branch `work/clm-rd7`.
+
+**The boundary.** A result is shaped once, where it becomes visible to the model: the output of the model's
+own tool call (generic tools, `lua`, Lua-defined tools, `workflow_invoke`), a drained continuation, or a host
+observation. Calls a program makes inside its own execution return whole results, so programs keep their
+tables and the documented CAS recipes keep their base. o17's native defaults for exec, process and
+read_file are unchanged. `blackbird.append` content is the program's own and is not shaped.
+
+**Which call is the model's.** A relay declares it: `blackbird.call(name, args, {call_id = ...})`. An unknown
+or already-answered call_id is refused and the call is not run. The four shipped relays declare, and the
+built-in ultracode is `builtin-ultracode-v4`. The name-and-arguments match remains only for undeclared calls,
+and it switches off after a turn's first declaration. The first attempt used that match alone; the recheck
+showed a relay that changes arguments or retries would flood context, and that a program's identical call
+could steal the match.
+
+**Shape.** Within 16384 bytes a result is whole. Over that it becomes the first 4096 bytes, one marker naming
+the omitted range and `result_ref`, and the last 12288 bytes. A cut never splits a UTF-8 character or a JSON
+escape; a sweep of 177,444 cuts found none. A cut that would not be shorter returns the result whole. A single
+shaped result passed straight through is not cut again. `read_process_output {result_ref}` pages the retained
+original 8 KiB at a time (design §5.7), even with a range. Every shaped result records the shape applied. A
+result with no text form becomes an error result naming the reason.
+
+**Measured.**
+- The `tools` wire bytes went from 27690 to 31275 (+12.9%), mostly the `lua` and `read_process_output`
+  descriptions.
+- The first `pin failed` over 9842 facts took about 910 ms at layer 1 and about 5 ms at layer 2: an indexed
+  lookup replaced a history scan.
+- A `result_ref` page costs about 32 ms whatever the original's size. Reading back a 16 MiB exec capture
+  takes 37-54 ms, a path T1 does not change.
+
+**Checks.** Every new or changed test failed on the code before it. Mac gate; Linux debug and ASan+UBSan on
+the touched suites. The merge with c3f resolved three hunks, keeping c3f's brief check and adding T1's
+declared call_id to the ultracode source, which became v4. A recorded v3 is now replaced too.
+
+**Review.** One review in two halves and one recheck in two halves. The notes are in
+`context/clm-rd7-notes/T1*.md`. Not done: an allocation-injection test for the shape parameter, since no
+armed state remains.
