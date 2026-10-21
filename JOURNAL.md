@@ -12244,3 +12244,22 @@ artifact.
 - `arconaut-x0g`: a torn tail shorter than a frame header fails every open (pre-existing).
 - `arconaut-8zr`: storage_raw and clean_stop's `tui` case are load-sensitive under parallel Linux runs.
 - `arconaut-r5n`: one more no-overlap failure of `tui_retained_result` in the first S1 gate.
+
+## 2026-10-21 — c6d and gjf: two fuzzer findings fixed
+
+The rerun of check-linux's fuzz profile against S1 found two faults, each fixed on `work/clm-rd7-c6d`.
+
+- **c6d (P1a's profile reader).** The 128-character numeral bound counted only the spelling, but
+  `format_value` can present a number in more characters: `e-NN` for a dropped point, zeros for an
+  exponent up to 16. An accepted 126-character numeral printed in 129, so the re-read refused it. The
+  reader now also bounds the presented form, so every accepted number reads back. Shared value code was
+  correct and is unchanged; no other caller has a per-numeral bound.
+- **gjf (S1's state-file parser).** S1 layer 2 kept every decode error that was not `corrupt`, so a packet
+  that decodes to `invalid_range` (malformed bytes) refused its slot under that name. Only allocation,
+  capacity and unsupported keep their own class now; the fuzzed body is a regression case.
+
+**Checks.** Each regression case failed on the old code. Both commits passed the Mac gate (the first with
+S2's build overlapping, peak load 26). On Neuroses, debug and ASan pass on the touched suites
+(run-wdamqv1k), and all three fuzzers ran 1,000,000 executions with no artifact (run-814ksad0):
+profile_reader 935 s, context_cut 362 s, saved_payload 211 s. This also completes S1's fuzz check on its
+final code. Notes: `context/clm-rd7-notes/c6d.md`.
