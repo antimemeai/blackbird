@@ -11511,3 +11511,27 @@ struct called with designated initializers, with no suppression. `terminal_test`
 passes and clang-tidy is clean on src/terminal.cpp. The operator authorized
 stopping the rerun of the whole gate for this mechanical change and committing
 with the per-command hook override; the settled suite is not repeated.
+
+## 2026-10-23 — orientation and Oxcart handoff
+
+Read current doctrine, foundation/core contracts, testing/implementation plans,
+recent journal and Oxcart's operator-requested `OXCART-HANDOFF-2026-10-23.md`.
+Checked the application connection/tool catalog and Oxcart event decoder against
+the handoff: host-provided native tools and correlated call/result messages are
+still missing. Coordinate the extension before implementation, keep controls
+responsive during outstanding calls, and start with actual state/reading artifacts.
+Oxcart owns browser operations; Blackbird owns provider/tool continuation.
+
+The active checkout is work/text-bugs-2026-10-19 at 168bb26; local/origin master
+is a94d094, newer than the handoff's inspected revision. CURRENT_STATE's October
+19 front line is historical. Oxcart's retained runtime still records source
+74a42f4 and tree a741c587; source publication does not activate that executable.
+No implementation, runtime activation, browser operation or colleague call was
+requested in this orientation. Preserve existing backup/artwork/research/handoff
+files and worktrees. Only this journal entry changes.
+
+Both `bd list --json --limit 0` and required `bd backup` fail: database
+`arconaut` is absent from the Dolt server at 127.0.0.1:13308. Preserve existing
+backups; do not initialize a replacement database during orientation. Issue access
+and supported backup remain unresolved. Check this text-only diff before its
+journal checkpoint; no source checks apply.
