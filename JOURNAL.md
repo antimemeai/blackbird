@@ -11620,3 +11620,56 @@ process reports Terminated: 15). No cause is established; Git remains at 2b80669
 and the 47k tree is staged, not committed. Retained output is
 context/47k-commit.log. Retry the required gate with BLACKBIRD_HOOK_LANES=1;
 this is recovery from an interrupted check, not a pass or another review layer.
+
+
+## 2026-10-23 — Oxcart native host tools
+
+Operator says Dolt is unused and directs proceeding. No further Dolt/Beads
+operation is part of this unit. Preserve the active checkout; create isolated
+context/oxcart-host-tools-2026-10-23 on work/oxcart-host-tools-2026-10-23 from
+master a94d094. Publish protocol proposal 8b0066f before native source.
+Drop the operator-authorized coordination note into Oxcart; its active colleague
+accepts version-1 catalog/ready/call/result/progress/cancel fields. Clarify
+32-character lowercase hex Blackbird identities separately from browser targets.
+
+Add native recursive kind/fields/element schemas and connection-local host
+callbacks to CodingEngine, sharing the existing admitted operation/tool-result
+path. Retain the catalog and bind its source to each operation; preserve exact
+BBM2 replies (including rejected replies), correlate turn/attempt identities, and
+keep controls/native command observations pumping while waiting. Native values
+become provider schemas only in request catalog assembly. Callback detachment
+prevents reuse after the application owner leaves. Large sources stay in files.
+Encoded host-call bytes are retained and sent without a second serialization.
+
+Initial regression fails against unchanged source at the missing ready echo.
+An initial fixture's double join on failure is corrected; the same missing-echo
+RED then exits cleanly. Native circuit GREEN uses a scripted provider, actual
+retained reading file, ordinary read_file and a source-backed final continuation.
+Controls/progress/stale/duplicate/malformed results, original bytes, explicit
+non-success/unknown outcomes, nested schemas, argument validation and catalog/
+Lua/native collisions have direct cases. No browser fixture or live provider yet.
+
+Kimi's sole review attempt returns subscription HTTP403, not a review. One
+independent Codex code review replaces it and finds three defects: draining past
+an accepted result loses its disposition on a later bad frame; local oversized
+call refusal becomes unknown/capacity-stop; integer validation rejects exact
+exponent-form integers. Each new regression fails before its source fix.
+Stop pumping at accepted result, return definite not-started on frame refusal,
+and validate Number's native integral representation. Current focused Debug
+cases pass; one affected recheck/fixes completes the two-layer scope. The report
+is papers/2026-10-23-oxcart-host-tools-review.md. No additional review round.
+
+Neuroses SSH times out before upload; no Linux checks run. Local ASan's first
+run passes application, CLI, coding and program_config; its host-tool test still
+contains the pre-fix frame refusal and fails. Rebuild/recheck only that affected
+case after the actual fix and final test additions. Full installed source gate
+and stable Oxcart runtime handoff remain to finish; source publication does not
+activate the retained browser child.
+
+First full source hook: all266 Debug tests pass in275.76s. Native lint then
+refuses swappable schema/value parameters, unchecked optional-waiter access
+after callbacks and swappable test reply IDs/outcomes. Fix with designated
+SchemaValue/ReplyCommand arguments and the stable reference returned by optional
+emplacement, without suppression. Retain the first hook log, run affected direct
+cases and diagnostics, then rerun the required source hook on the final staged
+result. No third behavioral review or additional assurance scope.

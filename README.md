@@ -101,7 +101,9 @@ See [provider authentication](docs/USING_BLACKBIRD.md) for commands and limits.
 Native applications can run `blackbird --application` and exchange framed BBM2
 commands and streaming events over stdio. This uses the same session, provider,
 workflow and tools as the terminal; page observations remain separate from the
-operator objective. See the [application interface](docs/APPLICATION_INTERFACE.md).
+operator objective. Hosts may offer a negotiated [native tool catalog](docs/APPLICATION_HOST_TOOLS.md)
+and return actual application results during a turn. See the
+[application interface](docs/APPLICATION_INTERFACE.md).
 
 ### Building this checkout
 

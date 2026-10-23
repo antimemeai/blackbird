@@ -1,6 +1,6 @@
 # Native application host tools, version 1
 
-2026-10-23. Proposed extension for coordination with Oxcart. This is the
+2026-10-23. Version-1 extension accepted by the Oxcart colleague. This is the
 Blackbird-side implementation contract; Oxcart must implement and opt into it
 before these tools are available in a live browser. Existing protocol-1 hosts
 that omit `host_tools` keep their current command/event vocabulary.
@@ -37,7 +37,11 @@ schema: {kind: "string"}}]}`.
 
 Blackbird emits `host_call` with `id` (owning application turn), `call_id`
 (unique native operation-attempt identity), `invocation_id`, `generation`,
-`tool`, and native `arguments`. The retained admission/input precedes dispatch.
+`tool`, and native `arguments`. `call_id`, `invocation_id` and `generation`
+are exactly 32 lowercase hexadecimal characters encoding native 128-bit
+identities, not numbers. `generation` identifies Blackbird program definitions;
+it is unrelated to an Oxcart browser/document generation.
+The retained admission/input precedes dispatch.
 The host owns browser/document/visit checks using its advertised arguments;
 Blackbird does not retarget an operation after navigation.
 
@@ -73,6 +77,10 @@ return a real job handle and expose status/cancel tools when implemented.
 
 Large observations remain complete files with adjacent blobs. Return their
 locators and let normal Blackbird file tools read selected ranges or whole files.
+A call that cannot fit the outgoing control frame returns a definite local
+`error` with `result.effect_outcome: "not_started"`, without sending a host call.
+The model can correct its arguments and continue. A received valid result settles
+before any later frame is read, so a later transport failure cannot erase it.
 The existing 4 MiB frame limit does not limit harvested data. Preserve originals;
 never substitute a capped inline payload for a complete retained reading.
 

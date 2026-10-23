@@ -57,6 +57,9 @@ void write_all(int descriptor, ByteView bytes) {
 } // namespace
 void ApplicationConnection::send(const Value &packet) {
   const auto bytes = unwrap(encode_packet(packet, limits()));
+  send_bytes(bytes);
+}
+void ApplicationConnection::send_bytes(ByteView bytes) {
   std::array<std::byte, 4> header{};
   const auto size = static_cast<std::uint32_t>(bytes.size());
   for (unsigned i = 0; i < 4; ++i)
@@ -82,7 +85,7 @@ void ApplicationConnection::fatal(std::string_view id,
 std::optional<Value> ApplicationConnection::receive(bool wait) {
   while (!eof_) {
     pollfd descriptor{input_, POLLIN, 0};
-    const auto ready = ::poll(&descriptor, 1, wait ? -1 : 0);
+    const auto ready = ::poll(&descriptor, 1, wait ? (host_wait_ ? 25 : -1) : 0);
     if (ready < 0 && errno == EINTR)
       continue;
     if (ready < 0 || (descriptor.revents & POLLNVAL))
@@ -119,6 +122,15 @@ std::optional<Value> ApplicationConnection::receive(bool wait) {
       body_bytes_ += static_cast<std::size_t>(count);
       if (body_bytes_ == body_.size()) {
         auto packet = unwrap(decode_packet(body_, limits()));
+        const auto *type = packet.find("type");
+        if (log_ && type &&
+            (*type == Value{"host_result"} || *type == Value{"host_progress"})) {
+          host_source_ = log_->original(
+              {"application.host.packet",
+               std::string_view{reinterpret_cast<const char *>(body_.data()),
+                                body_.size()},
+               Value::object({{"encoding", Value{"BBM2"}}})});
+        }
         header_bytes_ = body_bytes_ = 0;
         body_.clear();
         return packet;
@@ -137,6 +149,18 @@ Value ApplicationConnection::open() {
   for (const auto name : {"model", "effort"})
     if (packet->find(name))
       (void)text(*packet, name);
+  if (const auto *offer = packet->find("host_tools")) {
+    if (!std::holds_alternative<Value::Object>(offer->value()))
+      throw Error{ErrorCode::invalid_range};
+    for (const auto &[key, value] : offer->object()) {
+      (void)value;
+      if (key != "version" && key != "catalog")
+        throw Error{ErrorCode::invalid_range};
+    }
+    if (field(*offer, "version") != Value{Number{1}})
+      throw Error{ErrorCode::unsupported};
+    host_catalog_.emplace(field(*offer, "catalog"));
+  }
   return *packet;
 }
 void ApplicationConnection::command(Value packet) {
@@ -146,7 +170,9 @@ void ApplicationConnection::command(Value packet) {
     if (id.empty() || id.size() > 128)
       throw Error{ErrorCode::invalid_range};
     const auto &type = text(packet, "type");
-    if (type == "turn" || type == "steer") {
+    if (type == "host_result" || type == "host_progress") {
+      host_reply(packet);
+    } else if (type == "turn" || type == "steer") {
       validate_turn(packet);
       if (pending_ || !discarded_.empty() || (active_ && type == "turn"))
         throw Error{ErrorCode::busy};
@@ -168,6 +194,82 @@ void ApplicationConnection::command(Value packet) {
   } catch (const Error &failure) {
     error(id, error_name(failure.code));
   }
+}
+void ApplicationConnection::host_reply(const Value &packet) {
+  if (!host_catalog_ || !host_wait_ || host_wait_->result || stopped_ ||
+      text(packet, "turn_id") != host_wait_->turn ||
+      text(packet, "call_id") != host_wait_->call)
+    throw Error{ErrorCode::conflict};
+  if (text(packet, "id") == host_wait_->turn)
+    throw Error{ErrorCode::invalid_range};
+  if (text(packet, "type") == "host_progress") {
+    send(Value::object({{"type", Value{"status"}},
+                        {"id", Value{host_wait_->turn}},
+                        {"call_id", Value{host_wait_->call}},
+                        {"text", Value{text(packet, "text")}}}));
+    return;
+  }
+  const auto &outcome = text(packet, "outcome");
+  if (outcome != "success" && outcome != "error" && outcome != "cancelled" &&
+      outcome != "unknown")
+    throw Error{ErrorCode::invalid_range};
+  const auto &result = field(packet, "result");
+  if (outcome == "success")
+    host_catalog_->validate_result(host_wait_->tool, result);
+  host_wait_->result = Value::object({{"turn_id", Value{host_wait_->turn}},
+                                      {"call_id", Value{host_wait_->call}},
+                                      {"outcome", Value{outcome}},
+                                      {"result", result},
+                                      {"source", Value{host_source_}}});
+}
+Value ApplicationConnection::host_call(CodingEngine &engine, const HostToolCall &call) {
+  if (!active_ || host_wait_)
+    throw Error{ErrorCode::busy};
+  auto &waiting = host_wait_.emplace(HostWait{
+      active_id_, hex_identity(call.attempt.bytes()), std::string{call.name}, {}});
+  struct Clear {
+    std::optional<HostWait> &waiting;
+    ~Clear() { waiting.reset(); }
+  } clear{host_wait_};
+  const auto packet =
+      Value::object({{"type", Value{"host_call"}},
+                     {"id", Value{waiting.turn}},
+                     {"call_id", Value{waiting.call}},
+                     {"invocation_id", Value{hex_identity(call.invocation.bytes())}},
+                     {"generation", Value{hex_identity(call.generation.bytes())}},
+                     {"tool", Value{std::string{call.name}}},
+                     {"arguments", call.arguments}});
+  std::string bytes;
+  try {
+    bytes = unwrap(encode_packet_string(packet, limits()));
+  } catch (const Error &failure) {
+    if (failure.code != ErrorCode::capacity)
+      throw;
+    return Value::object(
+        {{"turn_id", Value{waiting.turn}},
+         {"call_id", Value{waiting.call}},
+         {"outcome", Value{"error"}},
+         {"result",
+          Value::object(
+              {{"effect_outcome", Value{"not_started"}},
+               {"message", Value{"Host call exceeds the 4 MiB control frame. "
+                                 "Pass retained artifact locators instead."}}})}});
+  }
+  log_->original(
+      {"application.host.call", bytes, Value::object({{"encoding", Value{"BBM2"}}})});
+  send_bytes(std::as_bytes(std::span{bytes.data(), bytes.size()}));
+  while (!waiting.result) {
+    if (stopped_ || closing_ || eof_) {
+      if (!eof_ && !transport_failed_)
+        send(Value::object({{"type", Value{"host_cancel"}},
+                            {"id", Value{waiting.turn}},
+                            {"call_id", Value{waiting.call}}}));
+      throw Error{ErrorCode::interrupted};
+    }
+    engine.poll_commands();
+    pump(true);
+  }
+  return std::move(*waiting.result);
 }
 void ApplicationConnection::discard_pending() {
   if (pending_) {
@@ -200,12 +302,17 @@ void ApplicationConnection::pump(bool wait) {
     if (!packet)
       break;
     command(std::move(*packet));
+    // Settle an accepted result before observing any later transport failure.
+    if (host_wait_ && host_wait_->result)
+      break;
   }
 }
 int ApplicationConnection::run(CodingEngine &engine, AuditLog &log,
                                const SessionSettings &settings,
                                const std::filesystem::path &session) {
-  std::string active_id, complete;
+  std::string complete;
+  auto &active_id = active_id_;
+  log_ = &log;
   bool text_truncated = false;
   engine.cancelled = [&] {
     pump(false);
@@ -241,6 +348,7 @@ int ApplicationConnection::run(CodingEngine &engine, AuditLog &log,
     CodingEngine &engine;
     bool finished = false;
     void run() {
+      engine.detach_host_tools();
       engine.display = engine.status = engine.notice = engine.diagnostic = {};
       engine.cancelled = [] { return true; };
       std::exception_ptr failure;
@@ -267,11 +375,20 @@ int ApplicationConnection::run(CodingEngine &engine, AuditLog &log,
         }
     }
   } shutdown{engine};
-  send(Value::object({{"type", Value{"ready"}},
-                      {"id", Value{open_id_}},
-                      {"protocol", Value{Number{1}}},
-                      {"model", Value{settings.model}},
-                      {"session", Value{session.string()}}}));
+  auto ready = Value::object({{"type", Value{"ready"}},
+                              {"id", Value{open_id_}},
+                              {"protocol", Value{Number{1}}},
+                              {"model", Value{settings.model}},
+                              {"session", Value{session.string()}}});
+  if (host_catalog_) {
+    engine.host_tools(*host_catalog_, [&](const HostToolCall &call) {
+      return host_call(engine, call);
+    });
+    ready.object().emplace_back("host_tools",
+                                Value::object({{"version", Value{Number{1}}},
+                                               {"names", host_catalog_->names()}}));
+  }
+  send(ready);
   while (!closing_ && !eof_) {
     if (!pending_)
       pump(true);

@@ -2332,12 +2332,45 @@ Value CodingEngine::tool_registry() const {
           pending_lua_tools_ == Value{} ? Value{} : Value{pending_tools_revision_}}});
   });
 }
+void CodingEngine::host_tools(HostToolCatalog catalog, HostToolCallback callback) {
+  if (turn_running_ || host_tools_ || !callback)
+    throw Error{ErrorCode::busy};
+  const auto native = tool_definitions();
+  for (const auto &entry : native.array())
+    if (catalog.find(string_field(entry, "name")))
+      throw Error{ErrorCode::conflict};
+  for (const auto *definitions : {&lua_tools_, &pending_lua_tools_}) {
+    if (*definitions == Value{})
+      continue;
+    for (const auto &entry : definitions->array())
+      if (catalog.find(string_field(entry, "name")))
+        throw Error{ErrorCode::conflict};
+  }
+  const auto bytes = unwrap(encode_packet_string(catalog.native()));
+  auto source = log_.original({"application.host.catalog", bytes,
+                               Value::object({{"version", Value{Number{1}}}})});
+  host_call_ = std::move(callback);
+  host_tools_source_ = std::move(source);
+  host_tools_ = std::move(catalog);
+}
+void CodingEngine::detach_host_tools() {
+  if (turn_running_)
+    throw Error{ErrorCode::busy};
+  host_call_ = {};
+  host_tools_.reset();
+  host_tools_source_.clear();
+}
 Value CodingEngine::request_tools() const {
   const auto origin = program_origin(operation_trace_, turn_trace_, generation_);
   const std::uint8_t kind = 3;
   RawProgramCall trace{3815, 3816, &origin, std::array{raw_native(kind)}};
   return trace.run([&] {
     auto result = tool_definitions();
+    if (host_tools_) {
+      const auto host = host_tools_->provider_tools();
+      for (const auto &d : host.array())
+        result.array().push_back(d);
+    }
     for (const auto &d : lua_tools_.array())
       result.array().push_back(Value::object({{"type", Value{"function"}},
                                               {"name", field(d, "name")},
@@ -2368,6 +2401,8 @@ Value CodingEngine::define_tool(const Value &arguments) {
                  (c >= '0' && c <= '9') || c == '_' || c == '-';
         }))
       throw Error{ErrorCode::invalid_range};
+    if (host_tools_ && host_tools_->find(name))
+      throw Error{ErrorCode::conflict};
     const auto native_definitions = tool_definitions();
     for (const auto &d : native_definitions.array())
       if (string_field(d, "name") == name)
@@ -3305,13 +3340,15 @@ Value CodingEngine::operation(
       result_data.emplace(unwrap(raw_claim_data(49 + ValueLimits{}.bytes)));
     const auto context = parse_id<ContextRevisionId>(context_.head());
     trace.identity(4, context.bytes());
-    const auto meta = Value::object(
+    auto meta = Value::object(
         {{"operation", Value{std::string{name}}},
          {"input_binding", Value{"invocation-v1"}},
          {"input_encoding", Value{"bbm2"}},
          {"invocation", Value{hex_identity(invocation.bytes())}},
          {"revision", Value{context_.head()}},
          {"generation", Value{hex_identity(admitted_generation.bytes())}}});
+    if (host_tools_ && host_tools_->find(name))
+      meta.object().emplace_back("host_catalog", Value{host_tools_source_});
     const auto continuation_bytes = unwrap(encode_packet(meta));
     CommandTaskMap staged_tasks;
     CommandTaskMap::node_type task_node;
@@ -3944,7 +3981,7 @@ Value CodingEngine::operation(
     if (boundary.error && !adapter_capacity &&
         (boundary.error->code == ErrorCode::capacity || name == "provider" ||
          name == "exec" || name == "beads" || name == "colleague" ||
-         name == "decision_model") &&
+         name == "decision_model" || (host_tools_ && host_tools_->find(name))) &&
         (boundary.error->code == ErrorCode::capacity ||
          boundary.error->code == ErrorCode::interrupted ||
          boundary.error->code == ErrorCode::io ||
@@ -3973,6 +4010,12 @@ Value CodingEngine::operation(
       const auto remote = string_field(result, "remote_disposition");
       disposition = remote == "unknown"    ? AttemptDisposition::unknown
                     : state == "completed" ? AttemptDisposition::success
+                                           : AttemptDisposition::failure;
+    }
+    if (!boundary.error && host_tools_ && host_tools_->find(name)) {
+      const auto &outcome = string_field(result, "outcome");
+      disposition = outcome == "unknown"   ? AttemptDisposition::unknown
+                    : outcome == "success" ? AttemptDisposition::success
                                            : AttemptDisposition::failure;
     }
     trace.disposition(disposition);
@@ -4905,6 +4948,18 @@ Value CodingEngine::call(std::string name, Value arguments) {
       [&](OperationAttemptId attempt, InvocationId invocation,
           DefinitionGenerationId admitted_generation, CommandTaskActivity *activity,
           RawRetainedExec *raw_exec) {
+        if (host_tools_ && host_tools_->find(name)) {
+          host_tools_->validate_arguments(name, arguments);
+          auto result =
+              host_call_({name, arguments, attempt, invocation, admitted_generation});
+          const auto &outcome = string_field(result, "outcome");
+          if (outcome != "success" && outcome != "error" && outcome != "cancelled" &&
+              outcome != "unknown")
+            throw Error{ErrorCode::invalid_range};
+          if (outcome == "success")
+            host_tools_->validate_result(name, field(result, "result"));
+          return result;
+        }
         if (name == "exec") {
           const auto id = hex_identity(attempt.bytes());
           const auto limits = log_.root().journal_limits();

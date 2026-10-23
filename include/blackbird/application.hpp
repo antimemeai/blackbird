@@ -29,9 +29,21 @@ private:
   bool transport_failed_ = false;
   std::string open_id_, close_id_;
   std::optional<Value> pending_;
+  std::optional<HostToolCatalog> host_catalog_;
+  struct HostWait {
+    std::string turn, call, tool;
+    std::optional<Value> result;
+  };
+  std::optional<HostWait> host_wait_;
+  AuditLog *log_ = nullptr;
+  std::string host_source_;
+  std::string active_id_;
+  Value host_call(CodingEngine &engine, const HostToolCall &call);
+  void host_reply(const Value &packet);
   std::vector<std::string> discarded_;
   std::optional<Value> receive(bool wait);
   void send(const Value &packet);
+  void send_bytes(ByteView bytes);
   void command(Value packet);
   void pump(bool wait);
   void discard_pending();

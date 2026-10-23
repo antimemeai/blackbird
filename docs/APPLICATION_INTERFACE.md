@@ -52,5 +52,7 @@ Cancellation remains cooperative with the existing engine/provider/tool machiner
 The browser stays on its own event loop while the host reads packets asynchronously.
 The host must keep draining output: a blocked stdout write can delay cooperative
 cancellation until the reader resumes or disconnects.
-Existing native engine tools remain available; browser proposal/actuation tools
-will be added as explicit native operations when that workflow needs them.
+Existing native engine tools remain available. Trusted hosts can additionally
+offer [native host tools](APPLICATION_HOST_TOOLS.md), with an explicitly
+negotiated catalog, correlated calls/results and responsive cancellation. The
+host owns browser or application operations and returns actual observed outcomes.

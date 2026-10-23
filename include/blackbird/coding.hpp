@@ -3,6 +3,7 @@
 #include "blackbird/colleague.hpp"
 #include "blackbird/command_jobs.hpp"
 #include "blackbird/decision_models.hpp"
+#include "blackbird/host_tools.hpp"
 #include "blackbird/observations.hpp"
 #include "blackbird/openai.hpp"
 #include "blackbird/participants.hpp"
@@ -120,6 +121,9 @@ public:
   // Optional native effect restriction for a scoped workflow (e.g. recovery
   // evidence protection). Throwing refuses admission; it is not Lua authority.
   std::function<void(std::string_view, const Value &)> effect_policy;
+  // Install once, outside a turn. A resumed session never restores callbacks.
+  void host_tools(HostToolCatalog catalog, HostToolCallback callback);
+  void detach_host_tools();
   void effort(std::string value);
   Value stats() const;
   bool uncontained_command_custody() const noexcept {
@@ -167,6 +171,9 @@ private:
   // Calls already unanswered at workflow admission. Repair never closes calls
   // introduced by the currently running workflow.
   Value::Array repairable_outputs_;
+  std::optional<HostToolCatalog> host_tools_;
+  HostToolCallback host_call_;
+  std::string host_tools_source_;
   Value lua_tools_{Value::Array{}}, pending_lua_tools_;
   std::string tools_revision_ = "initial-empty", pending_tools_revision_;
   Value program_config_{Value::object({{"modules", Value{Value::Array{}}},
