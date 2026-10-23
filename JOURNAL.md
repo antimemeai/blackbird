@@ -11673,3 +11673,21 @@ SchemaValue/ReplyCommand arguments and the stable reference returned by optional
 emplacement, without suppression. Retain the first hook log, run affected direct
 cases and diagnostics, then rerun the required source hook on the final staged
 result. No third behavioral review or additional assurance scope.
+
+Final source hook passes all266 Debug tests in278.50s and the full258-unit owned
+C++ analysis/format pass plus Lua syntax/format/type/contract checks. Commit
+0a7e2979d7b6e298b71faa208bb5588a40f304f8 is pushed on the work branch. Affected
+final ASan/UBSan host-tool recheck passes3.60s; the other four affected ASan
+passes remain settled. No new suppression, deadline relaxation or third review.
+
+Build a separate retained executable from the exact final tree19912c459ef51c92bd148d9a16385005aa6e7636
+under context/oxcart-host-tools-qualified-runtime-2026-10-23, preserving the older
+candidate and Oxcart's legacy mainline runtime. Record the matching implementation
+commit in SOURCE_COMMIT after the hook completes. Actual CLI catalog negotiation,
+late-result refusal, close and session reopen pass with no model turn. Oxcart's
+real native connection separately negotiates its full four-tool catalog against
+the earlier candidate; its live panel and shared endpoint/MCP are still being
+wired. Drop the final source/runtime/check handoff into its repository. Full
+results: papers/2026-10-23-oxcart-host-tools-results.md. No implied master merge,
+default-child switch or active-operator-process replacement. Linux remains
+unavailable; actual browser/model and outward-MCP circuits remain shared follow-up.

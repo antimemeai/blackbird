@@ -233,3 +233,9 @@ unless egregious. The final steering is to use a Python launcher for AFL and the
 leave it alone: preserve its native output queue without inspecting, polling,
 minimizing or repairing findings during the campaign. Keep fuzzing off the laptop
 and out of measured host windows; no unrelated assurance, eval or cloud scope.
+
+Operator2026-10-23 says Dolt is not used. This supersedes the historical
+Dolt-specific directions above: do not start, initialize or repair a Dolt server,
+or block delivery on Dolt-backed issue access/backup. Preserve existing issue
+backup snapshots and record remaining work in the journal. This is not a request
+to migrate or discard issue history.
