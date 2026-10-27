@@ -30,11 +30,11 @@ Enter created m32 even if text equals m31. It did not steer t12. Select Edit: na
 EDIT NEXT TURN m32 · held · revision 2 (prior text retained)
 Target: next main turn, NOT active t12
 ┌ Then inspect tests, including incomplete mouse prefixes. ┐
-[Apply correction; keep held] [Resume next turn] [Back]
+[Apply—keep held] [Release selected to queue] [Back]
 Main draft saved to drafts d9 · no text submitted by opening editor
 ```
 
-ESC here requests stop t12, not discard edit. Current strip becomes `Stop requested t12 · next turns held1`. Later `t12 interrupted locally; tool k4 completed earlier`. Resume m32 is explicit; old historical queue notices cannot make it runnable.
+ESC here requests stop t12, not discard edit. Current strip becomes `Stop requested t12 · next turns held1`. Later `t12 interrupted locally; tool k4 completed earlier`. Release m32 is explicit; old historical queue notices cannot make it runnable.
 
 ## B. Stop under ambiguity, blocked owner and PTY input (C3, C6)
 
@@ -153,13 +153,13 @@ Select Direction pins p4; submitting may refuse if p4 sealed since snapshot. It 
 INSTRUMENT / workflow research                  [Source]
 Saved root path: /project/turn.lua
 Current turn t22 pins generation g7 / retained source s7
-Effective registry rev g8 · pending g9, successful boundary only
-> edit buffer g9 · BASE CONFLICT · edit preserved
-[Inspect effective] [Rebase edit] [Back]
+Effective registry rev g8 · t22-owned pending candidate g9
+> edit buffer b17 / base g8 · operation u5 queued, not staged
+[Inspect effective] [Withdraw queued u5] [Back]
 Interrupt does not activate a canceled proposal.
 ```
 
-A successful eligible boundary changes effective revision; next turn's retained source establishes what actually governed it. General Apply-now is not offered. Running executable and selected managed generation appear separately in Session detail; build-source unknown remains unknown.
+If t22 activates g9 first, u5 refuses its stale g8 base; b17 is preserved for explicit rebase. If t22 fails, queued u5 remains independent. Once dispatched, u5 stages its own candidate g10 and only its own successful boundary can activate it. Tool-definition operations use their corresponding guarded registry and independent workflow. A successful eligible boundary changes effective revision; next turn's retained source establishes what actually governed it. General Apply-now is not offered. Running executable and selected managed generation appear separately in Session detail; build-source unknown remains unknown.
 
 ```text
 CONTEXT / effective c18 · change from c17 applied
@@ -187,3 +187,60 @@ Recovery fence blocks new effects; no automatic replay.
 ```
 
 Session detail explains saved/effective source, running/selected generation and actual continuation intent. Ordinary reopen doesn't consume pending resume-continue. A supported fresh independent session is an option, not evidence the predecessor settled. These screens specify later tasks; none is a capture or acceptance claim.
+
+## H. Adversarial crossings added after first-layer pressure test
+
+All frames remain **design artifacts**, not observed screens.
+
+**Completion + queued launch + stop:** decoded ESC admission occurs while t12 is
+active: native transition captures t12, holds m32 and closes dispatch together.
+Delayed worker notification cannot permit m32 launch. If launch committed before
+ESC decoded admission, screen instead says:
+
+```text
+MAIN t13 · stop requested (current at decoded admission)
+t12 completed · m32 launched as t13 before stop admission
+Next turns held1 · m32 no longer editable in queue
+Draft retained · stop is not undo
+```
+
+If no turn is active at decoded admission: `No active main turn; queue held2`.
+Physical keypress/first ESC byte is not a native ordering guarantee.
+
+**Generic call + authored flood + partner answer:**
+
+```text
+MAIN t31 completed · effects below remain separately scoped
+  k14 native result · completed · fields 28 [Original]
+  a7 WORKFLOW OUTPUT · t31 · append stream · preview folded
+    { records: [ …
+    … 48 KiB preview omitted …
+    ] }
+    [Preview] original unavailable to this view · raw ref r7
+BLACKBIRD / final reply
+  The result is incomplete: two records lack the source relation.
+  Read the retained call result k14 before choosing another attempt.
+READING / final reply · 2 authored updates available [Live]
+```
+
+`48 KiB` must be an actual known omission, otherwise say extent unknown. A raw
+reference is not falsely enabled as a bounded semantic original. Authored output
+stays distinct from tools and ordinary prose; compact generic cards alone don't
+qualify this case. A retained adapter later enables actual range inspection.
+
+**Pinned page exhaustion:** `Comparison pins full2/2; release a pin first` leaves
+current page/selection unchanged. At return depth8, nested open refuses or offers
+explicit Replace detail. If source retires: `Pinned page still visible; refetch
+unavailable` distinguishes resident selected bytes from an unavailable original.
+
+**Stale pointer:**
+
+```text
+CENTER participant p4 [Join: seal and drain]
+  → resize/partial frame; logical list has changed
+Click refused: display changing; no Join submitted
+Keyboard focus remains p4 · refresh pending · main draft retained
+```
+
+No hit test against a new row reinterprets the old coordinate. A coherent emitted
+frame is not proof of physical paint; exact owner validation still applies.

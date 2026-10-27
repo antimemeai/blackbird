@@ -11881,3 +11881,17 @@ provider/remote/generic flood/reading/accessibility/operator evidence remains
 later obligations, not passes. Do not change storage policy or reopen composition
 full-sync/gate diagnosis. Next is the ONE fresh-context design pressure test;
 delivery plan will be derived only after fixes.
+
+First design review completed under pinned native generation with explicit
+openai/gpt-6.1-sol/medium, single --once objective and private review session.
+No tools/implementation permitted. Original request/answer retained in run;
+tracked answer/provenance/disposition added. Six consequential valid findings
+(three blockers) fixed before plan derivation: decoded stop admission serializes
+queue launch; unambiguous Apply/Release queue table; native definition editors
+queue independent guarded engine workflows rather than borrowing an active
+transaction; authored-output bounds; finite reader pins/return stack; coherent
+emitted-scene pointer target capture/refusal. Unknown physical paint and later
+source/actual-use qualification remain limits. No extra review or source gate.
+Meaningful context selection removed completed large read groups with original
+recovery retained and an explicit source/limit continuation summary; no objective
+or live tool group removed. Next derive plan, then one FINAL layer only.
