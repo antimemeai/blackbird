@@ -11535,3 +11535,31 @@ Both `bd list --json --limit 0` and required `bd backup` fail: database
 backups; do not initialize a replacement database during orientation. Issue access
 and supported backup remain unresolved. Check this text-only diff before its
 journal checkpoint; no source checks apply.
+
+## 2026-10-26 — repository and unfinished-branch orientation
+
+Read workspace/repository doctrine, source, recent journal, retained unit reports
+and worktree handoffs; fetch origin and compare every local head with master.
+Three independent read-only lanes map execution ownership, CLM, and campaign/UI/
+research work. Save the synthesis in
+papers/2026-10-26-repository-orientation.md.
+
+Master is a94d094, not CURRENT_STATE's older f4bd931. Startup, text input/folding,
+cache affinity and compact observations are integrated. CLM rd7 is a substantial
+unmerged program; S3a and 8zr are sibling, unqualified archival checkpoints.
+The latter's notes identify a real interrupted-write/SIGTERM livelock, separately
+from host-load failures. Campaign integration includes only C++26/j1l/vv6;
+three formerly staged repairs now have explicitly unqualified checkpoint commits.
+Oxcart native host tools are implemented and checked on their own branch; the
+untracked handoff predates them. Live Oxcart integration remains separate.
+
+All auxiliary worktrees are clean. Preserve the active checkout's existing
+modified backup files, untracked artwork, research and handoff. No product edits,
+tests, provider calls, branch integration, cleanup or runtime activation. Inspect
+managed current-generation path without inferring its source parity.
+
+bd onboard/ready refuse the legacy 0.58.0 workspace under the current CLI. Leave
+storage unchanged and read the saved backup only; no migration or replacement
+initialization. Later Oxcart records say the operator regards Dolt as unused.
+Backup statuses lag implementation and are not used as authoritative completion.
+Check and publish only this report and journal under the text-only exception.
