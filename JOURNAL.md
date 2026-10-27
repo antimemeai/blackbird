@@ -11850,3 +11850,34 @@ trailing spaces in the tracked rendering, retaining exact original recheck.log
 unchanged and stating the rendering distinction. Run the corrected text check with
 fail-fast shell before the final publication checkpoint. No source-hook bypass is
 being used for product changes; only JOURNAL/papers are in this branch delta.
+
+## 2026-10-27 — holistic chat design, before delivery planning
+
+Own documentation-only chat-design-01 on work/autodev-chat-design-2026-10-27
+from exact accepted study d8dc2af. Read workspace/checkout instructions, primary
+current oversight/campaign/brief, entire accepted study including manifests,
+references, original review/final recheck and full-history reading contribution;
+relevant recent and original chat-first/composer/fold journal ranges. Read full
+interaction theory/TUI doctrine/components/views/plan and testing/performance,
+instrumentation, command/definition/reopen contracts. Read selected actual native
+input, queue, launch, turn/context/program activation, result and participant
+source ranges. Omitted tool output recovered where necessary; no claim to have
+personally reread every historical journal line. Read Rhizome rigor proposal's
+ownership/oracle cautions read-only; no foreign scope/language decision imported.
+
+RUN/STATUS declares concrete task/resource allowance: one consequential design
+review/fix, then derive plan, then one FINAL design-findings recheck plus plan
+review/fixes. No arbitrary mission timer and no third layer. Accepted study's
+allowance stays closed. No source/test/config edits, builds/source gates,
+experiments, runtime change or sibling mutation.
+
+Select chat-first receipts/current-work strip/call-linked evidence, stop-first
+ESC in harness modes with Ctrl-G local Back and Ctrl-B PTY return, held queue
+on stop, honest requested-versus-observed endpoints, compact typed cards and
+anchored reader/original inspection. These are proposed owner changes, not
+implemented UI. Write labeled storyboards plus lifecycle/failure/continuity,
+delegated-return, instrument-authoring and context-repair contracts. Missing
+provider/remote/generic flood/reading/accessibility/operator evidence remains
+later obligations, not passes. Do not change storage policy or reopen composition
+full-sync/gate diagnosis. Next is the ONE fresh-context design pressure test;
+delivery plan will be derived only after fixes.
