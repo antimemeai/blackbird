@@ -11779,3 +11779,43 @@ Validation is archive readback, branch identity, worktree registration and text
 diff checking; product code was unchanged. The current `bd backup` command prints
 subcommand help rather than performing the legacy backup. Existing issue storage
 and backups remain intact, with no migration attempted.
+
+## 2026-10-27 — chat usability study and private actual-use diagnosis
+
+Own the first research-only unit of **blackbird chat usability, polish, and
+stop-embarassing-ourselves** on work/autodev-chat-study-2026-10-27 from b7c082e.
+Write ROOT/chat-study-01/STATUS.md subplan and two-layer allowance before research.
+Read governing brief/campaign/oversight, prior interaction/TUI doctrine and research,
+primary corpus assessments and deferred findings. Preserve composition's original
+failed309/310 gate and fd12 semantic-audit full-sync progress frontier; no sibling
+edit/merge/hook retry or speculative storage repair.
+
+Trace actual submission/queue/worker/turn/provider/tool/child owners and focus paths.
+Read installed launcher/cache, exact executable bytes and live process4954 read-only.
+Pin managed generation-6QI9PQx9 for two new isolated-auth physical-PTY observations;
+no provider requests or operator-session interaction in those reproductions. Bare ESC
+leaves pure-Lua work active; Ctrl-C interrupts and keeps draft. Equal queued submits
+execute separately. Command folding and Ctrl-O originals already work in the observed
+case; lower process blocks/long quoted headers still overwhelm hierarchy. Raw child
+ledger proves Ctrl-X/ESC/Ctrl-C reach private PTY input. Narrow inspection hides detail;
+ordinary reopen keeps draft. Retain raw streams, input logs and real decoded screens.
+
+Reuse four exact original reference archives; seven studied source files match ZIP
+members. No acquired agent code executed, dependency adopted, Git metadata restored,
+product/test/config edit, build, test suite, lint/source hook, AFL or issue-store work.
+Read primary instrumental-interaction/direct-manipulation extracts and challenge the
+existing theory against actual task failures rather than infer usability from tests.
+
+Initial combined JOURNAL read was truncated. A research-only full-journal reader first
+received piped --plain input incorrectly as separate lines; terminate only that owned
+native process after discovering the error, retaining its unknown last remote request.
+Then explicitly issue a distinct --once full-journal reading action, openai/gpt-6.1-sol,
+medium: native872934-byte request,177562 input tokens, exit0, returned full-extent digest.
+Retain its contribution in the paper; no claim the failed ingestion read the full file.
+
+Study candidate in papers/chat-usability-2026-10-27 covers identity/provenance, reference
+synthesis, actual use, owners/control/failure map, systematic walkthrough, priorities,
+open decisions and later task/semantic/physical/readable-screen obligations. It supplies
+later holistic design, not an approved layout/plan, implementation or usability repair.
+One fresh-context consequential review and ONE findings recheck/fixes follow. Text-only
+checks and per-command hook override apply; source qualification remains untouched.

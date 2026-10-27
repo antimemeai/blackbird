@@ -1,0 +1,58 @@
+[
+  {
+    "name": "codex",
+    "author": "OpenAI and contributors",
+    "url": "https://codeload.github.com/openai/codex/zip/08e2b58b07b8a423d6577b66fb7756e980b53dbf",
+    "revision": "08e2b58b07b8a423d6577b66fb7756e980b53dbf",
+    "original": "/Users/patrickbeam/projects/quarantine_proj/archives/arconaut-known-agents-2026-09-30/codex-08e2b58b07b8.zip",
+    "bytes": 22271028,
+    "sha256": "2f54ff02b8e4bc774ab58499704a8512ec1541ebd9101e72d08956b7cef6de78",
+    "license": "Apache-2.0",
+    "work_copy": "/Users/patrickbeam/projects/blackbird/quarantine/codex",
+    "acquired": "2026-09-30 (existing catalog)",
+    "verified_utc": "2026-10-27T04:14:20.836504+00:00",
+    "restoration": "Download URL to a NEW archive, compare SHA256, extract into a NEW ignored directory; strip .git/.DS_Store/__MACOSX only from extracted copy, preserve archive; execute nothing."
+  },
+  {
+    "name": "pi",
+    "author": "Mario Zechner and contributors",
+    "url": "https://codeload.github.com/earendil-works/pi/zip/8ce69e9d2b171d173fe4b6b2b6256f1f4411e69d",
+    "revision": "8ce69e9d2b171d173fe4b6b2b6256f1f4411e69d",
+    "original": "/Users/patrickbeam/projects/quarantine_proj/archives/arconaut-known-agents-2026-09-30/pi-8ce69e9d2b17.zip",
+    "bytes": 10231841,
+    "sha256": "49615f7184269133b5c254599e29af61b6f5caed65931c10906bdcf1ef2cfda9",
+    "license": "MIT",
+    "work_copy": "/Users/patrickbeam/projects/blackbird/quarantine/pi",
+    "acquired": "2026-09-30 (existing catalog)",
+    "verified_utc": "2026-10-27T04:14:20.842732+00:00",
+    "restoration": "Download URL to a NEW archive, compare SHA256, extract into a NEW ignored directory; strip .git/.DS_Store/__MACOSX only from extracted copy, preserve archive; execute nothing."
+  },
+  {
+    "name": "crush",
+    "author": "Charmbracelet and contributors",
+    "url": "https://codeload.github.com/charmbracelet/crush/zip/76cc5c574e15072b15aaed0f4f843a5711fae0d9",
+    "revision": "76cc5c574e15072b15aaed0f4f843a5711fae0d9",
+    "original": "/Users/patrickbeam/projects/quarantine_proj/archives/arconaut-agent-discovery-2026-09-30/crush-76cc5c574e15.zip",
+    "bytes": 2971683,
+    "sha256": "d6d248a82bdc64d69be85f9953372bf0394e4c74ee46fd82dcc149426c027470",
+    "license": "MIT",
+    "work_copy": "/Users/patrickbeam/projects/blackbird/quarantine/crush",
+    "acquired": "2026-09-30 (existing catalog)",
+    "verified_utc": "2026-10-27T04:14:20.846204+00:00",
+    "restoration": "Download URL to a NEW archive, compare SHA256, extract into a NEW ignored directory; strip .git/.DS_Store/__MACOSX only from extracted copy, preserve archive; execute nothing."
+  },
+  {
+    "name": "libvaxis",
+    "author": "Tim Culverhouse and contributors",
+    "url": "https://codeload.github.com/rockorager/libvaxis/zip/d4c3b3666e0c090e2b5092ca09893c6db15e0b79",
+    "revision": "d4c3b3666e0c090e2b5092ca09893c6db15e0b79",
+    "original": "/Users/patrickbeam/projects/blackbird/quarantine/tui-2026-10-15/substrate/archives/libvaxis-d4c3b3666e0c.zip",
+    "bytes": 1318928,
+    "sha256": "7eec8e64ae3a04a4e5e20cd6870a29f8c220724bd61f9890ccf62d3d967174b9",
+    "license": "MIT (root LICENSE)",
+    "work_copy": "/Users/patrickbeam/projects/blackbird/quarantine/tui-2026-10-15/substrate/source/libvaxis",
+    "acquired": "2026-10-15 (existing catalog)",
+    "verified_utc": "2026-10-27T04:14:20.848794+00:00",
+    "restoration": "Download URL to new ignored archive, verify digest, extract absent destination; strip Git metadata only in work copy. Execute nothing."
+  }
+]

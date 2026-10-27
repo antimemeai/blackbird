@@ -1,0 +1,51 @@
+[
+  {
+    "reference": "codex",
+    "revision": "08e2b58b07b8a423d6577b66fb7756e980b53dbf",
+    "path": "codex-rs/tui/src/chatwidget.rs",
+    "sha256": "6b3ace72b6b4e2a24941b27a69ef95c35a7a5e599a730b6ead4233dde6df73d7",
+    "matches_original_archive_member": true
+  },
+  {
+    "reference": "codex",
+    "revision": "08e2b58b07b8a423d6577b66fb7756e980b53dbf",
+    "path": "codex-rs/tui/src/chatwidget/input_queue.rs",
+    "sha256": "3ca59f3b765e19850237516935278575071c74d0ea2ee9f72a78c82d832ba896",
+    "matches_original_archive_member": true
+  },
+  {
+    "reference": "codex",
+    "revision": "08e2b58b07b8a423d6577b66fb7756e980b53dbf",
+    "path": "codex-rs/tui/src/bottom_pane/mod.rs",
+    "sha256": "4698ca77d465b5b02736f43f3a35ac99749b94a796d325e19e2d2a6476d8937a",
+    "matches_original_archive_member": true
+  },
+  {
+    "reference": "pi",
+    "revision": "8ce69e9d2b171d173fe4b6b2b6256f1f4411e69d",
+    "path": "packages/coding-agent/src/modes/interactive/components/tool-execution.ts",
+    "sha256": "e24f68f450ab47c6421687ed09db700de6c4ba21ec4535a1773a345cfa704b58",
+    "matches_original_archive_member": true
+  },
+  {
+    "reference": "pi",
+    "revision": "8ce69e9d2b171d173fe4b6b2b6256f1f4411e69d",
+    "path": "packages/coding-agent/src/modes/interactive/interactive-mode.ts",
+    "sha256": "60efaa955ba55254c3867cabcae65551a6517e81741e62f1d0ac238be93def37",
+    "matches_original_archive_member": true
+  },
+  {
+    "reference": "crush",
+    "revision": "76cc5c574e15072b15aaed0f4f843a5711fae0d9",
+    "path": "internal/ui/chat/shell.go",
+    "sha256": "3a05d7721f37295be2fbc4b7ccda0dd55cd51d09edc1387f866be509217055eb",
+    "matches_original_archive_member": true
+  },
+  {
+    "reference": "libvaxis",
+    "revision": "d4c3b3666e0c090e2b5092ca09893c6db15e0b79",
+    "path": "src/Loop.zig",
+    "sha256": "295e7ee6e2415117f6068506223deeaf88d5c0ab357a977a1a07f380dcf0ab75",
+    "matches_original_archive_member": true
+  }
+]

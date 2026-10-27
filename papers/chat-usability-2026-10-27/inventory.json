@@ -1,0 +1,66 @@
+{
+  "observed_utc": "2026-10-27T04:13:04.265198+00:00",
+  "head": "b7c082eb2522e7dbca0c4f3d320705673edee13b",
+  "files": [
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/src/terminal.cpp",
+      "bytes": 164060,
+      "sha256": "6eaad6ddf3623c8863d7aa572eb59bd3766f34c6da7f19761cfde50d877777d6"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/src/chat_view.cpp",
+      "bytes": 34321,
+      "sha256": "364cf15ec915179867d835e0f3e5f6260735808b3eee4a201647522ad01f1b10"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/src/main.cpp",
+      "bytes": 90913,
+      "sha256": "4166b6f0ac2258c0ac7d2431f11709448133d081eda5d0f5c11a9bfe5b544800"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/src/coding.cpp",
+      "bytes": 272991,
+      "sha256": "19afa8eaadecf3d7668352cc93b100991113139fe01f26cfb86eb8bcd95f7051"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/src/command_jobs.cpp",
+      "bytes": 108403,
+      "sha256": "dce2933b15565754cad29a5dd50654fc9754f8bbf09b58c8d54bc475052b3508"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/scripts/check-terminal-pty",
+      "bytes": 45334,
+      "sha256": "3da6125e40ed0f988c53981c55494fea76a99d156a0d3079889f63d4a4e05579"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/scripts/terminal-screen-oracle.py",
+      "bytes": 21219,
+      "sha256": "1eb8479a7dd0cd45146355b64d777b50bd392f556e8ae4431390eefcc98a6b17"
+    },
+    {
+      "path": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-6QI9PQx9/build/release/blackbird",
+      "bytes": 5133798,
+      "sha256": "145be9185bcdaa509aaf3f2c2c2a958fb9e21fcdfa05c1c0f663ed642d61e1f1"
+    },
+    {
+      "path": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-6QI9PQx9/scripts/blackbird",
+      "bytes": 3403,
+      "sha256": "8a07f5b795c3d96d52f8c8d8c9fc0a2b0141a536a810846e695e96abcf77c9ed"
+    },
+    {
+      "path": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-6QI9PQx9/share/blackbird/programs/turn.lua",
+      "bytes": 1655,
+      "sha256": "856042aed9aed2e16feb37446523b4b6d477f2cd74b700edfff0e2ba97f91fe2"
+    },
+    {
+      "path": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-6QI9PQx9/build/release/CMakeCache.txt",
+      "bytes": 18246,
+      "sha256": "10f589d5e8cd2c80c7829f2bbf177cb22c6215a9751bc1e075292b29971d7591"
+    },
+    {
+      "path": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-6QI9PQx9/build/release/compile_commands.json",
+      "bytes": 281700,
+      "sha256": "43fe27af36abb204ddf53fb318565da499edf7e04046e0c75ca5d36c0feb7e99"
+    }
+  ]
+}
