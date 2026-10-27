@@ -477,6 +477,7 @@ ContextStore::ContextStore(AuditLog &log, ContextOpen open, RawContextOrigin ori
         skipped_.clear();
         restored_sections_.clear();
         classes_.clear();
+        chapter_ = {};
         unreadable_.clear();
         archive_loaded_ = true;
         lookup_boundary_.reset();
@@ -651,6 +652,10 @@ void ContextStore::restore_snapshot(const SavedState &saved, RawContextTrace &tr
   }
   entries_ = std::move(entries);
   restored_sections_ = field(context, "sections").array();
+  // The chapter table (S3a), present once a cut frame started a chapter.
+  chapter_ = {};
+  if (const auto *section = restored_section(chapter_section))
+    chapter_ = read_chapter_section(*section);
   if (const auto *section = restored_section(classes_section))
     classes_ = ClassMap::read_section(*section);
   else
@@ -818,6 +823,7 @@ void ContextStore::play_frame(const RetainedFact &fact,
     // The classes of what the frame created, derived from the frame itself as the
     // writer did (design §5.2).
     ClassMap made;
+    std::optional<ChapterStep> chapter_next;
     bool publishes = false;
     if (op == "append" || op == "edit" || op == "managed") {
       if (string_field(packet, "observed") != head_)
@@ -880,6 +886,8 @@ void ContextStore::play_frame(const RetainedFact &fact,
         }
         next = apply_cut(frame, entries_, fresh, trace.fresh());
         made.set(record.identity.bytes(), derive_classes(packet));
+        // The chapter the frame starts must follow the current one (S3a).
+        chapter_next = chapter_step(chapter_, frame);
         for (const auto &original : captured) {
           originals_.emplace(original.id, original);
           inserted.push_back(original.id);
@@ -896,6 +904,10 @@ void ContextStore::play_frame(const RetainedFact &fact,
       if (status)
         differing_.swap(*status);
       classes_.merge(made);
+      if (chapter_next) {
+        chapter_.table.push_back(std::move(chapter_next->row));
+        chapter_.binding = std::move(chapter_next->binding);
+      }
       head_ = revision;
     }
     ++report_.frames;
@@ -1050,7 +1062,11 @@ Result<void> ContextStore::checkpoint(RawContextOrigin origin) {
       Value::Array sections{
           Value::object({{"name", Value{std::string{classes_section}}},
                          {"value", classes_.section()}})};
-      std::set<std::string> names{std::string{classes_section}};
+      std::set<std::string> names{std::string{classes_section},
+                                  std::string{chapter_section}};
+      if (chapter_.started())
+        sections.push_back(Value::object({{"name", Value{std::string{chapter_section}}},
+                                          {"value", chapter_section_value(chapter_)}}));
       for (const auto &writer : section_writers) {
         if (!writer.write || !saved_section_registered(writer.name) ||
             !names.insert(writer.name).second)
@@ -2506,17 +2522,18 @@ void ContextStore::require_writable() const {
   if (read_only_)
     throw Error{ErrorCode::audit_unavailable};
 }
-void ContextStore::write_format_level(RawContextTrace &trace) {
-  // Written once, before the first frame an older format cannot read.
-  if (level_ >= format_level)
+void ContextStore::write_format_level(RawContextTrace &trace, std::uint64_t level) {
+  // Written before the first frame an older format cannot read: level 1 for cut and
+  // repair frames, 2 for a frame whose originals carry unit keys.
+  if (level_ >= level)
     return;
   const auto identity = log_.issue();
   auto publication = trace.publication();
   (void)log_.record(identity, ApplicationChannel::program,
                     Value::object({{"label", Value{"context-format-level"}},
-                                   {"level", Value{Number{format_level}}}}),
+                                   {"level", Value{Number{level}}}}),
                     &publication);
-  level_ = format_level;
+  level_ = level;
   history_stale_ = true;
 }
 const Value *ContextStore::restored_section(std::string_view name) const noexcept {
@@ -2589,6 +2606,13 @@ ContextStore::settle(const Value::Array &next, RawContextOrigin origin,
   return status;
 }
 Value ContextStore::cut(CutFrame frame, RawContextOrigin origin) {
+  // A hand-built frame applies to the current head and is measured here.
+  frame.base = head_;
+  frame.result.reset();
+  return cut(std::move(frame), log_.issue(), origin);
+}
+Value ContextStore::cut(CutFrame frame, const ApplicationRecordId &identity,
+                        RawContextOrigin origin) {
   const auto initial = raw_state();
   RawContextTrace trace{RawContextAction::cut, 1809, origin, &initial};
   return trace.run([&]() -> Value {
@@ -2596,14 +2620,27 @@ Value ContextStore::cut(CutFrame frame, RawContextOrigin origin) {
     // The frame and the next entries are built from values this call owns: a
     // maintenance checkpoint inside the record call may prune originals_ and
     // clear captured_ (design §4.3).
-    const auto identity = log_.issue();
+    if (!frame.revision.empty() && frame.revision != hex_identity(identity.bytes()))
+      throw Error{ErrorCode::invalid_range};
     frame.op = CutOp::cut;
     frame.accepted = true;
     frame.reason.clear();
     frame.revision = hex_identity(identity.bytes());
-    frame.base = head_;
+    // A composed frame carries the head it was composed against; after any other
+    // write its refs, anchors and reasoning rule are stale (B2).
+    if (frame.base != head_)
+      throw Error{ErrorCode::conflict};
     frame.observed = head_;
-    frame.result.reset();
+    // A chapter the frame starts must follow the current one; a writer that composed
+    // against another chapter raced another cut (B3).
+    std::optional<ChapterStep> chapter_next;
+    try {
+      chapter_next = chapter_step(chapter_, frame);
+    } catch (const Error &error) {
+      if (error.code != ErrorCode::corrupt)
+        throw;
+      throw Error{ErrorCode::conflict};
+    }
     std::map<std::string, Value> fresh;
     std::map<std::string, Original> originals;
     std::vector<Original> captured;
@@ -2617,8 +2654,11 @@ Value ContextStore::cut(CutFrame frame, RawContextOrigin origin) {
       captured.emplace_back(entry, identity);
       fresh.emplace(id, std::move(entry));
     }
+    // A composed frame brings its result (count and CRC32C checked by apply, bytes
+    // counted by the composer from its one sizing pass); a hand-built one is measured.
     auto next = apply_cut(frame, entries_, fresh, trace.fresh());
-    frame.result = measure_entries(next, true);
+    if (!frame.result)
+      frame.result = measure_entries(next, true);
     const auto packet = recordable(frame);
     auto status = settle(next, trace.fresh(), &fresh);
     ClassMap made;
@@ -2628,7 +2668,12 @@ Value ContextStore::cut(CutFrame frame, RawContextOrigin origin) {
       trace.protection([&](const RawEventRef &request) {
         protect(next, pending_proposal(trace.child()), request);
       });
-    write_format_level(trace);
+    // Level 2 before the first frame an S1/S2 binary would misread: a chapter (it
+    // would drop the chapter table) or unit keys (B1).
+    const bool keyed =
+        std::any_of(frame.originals.begin(), frame.originals.end(),
+                    [](const CutOriginal &o) { return o.unit.has_value(); });
+    write_format_level(trace, keyed || chapter_next ? 2 : 1);
     auto publication = trace.publication();
     const auto reference =
         log_.record(identity, ApplicationChannel::context, packet, &publication);
@@ -2641,6 +2686,10 @@ Value ContextStore::cut(CutFrame frame, RawContextOrigin origin) {
       original.record = reference;
     originals_.merge(originals);
     classes_.merge(made);
+    if (chapter_next) {
+      chapter_.table.push_back(std::move(chapter_next->row));
+      chapter_.binding = std::move(chapter_next->binding);
+    }
     entries_.swap(next);
     differing_.swap(status);
     head_ = frame.revision;
@@ -2716,7 +2765,7 @@ Value ContextStore::repair(const Value::Array &picks, RawContextOrigin origin) {
       if (found == skipped_originals_.end())
         throw Error{ErrorCode::invalid_identity};
       const auto index = static_cast<std::uint32_t>(frame.originals.size());
-      frame.originals.push_back({field(*found, "item"), 0});
+      frame.originals.push_back({field(*found, "item"), 0, std::nullopt});
       frame.insert.push_back({anchor, index});
       const auto id = frame.revision + "." + std::to_string(index);
       auto entry = Value::object({{"id", Value{id}}, {"item", field(*found, "item")}});
@@ -2738,7 +2787,7 @@ Value ContextStore::repair(const Value::Array &picks, RawContextOrigin origin) {
     ClassMap made;
     made.set(identity.bytes(), derive_classes(packet));
     reserve_append(captured_, captured.size());
-    write_format_level(trace);
+    write_format_level(trace, 1);
     auto publication = trace.publication();
     const auto reference =
         log_.record(identity, ApplicationChannel::context, packet, &publication);

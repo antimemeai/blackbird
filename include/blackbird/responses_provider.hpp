@@ -1,6 +1,7 @@
 #pragma once
 #include "blackbird/coding.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/turn_state.hpp"
 namespace blackbird {
 struct RegisteredResponsesConfig {
   std::string provider;
@@ -31,6 +32,10 @@ private:
   bool group_ = false, responding_ = false;
 };
 Value export_registered_responses_request(Value request, bool portable);
+// The provider-visible messages of a Responses input (design §7.1): one per item, in
+// order, as every Responses export (export_provider_request, the registered and
+// portable routes) sends them; portable routes send developer items as system.
+std::vector<RenderedMessage> responses_render(const Value::Array &input, bool portable);
 Result<Value>
 registered_responses_completed_response(std::string_view stream,
                                         const RawAdapterContext *context = nullptr);

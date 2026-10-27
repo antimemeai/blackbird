@@ -1,4 +1,5 @@
 #include "blackbird/saved_context.hpp"
+#include "blackbird/context_compose.hpp"
 #include "blackbird/context_cut.hpp"
 #include "blackbird/context_units.hpp"
 #include <map>
@@ -15,9 +16,11 @@ struct Registry {
 // S3a chapter, S3b pending, E1 review), so every reader of a snapshot (the loader
 // included, in any binary) knows them.
 Registry &registry() {
-  static Registry instance{{},
-                           {{std::string{classes_section},
-                             SavedSectionValidator{validate_classes_section}}}};
+  static Registry instance{
+      {},
+      {{std::string{classes_section}, SavedSectionValidator{validate_classes_section}},
+       {std::string{chapter_section},
+        SavedSectionValidator{validate_chapter_section}}}};
   return instance;
 }
 Result<void> fault(SavedContextFault which) {

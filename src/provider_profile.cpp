@@ -2,6 +2,7 @@
 // (CONTEXT_LIFECYCLE §15.2-§15.4). The schema is one declarative table; validation,
 // basis normalization, merge, projection and the missing-basis report all walk it.
 #include "blackbird/provider_profile.hpp"
+#include "blackbird/packet.hpp"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -1446,6 +1447,21 @@ std::string binding_digest(const ProfileQuery &query) {
                                     {"protocol", Value{query.protocol}},
                                     {"base_url", Value{query.base_url}},
                                     {"account_kind", Value{query.account_kind}}}));
+}
+
+std::string tools_digest(const Value &tools) {
+  // The exact native encoding, key order included: the provider reads the tools as
+  // sent, so a reordered definition is a different prefix.
+  auto bytes = std::string{"blackbird.chapter-tools/1\n"};
+  auto encoded = encode_packet_string(tools);
+  if (!encoded.has_value())
+    throw encoded.error();
+  bytes += encoded.value();
+  return "sha256:" + sha256_hex(bytes);
+}
+std::string instructions_digest(std::string_view instructions) {
+  return "sha256:" +
+         sha256_hex("blackbird.chapter-instructions/1\n" + std::string{instructions});
 }
 
 ProfileResult<ProfileSet> load_profile_set(const ProfileDirectories &directories) {

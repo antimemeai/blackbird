@@ -285,69 +285,34 @@ private:
   bool started_ = false, stopped_ = false, open_ = false, delta_ = false,
        input_delta_ = false;
 };
-} // namespace
-void validate_anthropic_route(std::string_view model, std::string_view effort) {
-  if (model.empty() || model.size() > 256)
-    throw Error{ErrorCode::invalid_range};
-  if (effort != "low" && effort != "medium" && effort != "high" && effort != "xhigh" &&
-      effort != "max")
-    throw Error{ErrorCode::unsupported};
-  if ((effort == "xhigh" && (model.starts_with("claude-sonnet-4-6") ||
-                             model.starts_with("claude-opus-4-6"))) ||
-      ((effort == "xhigh" || effort == "max") && model.starts_with("claude-opus-4-5")))
-    throw Error{ErrorCode::unsupported};
-}
-Value export_anthropic_request(const Value &request, std::uint64_t max_tokens,
-                               bool oauth) {
-  for (const auto &[key, value] : request.object()) {
-    (void)value;
-    if (key != "model" && key != "instructions" && key != "input" && key != "tools" &&
-        key != "reasoning" && key != "include" && key != "store" && key != "stream" &&
-        key != "parallel_tool_calls" && key != "max_output_tokens" &&
-        key != "previous_response_id" && key != "temperature" && key != "top_p" &&
-        key != "stop" && key != "tool_choice")
-      throw Error{ErrorCode::unsupported};
-  }
-  if (field(request, "store") != Value{false} ||
-      field(request, "stream") != Value{true} ||
-      (request.find("previous_response_id") &&
-       field(request, "previous_response_id") != Value{}))
-    throw Error{ErrorCode::unsupported};
-  if (const auto *configured = request.find("max_output_tokens"))
-    max_tokens = natural(*configured);
-  if (max_tokens == 0)
-    throw Error{ErrorCode::invalid_range};
-  const auto &model = string_field(request, "model");
-  const auto &effort = string_field(field(request, "reasoning"), "effort");
-  validate_anthropic_route(model, effort);
-  for (const auto &[key, value] : field(request, "reasoning").object()) {
-    (void)value;
-    if (key != "effort")
-      throw Error{ErrorCode::unsupported};
-  }
-  if (const auto *included = request.find("include"))
-    for (const auto &part : included->array())
-      if (part != Value{"reasoning.encrypted_content"})
-        throw Error{ErrorCode::unsupported};
-  Value::Array tools;
-  for (const auto &tool : field(request, "tools").array()) {
-    if (string_field(tool, "type") != "function")
-      throw Error{ErrorCode::unsupported};
-    auto native = Value::object(
-        {{"name", field(tool, "name")}, {"input_schema", field(tool, "parameters")}});
-    if (const auto *description = tool.find("description"))
-      native.object().emplace_back("description", *description);
-    if (const auto *strict = tool.find("strict"))
-      native.object().emplace_back("strict", *strict);
-    tools.push_back(std::move(native));
-  }
+// The Messages rendering of input items: consecutive user-role blocks (tool results,
+// user text, developer and system items as user text) merge into one user message;
+// a new message starts when the role or the assistant group changes. The export and
+// the wire-level turn state (anthropic_render) share it.
+Value::Array render_messages(const Value::Array &input,
+                             std::vector<RenderedMessage> *shape) {
   Value::Array messages;
   std::string last_group;
+  std::size_t position = 0;
   auto append = [&](std::string_view role, Value block, const std::string &group) {
     if (messages.empty() || string_field(messages.back(), "role") != role ||
         (role == "assistant" && last_group != group)) {
       messages.push_back(Value::object(
           {{"role", Value{std::string{role}}}, {"content", Value{Value::Array{}}}}));
+      if (shape) {
+        RenderedMessage rendered;
+        rendered.role = role == "assistant" ? RenderedMessage::Role::assistant
+                                            : RenderedMessage::Role::user;
+        shape->push_back(std::move(rendered));
+      }
+    }
+    if (shape) {
+      auto &rendered = shape->back();
+      rendered.positions.push_back(position);
+      const auto &kind = string_field(block, "type");
+      rendered.calls = rendered.calls || kind == "tool_use";
+      rendered.results = rendered.results || kind == "tool_result";
+      rendered.text = rendered.text || kind == "text";
     }
     for (auto &[key, value] : messages.back().object())
       if (key == "content") {
@@ -358,7 +323,7 @@ Value export_anthropic_request(const Value &request, std::uint64_t max_tokens,
   };
   std::set<std::string> seen, pending;
   bool results_started = false;
-  for (const auto &item : field(request, "input").array()) {
+  for (const auto &item : input) {
     const auto type = optional_text(item, "type");
     const auto group = optional_text(item, "anthropic_message_id");
     if (const auto *native = item.find("anthropic_content")) {
@@ -446,14 +411,77 @@ Value export_anthropic_request(const Value &request, std::uint64_t max_tokens,
       }
     } else
       throw Error{ErrorCode::unsupported};
+    ++position;
   }
   if (!pending.empty() || messages.empty() ||
       string_field(messages.front(), "role") != "user")
     throw Error{ErrorCode::conflict};
-  std::string instructions = string_field(request, "instructions");
+  return messages;
+}
+} // namespace
+std::string anthropic_system_text(std::string_view instructions, bool oauth) {
   if (oauth)
-    instructions =
-        "You are Claude Code, Anthropic's official CLI for Claude.\n" + instructions;
+    return "You are Claude Code, Anthropic's official CLI for Claude.\n" +
+           std::string{instructions};
+  return std::string{instructions};
+}
+void validate_anthropic_route(std::string_view model, std::string_view effort) {
+  if (model.empty() || model.size() > 256)
+    throw Error{ErrorCode::invalid_range};
+  if (effort != "low" && effort != "medium" && effort != "high" && effort != "xhigh" &&
+      effort != "max")
+    throw Error{ErrorCode::unsupported};
+  if ((effort == "xhigh" && (model.starts_with("claude-sonnet-4-6") ||
+                             model.starts_with("claude-opus-4-6"))) ||
+      ((effort == "xhigh" || effort == "max") && model.starts_with("claude-opus-4-5")))
+    throw Error{ErrorCode::unsupported};
+}
+Value export_anthropic_request(const Value &request, std::uint64_t max_tokens,
+                               bool oauth) {
+  for (const auto &[key, value] : request.object()) {
+    (void)value;
+    if (key != "model" && key != "instructions" && key != "input" && key != "tools" &&
+        key != "reasoning" && key != "include" && key != "store" && key != "stream" &&
+        key != "parallel_tool_calls" && key != "max_output_tokens" &&
+        key != "previous_response_id" && key != "temperature" && key != "top_p" &&
+        key != "stop" && key != "tool_choice")
+      throw Error{ErrorCode::unsupported};
+  }
+  if (field(request, "store") != Value{false} ||
+      field(request, "stream") != Value{true} ||
+      (request.find("previous_response_id") &&
+       field(request, "previous_response_id") != Value{}))
+    throw Error{ErrorCode::unsupported};
+  if (const auto *configured = request.find("max_output_tokens"))
+    max_tokens = natural(*configured);
+  if (max_tokens == 0)
+    throw Error{ErrorCode::invalid_range};
+  const auto &model = string_field(request, "model");
+  const auto &effort = string_field(field(request, "reasoning"), "effort");
+  validate_anthropic_route(model, effort);
+  for (const auto &[key, value] : field(request, "reasoning").object()) {
+    (void)value;
+    if (key != "effort")
+      throw Error{ErrorCode::unsupported};
+  }
+  if (const auto *included = request.find("include"))
+    for (const auto &part : included->array())
+      if (part != Value{"reasoning.encrypted_content"})
+        throw Error{ErrorCode::unsupported};
+  Value::Array tools;
+  for (const auto &tool : field(request, "tools").array()) {
+    if (string_field(tool, "type") != "function")
+      throw Error{ErrorCode::unsupported};
+    auto native = Value::object(
+        {{"name", field(tool, "name")}, {"input_schema", field(tool, "parameters")}});
+    if (const auto *description = tool.find("description"))
+      native.object().emplace_back("description", *description);
+    if (const auto *strict = tool.find("strict"))
+      native.object().emplace_back("strict", *strict);
+    tools.push_back(std::move(native));
+  }
+  auto messages = render_messages(field(request, "input").array(), nullptr);
+  auto instructions = anthropic_system_text(string_field(request, "instructions"), oauth);
   auto result = Value::object(
       {{"model", Value{model}},
        {"system", Value{std::move(instructions)}},
@@ -509,6 +537,11 @@ Value export_anthropic_request(const Value &request, std::uint64_t max_tokens,
     put(result, "output_config", Value::object({{"effort", Value{effort}}}));
   }
   return result;
+}
+std::vector<RenderedMessage> anthropic_render(const Value::Array &input) {
+  std::vector<RenderedMessage> shape;
+  (void)render_messages(input, &shape);
+  return shape;
 }
 Result<Value> anthropic_completed_response(std::string_view stream, ValueLimits limits,
                                            const RawAdapterContext *context) {

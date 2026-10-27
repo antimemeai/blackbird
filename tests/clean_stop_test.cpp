@@ -1447,9 +1447,10 @@ void format_level_case() {
       [](AuditLog &log, const ContextStore &) {
         check(!unwrap(log.root().unresolved_attempts()).empty(),
               "format level: the fixture leaves an unresolved attempt");
-        log.record(ApplicationChannel::program,
-                   Value::object({{"label", Value{"context-format-level"}},
-                                  {"level", Value{Number{std::uint64_t{2}}}}}));
+        log.record(
+            ApplicationChannel::program,
+            Value::object({{"label", Value{"context-format-level"}},
+                           {"level", Value{Number{ContextStore::format_level + 1}}}}));
       },
       true);
   const auto before = session_files(session);

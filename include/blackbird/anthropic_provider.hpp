@@ -1,6 +1,7 @@
 #pragma once
 #include "blackbird/coding.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/turn_state.hpp"
 namespace blackbird {
 struct AnthropicConfig {
   ProviderAuthConfig auth;
@@ -32,6 +33,14 @@ private:
 Value export_anthropic_request(const Value &request, std::uint64_t max_tokens = 16384,
                                bool oauth = false);
 void validate_anthropic_route(std::string_view model, std::string_view effort);
+// The top-level `system` text the export sends: the request's instructions, after the
+// OAuth identity line on an OAuth account. The chapter binding's instructions_digest
+// covers this text, so an API-key/OAuth switch is a prefix change (design §4.1).
+std::string anthropic_system_text(std::string_view instructions, bool oauth);
+// The provider-visible messages the export renders from input items, with the input
+// position of every block (design §7.1). Throws as the export does for input it
+// refuses.
+std::vector<RenderedMessage> anthropic_render(const Value::Array &input);
 Result<Value> anthropic_completed_response(std::string_view stream,
                                            ValueLimits limits = {},
                                            const RawAdapterContext *context = nullptr);

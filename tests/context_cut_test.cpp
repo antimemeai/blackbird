@@ -835,9 +835,10 @@ void format_level(const fs::path &base) {
   check(level_records() == 1, "the level record precedes the first cut frame");
   (void)session.context->cut(frame);
   check(level_records() == 1, "the level is written once");
-  session.log->record(ApplicationChannel::program,
-                      Value::object({{"label", Value{"context-format-level"}},
-                                     {"level", Value{Number{std::uint64_t{2}}}}}));
+  session.log->record(
+      ApplicationChannel::program,
+      Value::object({{"label", Value{"context-format-level"}},
+                     {"level", Value{Number{ContextStore::format_level + 1}}}}));
   bool unsupported = false;
   try {
     ContextStore newer{*session.log, ContextOpen{.probe = true}};

@@ -58,6 +58,11 @@ struct CutReplace {
 struct CutOriginal {
   Value item;
   std::uint8_t entry_class = 0; // S2 gives the byte its meaning
+  // The unit key: the ordinal of the first original of this entry's unit, written
+  // only where it differs from the default grouping (round originals share the
+  // first round ordinal; every other original is its own unit). It is at most the
+  // entry's own ordinal. A frame carrying one needs context-format-level 2.
+  std::optional<std::uint32_t> unit = std::nullopt;
 };
 // Entry count and CRC32C over the ordered refs are the playback check;
 // encoded_bytes is recorded only.

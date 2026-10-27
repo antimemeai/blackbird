@@ -1,4 +1,5 @@
 #pragma once
+#include "blackbird/context_compose.hpp"
 #include "blackbird/context_cut.hpp"
 #include "blackbird/context_units.hpp"
 #include "blackbird/packet.hpp"
@@ -124,8 +125,9 @@ struct ContextOpen {
 class ContextStore {
 public:
   // The highest context-format-level this binary reads and writes. Level 1: cut
-  // and repair frames.
-  static constexpr std::uint64_t format_level = 1;
+  // and repair frames. Level 2: cut frames that start a chapter or carry unit keys
+  // (S3a).
+  static constexpr std::uint64_t format_level = 2;
   // Error{unsupported} details from the open: the session's level is higher than
   // format_level, or whole-history playback exceeds ContextOpen's bound.
   static constexpr std::int64_t level_refused = 1, whole_history_refused = 2;
@@ -166,6 +168,13 @@ public:
   // measures the result and records it. Staging and settlement come with S3b; S1
   // has no production caller.
   Value cut(CutFrame frame, RawContextOrigin origin = {});
+  // The same, recorded under an identity the caller issued (AuditLog::issue) before
+  // composing, so the handles a composed note names are the recorded ones.
+  Value cut(CutFrame frame, const ApplicationRecordId &identity,
+            RawContextOrigin origin = {});
+  // The current chapter and the chapter table (design §3, §4.4), from the cut
+  // frames applied, saved as the snapshot section `chapter`.
+  const ChapterState &chapter() const noexcept { return chapter_; }
   // The value a registered snapshot section held at open, or null.
   const Value *restored_section(std::string_view name) const noexcept;
   // Snapshot section writers, one per owning unit; each name must be registered.
@@ -254,7 +263,7 @@ private:
                          const std::map<std::string, Value> &fresh,
                          RawContextOrigin origin) const;
   void require_writable() const;
-  void write_format_level(RawContextTrace &trace);
+  void write_format_level(RawContextTrace &trace, std::uint64_t level);
   static Value recordable(const CutFrame &frame);
   ContextOpen open_;
   ContextOpenReport report_;
@@ -330,6 +339,7 @@ private:
   // playback from the record, restored from the classes section, derived on demand
   // by identity lookup for a record the map does not hold.
   mutable ClassMap classes_;
+  ChapterState chapter_;
   std::set<ContextRef> pins_;
   // The creating record, decoded for its class fields (op, origin, class,
   // originals, lineage): from a held packet, else by identity lookup. Empty when it

@@ -51,6 +51,52 @@ Value export_registered_responses_request(Value request, bool portable) {
   }
   return export_provider_request(std::move(request));
 }
+std::vector<RenderedMessage> responses_render(const Value::Array &input,
+                                              bool portable) {
+  // Every Responses export sends the items as they are, one input item each, never
+  // merged or reordered; a portable route sends developer items as system.
+  std::vector<RenderedMessage> out;
+  out.reserve(input.size());
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    const auto &item = input[i];
+    const auto *type = item.find("type");
+    const auto *kind = type ? std::get_if<std::string>(&type->value()) : nullptr;
+    RenderedMessage message;
+    message.positions.push_back(i);
+    if (kind && *kind == "function_call") {
+      message.role = RenderedMessage::Role::assistant;
+      message.calls = true;
+    } else if (kind && *kind == "function_call_output") {
+      message.role = RenderedMessage::Role::tool;
+      message.results = true;
+    } else if (kind && *kind == "reasoning") {
+      message.role = RenderedMessage::Role::reasoning;
+    } else if (!kind || *kind == "message") {
+      const auto &role = string_field(item, "role");
+      if (role == "user")
+        message.role = RenderedMessage::Role::user;
+      else if (role == "assistant")
+        message.role = RenderedMessage::Role::assistant;
+      else if (role == "system" || (role == "developer" && portable))
+        message.role = RenderedMessage::Role::system;
+      else if (role == "developer")
+        message.role = RenderedMessage::Role::developer;
+      else
+        throw Error{ErrorCode::unsupported};
+      const auto &content = field(item, "content");
+      if (std::holds_alternative<std::string>(content.value()))
+        message.text = true;
+      else
+        for (const auto &part : content.array())
+          if (const auto *t = part.find("type");
+              t && (*t == Value{"input_text"} || *t == Value{"output_text"}))
+            message.text = true;
+    } else
+      throw Error{ErrorCode::unsupported};
+    out.push_back(std::move(message));
+  }
+  return out;
+}
 Result<Value>
 registered_responses_completed_response(std::string_view stream,
                                         const RawAdapterContext *context) {

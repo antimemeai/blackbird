@@ -248,6 +248,7 @@ RecordClasses derive_classes(const Value &packet) {
     return classes_of({UnitClass::summary}, items);
   if (*op == "cut" || *op == "repair") {
     std::vector<UnitClass> classes;
+    std::vector<std::optional<std::uint32_t>> named;
     for (const auto &original : originals->array()) {
       const auto *byte = original.find("class");
       const auto value = byte ? whole_number(*byte) : std::optional<std::uint64_t>{0};
@@ -255,8 +256,40 @@ RecordClasses derive_classes(const Value &packet) {
       if (!known)
         corrupt();
       classes.push_back(*known);
+      std::optional<std::uint32_t> key;
+      if (const auto *unit = original.find("unit")) {
+        const auto k = whole_number(*unit);
+        if (!k || *k > named.size())
+          corrupt();
+        key = static_cast<std::uint32_t>(*k);
+      }
+      named.push_back(key);
     }
-    return items.empty() ? RecordClasses{} : classes_of(std::move(classes), items);
+    if (items.empty())
+      return RecordClasses{};
+    if (std::none_of(named.begin(), named.end(), [](const auto &k) { return k; }))
+      return classes_of(std::move(classes), items);
+    // Unit keys (S3a): the default grouping, with each named key in its place. A
+    // key names the first original of its unit, so it must resolve to itself.
+    auto resolved = classes;
+    for (std::size_t i = 0; i < items.size(); ++i)
+      if (resolved[i] == UnitClass::by_role)
+        resolved[i] = role_class(*items[i]);
+    std::vector<std::uint32_t> keys;
+    std::optional<std::uint32_t> round;
+    for (std::uint32_t i = 0; i < items.size(); ++i) {
+      std::uint32_t key = i;
+      if (resolved[i] == UnitClass::round) {
+        if (!round)
+          round = i;
+        key = *round;
+      }
+      keys.push_back(named[i] ? *named[i] : key);
+    }
+    for (std::uint32_t i = 0; i < items.size(); ++i)
+      if (keys[keys[i]] != keys[i])
+        corrupt();
+    return classes_of(std::move(resolved), items, std::move(keys));
   }
   if (*op != "append")
     return {};

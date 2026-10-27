@@ -170,6 +170,13 @@ ProfileResult<RouteQuery> route_query(const Value &binding, std::string_view mod
 // "sha256:" + hex over the query's non-secret route fields: provider, protocol,
 // base_url (normalized when it can be) and account_kind. Never the account or model.
 std::string binding_digest(const ProfileQuery &query);
+// The chapter binding's prefix digests (design §6.4): "sha256:" + hex over the exact
+// native encoding of the tools a request sends, and over the system text the codec
+// actually sends (for Anthropic, anthropic_system_text, the OAuth line included; for
+// Responses, the instructions as sent). A request whose digests differ from its
+// chapter's needs a prefix cut.
+std::string tools_digest(const Value &tools);
+std::string instructions_digest(std::string_view instructions);
 // resolve_profile, or the conservative profile for a fallback route.
 ProfileResult<EffectiveProfile> resolve_route(const ProfileSet &set,
                                               const RouteQuery &route,
