@@ -9,6 +9,17 @@ reviving Dolt, replacing the operator's runtime, or an implicit merge to master.
 
 ## Current phase — T1 send/correct/stop source implementation, October 27
 
+Update 01:56 EDT: initial chat-t1-01 returned INCOMPLETE after preparation, no
+product edits or concrete external blocker. Exact remote c5048d2 is JOURNAL only.
+Retained initial Release/tool provisioning and three actual-main PTY REDs (active
+ESC, palette ESC, Ctrl-C queue loss) are not repaired behavior or a source gate.
+Explicit successor chat-t1-02 now continues the same original T1 scope and unused
+two-layer source allowance in the same slot/branch from c5048d2. Reuse original
+evidence; no repeated preparation, new budget or automatic T2. Explicit native
+OpenAI/Sol/medium/uncapped settings and actual source-reading activity verified;
+terminal proc_06d04430b8bc, initial supervisor95447. Current map is OVERSIGHT.md.
+
+
 Holistic chat design and delivery plan accepted at
 `e99a4fdb4918a7421286bfc44fc2600b4e84718f` on
 `work/autodev-chat-design-2026-10-27`; exact remote readback matches. Inspect

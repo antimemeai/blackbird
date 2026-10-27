@@ -11915,3 +11915,26 @@ Validation is archive readback, branch identity, worktree registration and text
 diff checking; product code was unchanged. The current `bd backup` command prints
 subcommand help rather than performing the legacy backup. Existing issue storage
 and backups remain intact, with no migration attempted.
+
+
+### 2026-10-27 — T1 initial owner returned incomplete; explicit source successor
+
+Initial chat-t1-01 returned normally at01:54:11 EDT without a product change or
+concrete external/source-gate blocker. Independently verify exact local/remote
+c5048d28b0d9045ef732f7a35617d7fdd0e29e37, JOURNAL-only delta and clean checkout.
+Its initial Release build/tool provisioning and actual-main PTY REDs establish
+active ESC, palette ESC and Ctrl-C queue-loss regressions, not T1 delivery.
+All old audit/results/captures remain retained; no GREEN, source review, source
+gate or performance comparison completed. Do not treat exit0 as acceptance.
+
+Acquire atomic controller claim, recheck exact clean checkout/absent predecessor
+owners, preserve original session and issue explicit chat-t1-02 successor in same
+bounded slot/branch. Continue original T1 scope/subplan/two source layers without
+reset, new timer or T2. Reuse retained initial source/binary/REDs; proceed with
+implementation rather than another preparation-only return. Fresh explicit
+OpenAI/Sol/medium/uncapped session, pinned generation unchanged. Terminal
+proc_06d04430b8bc, supervisor95447/native95460 family; actual commands/settings
+and source-reading activity independently observed. Cron has no async completion
+notifications; scheduled reads remain required. No unknown queued effects replay,
+sibling merge, primary-user-file edits, issue-store writes, install or activation.
+Publish checked text-only coordination update under own matching claim.
