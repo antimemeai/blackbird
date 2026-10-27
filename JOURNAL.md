@@ -11911,3 +11911,23 @@ nonexistent installed tooling. Source debug/lint/direct/Linux gates belong only 
 later commissioned units through shared build slot. No source checks run here.
 Next: ONE final focused design-findings recheck + consequential plan review/fixes;
 no authority to commission third review after that.
+
+SECOND/FINAL native review completed (single --once, explicit provider/model/
+effort, private final-session). Original answer and request hash/provenance
+retained. It resolved the six original findings on supplied prose, identified
+T1/T5 shared stop-fence scheduling gap and missing fault-specific provider
+wait/retry/partial-stream stop oracles. Both valid and fixed within final layer:
+shared native dispatch fence holds accepted queued definition ops, exact-ID
+release separate from chat, ordinary failure vs Stop and both winning orders;
+provider stop/retry ordering plus safe response-wait/retry-wait/partial-stream
+fixtures, retained attempts/originals and honest remote unknown. Directly read
+existing coding retry loop4485ff/4662ff and registered response cancellation
+125ff to ground exact owners, not to claim qualification. No source changes.
+
+Review allowance now CLOSED; no third review or certifying recheck. Final
+original BLOCKED-pending-two-document-fixes wording preserved, not changed to
+reviewer approval. Owner fixed specified document blockers; COMPLETE documentation
+handoff subject to orchestrator acceptance, with product design inactive until
+commissioned implementation. Native reviewer processes settled, exit0 only
+process/result fact, not quality certification. Final text checks/publication
+next; no implementation after publication.

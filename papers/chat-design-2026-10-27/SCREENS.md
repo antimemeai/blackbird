@@ -159,7 +159,7 @@ Effective registry rev g8 · t22-owned pending candidate g9
 Interrupt does not activate a canceled proposal.
 ```
 
-If t22 activates g9 first, u5 refuses its stale g8 base; b17 is preserved for explicit rebase. If t22 fails, queued u5 remains independent. Once dispatched, u5 stages its own candidate g10 and only its own successful boundary can activate it. Tool-definition operations use their corresponding guarded registry and independent workflow. A successful eligible boundary changes effective revision; next turn's retained source establishes what actually governed it. General Apply-now is not offered. Running executable and selected managed generation appear separately in Session detail; build-source unknown remains unknown.
+If t22 activates g9 first, u5 refuses its stale g8 base; b17 is preserved for explicit rebase. If t22 fails without Stop, queued u5 remains independent/eligible. If Stop was admitted first, it is held by the shared dispatch fence, not canceled or staged; release is explicit and per-operation. Once dispatched, u5 stages its own candidate g10 and only its own successful boundary can activate it. Tool-definition operations use their corresponding guarded registry and independent workflow. A successful eligible boundary changes effective revision; next turn's retained source establishes what actually governed it. General Apply-now is not offered. Running executable and selected managed generation appear separately in Session detail; build-source unknown remains unknown.
 
 ```text
 CONTEXT / effective c18 · change from c17 applied
@@ -244,3 +244,33 @@ Keyboard focus remains p4 · refresh pending · main draft retained
 
 No hit test against a new row reinterprets the old coordinate. A coherent emitted
 frame is not proof of physical paint; exact owner validation still applies.
+
+**Instrument operation held by Stop (C3/C8):**
+
+```text
+MAIN t22 interrupted locally · queue fence closed
+INSTRUMENT / buffer b17, base g8
+u5 accepted · HELD BY STOP · not staged
+[Release operation u5] [Withdraw u5 to edit] [Original proposal]
+Chat m41 held separately · releasing m41 does not release u5
+```
+
+Release u5 authorizes only u5 and its own workflow boundary; ordinary t22 failure
+without Stop would not impose this hold. If u5 dispatch committed first, the strip
+instead says `u5 workflow active; Stop requested u5 · t22 already settled`.
+No remembered t22 target substitutes for the actual current workflow. A new
+explicit submission after Stop is authority for that new operation only.
+
+**Provider partial-stream stop (C3):**
+
+```text
+MAIN t33 · Stop requested · provider q8 / attempt a2
+Partial preview retained [Original a2]
+Retry a3 not dispatched (stop admitted first)
+Local transport returned interrupted · remote stop UNKNOWN
+Next turns / definition operations held · draft preserved
+```
+
+Only owner-supported attempt/return facts can render these lines. Reverse the
+winning order: `a3 dispatched before stop; local cancellation requested; remote
+unknown`. A readable fixture screen doesn't establish a remote provider stopped.
