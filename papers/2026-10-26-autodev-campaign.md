@@ -7,7 +7,23 @@ review, source grounding, work-branch commits/pushes and subsequent unit dispatc
 It does not authorize secret changes, dependency adoption, mutation on the laptop,
 reviving Dolt, replacing the operator's runtime, or an implicit merge to master.
 
-## Current phase — T1 send/correct/stop source implementation, October 27
+## Current phase — T1 BLOCKED; source candidate inactive, October 27
+
+At04:10:22 EDT chat-t1-02 returned its final blocked handoff. Implementation and
+local direct checks exist, but Linux Debug33/36, unanswered final focused review
+(provider overload/native unknown), and incomplete new T1 performance episodes
+prevent acceptance. Both original layers are consumed; no automatic continuation,
+T2, source commit/push, installation or activation. macOS Debug268/268 and owned
+lint remain settled, not whole-unit qualification. Exact local/remote remains
+c5048d28b0d9045ef732f7a35617d7fdd0e29e37, source uncommitted. Independently checked
+all30 final file hashes, tar members, and reverse patch applicability against the
+unchanged working candidate. Recovery source/handoffs are additionally preserved
+outside projects at ~/archives/blackbird-autodev-blocked-2026-10-27/chat-t1-02.
+All authorized lanes now need operator direction; oversight job2dc91a5ccf63 is
+being paused, without commissioning another assurance layer. Current disposition
+and original evidence locators remain in ROOT/OVERSIGHT.md and chat-t1-02/HANDOFF.md.
+
+## Historical phase — T1 send/correct/stop source implementation, October 27
 
 Update 01:56 EDT: initial chat-t1-01 returned INCOMPLETE after preparation, no
 product edits or concrete external blocker. Exact remote c5048d2 is JOURNAL only.

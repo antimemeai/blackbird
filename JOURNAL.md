@@ -11917,6 +11917,27 @@ subcommand help rather than performing the legacy backup. Existing issue storage
 and backups remain intact, with no migration attempted.
 
 
+### 2026-10-27 — T1 final return blocked; preserve inactive candidate
+
+At04:10:22 EDT chat-t1-02 returned normally with a BLOCKED handoff, not qualified
+source. Independently inspect actual supervisor/result/handoff, absent matching
+workers, exact local and remote c5048d28b0d9045ef732f7a35617d7fdd0e29e37, uncommitted
+candidate and empty staged diff. Linux Debug33/36, unanswered final focused review
+(provider overload/native external_unknown), and incomplete new T1 performance
+round remain blockers. macOS Debug268/268 and full owned lint stay settled.
+Original two layers consumed; no successor, third review, T2, merge or activation.
+
+Under own atomic controller claim, match all30 final inventory hashes against
+working files and tar members. Copy complete patch/inventory/tar and final
+handoffs/dispositions to ~/archives/blackbird-autodev-blocked-2026-10-27/chat-t1-02;
+read back bytes and successfully reverse-check complete patch against unchanged
+working source without applying it. Preserve original audits/results and parked
+composition; no source staging/reset or issue-store changes. Update authoritative
+map and campaign note. All authorized lanes now require Patrick's direction;
+pause existing oversight job2dc91a5ccf63, no new schedule. Text-only record checks
+only; no rerun of settled native diagnostics or source-hook bypass. Primary user
+backup/artwork/research/handoff files remain untouched.
+
 ### 2026-10-27 — T1 initial owner returned incomplete; explicit source successor
 
 Initial chat-t1-01 returned normally at01:54:11 EDT without a product change or
