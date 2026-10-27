@@ -4,7 +4,7 @@
 
 **Design artifacts, not working UI. No product implementation or runtime qualification in this unit.** Based on accepted study `d8dc2af667b2029345ee150ae94950995cfc06f0`. Publication, orchestrator acceptance, source implementation, master integration, installation and observed operator improvement are separate outcomes.
 
-Read [behavioral contracts](CONTRACTS.md), [readable storyboards](SCREENS.md), and [source/owner changes](OWNERS.md). The first consequential pressure test is retained in [original answer](REVIEW_REPORT.md), [request/provenance](REVIEW_REQUEST.md), and [disposition](REVIEW.md). Six actual findings were fixed before deriving the delivery plan. Review requests, original answers and dispositions will be retained here and in the ignored run. The accepted study's review is CLOSED; this new design unit has only two total layers.
+Read [behavioral contracts](CONTRACTS.md), [readable storyboards](SCREENS.md), and [source/owner changes](OWNERS.md). The first consequential pressure test is retained in [original answer](REVIEW_REPORT.md), [request/provenance](REVIEW_REQUEST.md), and [disposition](REVIEW.md). Six actual findings were fixed before deriving the [delivery plan](PLAN.md). The final focused recheck/plan review is pending; no approval claim. Review requests, original answers and dispositions will be retained here and in the ignored run. The accepted study's review is CLOSED; this new design unit has only two total layers.
 
 ## Selected model: a conversation with receipts and linked evidence
 

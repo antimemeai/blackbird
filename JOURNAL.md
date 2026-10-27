@@ -11895,3 +11895,19 @@ source/actual-use qualification remain limits. No extra review or source gate.
 Meaningful context selection removed completed large read groups with original
 recovery retained and an explicit source/limit continuation summary; no objective
 or live tool group removed. Next derive plan, then one FINAL layer only.
+
+After remediation checkpoint dafb417, derive delivery PLAN as whole episodes:
+T1 intention/correction/stop, T2 typed result/cause/original and authored flood,
+T3 reading/anchors/backpressure/layout, T4 delegated return/direction, T5
+independent definition transaction/context repair/reopen, T6 actual expert-task
+qualification and separate activation decision. Each has source owners/files,
+proposed contracts, old-behavior RED obligations (not claimed observed failures),
+semantic/physical/readable-screen oracles, task criteria and uncertainty recovery.
+T4 can proceed without T3/T5; useful earlier work does not wait for remote/provider
+or assistive-tech gaps. No parked sibling/continuity dependency. Matched per-tranche
+Release performance deltas retain all attempts and raw endpoints; inactive helper
+status explicit, later qualified observer/fresh baseline needed rather than claiming
+nonexistent installed tooling. Source debug/lint/direct/Linux gates belong only to
+later commissioned units through shared build slot. No source checks run here.
+Next: ONE final focused design-findings recheck + consequential plan review/fixes;
+no authority to commission third review after that.
