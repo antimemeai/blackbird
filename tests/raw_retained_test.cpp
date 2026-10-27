@@ -275,6 +275,22 @@ std::vector<Record> read_records(const Directory &directory,
             "actual per-lane issuer order has no hole");
   return records;
 }
+RawStorageLoanKind scope_kind(const std::vector<Record> &records, const Record &scope) {
+  require(scope.site == 3035, "actual physical scope record");
+  auto body = ByteView{scope.body};
+  const auto reference = take_ref(body);
+  const auto grant = std::find_if(records.begin(), records.end(), [&](const auto &r) {
+    return r.site == 3033 && r.lane == reference.lane && r.ordinal == reference.ordinal;
+  });
+  require(grant != records.end() && grant->lane == scope.lane &&
+              grant->ordinal < scope.ordinal,
+          "physical scope names its actual prior issuer grant");
+  body = ByteView{grant->body};
+  (void)take_ref(body);
+  if (take<bool>(body))
+    (void)take_ref(body);
+  return take<RawStorageLoanKind>(body);
+}
 struct NativeFrame {
   PhysicalJournalRecord physical;
   std::vector<std::byte> payload;
@@ -769,12 +785,18 @@ void canceled_context_loan() {
   lane.reset();
   runtime.reset();
   const auto records = read_records(directory);
-  require(std::count_if(records.begin(), records.end(),
-                        [](const auto &record) { return record.site == 3035; }) == 1,
+  const auto stop_scope = [&](const auto &record) {
+    if (record.site != 3035)
+      return false;
+    const auto kind = scope_kind(records, record);
+    require(kind == RawStorageLoanKind::journal_append ||
+                kind == RawStorageLoanKind::stop,
+            "only ordinary append funding precedes the actual stop scope");
+    return kind == RawStorageLoanKind::stop;
+  };
+  require(std::count_if(records.begin(), records.end(), stop_scope) == 1,
           "one actual physical stop scope, no invented second allowance");
-  const auto start =
-      std::find_if(records.begin(), records.end(),
-                   [](const auto &record) { return record.site == 3035; });
+  const auto start = std::find_if(records.begin(), records.end(), stop_scope);
   require(start != records.end(), "actual stop scope starts");
   const auto end = std::find_if(start, records.end(), [&](const auto &record) {
     if (record.site != 3037)
@@ -1012,8 +1034,14 @@ void generic_receipt_caller() {
   const auto records = read_records(directory);
   unsigned scopes = 0, receipts = 0;
   for (const auto &record : records) {
-    if (record.site == 3035)
-      ++scopes;
+    if (record.site == 3035) {
+      const auto kind = scope_kind(records, record);
+      require(kind == RawStorageLoanKind::journal_append ||
+                  kind == RawStorageLoanKind::adapter_receipt,
+              "only ordinary append funding and the actual receipt scope");
+      if (kind == RawStorageLoanKind::adapter_receipt)
+        ++scopes;
+    }
     if (record.site == 3033) {
       auto bytes = ByteView{record.body};
       (void)take_ref(bytes);

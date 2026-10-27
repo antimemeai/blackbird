@@ -1,6 +1,7 @@
 #include "blackbird/journal_writer.hpp"
 
 #include <algorithm>
+#include <cerrno>
 
 namespace blackbird {
 namespace {
@@ -347,11 +348,13 @@ Result<void> FramedJournal::write_exact(std::uint64_t offset, ByteView input) {
   if (!prepared.has_value())
     return prepared;
   std::size_t written = 0;
+  unsigned int interruptions = 0;
   while (written < input.size()) {
     const auto result = file_->write_at_continuing(
         offset + written, input.subspan(written), continuation);
     if (!result.has_value()) {
-      if (result.error().code == ErrorCode::interrupted) {
+      if (result.error() == Error{ErrorCode::interrupted, EINTR} &&
+          ++interruptions < 8) {
         continue;
       }
       return Result<void>::failure(result.error());
@@ -360,6 +363,7 @@ Result<void> FramedJournal::write_exact(std::uint64_t offset, ByteView input) {
       return Result<void>::failure({ErrorCode::io});
     }
     written += result.value();
+    interruptions = 0;
   }
   return Result<void>::success();
 }
@@ -448,6 +452,23 @@ Result<JournalCursor> FramedJournal::append(std::span<const JournalDraft> drafts
         return Result<JournalCursor>::failure(commit.error());
       }
       encoded.insert(encoded.end(), commit.value().begin(), commit.value().end());
+      // No cancellation-sensitive raw admission may split physical submission
+      // from its synchronization. Fund this batch before touching the file;
+      // enclosing stop/exec scopes already own their finite physical grant.
+      std::unique_ptr<RawStorageSettlementLoan> physical;
+      std::optional<RawStorageLoanScope> physical_scope;
+      auto *resource = file_->raw_storage_resource();
+      if (resource && !resource->has_settlement_loan()) {
+        auto funded = RawStorageSettlementLoan::prepare(
+            this, resource->owner(),
+            {RawStorageLoanKind::journal_append, encoded.size(), 1, 1, 0, 0, 0, 0},
+            trace.reference());
+        if (!funded.has_value())
+          return Result<JournalCursor>::failure(funded.error());
+        physical = std::move(funded).value();
+        physical_scope.emplace(*physical,
+                               RawStorageSelection{this, resource->owner(), file_, {}});
+      }
       const auto extent = file_->extent();
       if (!extent.has_value()) {
         state_ = JournalWriterState::blocked;
@@ -461,11 +482,15 @@ Result<JournalCursor> FramedJournal::append(std::span<const JournalDraft> drafts
       AppendAttempt attempt{state_};
       const auto written = write_exact(cursor_.end_offset, encoded);
       if (!written.has_value()) {
+        if (physical_scope)
+          physical_scope->error(written.error());
         state_ = JournalWriterState::poisoned;
         return Result<JournalCursor>::failure(written.error());
       }
       const auto synchronized = file_->synchronize(strength_);
       if (!synchronized.has_value()) {
+        if (physical_scope)
+          physical_scope->error(synchronized.error());
         state_ = JournalWriterState::poisoned;
         return Result<JournalCursor>::failure(synchronized.error());
       }

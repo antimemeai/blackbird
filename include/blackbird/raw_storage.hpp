@@ -50,7 +50,8 @@ enum class RawStorageLoanKind : std::uint8_t {
   joined_terminal = 2,
   selected_exec = 3,
   adapter_receipt = 4,
-  adapter_terminal = 5
+  adapter_terminal = 5,
+  journal_append = 6
 };
 struct RawStorageLoanBudget {
   RawStorageLoanKind kind = RawStorageLoanKind::stop;
@@ -171,6 +172,7 @@ public:
   void acquired_writer(bool success) noexcept;
   void release_writer() noexcept;
   void begin_write(std::size_t bytes, RawStorageWriteContinuation &continuation);
+  bool has_settlement_loan() const noexcept { return scope_ != nullptr; }
 
 private:
   friend class RawStorageAction;

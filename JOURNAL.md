@@ -12362,3 +12362,32 @@ declared call_id to the ultracode source, which became v4. A recorded v3 is now 
 **Review.** One review in two halves and one recheck in two halves. The notes are in
 `context/clm-rd7-notes/T1*.md`. Not done: an allocation-injection test for the shape parameter, since no
 armed state remains.
+
+## 2026-10-26 — journal SIGTERM settlement continuity (8zr)
+
+Ordinary native journal appends prepay physical extent/write/sync capture using the
+existing finite raw storage settlement loan. Cancellation before funding leaves a
+live untouched writer; after funding the batch finishes without clearing sticky
+cancellation. Native EINTR alone is retryable, with bounded consecutive retries;
+ordinary appends fund eight extra finite continuation calls. Failure/exhaustion
+poisons the uncertain tail and cannot publish a successful cursor. Existing outer
+stop/exec loans keep their limits, and retained suffixes reference original input.
+
+Baseline REDs, initial stop/restart GREENs, the one completed independent Sol
+review and the existing layer-2 native/provenance additions are documented in
+papers/2026-10-26-journal-stop-continuity.md and its linked review. The successor
+collected exit 0 for the unfinished native selector and journal batch suite, then
+Linux debug/ASan passed both owning suites. A transport-order test-oracle mistake
+was corrected using producer ordinals; failed logs remain preserved. The old
+64-step workflow stop was operational, not a source failure or qualification.
+No third review, sibling merge, old-session reopen, dependency adoption, runtime
+installation, or unrelated command-jobs repair. Final full source-hook, release
+build and normal push results are retained in continuity-followup-01/HANDOFF.md.
+
+The first full hook blocked publication: retained-storage scope-count oracles
+needed to distinguish ordinary append grants from actual stop/receipt grants;
+corrected tests link actual prior same-issuer grants and retain exact single
+stop/receipt bounds. Their failed hook RED and focused GREEN remain in successor
+logs. Provisioned the already-adopted pinned TUI driver and cleared inherited
+session launcher overrides only for qualification. The unchanged PTY command-jobs
+case also passed its focused disposition. No product repair outside this unit.

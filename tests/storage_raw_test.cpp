@@ -41,6 +41,9 @@
 using namespace blackbird;
 namespace {
 thread_local bool armed = false;
+thread_local int journal_cancel_writer = -1;
+thread_local bool journal_cancel_short = false;
+thread_local bool journal_cancel_eintr = false;
 thread_local bool reject_allocations = false;
 thread_local std::size_t refused_allocations = 0;
 thread_local dev_t selected_device{};
@@ -462,6 +465,20 @@ extern "C" ssize_t pwrite(int descriptor, const void *input, std::size_t count,
   if (!forward)
     std::abort();
 #endif
+  if (journal_cancel_writer >= 0 && selected_descriptor(descriptor)) {
+    const auto actual =
+        journal_cancel_eintr
+            ? ssize_t{-1}
+            : forward(descriptor, input,
+                      journal_cancel_short ? std::min(count, std::size_t{4}) : count,
+                      offset);
+    const int writer = std::exchange(journal_cancel_writer, -1);
+    const char wake = 'x';
+    require(::write(writer, &wake, 1) == 1, "latch cancellation at native write cut");
+    if (journal_cancel_eintr)
+      errno = EINTR;
+    return actual;
+  }
   if ((short_write || interrupt_write || capture_write) &&
       selected_descriptor(descriptor)) {
     ++observed_writes;
@@ -1760,6 +1777,138 @@ public:
 private:
   NativeJournalDirectory &directory_;
 };
+enum class JournalCut { full, partial, eintr, exhausted, before };
+void journal_cancelled_commit(JournalCut cut) {
+  Fixture fixture;
+  RawEventRef resource;
+  {
+    RawThreadBinding binding{fixture.primary};
+    auto owner = unwrap(RawProductStorageOwner::prepare());
+    auto directory = unwrap(NativeJournalDirectory::open(fixture.path, owner));
+    ForwardDirectory forwarding{directory};
+    const JournalHeader header{
+        identity<EnvironmentId>(120), identity<AuditStreamId>(12), 7, {4096, 8192}, {}};
+    auto journal = unwrap(FramedJournal::create(forwarding, "journal", header,
+                                                {65536, 16}, SyncStrength::data));
+    resource = forwarding.actual->raw_storage_resource()->reference();
+    struct stat status{};
+    require(
+        ::stat((std::filesystem::path{fixture.path} / "journal").c_str(), &status) == 0,
+        "select journal native inode");
+    selected_device = status.st_dev;
+    selected_inode = status.st_ino;
+    std::array<int, 2> cancellation{};
+    require(::pipe(cancellation.data()) == 0, "journal cancellation pipe");
+    const std::array original{std::byte{0}, std::byte{0xff}, std::byte{0x72}};
+    const std::array drafts{JournalDraft{FrameKind::semantic, original}};
+    const auto before = journal->cursor();
+    {
+      RawWaitScope wait{{{cancellation[0], -1}, {}}};
+      journal_cancel_short = cut == JournalCut::partial || cut == JournalCut::exhausted;
+      journal_cancel_eintr = cut == JournalCut::eintr;
+      short_write = cut == JournalCut::exhausted;
+      if (cut == JournalCut::before) {
+        const char wake = 'x';
+        require(::write(cancellation[1], &wake, 1) == 1, "cancel before batch funding");
+      } else
+        journal_cancel_writer = cancellation[1];
+      const auto accepted = journal->append(drafts);
+      journal_cancel_writer = -1;
+      journal_cancel_eintr = false;
+      short_write = false;
+      if (cut == JournalCut::before || cut == JournalCut::exhausted) {
+        require(!accepted.has_value() &&
+                    accepted.error().code == (cut == JournalCut::before
+                                                  ? ErrorCode::interrupted
+                                                  : ErrorCode::capacity) &&
+                    journal->cursor().sequence == before.sequence &&
+                    journal->cursor().end_offset == before.end_offset &&
+                    journal->physical_records().empty() &&
+                    journal->state() == (cut == JournalCut::before
+                                             ? JournalWriterState::live
+                                             : JournalWriterState::poisoned),
+                "refusal before funding is unchanged/live; exhausted writes are "
+                "uncertain/poisoned");
+      } else {
+        require(accepted.has_value(),
+                "funded batch finishes write AND sync after cancellation");
+        require(journal->state() == JournalWriterState::live &&
+                    accepted.value().sequence == before.sequence + 2,
+                "successful batch publishes exact cursor once");
+      }
+      const auto refused = raw_claim_control(1);
+      require(!refused.has_value() &&
+                  refused.error() == Error{ErrorCode::interrupted, ECANCELED},
+              "commit leaves sticky cancellation latched for enclosing stop");
+    }
+    require(::close(cancellation[0]) == 0 && ::close(cancellation[1]) == 0,
+            "close journal cancellation pipe");
+    if (cut == JournalCut::before)
+      require(unwrap(forwarding.actual->extent()) == before.end_offset,
+              "cancelled reservation never touches file bytes");
+    journal.reset();
+    forwarding.actual.reset();
+    auto reopened = unwrap(FramedJournal::open(directory, "journal", header,
+                                               {65536, 16}, SyncStrength::data));
+    if (cut == JournalCut::exhausted) {
+      require(reopened->recovery_report().available_end == before.end_offset + 36,
+              "nine short native writes preserve exactly the uncertain prefix");
+    }
+    if (cut == JournalCut::before || cut == JournalCut::exhausted) {
+      require(reopened->cursor().sequence == before.sequence &&
+                  reopened->physical_records().empty(),
+              "reopen does not invent a commit for refused/partial submission");
+    } else {
+      unwrap(reopened->confirm_recovery());
+      require(reopened->physical_records().size() == 1 &&
+                  reopened->cursor().sequence == before.sequence + 2 &&
+                  unwrap(reopened->read_payload(reopened->physical_records()[0])) ==
+                      std::vector<std::byte>(original.begin(), original.end()),
+              "reopen reads exactly one committed original after cancelled commit");
+    }
+  }
+  const auto rows = fixture.finish();
+  RawEventRef input;
+  unsigned copies = 0, references = 0;
+  std::size_t next = 0;
+  // DATA and CONTROL transport order is not native call order. Sort requests
+  // by the producer's shared per-lane ordinal before checking exact progress.
+  std::vector<const Row *> requests;
+  for (const auto &row : rows)
+    if ((site(row) == 3009 || site(row) == 3032) && same(linked(row, 40), resource) &&
+        field<off_t>(row.raw, 78) >= 112)
+      requests.push_back(&row);
+  std::sort(requests.begin(), requests.end(), [](const Row *a, const Row *b) {
+    return reference(*a).ordinal < reference(*b).ordinal;
+  });
+  for (const auto *selected : requests) {
+    const auto &row = *selected;
+    require(field<off_t>(row.raw, 78) == static_cast<off_t>(112 + next),
+            "native continuation uses exact progressed offset");
+    if (site(row) == 3009) {
+      input = reference(row);
+      ++copies;
+      require(field<std::size_t>(row.raw, 69) == 91 && row.raw[118] == std::byte{0} &&
+                  row.raw[119] == std::byte{0xff} && row.raw[120] == std::byte{0x72},
+              "first request captures exact full encoded input including original");
+    } else {
+      ++references;
+      require(same(linked(row, 86), input) &&
+                  field<std::size_t>(row.raw, 110) == 86 + next,
+              "continuation names exact retained original slice, not a copy");
+    }
+    if (cut == JournalCut::exhausted || cut == JournalCut::partial)
+      next += 4;
+  }
+  const unsigned expected_references =
+      cut == JournalCut::exhausted
+          ? 8U
+          : (cut == JournalCut::partial || cut == JournalCut::eintr ? 1U : 0U);
+  require(copies == (cut == JournalCut::before ? 0U : 1U) &&
+              references == expected_references,
+          "finite prepaid native attempts, one retained input and exact references");
+}
+
 void actual_journal_consumer(bool cut) {
   Fixture fixture;
   const std::size_t size = cut ? 256 : 32 * 1024 * 1024;
@@ -2989,6 +3138,12 @@ void terminal_product_owner(TerminalCut cut) {
 } // namespace
 int main(int argc, char **argv) {
   try {
+    if (argc == 2 && std::string_view{argv[1]} == "journal-cancel") {
+      for (const auto cut : {JournalCut::before, JournalCut::full, JournalCut::partial,
+                             JournalCut::eintr, JournalCut::exhausted})
+        journal_cancelled_commit(cut);
+      return 0;
+    }
     if (argc == 2 && std::string_view{argv[1]} == "completion") {
       retained_cold_concurrent_cleanup();
       held_physical_stop();
@@ -3002,6 +3157,9 @@ int main(int argc, char **argv) {
       return 0;
     }
     require(argc == 1, "unknown native fixture selection");
+    for (const auto cut : {JournalCut::before, JournalCut::full, JournalCut::partial,
+                           JournalCut::eintr, JournalCut::exhausted})
+      journal_cancelled_commit(cut);
     diagnostic_prefix();
     diagnostic_failure_cleanup(DiagnosticFault::kernel_error);
     diagnostic_failure_cleanup(DiagnosticFault::zero);

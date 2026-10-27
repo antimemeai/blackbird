@@ -174,13 +174,21 @@ Result<RawStorageLoanReservation>
 raw_storage_loan_reservation(const RawStorageLoanBudget &b) noexcept {
   using R = Result<RawStorageLoanReservation>;
   const auto kind = static_cast<std::uint8_t>(b.kind);
-  if (kind < 1 || kind > 5 || !b.batches || !b.submissions || !b.write_bytes)
+  if (kind < 1 || kind > 6 || !b.batches || !b.submissions || !b.write_bytes)
     return R::failure({ErrorCode::invalid_range});
   RawStorageLoanReservation r;
   r.scopes = b.kind == RawStorageLoanKind::selected_exec ? 3 : 1;
   r.write_calls = ceil_io(b.write_bytes);
   if (!add_checked(r.write_calls, b.batches - 1))
     return R::failure({ErrorCode::overflow});
+  // An ordinary single-batch commit prepays finite short-write/EINTR
+  // continuations. Existing terminal/exec grants retain their exact quota.
+  if (b.kind == RawStorageLoanKind::journal_append) {
+    if (b.batches != 1 || b.submissions != 1)
+      return R::failure({ErrorCode::invalid_range});
+    if (!add_checked(r.write_calls, 8))
+      return R::failure({ErrorCode::overflow});
+  }
   const auto p =
       b.catalog_maximum
           ? std::min<std::uint64_t>(
@@ -871,7 +879,9 @@ void RawStorageResource::begin_write(std::size_t bytes_count,
   if (continuation.slots || continuation.resource ||
       loan.batches_ == loan.budget_.batches)
     throw Error{ErrorCode::capacity};
-  const auto calls = ceil_io(bytes_count);
+  const auto calls = loan.budget_.kind == RawStorageLoanKind::journal_append
+                         ? loan.write_calls_
+                         : ceil_io(bytes_count);
   if (!calls || calls > loan.write_calls_)
     throw Error{ErrorCode::capacity};
   loan.write_calls_ -= calls;

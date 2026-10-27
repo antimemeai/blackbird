@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -70,6 +71,8 @@ struct StorageState {
   std::uint64_t read_failure_offset = UINT64_MAX;
   std::function<void()> on_read;
   std::size_t interrupt_writes = 0;
+  int write_interrupt_detail = EINTR;
+  std::size_t write_guard = SIZE_MAX;
   std::size_t interrupt_reads = 0;
   std::size_t interrupts_between_reads = 0;
   std::size_t interrupt_extents = 0;
@@ -121,8 +124,10 @@ public:
   Result<std::size_t> write_at(std::uint64_t offset, ByteView input) override {
     ++state_->writes;
     if (state_->interrupt_writes != 0) {
+      CHECK(state_->writes <= state_->write_guard);
       --state_->interrupt_writes;
-      return Result<std::size_t>::failure({ErrorCode::interrupted, 4});
+      return Result<std::size_t>::failure(
+          {ErrorCode::interrupted, state_->write_interrupt_detail});
     }
     if (state_->zero_progress) {
       return Result<std::size_t>::success(0);
@@ -205,6 +210,30 @@ JournalHeader header() {
 constexpr JournalCapacity capacity{4096, 32};
 const std::array original{std::byte{0}, std::byte{255}, std::byte{10}};
 const std::array drafts{JournalDraft{FrameKind::source, original}};
+
+void interrupted_write_settlement() {
+  for (const int detail : {ECANCELED, ETIMEDOUT, EINTR}) {
+    MemoryDirectory directory;
+    auto writer =
+        require(FramedJournal::create(directory, "journal", header(), capacity));
+    const auto before = writer->cursor();
+    const auto writes = directory.state->writes;
+    directory.state->write_interrupt_detail = detail;
+    directory.state->interrupt_writes = detail == EINTR ? 20 : 2;
+    // Old endless retry fails this direct call-count oracle, not a wall clock.
+    directory.state->write_guard = writes + 8;
+    const auto result = writer->append(drafts);
+    error_is(result, ErrorCode::interrupted);
+    CHECK(result.error().detail == detail);
+    CHECK(directory.state->writes == writes + (detail == EINTR ? 8 : 1));
+    CHECK(writer->state() == JournalWriterState::poisoned);
+    CHECK(writer->cursor().sequence == before.sequence &&
+          writer->cursor().end_offset == before.end_offset &&
+          writer->physical_records().empty());
+    error_is(writer->append(drafts), ErrorCode::audit_unavailable);
+    CHECK(directory.state->submitted == directory.state->synchronized);
+  }
+}
 
 void commitment() {
   MemoryDirectory directory;
@@ -979,6 +1008,7 @@ void usage_observation() {
 
 int main() {
   try {
+    interrupted_write_settlement();
     usage_observation();
     commitment();
     failures_and_cuts();
