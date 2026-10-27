@@ -23,7 +23,7 @@ No valid finding was rejected or hidden. The review's reference-source availabil
 
 ## ONE focused findings recheck
 
-Completed normally using a second fresh explicit native --once request, same pinned executable and requested openai/gpt-6.1-sol/medium selection. Scope was only the six accepted corrections and direct consequences, not a new general review. Retained request/log/session: ROOT/chat-study-01/recheck-request.txt, recheck.log, recheck-session. Native request125,855 bytes; returned usage24,679 input/858 output tokens; exit0. The unchanged [recheck result](RECHECK_RESULT.md) records five resolved and one narrow remaining sentence under finding5.
+Completed normally using a second fresh explicit native --once request, same pinned executable and requested openai/gpt-6.1-sol/medium selection. Scope was only the six accepted corrections and direct consequences, not a new general review. Retained request/log/session: ROOT/chat-study-01/recheck-request.txt, recheck.log, recheck-session. Native request125,855 bytes; returned usage24,679 input/858 output tokens; exit0. The [recheck result](RECHECK_RESULT.md) (prose unchanged; hard-break trailing spaces normalized, exact bytes in recheck.log) records five resolved and one narrow remaining sentence under finding5.
 
 Apply that exact final correction: replace the categorical inventory claim that local /lua workflows do not invoke inference with the fixture-specific source-path expectation, retaining independent-attempt/network and fallback-credential limitations. This is the permitted layer-two fix, **not a subsequent recheck pass**. No third review or certifying rerun occurred. All six findings are dispositioned; the final sentence edit has no independent third-layer certification.
 

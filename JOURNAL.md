@@ -11842,3 +11842,11 @@ unextracted actual-model distinction. All findings dispositioned; no further ass
 layer or runtime experiment. Final documentation/JSON/local-link/capture-hash and
 changed-path checks, then normal work-branch publication with exact remote readback.
 Holistic design/pressure-tested plan remains orchestrator's next commission, not code.
+
+The final staged whitespace check flags Markdown hard-break trailing spaces copied
+from the recheck answer. The shell did not stop on that nonzero and created local
+d8298fd anyway; do not report that staged check as passed. Normalize only those
+trailing spaces in the tracked rendering, retaining exact original recheck.log
+unchanged and stating the rendering distinction. Run the corrected text check with
+fail-fast shell before the final publication checkpoint. No source-hook bypass is
+being used for product changes; only JOURNAL/papers are in this branch delta.
