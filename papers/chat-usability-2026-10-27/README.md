@@ -6,7 +6,7 @@ This is the first conceptual unit of the [operator's program](../2026-10-26-chat
 
 **Central diagnosis:** Blackbird has substantial execution and inspection machinery, but its conversation does not consistently make that machinery into a legible working instrument. “The capability exists” answers the wrong question when the operator cannot determine what was received, what is running, what a key will stop, or how to inspect the particular output they just saw. The three operator reports are operating failures, not requests for three decorations.
 
-A new private physical-PTY observation of the pinned installed executable confirms that bare Escape leaves a pure-Lua turn active, whereas Ctrl-C interrupts it and preserves the draft. Two identical busy submissions become two queue entries, with only a count in the ordinary conversation until `/queue` is requested. A long command is already automatically head/tail-folded and its originals are accessible through Ctrl-O; that is an important counterexample to “folding is absent.” It is not proof that all tool results are readable, that Ctrl-O targets the relevant block, or that the operator's reported flood was imaginary. Details and real captures are in [actual use](ACTUAL_USE.md).
+A new private physical-PTY observation of the pinned installed executable shows no observed bare-Escape interruption of a pure-Lua turn during the recorded interval, whereas Ctrl-C interrupts it and preserves the draft. Two identical busy submissions become two queue entries, with only a count in the ordinary conversation until `/queue` is requested. A long command is already automatically head/tail-folded and its originals are accessible through Ctrl-O; that is an important counterexample to “folding is absent.” It is not proof that all tool results are readable, that Ctrl-O targets the relevant block, or that the operator's reported flood was imaginary. Details and real captures are in [actual use](ACTUAL_USE.md).
 
 ## Read this unit
 
@@ -16,7 +16,8 @@ A new private physical-PTY observation of the pinned installed executable confir
 4. [Actual owners, lifecycle, focus/control and failure map](STATE_CONTROL_MAP.md).
 5. [Systematic task walkthrough, priorities, design decisions and direct obligations](REQUIREMENTS.md).
 6. [Missing sources and observation gaps](SHOPPING_LIST.md).
-7. [Independent review and remediation disposition](REVIEW.md).
+7. [Independent review and remediation disposition](REVIEW.md), original [review](REVIEW_REPORT.md) and ONE [focused recheck](RECHECK_RESULT.md).
+8. [Full historical-journal reading contribution](HISTORY_READING.md).
 
 ## Consequential conclusions
 
@@ -28,6 +29,6 @@ A new private physical-PTY observation of the pinned installed executable confir
 
 ## What this does not establish
 
-No operator live UI was controlled. New private sessions made no provider requests and used an isolated auth home; model inference/retry/remote effect interruption was not reproduced. Captured text is derived from real PTY bytes by the existing independent VT-subset parser, not a fabricated screenshot and not a Ghostty GUI/font/accessibility observation. This is a task analysis with a small set of direct reproductions, not a controlled human experiment, performance comparison or exhaustive failure qualification. The installed executable is pinned by path and SHA256; its exact build-source commit/tree cannot be proven from the installation's available manifest information. Read the inventory before attributing runtime findings to checkout source.
+No operator live UI was controlled. New private fixtures use local /lua paths with no request invocation and an isolated auth home; absence of provider calls is source-path inference, not independently enumerated network/provider-attempt evidence; model inference/retry/remote effect interruption was not reproduced. Captured text is derived from real PTY bytes by the existing independent VT-subset parser, not a fabricated screenshot and not a Ghostty GUI/font/accessibility observation. This is a task analysis with a small set of direct reproductions, not a controlled human experiment, performance comparison or exhaustive failure qualification. The installed executable is pinned by path and SHA256; its exact build-source commit/tree cannot be proven from the installation's available manifest information. Read the inventory before attributing runtime findings to checkout source.
 
 Source publication, later design approval, integration, installation and user-observed improvement remain distinct. This study declares none of the latter outcomes and does not declare chat fixed.

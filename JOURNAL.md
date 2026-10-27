@@ -11819,3 +11819,26 @@ open decisions and later task/semantic/physical/readable-screen obligations. It 
 later holistic design, not an approved layout/plan, implementation or usability repair.
 One fresh-context consequential review and ONE findings recheck/fixes follow. Text-only
 checks and per-command hook override apply; source qualification remains untouched.
+
+The ONE fresh-context review completes normally with six consequential findings.
+Retain its original report. Remediate: avoid unsupported duplicate-external-effect
+promise; separate studied source from unknown installed-source causation and lone-ESC
+qualification; add whole delegated-return/direction, governing-change and context-repair
+episodes/obligations; withdraw unobserved normal child-exit claim; qualify no-inference
+as dispatch-source/fixture inference rather than network/attempt census; distinguish
+submitted error text from actual runtime-cause availability. Historical notes saying
+no provider calls in the two PTY cases described fixture intent/source path, not an
+independent absence measurement; isolated auth selection does not exclude every
+fallback path. Add exact capture hashes and concrete reference restore commands.
+No new reproduction, product source change or assurance family for these text fixes.
+One focused findings recheck follows; no third layer or review of the review.
+
+The ONE focused findings recheck returns exit0: five findings resolved; one categorical
+inventory sentence still overgeneralized no-inference beyond the private fixtures.
+Apply its exact fixture-specific source-path wording, keeping independent attempt/
+network-census and fallback-auth limitations. This is the layer-two fix, not a passed
+third review. Retain original review/recheck answers and explicit requested versus
+unextracted actual-model distinction. All findings dispositioned; no further assurance
+layer or runtime experiment. Final documentation/JSON/local-link/capture-hash and
+changed-path checks, then normal work-branch publication with exact remote readback.
+Holistic design/pressure-tested plan remains orchestrator's next commission, not code.

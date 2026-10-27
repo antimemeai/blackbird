@@ -11,7 +11,11 @@
     "work_copy": "/Users/patrickbeam/projects/blackbird/quarantine/codex",
     "acquired": "2026-09-30 (existing catalog)",
     "verified_utc": "2026-10-27T04:14:20.836504+00:00",
-    "restoration": "Download URL to a NEW archive, compare SHA256, extract into a NEW ignored directory; strip .git/.DS_Store/__MACOSX only from extracted copy, preserve archive; execute nothing."
+    "restoration": "Download URL to a NEW archive, compare SHA256, extract into a NEW ignored directory; strip .git/.DS_Store/__MACOSX only from extracted copy, preserve archive; execute nothing.",
+    "restore_download_command": "mkdir -p quarantine/chat-study-restored/originals && curl -fL 'https://codeload.github.com/openai/codex/zip/08e2b58b07b8a423d6577b66fb7756e980b53dbf' -o 'quarantine/chat-study-restored/originals/codex.zip'",
+    "restore_hash_command": "printf '%s  %s\\n' '2f54ff02b8e4bc774ab58499704a8512ec1541ebd9101e72d08956b7cef6de78' 'quarantine/chat-study-restored/originals/codex.zip' | shasum -a 256 -c -",
+    "restore_extract_command": "unzip 'quarantine/chat-study-restored/originals/codex.zip' -d 'quarantine/chat-study-restored/extracted/codex'",
+    "restore_notes": "Use only NEW absent extraction/archive destinations; retain mismatching downloads separately, not overwrite originals. Strip nested .git/.DS_Store/__MACOSX only inside this new extracted work copy, never from original archive; preserve links/licenses in archive. Do not execute source."
   },
   {
     "name": "pi",
@@ -25,7 +29,11 @@
     "work_copy": "/Users/patrickbeam/projects/blackbird/quarantine/pi",
     "acquired": "2026-09-30 (existing catalog)",
     "verified_utc": "2026-10-27T04:14:20.842732+00:00",
-    "restoration": "Download URL to a NEW archive, compare SHA256, extract into a NEW ignored directory; strip .git/.DS_Store/__MACOSX only from extracted copy, preserve archive; execute nothing."
+    "restoration": "Download URL to a NEW archive, compare SHA256, extract into a NEW ignored directory; strip .git/.DS_Store/__MACOSX only from extracted copy, preserve archive; execute nothing.",
+    "restore_download_command": "mkdir -p quarantine/chat-study-restored/originals && curl -fL 'https://codeload.github.com/earendil-works/pi/zip/8ce69e9d2b171d173fe4b6b2b6256f1f4411e69d' -o 'quarantine/chat-study-restored/originals/pi.zip'",
+    "restore_hash_command": "printf '%s  %s\\n' '49615f7184269133b5c254599e29af61b6f5caed65931c10906bdcf1ef2cfda9' 'quarantine/chat-study-restored/originals/pi.zip' | shasum -a 256 -c -",
+    "restore_extract_command": "unzip 'quarantine/chat-study-restored/originals/pi.zip' -d 'quarantine/chat-study-restored/extracted/pi'",
+    "restore_notes": "Use only NEW absent extraction/archive destinations; retain mismatching downloads separately, not overwrite originals. Strip nested .git/.DS_Store/__MACOSX only inside this new extracted work copy, never from original archive; preserve links/licenses in archive. Do not execute source."
   },
   {
     "name": "crush",
@@ -39,7 +47,11 @@
     "work_copy": "/Users/patrickbeam/projects/blackbird/quarantine/crush",
     "acquired": "2026-09-30 (existing catalog)",
     "verified_utc": "2026-10-27T04:14:20.846204+00:00",
-    "restoration": "Download URL to a NEW archive, compare SHA256, extract into a NEW ignored directory; strip .git/.DS_Store/__MACOSX only from extracted copy, preserve archive; execute nothing."
+    "restoration": "Download URL to a NEW archive, compare SHA256, extract into a NEW ignored directory; strip .git/.DS_Store/__MACOSX only from extracted copy, preserve archive; execute nothing.",
+    "restore_download_command": "mkdir -p quarantine/chat-study-restored/originals && curl -fL 'https://codeload.github.com/charmbracelet/crush/zip/76cc5c574e15072b15aaed0f4f843a5711fae0d9' -o 'quarantine/chat-study-restored/originals/crush.zip'",
+    "restore_hash_command": "printf '%s  %s\\n' 'd6d248a82bdc64d69be85f9953372bf0394e4c74ee46fd82dcc149426c027470' 'quarantine/chat-study-restored/originals/crush.zip' | shasum -a 256 -c -",
+    "restore_extract_command": "unzip 'quarantine/chat-study-restored/originals/crush.zip' -d 'quarantine/chat-study-restored/extracted/crush'",
+    "restore_notes": "Use only NEW absent extraction/archive destinations; retain mismatching downloads separately, not overwrite originals. Strip nested .git/.DS_Store/__MACOSX only inside this new extracted work copy, never from original archive; preserve links/licenses in archive. Do not execute source."
   },
   {
     "name": "libvaxis",
@@ -53,6 +65,10 @@
     "work_copy": "/Users/patrickbeam/projects/blackbird/quarantine/tui-2026-10-15/substrate/source/libvaxis",
     "acquired": "2026-10-15 (existing catalog)",
     "verified_utc": "2026-10-27T04:14:20.848794+00:00",
-    "restoration": "Download URL to new ignored archive, verify digest, extract absent destination; strip Git metadata only in work copy. Execute nothing."
+    "restoration": "Download URL to new ignored archive, verify digest, extract absent destination; strip Git metadata only in work copy. Execute nothing.",
+    "restore_download_command": "mkdir -p quarantine/chat-study-restored/originals && curl -fL 'https://codeload.github.com/rockorager/libvaxis/zip/d4c3b3666e0c090e2b5092ca09893c6db15e0b79' -o 'quarantine/chat-study-restored/originals/libvaxis.zip'",
+    "restore_hash_command": "printf '%s  %s\\n' '7eec8e64ae3a04a4e5e20cd6870a29f8c220724bd61f9890ccf62d3d967174b9' 'quarantine/chat-study-restored/originals/libvaxis.zip' | shasum -a 256 -c -",
+    "restore_extract_command": "unzip 'quarantine/chat-study-restored/originals/libvaxis.zip' -d 'quarantine/chat-study-restored/extracted/libvaxis'",
+    "restore_notes": "Use only NEW absent extraction/archive destinations; retain mismatching downloads separately, not overwrite originals. Strip nested .git/.DS_Store/__MACOSX only inside this new extracted work copy, never from original archive; preserve links/licenses in archive. Do not execute source."
   }
 ]

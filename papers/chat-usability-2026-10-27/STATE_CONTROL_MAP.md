@@ -49,6 +49,38 @@ On resize, native presenter/output own the pending packet/suffix and baseline; f
 
 Ordinary reopen restores saved draft/history/recovered inputs, not live process custody. Initial welcome may hide prior conversation; first deliberate input reveals retained chat. Saved Lua source may still name an older generation. Session continuity and runtime installation are distinct: a new managed current symlink cannot prove a running process changed, and source publication does not replace either.
 
+## Three broader expert-work episodes (source-grounded, not newly exercised)
+
+### Return to a delegated diagnosis, then direct the right participant
+
+**Intention/target:** return after doing other work, find the specific participant run and its latest answer, and ask it to address a changed question without disturbing the main draft. Target is run_id, not task title, row number, provider/model label or a remembered PID.
+
+**Actual owner/transitions:** `Participants` owns the run, bounded inbox, message receipts, per-request result and remote disposition (`src/participants.cpp:720–765,1468–1588,1640ff`). A completed request normally leaves a run **waiting** and available for another addressed direction; waiting does not mean the run is sealed/completed or that it is asking the human a question. `/send JSON` routes through `participant_send`; exact message_id plus identical arguments returns the prior acceptance/duplicate, conflicting reuse refuses. Direction acceptance is for the next request boundary, not live mutation of an already-fixed provider request. `/await` leaves admission open; `/join` seals it and drains accepted directions. `/stop ID` requests cancellation; read the actual later run/remote state separately. Main dispatch is `src/main.cpp:832–882`.
+
+**Visible evidence:** `/runs [ID]` prints current observed state/provider/model/to/cancel_requested or selected structured detail. The center's participant collection is bounded and can be stale/partial; task status is declared work state, not this execution state. A readable future surface must relate accepted message_id to later included delivery/result, while not claiming comprehension. Available result truncation and original retrieval are separate from whether a row is current.
+
+**Failure/continuation/return:** a full inbox, sealed/retired run, conflict or unknown remote disposition must be explicit. Do not resend on missing acknowledgment unless that exact owner can reconcile the identity; otherwise retain unknown. Inspect retained result and choose a deliberate new request if needed. Return to the same main draft/reading anchor. Present source mechanisms do not yet constitute a qualified task-oriented team surface. No real delegated-return/direction task was observed here.
+
+### Change the governing instrument without confusing saved, pending and effective
+
+**Intention/target:** edit a program/module/workflow or model/effort setting while another turn runs, preserve current work, and know which definition will govern the next action. Target includes definition kind, revision and affected scope; a view generation is not a turn program generation.
+
+**Actual owner/transitions:** terminal busy input serializes most slash operations behind current work. `/workflow FILE` later reads the file and saves its absolute path in SessionStore (`src/main.cpp:1101–1110`), a different mechanism from model/Lua `program_config` proposals. `CodingEngine::program_config` guards the effective revision, validates complete proposals and stages governing changes; successful workflow settlement publishes, failure/interruption preserves the previous effective state (`src/coding.cpp:2176ff`; callable-workflow contract). A context-data edit has its own next-request/publication semantics; native executable replacement is restart/install, not this setting change. General atomic interrupt-and-apply-now is an intended capability, not made real by calling cancel then save.
+
+**Visible evidence:** source/effective/pending revision and actual activation result must answer “which definition governed that turn?” `/session` exposes saved settings and program/tool inspection exposes their own state, presently often as structured text rather than a coherent form. Editing a file, selecting its path, staging a retained module and successfully activating it are not interchangeable acknowledgments.
+
+**Failure/continuation/return:** stale base, syntax failure, rejected publication or canceled workflow must keep the prior effective definition and the user's edit/draft recoverable. Cancellation does not prove a staged candidate activated. Inspect effective state after the boundary; compare the next turn's retained program source/generation to the intended revision. Keep current turn's pinned meaning and return focus/draft. Actual-use program editing/activation was not performed in this study; this is an acceptance episode for later design, not a changed configuration.
+
+### Understand and repair a model-authored context transformation
+
+**Intention/target:** discover that a useful fact disappeared from the model's working presentation, recover the original, repair the working map, then continue without re-executing the old tool. Target is context revision plus original entry/source reference, not transcript row or current disk path.
+
+**Actual owner/transitions:** ContextStore owns presentation/original lineage, managed proposals and structural linkage. `/context`, `/inspect JSON`, `/originals`, `/restore ENTRY`, `/compact JSON` map to its operations (`src/main.cpp:1111–1146`). A direct operator managed call outside a workflow can publish immediately; a model/Lua managed proposal during a workflow stages and settles only at its eligible successful boundary (`src/context.cpp:1307–1445`). Stale base/pending overlap/invalid groups refuse; complete call/result intervals and live instructions remain protected. Structural validity does not certify summary accuracy.
+
+**Visible evidence:** distinguish effective context from pending transform, summary ancestry from exact original, and displayed-context size from physical audit usage. A context-view publication/badge is not proof of a useful summary or that a provider consumed that revision. Inspect the actual request when that is the question. The separate `context_repair`/protocol-repair mechanism addresses unanswered call linkage under explicit recovery constraints; it does not recover missing scientific content, replay effects or settle unknown attempts.
+
+**Failure/continuation/return:** retrieve bounded original pages, restore the relevant entry or submit a guarded corrected presentation, preserve tool groups and inspect the actual publication result. On conflict keep the proposed repair and rebase deliberately, not a silent overwrite. Missing/corrupt/unavailable original evidence must stay distinguishable. Compaction does not reclaim physical audit bytes; at a physical cap follow the existing explicit recovery/successor contract, not repeated compaction or blind tool rerun. Return to the original diagnostic task with recovered references and draft. No actual context-loss/repair task or provider request comparison was exercised here.
+
 ## Failure/recovery map
 
 | Failure frontier | What is known | Safe useful continuation / required feedback |

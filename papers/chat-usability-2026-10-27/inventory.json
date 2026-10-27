@@ -61,6 +61,26 @@
       "path": "/Users/patrickbeam/.local/lib/blackbird/releases/generation-6QI9PQx9/build/release/compile_commands.json",
       "bytes": 281700,
       "sha256": "43fe27af36abb204ddf53fb318565da499edf7e04046e0c75ca5d36c0feb7e99"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/src/context.cpp",
+      "bytes": 78474,
+      "sha256": "cd7a8a817bbbf1aec042b6268c0e882845d5a079948251277a367533cc4743a2"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/src/participants.cpp",
+      "bytes": 73711,
+      "sha256": "9e7a2895f0483f27243339bac50499298347623998b97be1b273ff4cb4b06455"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/src/command_inspector.cpp",
+      "bytes": 13766,
+      "sha256": "67cdee0879c930e0e08a90dcfc414b2ccae0b1b3f3c72a494fe18acd13872d0d"
+    },
+    {
+      "path": "/Users/patrickbeam/projects/blackbird/context/autodev-2026-10-26/continuity/src/command_center.cpp",
+      "bytes": 38634,
+      "sha256": "ba553ddc224fee809575f6f70b7ac0c289075b0ae211a0c18f8ac23500c71d0c"
     }
   ]
 }

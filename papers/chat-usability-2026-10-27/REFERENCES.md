@@ -70,7 +70,7 @@ The theory's distinctions survive these observations, but their presence in a do
 
 - “Input acquired / accepted / effect observed” is not a screen contract until the actual owner and visible referent are specified. In the reproduction, the UI can keep saying Starting after Lua has printed a result and entered an infinite loop. Do not add imagined percentage progress to fix that mismatch.
 - “Useful relationships” must include selection from the particular tool block to its originals. A universal Ctrl-O catalog can preserve bytes while leaving the human to reconstruct which command produced the block. The deployed command fold proves retention and discoverability are separate questions.
-- “Stable control meaning” cannot be inferred from “ESC parser repaired.” This episode shows healthy escape recovery with no turn-interrupt action. Theory must predict and test task-level behavior, not rename a decoder pass as control success.
+- “Stable control meaning” cannot be inferred from “ESC parser repaired.” The studied source has repaired escape flushing without a turn-interrupt action; this runtime episode shows no observed stop acknowledgment, not broad decoder-recovery qualification. Theory must predict and test task-level behavior, not rename a decoder pass as control success.
 - “Density” must account for wrapped long identifiers/status arguments and an empty task pane consuming space. At42×16, the observed command route loses detail and clips its help line; preserving a data model is not preserving the operator's available judgment.
 - “Continuity” is not simply restore all pixels. Draft restoration succeeded while prior conversation was initially hidden. The next design must explain how to resume the work, not merely demonstrate file persistence.
 
