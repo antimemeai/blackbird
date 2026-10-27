@@ -11610,6 +11610,30 @@ unit is complete merely because this launch or a future worker exit succeeds.
 Preserve pre-existing backups/artwork/research. No bd/Dolt storage operations.
 Only campaign documentation and this journal change in the primary checkout.
 
+### Composition saved-state failure and deliberate successor — 23:05 EDT
+
+Composition's original native session stops at 23:00:22 with external_unknown (0)
+and saved-state maintenance capacity. This is not a provider outage or completed
+unit. Source remains staged on 9df54fe. Preserve old audit and result. Inspect
+actual queued commands: source-commit log only records waiting for the build slot;
+Linux run-992kc9y9 ends during compile, before tests. No local composition command
+remains. Its remote /tmp/arconaut-linux-bOVaKiqb tree persists, but an SSH /proc cwd
+census finds no owner, and no matching compiler/test runner is observed. These
+checks do not certify old effects; old results remain incomplete/unknown.
+
+Do not reopen/acknowledge/replay the failed session. Launch composition-followup-01
+as a fresh OpenAI/Sol/medium session in the same worktree, retaining explicit
+lineage and the staged source. Its mission is finishing qualification, source
+gate, commit/push, not restarting design/review. Existing three recheck findings
+and direct RED/GREEN results are retained, not a third assurance layer. Verify
+new session configuration, exact supervisor command and actual mission tool reads.
+Terminal proc_399cc152075c, launch PID 1489; retain precise run map in ignored
+context/autodev-2026-10-26/OVERSIGHT.md. Continuity remains running independently.
+Update scheduled oversight to discover current successor runs and avoid duplicate
+recovery. The primary checkout still changes only documentation; no unit accepted,
+master merge, runtime activation or source-check success is inferred here.
+
+
 
 ## 2026-10-26 — retire auxiliary worktrees
 

@@ -44,7 +44,14 @@ turn return is not task completion. Non-provider failure/cancellation pauses for
 inspection; no automatic --recover-unknown-effects, duplicate work or replay.
 Hermes examines actual diffs, logs, handoffs and exact pushed refs before accepting
 units or issuing the next mission. Worker reports are not self-certifying.
-Periodic Hermes oversight is scheduled separately; the Mac must remain awake
+Periodic Hermes oversight is scheduled separately; read
+`context/autodev-2026-10-26/OVERSIGHT.md` before dispatch for the current run/session
+map and any parent-session reconciliation in progress. The composition predecessor
+hit saved-state capacity at 23:00:22 EDT; its source/audit remain intact. After
+checking actual interrupted command dispositions, a fresh composition-followup-01
+session continues only the remaining S3a qualification and publication. This does
+not reopen review layers or certify the interrupted Linux/queued source gate.
+The Mac must remain awake
 and its Hermes gateway available for scheduled oversight. Worker terminal jobs
 survive this chat's release, not machine reboot. No arbitrary campaign wall-clock
 cutoff is introduced.
