@@ -11700,6 +11700,32 @@ existing five-minute cron mission so the new sequencing survives the current cha
 Read back the scheduled job. No additional worker, source mutation, interruption,
 branch integration or runtime replacement is performed for this planning request.
 
+### S3a blocked handoff routed to a focused diagnostic successor
+
+Composition-followup-01 returns normally at 23:45:01, explicitly BLOCKED rather
+than complete: Linux debug/ASan 25/25 each, Release build and final lint passed,
+but clean-environment source hook failed terminal_pty_composer (309/310). Retain
+HANDOFF/STATUS, exact failure fixture and logs. Verify HEAD remains 9df54fe,
+staged tree 8db2e5af5902ffa134ae5a172e6d1c1b4447bb26 and no unstaged changes.
+No commit or push exists; normal worker exit does not change that disposition.
+
+Reserve the composition slot in OVERSIGHT.md, verify no matching old native or
+supervisor owner, then launch composition-gate-diagnostic-01 in the same worktree
+with explicit OpenAI/Sol/medium and uncapped autodev.lua. This owner must diagnose
+the exact missing COMPOSER_HISTORY/workflow-Starting symptom before changing any
+code, preserve the existing oracle, avoid sleeps/deadline relaxation or confidence
+reruns, and request an exact qualified dependency if needed rather than merge the
+live continuity sibling. Scope is current S3a settlement, not a new general TUI
+campaign or a third review. Both live owners retain the shared heavy-work lock.
+
+Terminal handle proc_111bfc43ea5b, initial supervisor PID 46000. Verify native
+session settings, actual supervisor command and real mission activity before
+claiming launch. Preserve old sessions/results and staged source. Next program
+remains the operator's source-grounded chat usability study/design after current
+safe settlement; no S3b/general backlog advancement, master merge or installed
+runtime activation is inferred from this diagnostic dispatch.
+
+
 
 
 
