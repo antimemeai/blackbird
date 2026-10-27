@@ -11563,3 +11563,28 @@ storage unchanged and read the saved backup only; no migration or replacement
 initialization. Later Oxcart records say the operator regards Dolt as unused.
 Backup statuses lag implementation and are not used as authoritative completion.
 Check and publish only this report and journal under the text-only exception.
+
+## 2026-10-26 — retire auxiliary worktrees
+
+The operator requests one primary local checkout and retirement material outside
+`~/projects`. Removed all 16 auxiliary Blackbird worktrees with `git worktree
+remove`. Each was clean and its exact branch head was already pushed to origin.
+Local branch refs remain unchanged; the main checkout remains at
+`~/projects/blackbird` on `work/text-bugs-2026-10-19`.
+
+Ignored research, experiment files and noncompiled test records are preserved in
+`~/archives/blackbird-worktrees-2026-10-26/ignored-files-and-results.tar.zst`
+(31.6 MiB), with SQLite/Parquet indexes identifying branches, commits and original
+paths. The archive was decoded and every retained payload checked against its
+SHA-256 before the worktrees were removed. Compiler products were discarded.
+The retired directories occupied 34.30 GiB. The original branch refs and main
+checkout's existing issue-backup, artwork, research and handoff changes were
+checked unchanged before this journal update.
+
+Immediately after retirement, Git listed only the primary checkout. A separate
+session subsequently created two new autodev campaign worktrees; their removal
+needs coordination with the operator because that campaign is being launched.
+Validation is archive readback, branch identity, worktree registration and text
+diff checking; product code was unchanged. The current `bd backup` command prints
+subcommand help rather than performing the legacy backup. Existing issue storage
+and backups remain intact, with no migration attempted.
