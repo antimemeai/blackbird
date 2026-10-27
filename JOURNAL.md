@@ -11782,6 +11782,45 @@ composer oracle now passes once, but that alone does not explain the historical
 Starting timeout; do not assume flakiness or merge continuity speculatively.
 No new source unit starts ahead of the operator's next chat-usability program.
 
+### 2026-10-27 — S3a safely inactive; chat-usability study running
+
+Composition's focused diagnostic returns BLOCKED at 00:04:19, with the exact
+staged source unchanged and its full source gate still 309/310. Read its native
+projection: worker starts, the exact inline print program reaches retention, a
+343-byte audit write returns, then full-sync request3013 on audit fd12 has no
+retained return3014 or Lua-evaluation transition. UI rendering continues. This
+narrows the progress frontier, not kernel/scheduling causation or a qualified
+repair. One unchanged targeted composer pass is not a fix. Retain the full
+returned report in papers/2026-10-27-s3a-gate-diagnostic.md.
+
+Close the bounded diagnostic pass without another assurance/commit attempt.
+Keep S3a inactive and uncommitted in its existing slot. Additionally preserve
+its exact staged diff/HEAD/tree and both handoffs under
+~/archives/blackbird-autodev-blocked-2026-10-27/. The recovered binary-format Git
+patch reverse-checks against the unchanged staged index; no source apply/reset
+or publication bypass. An initially truncated tool capture was rejected before
+writing; use its complete retained output for the recovery patch.
+
+Proceed to the operator's next program. Live discovery finds the scheduled
+orchestrator already launched chat-study-01 on work/autodev-chat-study-2026-10-27,
+from primary b7c082e, reusing the clean former continuity slot. Parent's expected-
+HEAD guard stops before any duplicate branch switch/launch. Independently read
+its mission, supervisor/child state, exact native command and actual primary-
+literature/source-reading activity; no duplicate is launched. Provider/model/
+effort/workflow remain OpenAI/Sol/medium/uncapped. The mission is the whole
+reference/UX/actual-use study feeding holistic reviewed design/plan, no coding,
+layout selection, storage-policy change, S3b or unrelated backlog work.
+
+Prose run-map claims did not exclude the two controller sessions. Introduce one
+shared atomic .orchestrator-claim directory before controller mutations, with
+unique owner/scope and explicit own-claim release, never timeout/steal. A direct
+two-contender probe yields one winner/one refusal. Parent holds its claim while
+updating primary records and verifies/releases after publication; scheduled
+oversight is updated to obey the same mechanism. Read-only observation/native
+study work remains unaffected. Current map supersedes old active-run observations.
+No failed gate is reclassified as success, and no main merge or runtime activation.
+
+
 
 
 

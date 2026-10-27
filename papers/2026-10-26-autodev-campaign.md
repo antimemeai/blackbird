@@ -7,7 +7,40 @@ review, source grounding, work-branch commits/pushes and subsequent unit dispatc
 It does not authorize secret changes, dependency adoption, mutation on the laptop,
 reviving Dolt, replacing the operator's runtime, or an implicit merge to master.
 
-## First two owners
+## Current phase — chat usability study, October 27
+
+The initial implementation pass is settled: continuity is delivered as qualified
+source at `38a82ea`; S3a remains blocked and inactive, with unchanged staged source
+and no commit/push. Its bounded diagnostic reached an unreturned semantic-audit
+full-sync request before Lua evaluation, not a kernel/scheduling diagnosis or a
+fix. Preserve the failed gate rather than bypass it or start another assurance
+loop. [Retained diagnostic](2026-10-27-s3a-gate-diagnostic.md). The recovery patch
+and handoffs are also at `~/archives/blackbird-autodev-blocked-2026-10-27/`;
+reverse application against the exact staged index passed without mutating it.
+
+The scheduled orchestrator has launched the operator's next reference/source and
+UX/HCI study: branch `work/autodev-chat-study-2026-10-27` from primary `b7c082e`,
+reusing the clean former continuity slot. Run `context/autodev-2026-10-26/chat-study-01`,
+OpenAI/Sol/medium, uncapped `autodev.lua`. Parent independently verified the actual
+native process, model/effort and mission source/literature-reading activity, and
+did not launch a duplicate when live branch discovery found this owner already
+running. Old continuity branch/logs remain intact; composition stays unchanged.
+
+This first whole unit delivers substantive reference reading, actual-use/task/
+state/control/failure analysis and prioritized design requirements, not product
+code or a premature selected layout. Holistic design and pressure-tested plan
+follow before implementation. The precise durability/feedback/control interaction
+is study input, not authority to silently change storage or relax a test.
+
+Parent and scheduled orchestration must acquire the same atomic
+`context/autodev-2026-10-26/.orchestrator-claim` directory before dispatch,
+checkout switching, integration or primary project-record/index/commit mutation.
+Write a unique owner/scope; if already held, observe only and do not steal it.
+Verify the effect/map and release only one's own claim explicitly. A direct
+two-contender probe confirmed one winner and one refusal. Read-only observation
+is not blocked. No automatic timeout or new mission budget is introduced.
+
+## First two owners (initial implementation pass)
 
 - **Continuity:** `work/autodev-continuity-2026-10-26`, based on `5b1ff1d`.
   Finish the diagnosed SIGTERM/interrupted journal-write invariant and the relevant
