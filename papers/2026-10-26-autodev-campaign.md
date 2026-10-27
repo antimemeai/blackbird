@@ -44,7 +44,8 @@ turn return is not task completion. Non-provider failure/cancellation pauses for
 inspection; no automatic --recover-unknown-effects, duplicate work or replay.
 Hermes examines actual diffs, logs, handoffs and exact pushed refs before accepting
 units or issuing the next mission. Worker reports are not self-certifying.
-Periodic Hermes oversight is scheduled separately; read
+Periodic Hermes oversight is scheduled every five minutes by the operator's
+correction; read
 `context/autodev-2026-10-26/OVERSIGHT.md` before dispatch for the current run/session
 map and any parent-session reconciliation in progress. The composition predecessor
 hit saved-state capacity at 23:00:22 EDT; its source/audit remain intact. After
@@ -55,6 +56,19 @@ The Mac must remain awake
 and its Hermes gateway available for scheduled oversight. Worker terminal jobs
 survive this chat's release, not machine reboot. No arbitrary campaign wall-clock
 cutoff is introduced.
+
+The operator also corrects the inherited 64-step turn ceiling: no artificial
+mission/request-count ceiling, not a higher finite allowance. The actual retained
+continuity audit names this budget error. `context/autodev-2026-10-26/autodev.lua`
+removes only that loop bound and preserves T1 tool/result dispatch, defaults,
+restart and cancellation/error behavior. A direct old-source RED stops at 64;
+the selected runtime passes 130 tool rounds plus the final response and separate
+restart/cancel/unsupported-call checks. Continuity's fresh followup session is
+verified using this file. Composition's active turn retained older source; switch
+at its next clean boundary rather than interrupting qualification. The repository
+default still needs its separate tested source change. Do not confuse native
+storage safety limits or the two hardening layers with an arbitrary mission timer.
+
 
 All compilation, tests, lint, sanitizers, performance samples and commit hooks
 run through the single campaign `with-build-slot.py` wrapper, synchronously, so

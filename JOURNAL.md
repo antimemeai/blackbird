@@ -11633,6 +11633,37 @@ Update scheduled oversight to discover current successor runs and avoid duplicat
 recovery. The primary checkout still changes only documentation; no unit accepted,
 master merge, runtime activation or source-check success is inferred here.
 
+### Operator corrections — five-minute oversight and no turn-count ceiling
+
+Operator requests oversight every five minutes, then objects that the 64-step
+budget was supposed to be gone. Change and read back the existing cron job rather
+than adding another. Inspect actual selected Lua source and read-only continuity
+audit: the exact retained failure is "Workflow reached its configured 64-step
+budget". The launcher selected ordinary programs/turn.lua; this was an orchestration
+mistake, not a newly diagnosed journal regression.
+
+Write the short runtime-policy plan in ignored campaign context. Direct Lua oracle
+against old source fails at round 64; select a campaign autodev.lua that removes
+the finite bound entirely while preserving dispatcher/T1 result links/defaults,
+restart and cancellation/errors. Actual selected-source checks pass 130 tool
+rounds plus final, restart, cancellation and unsupported-call refusal; syntax and
+exact policy-only delta checks pass. Independent narrow runtime-policy review is
+requested, not a review of either product's reviews. No native/product code edit
+is hidden in this runtime configuration; repository default's obsolete ceiling
+remains a separate source-delivery unit.
+
+Continuity's old source and incomplete direct/Linux results remain retained.
+Its remote tree has no /proc cwd owners. Launch continuity-followup-01 with explicit
+OpenAI/Sol/medium and the uncapped Lua workflow, same worktree and existing layer 2;
+read back settings, exact supervisor and actual tool activity. Terminal
+proc_5b444f9fd662, initial PID 8226. Composition successor is already live on retained
+older source; do not interrupt its gate to swap programs, and require the uncapped
+program at its next clean boundary. Update OVERSIGHT.md/current cron instructions
+so later dispatch cannot silently restore the ceiling. Native storage safety and
+two-layer hardening rules remain; no larger numerical mission budget substitutes
+for the removed limit. Keep user source/backup/artwork untouched.
+
+
 
 
 ## 2026-10-26 — retire auxiliary worktrees
