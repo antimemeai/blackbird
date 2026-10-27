@@ -11931,3 +11931,42 @@ handoff subject to orchestrator acceptance, with product design inactive until
 commissioned implementation. Native reviewer processes settled, exit0 only
 process/result fact, not quality certification. Final text checks/publication
 next; no implementation after publication.
+
+## 2026-10-27 — T1 source commission: initial-source evidence checkpoint (INCOMPLETE)
+
+Commissioned T1 only on `work/autodev-chat-t1-2026-10-27`, exact initial source
+`e99a4fdb4918a7421286bfc44fc2600b4e84718f`. Study/design acceptance is documentation,
+not implemented behavior. Read governing workspace/source/testing doctrine,
+primary campaign oversight/brief, entire accepted design and study state/control/
+requirements/source limitations; targeted current terminal, main, CodingEngine
+retry, response/provider-auth transport and test owners. No design re-review.
+`../chat-t1-01/STATUS.md` contains the pre-code concrete subplan and two-layer
+allowance. Installed normal hooks (`core.hooksPath=.githooks`); no source gate bypass.
+This journal-only checkpoint uses the authorized text-only commit exception.
+
+Initial Release build completed through synchronous campaign build-slot wrapper;
+retained executable `../chat-t1-01/initial-blackbird`, SHA256
+`3020d94afae86606c9db469dd1756307fa3b8952d1183f2b7f7865406d432e57`.
+Full log `../chat-t1-01/initial-build.log`. Explicit Microsoft dev tool install/check
+reported tui-test0.1.0, package SHA256
+`88e71dae1ebdead25f1a7d8a2618e39868a2fa8a4b14630d4c4cfa446af6caeb`.
+This is build/tool qualification, not full source-gate or behavior GREEN.
+
+Before any product source change, provider-free actual main-process PTY fixture
+`../chat-t1-01/old-behavior.py` produced three genuine initial-source REDs:
+active ESC does not stop; palette ESC does not stop; Ctrl-C removes pending work.
+Results `old-behavior-results.json`, command log `old-behavior.log`, exact raw VT
+bytes/readable80x24 screens/session files and child exit records in `red-*` under
+that run. Fixture command exit1 represents the expected RED assertions; all three
+main fixture children independently settled exit0 after explicit stop/exit.
+No account/provider call; no healthy process killed for silence. Only campaign
+binary/sprite override variables removed in fixture environment, auth preserved.
+Exact initial source archive retained there as `initial-source.tar` SHA256
+`cfff5d9dfe8940aae04094b87b8bd67fa940825f780d44c6d4acae8008e70820`.
+
+This checkpoint has NO C++/Lua/product/test implementation. No T1 GREEN, matched
+performance, full debug/lint/Linux gate, source review, final recheck, usability,
+accessibility or activation claim. No source layer completed or reset. Continue
+same T1 allowance from these retained REDs; do not promote this documentation
+checkpoint as implementation or a repaired chat. See run HANDOFF for incomplete
+obligations; no concrete external/source-gate blocker has been established yet.
