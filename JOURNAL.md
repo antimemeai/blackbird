@@ -11725,6 +11725,40 @@ remains the operator's source-grounded chat usability study/design after current
 safe settlement; no S3b/general backlog advancement, master merge or installed
 runtime activation is inferred from this diagnostic dispatch.
 
+### 2026-10-27 — bounded S3a settlement and chat-usability study dispatch
+
+Scheduled oversight verifies continuity's exact published remote38a82ea and clean
+slot. Composition's diagnostic returns at00:04:19 EDT, explicitly BLOCKED with
+all owned commands settled. Inspect actual retained native projection: source
+retention wrote343 bytes then semantic-audit fd12 F_FULLFSYNC request3013, no
+retained return3014/evaluation, while UI frames continue about4.96s. No original
+native stack distinguishes kernel latency from scheduling. One unchanged targeted
+composer pass is not a causal repair or a clean mandatory gate. Verify exact
+staged tree8db2e5af5902ffa134ae5a172e6d1c1b4447bb26 on9df54fe; nine staged files,
+no unstaged source, commit or remote branch publication. Retain candidate and all
+old results inactive. Do not speculate a continuity prerequisite, weaken deadline,
+rerun until green or start a third assurance layer. Broader native-sync contract
+question stays recorded, not falsely certified or expanded into another campaign.
+
+The operator explicitly says unsafe candidates may remain inactive and the next
+program must be chat usability. Reuse ONLY the clean completed continuity slot
+on work/autodev-chat-study-2026-10-27 from primaryb7c082e. Preserve continuity's
+branch and all run evidence, leave composition untouched. Reserve map before
+launch; initialize NEW chat-study-01 with explicit openai/gpt-6.1-sol/medium and
+uncapped ROOT/autodev.lua. Launch pinned managed native executable through the
+existing provider-only supervisor, persistent across chat release, terminal
+proc_fd68d0c1e00b, initial supervisor60661. Cron cannot receive async notifications;
+future scheduled oversight must inspect actual run state. No reboot guarantee.
+
+This first conceptual unit is substantive reference/source and UX/HCI study,
+actual installed/running identity and safe private-session task walkthroughs,
+full task/state/control/failure mapping and design requirements. No product/test
+coding, main integration, dependency adoption, operator-terminal input or runtime
+replacement. Existing theory/reference corpus must be read and challenged; retain
+source provenance and actual captures. Holistic reviewed design and plan follow
+before implementation. No unrelated backlog work or issue-store mutation. Update
+OVERSIGHT.md as current map, superseding its historical live-owner observations.
+
 ### 2026-10-27 — continuity source delivery verified
 
 Continuity-followup-01 returns COMPLETE at 00:00:44 EDT. Inspect its HANDOFF,

@@ -105,11 +105,23 @@ uncertain failed tails; limitations remain in its handoff. This accepts a
 qualified source delivery, not mainline integration, installation or activation.
 No live Beads closure is claimed while project storage is blocked.
 
-Keep the completed slot idle while composition's focused gate diagnosis remains
-active. Its unchanged composer oracle passed once during diagnosis; this does
-not itself explain the earlier retained timeout or qualify the full source gate.
-Do not automatically merge continuity as a speculative prerequisite. Chat usability
-remains the next program after current safe settlement.
+The completed slot was kept idle until composition's diagnostic finished at
+00:04:19 EDT October 27. That unit is now safely retained INACTIVE, not accepted:
+the original native stream reaches semantic-audit fd12 F_FULLFSYNC request without
+a retained return or Lua evaluation. No original stack establishes kernel latency
+versus scheduling. Its single unchanged composer pass is not a fix; mandatory
+gate remains309/310. Preserve staged tree8db2e5af5902ffa134ae5a172e6d1c1b4447bb26
+on9df54fe and all evidence, without another assurance layer or speculative merge.
+
+The next program has therefore begun as research, not coding: reuse the clean
+former continuity checkout on work/autodev-chat-study-2026-10-27 from primary
+b7c082e. ROOT/chat-study-01 runs native openai/gpt-6.1-sol/medium with explicit
+uncapped autodev.lua. Supervisor60661/native60674, terminal proc_fd68d0c1e00b;
+actual commands, initialization settings and mission tool activity verified.
+Reference/source and UX/HCI study, installed/runtime identity, safe private-session
+walkthroughs and full task/state/control/failure mapping precede holistic reviewed
+design/plan and any product code. No integration or installed runtime activation.
+Current run map and future scheduling decisions live in ROOT/OVERSIGHT.md.
 
 ## Next program — operator priority, 2026-10-26
 
