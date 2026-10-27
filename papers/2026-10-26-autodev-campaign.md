@@ -7,7 +7,36 @@ review, source grounding, work-branch commits/pushes and subsequent unit dispatc
 It does not authorize secret changes, dependency adoption, mutation on the laptop,
 reviving Dolt, replacing the operator's runtime, or an implicit merge to master.
 
-## Current phase — holistic chat design and delivery plan, October 27
+## Current phase — T1 send/correct/stop source implementation, October 27
+
+Holistic chat design and delivery plan accepted at
+`e99a4fdb4918a7421286bfc44fc2600b4e84718f` on
+`work/autodev-chat-design-2026-10-27`; exact remote readback matches. Inspect
+that branch's `papers/chat-design-2026-10-27/` contracts, owner map, labeled
+screens and T1–T6 plan. Six first-review findings fixed before planning; final
+layer resolved those and raised two integration blockers, fixed within the
+allowance: shared stop/definition dispatch fence and explicit safe provider
+response/retry/partial-stream cancellation oracles. Original final recommendation
+is preserved, not rewritten as approval. Text-only ten-path scope, clean tree,
+whitespace/local-link/fence checks pass. No third review or source/UI claim.
+
+Scheduled controller commissioned `chat-t1-01` on
+`work/autodev-chat-t1-2026-10-27` from exact accepted design HEAD, reusing the
+same bounded slot and preserving all prior ignored evidence. Fresh explicit
+OpenAI/Sol/medium/uncapped session, pinned installed generation unchanged;
+terminal `proc_f266a4e5ec95`, initial supervisor90736. Current commands/status
+and later successor map live in ROOT/OVERSIGHT.md, not these historical PIDs.
+
+T1 owns one useful source episode: stable send receipt/request relations,
+held keyed queue correction/release, captured-turn ESC stop with preserved drafts,
+provider wait/retry/partial-stream local fixtures, truthful outcome/control service
+and effective help. Required direct RED/GREEN/PTY/screens/source/host gates and
+matched performance apply; expensive work stays serialized. Two source layers,
+no reopened study/design review. T2–T6 and actual expert usability are not delivered
+by this commission. No sibling merge, main integration, runtime install/activation,
+operator-session interaction or issue-store mutation. Composition stays inactive.
+
+## Previous phase — holistic chat design and delivery plan, October 27
 
 Research-only study accepted at `d8dc2af667b2029345ee150ae94950995cfc06f0`
 on `work/autodev-chat-study-2026-10-27`; exact remote readback matches. Study,

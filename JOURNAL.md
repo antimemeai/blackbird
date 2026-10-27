@@ -11820,6 +11820,42 @@ oversight is updated to obey the same mechanism. Read-only observation/native
 study work remains unaffected. Current map supersedes old active-run observations.
 No failed gate is reclassified as success, and no main merge or runtime activation.
 
+### 2026-10-27 — holistic design/plan accepted; T1 source owner commissioned
+
+Chat-design-01 returned at01:42:11 EDT, COMPLETE documentation. Inspect actual
+contracts C1–C9, owner map, readable labeled storyboards, sequenced T1–T6 plan,
+original final review and final fixes. Exact published remote matches
+ e99a4fdb4918a7421286bfc44fc2600b4e84718f on
+work/autodev-chat-design-2026-10-27. Six first-layer findings fixed before
+planning; final layer resolved those and raised two valid integration blockers.
+Owner fixed shared stop/queued-definition fence and provider response/retry/
+partial-stream local-oracle obligations within final allowance. Original final
+BLOCKED-pending-fixes recommendation remains unchanged, no third review or
+independent certification of final fixes. Text-only ten-path delta, clean tree,
+base whitespace and UTF-8/fence/local-link checks pass. Accept design/plan as
+completed documentation, not implemented behavior or observed improvement.
+
+Acquire atomic controller claim, recheck live owners, exact clean HEAD and
+finished prior session before reusing same slot. Create
+work/autodev-chat-t1-2026-10-27 from accepted e99a4fd. Initialize chat-t1-01 with
+explicit OpenAI/Sol/medium and uncapped ROOT/autodev.lua, pinned installed native
+generation unchanged; launch existing provider-only supervisor, terminal
+proc_f266a4e5ec95, initial supervisor90736. Preserve study/design originals,
+blocked inactive composition and separate continuity source. No additional slot,
+main integration, installation, operator-session input or issue-store operation.
+
+Commission whole PLAN T1 send/receipt/queue-correction/captured-turn-stop episode,
+truthful request relations, draft/reopen preservation, decoder/PTY priority and
+provider response/retry/partial-stream cancellation fixtures. Require genuine
+old-behavior REDs and relevant direct GREEN/PTY/readable-screen/source gates,
+clean lint, appropriate Release/Linux and matched performance. All expensive
+work stays synchronous through build slot. Two source layers only; no study/
+design re-review. Future T5 definition editor is not commissioned; shared fence
+must cover present dispatch routes and retain explicit future integration.
+No T2 auto-continuation or runtime activation. Actual expert tasks and live
+remote/physical/accessibility evidence stay unqualified. Update primary campaign
+and authoritative run map under matching controller claim.
+
 ### 2026-10-27 — research accepted; holistic chat design/plan dispatched
 
 Chat-study-01 returned at 00:38:11 EDT. Inspect its actual handoff, task/state/
