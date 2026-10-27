@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Actual `rigor doctor` linker identity: accepted under a substituted PATH, rejected
+when the profile, a preset or the driver selection names another linker."""
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parent.parent
+PROFILE = json.loads((ROOT / "tooling/local-profile.json").read_text())
+PINNED = PROFILE["linker"]["path"]
+FLAGS = ("CMAKE_EXE_LINKER_FLAGS", "CMAKE_SHARED_LINKER_FLAGS", "CMAKE_MODULE_LINKER_FLAGS")
+
+
+def tree(work, name):
+    """A disposable root: rigor resolves its profile and presets beside itself."""
+    root = work / name
+    (root / "scripts").mkdir(parents=True)
+    (root / "tooling").mkdir()
+    shutil.copy2(ROOT / "scripts/rigor", root / "scripts/rigor")
+    profile = json.loads((ROOT / "tooling/local-profile.json").read_text())
+    presets = json.loads((ROOT / "CMakePresets.json").read_text())
+    return root, profile, presets
+
+
+def write(root, profile, presets):
+    (root / "tooling/local-profile.json").write_text(json.dumps(profile))
+    (root / "CMakePresets.json").write_text(json.dumps(presets))
+
+
+def doctor(root, env):
+    return subprocess.run([sys.executable, root / "scripts/rigor", "doctor"], env=env,
+                          text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          timeout=100, check=False)
+
+
+def base(presets):
+    return next(p for p in presets["configurePresets"] if p["name"] == "base")
+
+
+def main():
+    with tempfile.TemporaryDirectory(prefix="rigor-linker-") as name:
+        work = Path(name)
+        # The defect's shape: another ld64 (Anaconda's ld64-711) is first on PATH.
+        substitute = work / "substitute-bin" / "ld"
+        substitute.parent.mkdir()
+        substitute.write_text("#!/bin/sh\n"
+                              "echo '@(#)PROGRAM:ld  PROJECT:ld64-711' >&2\n"
+                              "exit 0\n")
+        substitute.chmod(0o755)
+        env = dict(os.environ, PATH=f"{substitute.parent}:{os.environ['PATH']}")
+
+        root, profile, presets = tree(work, "accepted")
+        write(root, profile, presets)
+        result = doctor(root, env)
+        assert result.returncode == 0, result.stdout
+        assert f"linker selected by clang++: {PINNED}" in result.stdout, result.stdout
+        assert f"PROJECT:{PROFILE['linker']['version']}" in result.stdout, result.stdout
+        assert str(substitute) not in result.stdout, result.stdout
+
+        rejected = {}
+        # The profile and every preset consistently name a different linker executable.
+        root, profile, presets = tree(work, "substituted-profile")
+        profile["linker"]["path"] = str(substitute)
+        for key in FLAGS:
+            base(presets)["cacheVariables"][key] = f"--ld-path={substitute}"
+        write(root, profile, presets)
+        rejected[root] = "linker: pinned version mismatch"
+        # The profile names another linker; the presets still pin the qualified one.
+        root, profile, presets = tree(work, "profile-only")
+        profile["linker"]["path"] = str(substitute)
+        write(root, profile, presets)
+        rejected[root] = "preset/profile pin mismatch: debug: CMAKE_EXE_LINKER_FLAGS"
+        # One profile preset drops the pin, leaving the driver to search PATH.
+        root, profile, presets = tree(work, "fuzz-unpinned")
+        fuzz = next(p for p in presets["configurePresets"] if p["name"] == "fuzz")
+        fuzz["cacheVariables"]["CMAKE_EXE_LINKER_FLAGS"] = ""
+        write(root, profile, presets)
+        rejected[root] = "preset/profile pin mismatch: fuzz: CMAKE_EXE_LINKER_FLAGS"
+        # A shared-library link is pinned separately from executables.
+        root, profile, presets = tree(work, "shared-unpinned")
+        del base(presets)["cacheVariables"]["CMAKE_SHARED_LINKER_FLAGS"]
+        write(root, profile, presets)
+        rejected[root] = "preset/profile pin mismatch: debug: CMAKE_SHARED_LINKER_FLAGS"
+        for root, marker in rejected.items():
+            result = doctor(root, env)
+            assert result.returncode != 0 and f"rigor: {marker}" in result.stdout, \
+                f"{root.name}: expected {marker!r}\n{result.stdout}"
+    print("rigor doctor pins the Apple linker under a substituted PATH and rejects "
+          f"{len(rejected)} substitutions")
+
+
+if __name__ == "__main__":
+    main()

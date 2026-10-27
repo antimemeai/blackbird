@@ -20,7 +20,14 @@ CPP_UNITS = {".cpp", ".cc", ".cxx", ".C", ".c++", ".cppm", ".ixx"}
 CPP_HEADERS = {".h", ".hpp", ".hh", ".hxx", ".h++", ".inl", ".ipp"}
 
 
-def run(args, *, cwd=ROOT, check=True, env=None, timeout=120):
+LINKER = PROFILE["linker"]
+# Every preset link kind names the pinned linker; clang otherwise takes the first
+# `ld` on PATH (Anaconda's ld64-711 crashed fuzz links on this host).
+LINKER_FLAG_VARIABLES = ("CMAKE_EXE_LINKER_FLAGS", "CMAKE_SHARED_LINKER_FLAGS",
+                         "CMAKE_MODULE_LINKER_FLAGS")
+
+
+def run(args, *, cwd=ROOT, check=True, env=None, timeout=120, echo=True):
     command = [str(a) for a in args]
     child = subprocess.Popen(command, cwd=cwd, env=env, text=True,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -39,11 +46,39 @@ def run(args, *, cwd=ROOT, check=True, env=None, timeout=120):
                   else "interrupted")
         raise RuntimeError(f"command {reason}: {args[0]}")
     result = subprocess.CompletedProcess(command, child.returncode, output)
-    if result.stdout:
+    if echo and result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n", flush=True)
     if check and result.returncode:
         raise RuntimeError(f"command failed ({result.returncode}): {args[0]}")
     return result
+
+
+def preset_cache(presets, name, chain=()):
+    """Effective cacheVariables of a configure preset, resolving `inherits` as CMake does:
+    the preset's own values win, then earlier parents over later ones."""
+    if name in chain or name not in presets:
+        raise RuntimeError(f"unresolvable configure preset inheritance: {(*chain, name)}")
+    preset = presets[name]
+    parents = preset.get("inherits", [])
+    values = {}
+    for parent in reversed([parents] if isinstance(parents, str) else parents):
+        values.update(preset_cache(presets, parent, (*chain, name)))
+    values.update(preset.get("cacheVariables", {}))
+    return values
+
+
+def selected_linker(flags):
+    """The linker the pinned clang++ driver actually runs with these link flags and
+    the caller's environment (PATH included)."""
+    with tempfile.TemporaryDirectory() as work:
+        source = Path(work) / "link.cpp"
+        source.write_text("int main() { return 0; }\n")
+        result = run([LLVM / "clang++", *shlex.split(flags), "-###", source,
+                      "-o", Path(work) / "link"], echo=False)
+    jobs = [line for line in result.stdout.splitlines() if line.startswith(' "')]
+    if len(jobs) != 2:
+        raise RuntimeError(f"unexpected clang++ compile/link job plan: {len(jobs)} jobs")
+    return shlex.split(jobs[-1])[0]
 
 
 def verify_tools():
@@ -51,28 +86,31 @@ def verify_tools():
         raise RuntimeError("local profile is qualified only for macOS arm64")
     expected = {"CMAKE_CXX_COMPILER": str(LLVM / "clang++"),
                 "CMAKE_MAKE_PROGRAM": PROFILE["ninja"]["path"]}
-    presets = json.loads((ROOT / "CMakePresets.json").read_text())["configurePresets"]
-    found = set()
-    for preset in presets:
-        for key, value in preset.get("cacheVariables", {}).items():
-            if key in expected:
-                if value != expected[key]:
-                    raise RuntimeError(f"preset/profile pin mismatch: {preset['name']}: {key}")
-                found.add(key)
-    if found != set(expected):
-        raise RuntimeError("presets do not declare the qualified compiler and build driver")
+    expected.update({key: f"--ld-path={LINKER['path']}" for key in LINKER_FLAG_VARIABLES})
+    presets = {preset["name"]: preset for preset in
+               json.loads((ROOT / "CMakePresets.json").read_text())["configurePresets"]}
+    for profile in PROFILES:
+        values = preset_cache(presets, profile)
+        for key, value in expected.items():
+            if values.get(key) != value:
+                raise RuntimeError(f"preset/profile pin mismatch: {profile}: {key}")
     versions = {}
     tools = {name: {"path": str(LLVM / name), "version": PROFILE["llvm"]["version"]}
              for name in ("clang++", "clang-format", "clang-tidy", "clangd")}
     tools.update({name: PROFILE[name] for name in
-                  ("cmake", "ctest", "ninja", "lua_ls", "stylua", "lua", "luac")})
+                  ("cmake", "ctest", "ninja", "linker", "lua_ls", "stylua", "lua", "luac")})
     for name, tool in tools.items():
-        flag = "-v" if name in ("lua", "luac") else "--version"
+        flag = "-v" if name in ("linker", "lua", "luac") else "--version"
         result = run([tool["path"], flag])
         if not re.search(r"(?<![\d.])" + re.escape(tool["version"]) + r"(?![\d.])",
                          result.stdout):
             raise RuntimeError(f"{name}: pinned version mismatch")
         versions[name] = {"path": tool["path"], "version_output": result.stdout.strip()}
+    selected = selected_linker(expected["CMAKE_EXE_LINKER_FLAGS"])
+    if selected != LINKER["path"]:
+        raise RuntimeError(f"linker: clang++ selects {selected}, not {LINKER['path']}")
+    print(f"linker selected by clang++: {selected}", flush=True)
+    versions["linker"]["selected_by_clang++"] = selected
     return versions
 
 

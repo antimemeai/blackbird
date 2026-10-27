@@ -42,7 +42,7 @@ test's watchdog, using its existing TIMEOUT or a 120-second default; the complet
 suite does not share one test's allowance. No fixture assertion or existing
 deadline is relaxed. A failed command fails the gate. A missing tool, report,
 translation unit, header analysis
-path, mismatched compiler or preset/profile pin is an error. Owned directory
+path, mismatched compiler or linker, or preset/profile pin is an error. Owned directory
 symlinks are rejected until an explicit source policy is designed; research,
 captures and generated build roots are excluded from owned source enumeration.
 
@@ -55,7 +55,7 @@ reuse an old compiler cache or suppress failed instrumentation.
 ## Qualified local tools and profiles
 
 Exact paths and versions are in [local-profile.json](local-profile.json), with
-matching compiler/build-driver pins in [CMakePresets.json](../CMakePresets.json).
+matching compiler, build-driver and linker pins in [CMakePresets.json](../CMakePresets.json).
 No global shell or editor configuration is required.
 
 | Tool | Local version | Purpose |
@@ -63,9 +63,22 @@ No global shell or editor configuration is required.
 | LLVM Clang, clang-format, clang-tidy, clangd | 23.1.2 | Coherent C++26 compiler, formatting, focused analysis and editor diagnostics |
 | CMake / CTest | 4.3.0 | Owned target/test orchestration |
 | Ninja | 1.13.0.git.kitware.jobserver-pipe-1 | Existing pinned build driver |
+| Apple ld (Xcode 26.2 default toolchain) | ld-1230.1 | Linker for every macOS preset, selected with `--ld-path` |
 | Lua / luac | 5.4.8 | Compatibility execution and syntax checks |
 | Lua Language Server | 3.19.1 | Annotation/type diagnostics with fresh JSON reports |
 | StyLua | 2.5.2 | Lua 5.4 formatting |
+
+Clang's driver otherwise runs the first `ld` on `PATH`. In the operator's shell that is
+Anaconda's `ld64-711`, which aborts fuzz-profile links in `buildChainedFixupInfo`.
+`/usr/bin/ld` is an `xcrun` shim whose target follows `xcode-select` and
+`DEVELOPER_DIR` (the Command Line Tools copy is `ld-1167.5`), so every preset passes
+the real Xcode toolchain path as `--ld-path` for executable, shared and module links.
+`doctor` resolves each profile preset's inherited cache variables and rejects a missing
+or different linker pin, checks `ld -v` for the pinned project version, and confirms
+that the pinned `clang++` driver actually selects that linker under the caller's `PATH`.
+An Xcode update that changes the linker's project version fails `doctor` until the profile is
+deliberately requalified. The `rigor_linker` CTest runs the actual `doctor` against
+temporary copies with a substitute `ld` first on `PATH` and four substituted pins.
 
 Debug and optimized profiles exercise ISO C++26 mode with libc++ (no GNU dialect), C++26
 `std::saturating_*` arithmetic and throwing `std::span::at`, C++23 `std::expected` and constexpr
