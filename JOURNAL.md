@@ -11670,6 +11670,37 @@ papers/2026-10-26-autodev-workflow-review.md. It does not qualify native storage
 provider behavior, the product unit implementations or live workflow selection;
 those claims have their own direct mechanisms. No additional review layer.
 
+### Operator next program — chat usability, polish, and stop-embarassing-ourselves
+
+Operator requests a Beads issue under the exact title "blackbird chat usability,
+polish, and stop-embarassing-ourselves". Actual complaints: confusing UI; Escape
+cannot interrupt the turn; sent state so unclear that four/five similar messages
+were sent; tool-call chat output needs pretty printing and automatic collapse
+with an inspection mechanism. This is a broader usability program, not the whole
+list and not isolated cosmetic fixes.
+
+Retain the full operator scope and intended P1 epic payload in
+papers/2026-10-26-chat-usability-program-brief.md. After currently in-flight
+continuity/composition units conclude and are safely settled, this is NEXT,
+superseding automatic S3b/linker/provider/general-backlog continuation. Start with
+reference implementation review, UX/HCI/design study, actual runtime/task-state
+inspection, holistic design and pressure-tested delivery plan before code. Existing
+TUI theory/research is input, not proof present usability is adequate. Leave live
+owners undisturbed; do not postpone this until the entire old backlog finishes.
+
+Actually invoke bd 1.3.1 create with the exact title, epic/P1/open, brief body and
+chat-usability/ux/tui/next-program labels. CLI refuses the preserved legacy 0.58.0
+Dolt-server workspace and requires explicit migration. No bead ID is created;
+do not edit backups or initialize/migrate the store by implication. The brief is
+not a replacement tracker or a successful issue filing. Record the specific block
+for operator direction.
+
+Update the primary campaign note, ignored OVERSIGHT.md priority override and
+existing five-minute cron mission so the new sequencing survives the current chat.
+Read back the scheduled job. No additional worker, source mutation, interruption,
+branch integration or runtime replacement is performed for this planning request.
+
+
 
 
 

@@ -92,7 +92,23 @@ in unit notes/journals rather than introduce another tracker. Preserve the main
 checkout's backup, artwork, research and handoff changes. Only the orchestrator
 edits this checkout's campaign notes; each worker owns its worktree journal.
 
-## Dispatch after the first units
+## Next program — operator priority, 2026-10-26
+
+After the currently in-flight continuity and S3a composition units conclude and
+are safely settled, the NEXT program is **blackbird chat usability, polish, and
+stop-embarassing-ourselves**, ahead of S3b or any other new backlog unit. Read
+papers/2026-10-26-chat-usability-program-brief.md in the primary checkout. Start
+with reference implementation review, UX/HCI/design study and a reviewed holistic
+design/plan; no piecemeal UI patching or substitute unrelated campaign first.
+Do not interrupt either live owner or claim a failed gate complete. A directly
+necessary blocker to settling those current units stays with its owner.
+
+Bead creation was attempted with bd 1.3.1 and refused because the project is a
+legacy bd 0.58.0 Dolt-server workspace. No bead ID was created. Do not migrate,
+initialize, overwrite backups or claim the issue was filed; the tracked brief
+preserves the operator's scope and scheduling direction pending storage repair.
+
+## Earlier branch-delivery sequence (superseded as next priority)
 
 Continue one conceptual unit at a time, selecting from actual dependencies:
 S3a → S3b and the reviewed CLM lifecycle sequence; isolated linker repair;
