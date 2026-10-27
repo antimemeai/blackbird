@@ -834,3 +834,15 @@ and optional `source`, `offset`, `limit` for exact hex bytes. Timeline metadata
 does not establish success from admission or establish a missing settlement.
 It does not yet expose timing/usage aggregates, evaluations or Git checkpoints.
 See [campaign design](TRAJECTORIES.md) for the next units.
+
+## Slash command names and completion
+
+`/status` shows current session/settings; `/session` remains an alias. The other
+singular/plural pairs remain compatible: the singular performs an action and the
+plural lists its objects. Tab on a recalled or dismissed ambiguous command opens
+its candidates, even when an exact singular exists. Select with arrows and Tab;
+completion never submits. This makes `/sessions`, `/runs`, `/colleagues` and
+`/drafts` reachable without spelling their final `s`.
+
+`/clear-screen` clears only the display, **not model history**. `/clear` remains
+an alias, with a visible reminder. Use `/new` for a fresh conversation.

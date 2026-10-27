@@ -142,6 +142,9 @@ int main() {
         "/wf-research "); // slash menu selects the shared catalog entry
   composer.draft("/wf-research");
   composer.feed('\t');
+  check(composer.slash_open());
+  check(composer.text() == "/wf-research");
+  composer.feed('\t');
   check(composer.text() == "/wf-research ");
   check(terminal_command_hint("/wf-research x").find("Research procedure") !=
         std::string::npos);

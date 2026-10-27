@@ -743,7 +743,8 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
           dispatch.run([&] {
             if (session_store.settings().effort_pending &&
                 !prompt.starts_with("/effort ") && !prompt.starts_with("/model ") &&
-                prompt != "/session" && prompt != "/help" && prompt != "/context") {
+                prompt != "/session" && prompt != "/status" && prompt != "/help" &&
+                prompt != "/context") {
               ask_effort(session_store.settings(),
                          route_efforts(session_store.settings(), command_context));
               return;
@@ -954,7 +955,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
               emit(unwrap(dump_json(engine.operator_call(
                        "colleague", unwrap(parse_json(prompt.substr(11)))))) +
                    "\n");
-            } else if (prompt == "/session") {
+            } else if ((prompt == "/session" || prompt == "/status")) {
               raw_main_branch(dispatch, 21);
               const auto identity = session_identity(log, &command_context);
               emit(unwrap(dump_json(Value::object(

@@ -68,3 +68,15 @@ When selection replaces a nonempty draft, that draft is retained in **`/drafts`*
 3. Distinct conversation blocks, bounded collapsible tool output, unobtrusive truthful activity, search, unread/follow-tail controls.
 
 Keep useful expert paths and truthful work ownership. A polished display must not pretend a stored steer was consumed, a stopped request settled remote effects, a tool completion accepted a unit, or a source commit activated a running executable.
+
+## Slash command names and completion
+
+`/status` shows current session/settings; `/session` remains an alias. The other
+singular/plural pairs remain compatible: the singular performs an action and the
+plural lists its objects. Tab on a recalled or dismissed ambiguous command opens
+its candidates, even when an exact singular exists. Select with arrows and Tab;
+completion never submits. This makes `/sessions`, `/runs`, `/colleagues` and
+`/drafts` reachable without spelling their final `s`.
+
+`/clear-screen` clears only the display, **not model history**. `/clear` remains
+an alias, with a visible reminder. Use `/new` for a fresh conversation.

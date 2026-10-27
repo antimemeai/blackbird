@@ -11511,3 +11511,11 @@ struct called with designated initializers, with no suppression. `terminal_test`
 passes and clang-tidy is clean on src/terminal.cpp. The operator authorized
 stopping the rerun of the whole gate for this mechanical change and committing
 with the per-command hook override; the settled suite is not repeated.
+
+## 2026-10-19 — Slash command discovery and honest names
+
+Fixed fallback Tab trapping recalled/dismissed exact singular command prefixes;
+ambiguous matches now expose the candidate list. Kept action/list pairs, added
+/status (/session alias) and /clear-screen (/clear alias). Clearing prints that
+model history remains. Added direct old-code-failing composer regression and
+updated command help/operator docs. Plan/results: papers/sol-slash-2026-10-19/PLAN.md.

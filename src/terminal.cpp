@@ -58,7 +58,10 @@ const std::array builtin_commands{
     ChatCommand{"/queue", "", "Show pending prompts (TUI only)", "Chat"},
     ChatCommand{"/cancel", "", "Request stop and clear pending queue (TUI only)",
                 "Chat"},
-    ChatCommand{"/clear", "", "Clear display, not model context (TUI only)", "Chat"},
+    ChatCommand{"/clear-screen", "", "Clear display, not model context (TUI only)",
+                "Chat"},
+    ChatCommand{"/clear", "", "Alias for /clear-screen; keeps all model history",
+                "Chat"},
     ChatCommand{"/drafts", "", "List recovered drafts (TUI only)", "Chat"},
     ChatCommand{"/draft", "NUMBER",
                 "Load a recovered draft; explicit Enter sends (TUI only)", "Chat"},
@@ -67,7 +70,8 @@ const std::array builtin_commands{
     ChatCommand{"/model", "NAME", "Change model at the next available boundary",
                 "Session"},
     ChatCommand{"/effort", "LEVEL", "Set low, medium, high, xhigh or max", "Session"},
-    ChatCommand{"/session", "", "Current session and settings", "Session"},
+    ChatCommand{"/status", "", "Current session and settings", "Session"},
+    ChatCommand{"/session", "", "Alias for /status", "Session"},
     ChatCommand{"/new", "", "Start a fresh saved session; keep current settings",
                 "Session"},
     ChatCommand{"/sessions", "",
@@ -223,10 +227,6 @@ std::string complete_command(std::string_view text,
                              const std::vector<ChatCommand> &commands) {
   if (!command_token(text))
     return std::string{text};
-  // An exact command wins over longer names (/draft versus /drafts).
-  for (const auto &command : commands)
-    if (command.name == text)
-      return std::string{text} + (command.arguments.empty() ? "" : " ");
   std::string prefix;
   const ChatCommand *only = nullptr;
   std::size_t count = 0;
@@ -1208,6 +1208,15 @@ InputResult Composer::feed_impl(char byte, RawUiInput *raw, bool inspecting) {
       return {};
     }
     if (cursor_ == text_.size()) {
+      if (command_token(text_) &&
+          std::count_if(commands.begin(), commands.end(), [&](const auto &command) {
+            return command.name.starts_with(text_);
+          }) > 1) {
+        slash_open_ = true;
+        palette_query_ = text_.substr(1);
+        palette_selected_ = 0;
+        return {};
+      }
       text_ = complete_command(text_, commands);
       cursor_ = text_.size();
       goal_column_.reset();
@@ -3648,8 +3657,10 @@ void TerminalUI::run(const std::function<void(std::string_view)> &perform,
             transcript += busy ? "\nStop requested; pending queue cleared.\n"
                                : "\nNo active turn; pending queue cleared.\n";
             scroll = 0;
-          } else if (result.text == "/clear") {
+          } else if (result.text == "/clear" || result.text == "/clear-screen") {
             transcript.clear();
+            transcript += "\nDisplay cleared; model history is unchanged. "
+                          "Use /new for a fresh conversation.\n";
             scroll = 0;
           } else if (result.text == "/mouse" || result.text == "/mouse on" ||
                      result.text == "/mouse off") {

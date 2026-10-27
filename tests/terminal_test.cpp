@@ -1,6 +1,7 @@
 #include "blackbird/json.hpp"
 #include "blackbird/terminal.hpp"
 #include "blackbird/tools.hpp"
+#include <algorithm>
 #include <clocale>
 #include <cstdlib>
 #include <iostream>
@@ -134,7 +135,7 @@ int main() {
     feed(slash, "custom");
     check(feed(slash, "\r").text == "/model custom");
     feed(slash, "/statx\x7f");
-    check(slash.palette_lines(8)[1].find("/stats") != std::string::npos);
+    check(slash.palette_lines(8)[1].find("/status") != std::string::npos);
     slash.draft("");
     feed(slash, "/tmp/file");
     check(slash.palette_lines(8).empty());
@@ -231,6 +232,17 @@ int main() {
     feed(editor_key, "draft");
     check(feed(editor_key, "\x07").action != InputAction::none &&
           editor_key.text() == "draft");
+    // Recalled/dismissed exact singulars must still expose their plurals.
+    for (const auto name : {"/session", "/run", "/colleague", "/draft"}) {
+      Composer ambiguous;
+      ambiguous.draft(name);
+      feed(ambiguous, "\t");
+      check(ambiguous.slash_open());
+      const auto rows = ambiguous.palette_lines(12);
+      check(std::any_of(rows.begin(), rows.end(), [&](const auto &row) {
+        return row.find(std::string{name} + "s") != std::string::npos;
+      }));
+    }
     Composer completion;
     feed(completion, "/hel\t");
     check(completion.text() == "/help" && completion.cursor() == 5);
