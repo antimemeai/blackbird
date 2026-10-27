@@ -11564,6 +11564,53 @@ initialization. Later Oxcart records say the operator regards Dolt as unused.
 Backup statuses lag implementation and are not used as authoritative completion.
 Check and publish only this report and journal under the text-only exception.
 
+## 2026-10-26 — launch native Blackbird autodev with Hermes oversight
+
+Patrick asks for Blackbirds using gpt-6.1-sol medium to burn outstanding work down
+to BLACKBIRD.md standard, with Hermes orchestrating and overseeing. Record scope,
+first conceptual owners and integration/resource rules in
+papers/2026-10-26-autodev-campaign.md. This is execution authorization, not merely
+a proposed roster; no implicit master promotion or operator-runtime replacement.
+
+Live discovery finds the sixteen auxiliary worktrees retired since orientation.
+Their branch tips remain. Observe retirement archive/index, then discover that
+its directory disappears as preparation proceeds; do not infer its new location.
+Keep shared clm-rd7-notes available and initially tell workers not to depend on
+the vanished staging locator. The concurrent retirement journal subsequently
+identifies ~/archives/blackbird-worktrees-2026-10-26/; verify that directory and
+preserve its payloads. Restore only two bounded worktree slots in context/autodev-2026-10-26:
+continuity based on 5b1ff1d and composition based on 9df54fe, each on a fresh
+work/autodev-* branch. Workspace doctrine resolves through their parent symlink.
+
+Use existing arco-campaign provider-only transport supervision, pinned to selected
+managed generation-6QI9PQx9. Qualify actual OpenAI/Sol/medium native read_file and
+write_file; read back its artifact and session metadata. Initialize both worker
+sessions explicitly with provider/model/effort and their own Lua program. Launch
+persistent terminal jobs, then read back exact supervisor commands, child metadata
+and real mission tool activity. Composition writes its initial unit status.
+The first composition command had a mistyped run path and refused before native
+dispatch; correct it once, retaining the failed handle. No unknown effect replay.
+
+Continuity owns the interrupted-write/SIGTERM invariant and directly relevant 8zr
+findings. Composition owns completing S3a's existing remediation/recheck and
+exact-tree qualification, without S3b. Neither edits its sibling or shared master.
+Serialize all builds/tests/lint/Linux checks and source commit hooks with a small
+development-only lock wrapper. Direct concurrent-holder and exit-7 cases verify
+serialization and error propagation, not process containment. Native workers must
+retain grounding, RED/GREEN, consequential independent review, one recheck/fixes,
+required source gates and normal branch pushes. No third hardening layer, source
+hook bypass, new dependencies, laptop mutation/fuzz or blanket recertification.
+
+Schedule and read back Hermes oversight job 2dc91a5ccf63 every 15m, with explicit
+acceptance, safe continuation, subsequent-unit dispatch and material-result
+reporting instructions. Initial terminal handles, PIDs, qualification and failure
+are in ignored context/autodev-2026-10-26/LAUNCH.md. Oversight requires the Mac awake
+and Hermes gateway running; persistent workers are not reboot-resumable. No work
+unit is complete merely because this launch or a future worker exit succeeds.
+Preserve pre-existing backups/artwork/research. No bd/Dolt storage operations.
+Only campaign documentation and this journal change in the primary checkout.
+
+
 ## 2026-10-26 — retire auxiliary worktrees
 
 The operator requests one primary local checkout and retirement material outside
