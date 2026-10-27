@@ -10,8 +10,24 @@ import tempfile
 import traceback
 
 
+# MiMo Token Plan's reply to an unsupported model, as retained by the 2026-10-17
+# campaign (r2-t04-mimo diagnostics), with the requested model substituted.
+MIMO_REFUSAL = '{\n    "error": {\n        "code": "400",\n        "message": "Not supported model %s"\n    }\n}'
+
+
 def fake_curl():
     config = sys.stdin.read()
+    mode = os.environ.get('BLACKBIRD_RR_MODE', 'success')
+    if mode == 'http_400':
+        assert 'https://token-plan-sgp.xiaomimimo.com/v1/responses' in config
+        assert 'Authorization: Bearer fixture-secret' in config
+        encoded = next(line.split(' = ', 1)[1] for line in config.splitlines()
+                       if line.startswith('data-binary = '))
+        request = json.loads(json.loads(encoded))
+        with Path(os.environ['BLACKBIRD_RR_LOG']).open('a') as out:
+            out.write(json.dumps(request) + '\n')
+        sys.stdout.write(MIMO_REFUSAL % request['model'] + '\n400')
+        return
     assert 'https://api.paperinstruments.com/v1/responses' in config
     assert 'Authorization: Bearer fixture-secret' in config
     assert all('fixture-secret' not in arg for arg in sys.argv)
@@ -50,7 +66,6 @@ def fake_curl():
     response = {'status': 'completed', 'id': 'resp1', 'model': 'ultramarine-1-flash',
                 'output': output, 'usage': {'input_tokens': 100, 'output_tokens': 10}}
     event = {'type': 'response.completed', 'response': response}
-    mode = os.environ.get('BLACKBIRD_RR_MODE', 'success')
     if mode in ('failed', 'incomplete'):
         event['type'] = 'response.' + mode
         response['status'] = mode
@@ -84,16 +99,16 @@ def main():
                    BLACKBIRD_RR_DIAGNOSTIC=str(root / 'fake-error'),
                    BLACKBIRD_RR_EFFECT=str(root / 'effect'))
 
-        def run(args, *, input=None, selected_env=env):
+        def run(args, *, input=None, selected_env=env, errors=None):
             result = subprocess.run([str(executable), *args], env=selected_env,
-                                    input=input, capture_output=True, text=True, timeout=30)
+                                    input=input, capture_output=True, text=True,
+                                    errors=errors, timeout=30)
             diagnostic = root / 'fake-error'
             assert not diagnostic.exists(), diagnostic.read_text() if diagnostic.exists() else ''
             return result
 
-        def register(name, protocol):
-            result = run(['auth', 'add-provider', name,
-                          'https://api.paperinstruments.com/v1', protocol, 'PAPER_FIXTURE_KEY'])
+        def register(name, protocol, base='https://api.paperinstruments.com/v1'):
+            result = run(['auth', 'add-provider', name, base, protocol, 'PAPER_FIXTURE_KEY'])
             assert result.returncode == 0, result.stderr
 
         register('paper', 'responses-portable')
@@ -114,7 +129,8 @@ def main():
         assert len((root / 'requests').read_text().splitlines()) == 3
         refused_effort = run(['--plain', '--session', str(session)],
                              input='/effort medium\n/effort xhigh\n/session\n/quit\n')
-        assert 'Portable Responses requires' in refused_effort.stderr
+        assert "Effort 'medium' is not documented for Paper Ultramarine Responses" in refused_effort.stderr
+        assert 'Accepted: low, high, max.' in refused_effort.stderr
         assert '"effort":"max"' in refused_effort.stdout
         repaired = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
         assert repaired.returncode == 0 and '"effort":"max"' in repaired.stdout
@@ -128,7 +144,7 @@ def main():
         for effort in ('medium', 'xhigh'):
             refused = run([*options, '--effort', effort, '--once', 'must not dispatch'])
             assert refused.returncode != 0
-            assert 'Portable Responses requires' in refused.stderr
+            assert f"Effort '{effort}' is not documented for Paper Ultramarine Responses" in refused.stderr
         still = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
         assert '"provider":"paper"' in still.stdout and '"model":"ultramarine-1-flash"' in still.stdout
         assert len((root / 'requests').read_text().splitlines()) == 3
@@ -141,7 +157,43 @@ def main():
                          selected_env=selected)
             assert result.returncode != 0, (mode, result.stdout, result.stderr)
             assert not (root / 'effect').exists(), mode
-        for result in (first, reopened, follow, still):
+        # A provider's JSON refusal reaches the console and the session diagnostics.
+        register('tokenplan', 'responses', 'https://token-plan-sgp.xiaomimimo.com/v1')
+        keyed = run(['auth', 'key', 'tokenplan', 'fixture'], input='fixture-secret\n')
+        assert keyed.returncode == 0, keyed.stderr
+        refusal_session = root / 'refusal'
+        before = len((root / 'requests').read_text().splitlines())
+        refused = run(['--plain', '--session', str(refusal_session), '--provider', 'tokenplan',
+                       '--model', 'mimo-v2.6-pro', '--effort', 'high',
+                       '--once', 'Refused by the provider.'],
+                      selected_env=dict(env, BLACKBIRD_RR_MODE='http_400'))
+        assert refused.returncode != 0, (refused.stdout, refused.stderr)
+        line = 'provider HTTP 400: Not supported model mimo-v2.6-pro'
+        assert line + ']' in refused.stdout, (refused.stdout, refused.stderr)
+        # Retained sources in the listing are raw bytes, not necessarily UTF-8.
+        inspected = run(['--plain', '--session', str(refusal_session), '--audit-last'],
+                        errors='replace')
+        assert inspected.returncode == 0, inspected.stderr
+        assert '"label":"provider.error"' in inspected.stdout and line in inspected.stdout
+        assert len((root / 'requests').read_text().splitlines()) == before + 1  # 400: no retry
+        # The Token Plan refuses ultraspeed; the settings table refuses it before dispatch.
+        ultraspeed = run(['--plain', '--session', str(root / 'ultraspeed'), '--provider',
+                          'tokenplan', '--model', 'mimo-v2.6-pro-ultraspeed', '--effort', 'high',
+                          '--once', 'must not dispatch'],
+                         selected_env=dict(env, BLACKBIRD_RR_MODE='http_400'))
+        assert ultraspeed.returncode != 0
+        assert ("Model 'mimo-v2.6-pro-ultraspeed' is not available on MiMo Token Plan "
+                "(Singapore)") in ultraspeed.stderr, ultraspeed.stderr
+        assert len((root / 'requests').read_text().splitlines()) == before + 1
+        # MiMo documents none (thinking off); Blackbird sends it unchanged.
+        thinking_off = run(['--plain', '--session', str(root / 'thinking-off'), '--provider',
+                            'tokenplan', '--model', 'mimo-v2.6-flash', '--effort', 'none',
+                            '--once', 'Refused by the provider.'],
+                           selected_env=dict(env, BLACKBIRD_RR_MODE='http_400'))
+        assert thinking_off.returncode != 0 and 'provider HTTP 400' in thinking_off.stdout
+        sent = json.loads((root / 'requests').read_text().splitlines()[-1])
+        assert sent['reasoning']['effort'] == 'none' and sent['model'] == 'mimo-v2.6-flash'
+        for result in (first, reopened, follow, still, refused):
             assert 'fixture-secret' not in result.stdout + result.stderr
         for file in session.rglob('*'):
             if file.is_file():

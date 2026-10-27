@@ -427,6 +427,77 @@ void require_provider_success(int status) {
   if (status < 200 || status >= 300)
     throw Error{ErrorCode::external_unknown, status};
 }
+std::optional<int> provider_http_status(const Error &error) noexcept {
+  const auto status = error.detail;
+  if ((error.code == ErrorCode::external_unknown && status >= 100 && status <= 599 &&
+       (status < 200 || status >= 300)) ||
+      (error.code == ErrorCode::provider_auth && (status == 401 || status == 403)) ||
+      (error.code == ErrorCode::provider_rate_limit && status == 429))
+    return static_cast<int>(status);
+  return std::nullopt;
+}
+std::optional<std::string> provider_error_message(std::string_view body, int status) {
+  constexpr std::size_t body_limit = 64 * 1024, message_limit = 1024;
+  if (status < 100 || status > 599)
+    return std::nullopt;
+  const auto code = std::to_string(status);
+  if (body.ends_with(code) && body.size() > code.size() &&
+      body[body.size() - code.size() - 1] == '\n')
+    body.remove_suffix(code.size() + 1);
+  if (body.size() > body_limit)
+    return std::nullopt;
+  auto parsed = parse_json(body);
+  if (!parsed.has_value() ||
+      !std::holds_alternative<Value::Object>(parsed.value().value()))
+    return std::nullopt;
+  const auto &root = parsed.value();
+  const auto text = [](const Value *value) -> std::string {
+    if (value == nullptr)
+      return {};
+    if (const auto *string = std::get_if<std::string>(&value->value()))
+      return *string;
+    if (const auto *number = std::get_if<Number>(&value->value()))
+      return number->text();
+    return {};
+  };
+  std::string message, context;
+  if (const auto *error = root.find("error")) {
+    if (std::holds_alternative<Value::Object>(error->value())) {
+      message = text(error->find("message"));
+      for (const auto key : {"type", "code", "param"}) {
+        const auto value = text(error->find(key));
+        if (value.empty() || value == code)
+          continue;
+        context += context.empty() ? " (" : ", ";
+        context += key;
+        context += ": ";
+        context += value;
+      }
+    } else if (std::holds_alternative<std::string>(error->value()))
+      message = error->string();
+  }
+  for (const auto key : {"message", "detail"})
+    if (message.empty())
+      if (const auto *value = root.find(key);
+          value && std::holds_alternative<std::string>(value->value()))
+        message = value->string();
+  if (message.empty())
+    return std::nullopt;
+  if (!context.empty())
+    message += context + ")";
+  // One terminal line: controls become spaces; truncation keeps whole UTF-8 scalars.
+  for (auto &c : message)
+    if (static_cast<unsigned char>(c) < 32 || c == 127)
+      c = ' ';
+  if (message.size() > message_limit) {
+    std::size_t end = message_limit;
+    while (end > 0 && (static_cast<unsigned char>(message[end]) & 0xC0U) == 0x80U)
+      --end;
+    message.resize(end);
+    message += "...";
+  }
+  return message;
+}
 ProviderHttpResponse
 provider_http_impl(const ProviderHttpRequest &r, const ProviderAuthConfig &c,
                    const std::function<void(std::string_view)> &observer,

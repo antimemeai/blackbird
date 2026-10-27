@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <functional>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -37,12 +38,20 @@ public:
       throw;
     }
     pending_.clear();
+    flushed_ = true;
   }
   std::size_t pending_bytes() const { return pending_.size(); }
+  // The whole stream so far while no block has been flushed, such as a short
+  // provider error body; nullopt once earlier bytes left for the sink.
+  std::optional<std::string_view> whole() const {
+    if (flushed_)
+      return std::nullopt;
+    return std::string_view{pending_};
+  }
 
 private:
   std::function<void(std::string_view)> sink_;
   std::string pending_;
-  bool failed_ = false;
+  bool failed_ = false, flushed_ = false;
 };
 } // namespace blackbird

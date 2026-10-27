@@ -19,8 +19,12 @@ Recovery, inspection, continuation and diagnostic expiry require `--session`.
 The working directory is the tool working
 directory. Only one process may hold a session. `--once 'prompt'` runs one turn.
 `--provider ID` selects OpenAI, OpenRouter or a registered Responses route; switching
-providers requires an explicit `--model NAME`. `--effort low|medium|high|xhigh|max` selects reasoning
-(initial default `medium`). Provider, model, effort and absolute workflow path persist with
+providers requires an explicit `--model NAME`. `--effort LEVEL` selects reasoning
+(initial default `medium`). Levels are none, minimal, low, medium, high, xhigh, max and
+ultra; launch, `/effort` and `/model` accept only what the selected endpoint documents
+([provider settings](PROVIDER_SETTINGS.md)), and a refusal lists the accepted values. A
+provider's HTTP refusal shows its own message as `[provider HTTP 400: ...]` and is kept
+as a `provider.error` record that `--audit-last` lists. Provider, model, effort and absolute workflow path persist with
 the session; explicit launch options override and save them. Actor/conversation/
 workflow identities also survive restart. Lua request options can override model
 request defaults for a particular call. `/session` shows configuration and identities;
@@ -492,7 +496,9 @@ assert(pending.staged)
 ```
 
 Empty model/effort use current launch defaults; nonempty defaults affect later
-requests after publication. Effort accepts low/medium/high/xhigh/max. Request-local
+requests after publication. Effort accepts the vocabulary none, minimal, low, medium,
+high, xhigh, max and ultra; the provider refuses levels its endpoint does not take.
+Request-local
 `blackbird.request` options still override these defaults. Model strings do **not**
 select a different provider/adapter, authorize dependencies, or establish provider
 capability; unsupported models fail through the existing adapter.

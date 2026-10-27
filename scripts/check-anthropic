@@ -153,7 +153,9 @@ def main():
         reopened = run(['--plain', '--session', str(session)], input='/session\n/quit\n')
         assert reopened.returncode == 0 and '"provider":"anthropic"' in reopened.stdout
         refused = run(['--plain', '--session', str(session)], input='/effort xhigh\n/session\n/quit\n')
-        assert 'Anthropic model does not support the selected effort' in refused.stderr
+        assert ("Effort 'xhigh' is not documented for Anthropic Messages "
+                "(https://api.anthropic.com/v1) with model claude-sonnet-4-6. "
+                "Accepted: low, medium, high, max.") in refused.stderr, refused.stderr
         assert '"effort":"medium"' in refused.stdout and '"effort":"xhigh"' not in refused.stdout
         follow = run(['--plain', '--session', str(session), '--rebuild-session', '--once', 'Confirm the prior result.'])
         assert follow.returncode == 0, (follow.stdout, follow.stderr)

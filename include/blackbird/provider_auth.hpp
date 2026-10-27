@@ -3,6 +3,9 @@
 #include "blackbird/value.hpp"
 #include <filesystem>
 #include <functional>
+#include <optional>
+#include <string>
+#include <string_view>
 
 namespace blackbird {
 struct RawProviderOwner;
@@ -38,6 +41,13 @@ provider_http(const ProviderHttpRequest &request, const ProviderAuthConfig &conf
               const RawEventRef *auth_resolution = nullptr,
               const RawAdapterContext *raw_context = nullptr);
 void require_provider_success(int status);
+// HTTP status of a provider reply that require_provider_success refused; none for
+// transport, stream or refresh failures. Error itself carries no text.
+std::optional<int> provider_http_status(const Error &error) noexcept;
+// One display line from a provider's JSON error body: error.message (OpenAI, Paper,
+// MiMo, OpenRouter, Anthropic envelopes), a string error, message or detail. Strips
+// Blackbird's own curl "\n<status>" trailer. None when the body is not such JSON.
+std::optional<std::string> provider_error_message(std::string_view body, int status);
 
 struct OAuthExpected {
   std::int64_t account_revision = -2;

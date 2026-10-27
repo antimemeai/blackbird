@@ -25,8 +25,11 @@ fallback, as with other owned providers.
 
 Use `responses` for a provider accepting Blackbird's normal OpenAI Responses
 fields. `responses-portable` sends developer messages as system messages,
-requests plaintext reasoning and accepts only `low`, `high` or `max` effort.
-Choose effort explicitly: the ordinary initial `medium` is unsupported. The
+requests plaintext reasoning. Paper documents only `low`, `high` and `max` effort,
+so choose effort explicitly: the ordinary initial `medium` is refused at launch.
+Launch checks of model and effort follow the endpoint's entry in the
+[provider settings table](PROVIDER_SETTINGS.md); an undescribed `responses-portable`
+endpoint accepts `low`, `high` or `max`. The
 portable adapter refuses encrypted history instead of discarding it; begin a
 fresh session when moving from a provider whose history contains encrypted items.
 Plaintext reasoning and tool call/result IDs are replayed with the full history.

@@ -4,6 +4,7 @@
 #include "blackbird/packet.hpp"
 #include "blackbird/process_lifetime.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/provider_settings.hpp"
 #include "blackbird/raw_authored.hpp"
 #include "blackbird/raw_bridge.hpp"
 #include "blackbird/raw_command.hpp"
@@ -2192,9 +2193,7 @@ Value CodingEngine::program_config(const Value &arguments, DomainAdmission *admi
       }
       const auto &model = string_field(*proposal, "model");
       const auto &effort = string_field(*proposal, "effort");
-      if (model.size() > 256 ||
-          (!effort.empty() && effort != "low" && effort != "medium" &&
-           effort != "high" && effort != "xhigh" && effort != "max"))
+      if (model.size() > 256 || (!effort.empty() && !parse_effort(effort)))
         throw Error{ErrorCode::invalid_range};
       if (const auto *cache = proposal->find("prompt_cache"))
         (void)prompt_cache_mode(*cache);
@@ -4527,6 +4526,9 @@ Value CodingEngine::request(Value options) {
         }
         ResponsePreview preview;
         previewed_.clear();
+        // The provider's own explanation of a refused HTTP reply. Error carries no
+        // text, so the attempt reads it from the bytes it captured.
+        std::optional<std::string> refusal;
         try {
           group.stage(22);
           response = attempt_phase.run([&] {
@@ -4609,6 +4611,9 @@ Value CodingEngine::request(Value options) {
                     transport.error(error);
                     transport.outcome(RawRegionOutcome::exception);
                     transport.finish();
+                    if (const auto http = provider_http_status(error))
+                      if (const auto body = capture.whole())
+                        refusal = provider_error_message(*body, *http);
                     // No destructor I/O and no retry if a prior sink write was
                     // uncertain.
                     capture.flush();
@@ -4674,6 +4679,18 @@ Value CodingEngine::request(Value options) {
           // No attempt begin exists if native retained admission itself refused.
           if (attempt_ref.ordinal)
             group.emit(1326, decision_fields);
+          if (refusal) {
+            const auto line =
+                "provider HTTP " + std::to_string(e.detail) + ": " + *refusal;
+            if (log_.root().state() == JournalWriterState::live)
+              log_.original({"provider.error", line,
+                             Value::object({{"retry_group", Value{retry_group}},
+                                            {"status", Value{Number{e.detail}}}})});
+            if (status)
+              status(line);
+            if (notice || display)
+              (notice ? notice : display)("\n[" + line + "]\n");
+          }
           if (!eligible)
             throw;
           const auto message =
@@ -5629,8 +5646,7 @@ CodingEngine::take_restart_note(const RawAdapterContext *context) {
   });
 }
 void CodingEngine::effort(std::string value) {
-  if (value != "low" && value != "medium" && value != "high" && value != "xhigh" &&
-      value != "max")
+  if (!parse_effort(value))
     throw Error{ErrorCode::invalid_range};
   effort_ = std::move(value);
 }

@@ -1,5 +1,6 @@
 #include "blackbird/session.hpp"
 #include "blackbird/packet.hpp"
+#include "blackbird/provider_settings.hpp"
 #include "blackbird/raw_file.hpp"
 #include "blackbird/raw_restart.hpp"
 #include "blackbird/raw_session.hpp"
@@ -42,8 +43,7 @@ void validate(const SessionSettings &value) {
       value.model.find('\0') != std::string::npos || value.workflow.empty() ||
       value.workflow.find('\0') != std::string::npos || !valid_provider ||
       (value.provider == "openrouter" && value.model.find('/') == std::string::npos) ||
-      (value.effort != "low" && value.effort != "medium" && value.effort != "high" &&
-       value.effort != "xhigh" && value.effort != "max"))
+      !parse_effort(value.effort))
     throw Error{ErrorCode::invalid_range};
 }
 RawSessionCall session_call(AuditLog &log, std::uint8_t action,

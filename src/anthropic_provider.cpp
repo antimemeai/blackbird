@@ -1,5 +1,6 @@
 #include "blackbird/anthropic_provider.hpp"
 #include "blackbird/json.hpp"
+#include "blackbird/provider_settings.hpp"
 #include "blackbird/raw_auth.hpp"
 #include <charconv>
 #include <chrono>
@@ -289,12 +290,8 @@ private:
 void validate_anthropic_route(std::string_view model, std::string_view effort) {
   if (model.empty() || model.size() > 256)
     throw Error{ErrorCode::invalid_range};
-  if (effort != "low" && effort != "medium" && effort != "high" && effort != "xhigh" &&
-      effort != "max")
-    throw Error{ErrorCode::unsupported};
-  if ((effort == "xhigh" && (model.starts_with("claude-sonnet-4-6") ||
-                             model.starts_with("claude-opus-4-6"))) ||
-      ((effort == "xhigh" || effort == "max") && model.starts_with("claude-opus-4-5")))
+  // Documented efforts and per-model exclusions live in the provider settings table.
+  if (refuse_launch({"messages", "https://api.anthropic.com/v1", model, effort}))
     throw Error{ErrorCode::unsupported};
 }
 Value export_anthropic_request(const Value &request, std::uint64_t max_tokens,

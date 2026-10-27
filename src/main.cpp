@@ -7,6 +7,7 @@
 #include "blackbird/openrouter.hpp"
 #include "blackbird/packet.hpp"
 #include "blackbird/provider_auth.hpp"
+#include "blackbird/provider_settings.hpp"
 #include "blackbird/raw_auth.hpp"
 #include "blackbird/raw_command.hpp"
 #include "blackbird/raw_file.hpp"
@@ -107,7 +108,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
                      "blackbird [--session DIRECTORY] [--provider ID] "
                      "[--model NAME] [--workflow FILE] "
                      "[--once "
-                     "PROMPT] [--audit-last] [--effort low|medium|high|xhigh|max] "
+                     "PROMPT] [--audit-last] [--effort LEVEL] "
                      "[--plain] [--list-sessions [ROOT]] [--seed-session JSON] "
                      "[--backstop MISSION_JSON (requires --once)] "
                      "[--resume-continue|--resume-once] [--rebuild-session] "
@@ -451,33 +452,42 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
       settings.workflow =
           std::filesystem::absolute(workflow).lexically_normal().string();
     (void)read_file(settings.workflow, 16 * 1024 * 1024, &session_capture);
+    // Model and effort are checked against the provider settings table for the
+    // endpoint the adapter will call (docs/PROVIDER_SETTINGS.md).
     const auto validate_route = [&](const SessionSettings &candidate,
                                     const RawAdapterContext &capture) {
-      if (candidate.provider == "openai" || candidate.provider == "openrouter")
-        return;
       ProviderAuth auth;
       const RawAuthParent parent{capture.parent.value_or(RawEventRef{})};
-      const auto descriptor = auth.descriptor(candidate.provider, &parent);
-      const auto &protocol = string_field(descriptor, "protocol");
-      if (candidate.provider == "anthropic" && protocol == "messages") {
-        try {
-          validate_anthropic_route(candidate.model, candidate.effort);
-        } catch (const Error &) {
-          warning("Anthropic model does not support the selected effort.\n");
-          throw;
+      std::string protocol = "responses", base_url;
+      if (candidate.provider == "openai")
+        // The OpenAI adapter uses an owned account when one is selected, else the
+        // Codex ChatGPT login.
+        base_url = auth.selected("openai", &parent)
+                       ? string_field(auth.descriptor("openai", &parent), "base_url")
+                       : std::string{codex_chatgpt_base_url};
+      else if (candidate.provider == "openrouter")
+        base_url = "https://openrouter.ai/api/v1"; // The adapter requires this binding.
+      else {
+        const auto descriptor = auth.descriptor(candidate.provider, &parent);
+        protocol = string_field(descriptor, "protocol");
+        base_url = string_field(descriptor, "base_url");
+        if (protocol != "responses" && protocol != "responses-portable" &&
+            !(candidate.provider == "anthropic" && protocol == "messages")) {
+          warning("Main coding requires a Responses provider or native Anthropic "
+                  "Messages.\n");
+          throw Error{ErrorCode::unsupported};
         }
-        return;
       }
-      if (protocol != "responses" && protocol != "responses-portable") {
-        warning("Main coding requires a Responses provider or native Anthropic "
-                "Messages.\n");
-        throw Error{ErrorCode::unsupported};
+      if (const auto refusal =
+              refuse_launch({protocol, base_url, candidate.model, candidate.effort})) {
+        warning(*refusal + "\n");
+        // A value outside Blackbird's vocabulary is invalid; a known one is
+        // unsupported.
+        throw Error{parse_effort(candidate.effort) ? ErrorCode::unsupported
+                                                   : ErrorCode::invalid_range};
       }
-      if (protocol == "responses-portable" && candidate.effort != "low" &&
-          candidate.effort != "high" && candidate.effort != "max") {
-        warning("Portable Responses requires effort low, high or max.\n");
-        throw Error{ErrorCode::unsupported};
-      }
+      if (protocol == "messages")
+        validate_anthropic_route(candidate.model, candidate.effort); // Model bounds.
     };
     validate_route(settings, session_capture);
     session_store.save(settings, &session_capture);
@@ -1075,6 +1085,7 @@ int run_session(int argc, char **argv, SessionSuccessorOutputs outputs,
               raw_main_branch(dispatch, 35);
               auto candidate = session_store.settings();
               candidate.model = prompt.substr(7);
+              validate_route(candidate, command_context);
               session_store.save(candidate, &command_context);
               engine.model(candidate.model);
               model = candidate.model;
