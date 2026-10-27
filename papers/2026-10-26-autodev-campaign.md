@@ -7,7 +7,27 @@ review, source grounding, work-branch commits/pushes and subsequent unit dispatc
 It does not authorize secret changes, dependency adoption, mutation on the laptop,
 reviving Dolt, replacing the operator's runtime, or an implicit merge to master.
 
-## Current phase — chat usability study, October 27
+## Current phase — holistic chat design and delivery plan, October 27
+
+Research-only study accepted at `d8dc2af667b2029345ee150ae94950995cfc06f0`
+on `work/autodev-chat-study-2026-10-27`; exact remote readback matches. Study,
+source/task requirements, six-finding review, one recheck and final narrow wording
+fix inspected; clean text-only scope and whitespace/local-link/JSON checks pass.
+No third review. Start at the study branch's `papers/chat-usability-2026-10-27/README.md`.
+This accepts research with explicit gaps, not installed-source causality, live
+provider/remote interruption, or actual operator usability improvement.
+
+Scheduled oversight dispatched `chat-design-01`, reusing the same bounded slot
+on `work/autodev-chat-design-2026-10-27` from exact study HEAD. Explicit native
+OpenAI/Sol/medium and uncapped workflow; supervisor73480/native73493 observed,
+initial provider request and session settings verified. Its unit is coherent
+holistic design, labeled readable mockups and owner-linked behavioral contracts,
+then delivery plan after design pressure testing. Two total review/fix layers;
+no product coding or implied implementation commission. Primary user changes,
+old study evidence and inactive composition remain untouched. No integration,
+installation or activation. Current owner/map remains in ROOT/OVERSIGHT.md.
+
+## Previous phase — chat usability study, October 27
 
 The initial implementation pass is settled: continuity is delivered as qualified
 source at `38a82ea`; S3a remains blocked and inactive, with unchanged staged source

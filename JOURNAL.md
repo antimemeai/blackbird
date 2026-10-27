@@ -11820,6 +11820,33 @@ oversight is updated to obey the same mechanism. Read-only observation/native
 study work remains unaffected. Current map supersedes old active-run observations.
 No failed gate is reclassified as success, and no main merge or runtime activation.
 
+### 2026-10-27 — research accepted; holistic chat design/plan dispatched
+
+Chat-study-01 returned at 00:38:11 EDT. Inspect its actual handoff, task/state/
+control requirements, independent review/recheck and final categorical-wording
+correction. Exact published remote is d8dc2af667b2029345ee150ae94950995cfc06f0
+on work/autodev-chat-study-2026-10-27. Clean worktree; 16 changed documentation
+paths only. Base diff whitespace, local document links and JSON checks pass.
+Accept the research with its explicit source/runtime, provider, child-exit and
+operator-observation limits. Six review findings remediated, one focused recheck
+and final narrow fix, no third assurance. Not a claim chat is fixed.
+
+Acquire atomic controller claim before any mutation, recheck clean exact HEAD
+and absent prior native worker, create work/autodev-chat-design-2026-10-27 from
+accepted study in the same bounded slot. Preserve all old ignored evidence.
+Initialize fresh chat-design-01 explicitly openai/gpt-6.1-sol/medium with uncapped
+ROOT/autodev.lua; launch existing pinned native runtime via provider-only
+supervisor. Terminal proc_08e347d915b4, supervisor73480/native73493; actual commands,
+session settings, running metadata and initial native request observed.
+
+Commission whole coherent interaction design with source-linked behavioral
+contracts and labeled readable mockups, design pressure testing, then delivery
+plan and final bounded review/fixes. No product/test/config coding, builds or
+source gates in this unit. Implementation awaits orchestrator acceptance and
+separate commission. No merge, activation, bd/Dolt operations or sibling changes;
+composition remains blocked/inactive and continuity remains separate source.
+Update current coordination map and campaign note under the controller claim.
+
 
 
 
