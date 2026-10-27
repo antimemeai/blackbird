@@ -26,7 +26,9 @@ def main():
     artifacts = args.artifacts.resolve() / (args.backend + '-' + uuid.uuid4().hex[:10])
     artifacts.mkdir(parents=True)
     tool = ROOT / 'scripts/tui-test'
-    subprocess.run([str(tool), '--check'], check=True, timeout=10)
+    # A precondition, not a claim: on Neuroses the first check after install
+    # outlasted 10 s (arconaut-8zr).
+    subprocess.run([str(tool), '--check'], check=True, timeout=60)
     session = 'blackbird-center-' + uuid.uuid4().hex
     history = []
 

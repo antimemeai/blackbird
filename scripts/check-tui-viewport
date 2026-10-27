@@ -26,7 +26,9 @@ def main():
     directory = args.artifacts.resolve() / (args.backend + '-' + uuid.uuid4().hex[:10])
     directory.mkdir(parents=True)
     (directory / 'responses').mkdir()
-    subprocess.run([str(TOOL), '--check'], check=True, timeout=10)
+    # A precondition, not a claim: on Neuroses the first check after install
+    # outlasted 10 s (arconaut-8zr).
+    subprocess.run([str(TOOL), '--check'], check=True, timeout=60)
     session = 'blackbird-viewport-' + uuid.uuid4().hex
     history, phases = [], []
     failure = cleanup_error = None

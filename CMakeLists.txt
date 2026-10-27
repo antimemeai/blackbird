@@ -1025,7 +1025,7 @@ target_compile_definitions(tui_snapshot_test PRIVATE BLACKBIRD_INSTRUMENT_SOURCE
 add_test(NAME tui_retained_result COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_SOURCE_DIR}/scripts/check-tui-instrument $<TARGET_FILE:blackbird>
   --artifacts ${CMAKE_BINARY_DIR}/tui-retained-result)
-set_tests_properties(tui_retained_result PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+set_tests_properties(tui_retained_result PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
 
 add_test(NAME install_blackbird COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check-install-blackbird)
 set_tests_properties(install_blackbird PROPERTIES TIMEOUT 30)

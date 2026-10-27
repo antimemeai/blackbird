@@ -34,6 +34,12 @@ std::atomic<int> resource_descriptor_result{0}, resource_descriptor_error{0};
 struct rlimit selected_resource_limit{};
 struct rlimit restored_resource_limit{};
 using Path = std::filesystem::path;
+// Liveness guard for waits on fixture milestones: each milestone happens
+// eventually, and the guard only names the step that hung before CTest's
+// 30-second watchdog. It is not a performance claim, so host load must not
+// reach it. Claims about time itself (the one-second absolute lifetime) keep
+// their own bounds.
+constexpr auto liveness_guard = std::chrono::seconds{20};
 void require(bool value, std::string_view claim) {
   if (!value)
     throw std::runtime_error(std::string{claim});
@@ -125,7 +131,7 @@ struct Evidence {
   }
   void until(const std::string &id, const std::function<bool()> &predicate,
              std::string_view milestone) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{4};
+    const auto deadline = std::chrono::steady_clock::now() + liveness_guard;
     while (!predicate()) {
       if (std::chrono::steady_clock::now() >= deadline) {
         const auto state = jobs.read(Value::object({{"job_id", Value{id}}}));
@@ -201,7 +207,7 @@ void retention(const Path &executable, const Path &root) {
   const auto pid = metadata(running.root / "identity", "pid");
   const auto pending = fixture({executable, root / "capture-protected"});
   protected_jobs.start(c, pending, {"closed-stdio"});
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{4};
+  const auto deadline = std::chrono::steady_clock::now() + liveness_guard;
   while (string_field(protected_jobs.jobs.read(Value::object({{"job_id", Value{c}}})),
                       "state") != "settling") {
     require(std::chrono::steady_clock::now() < deadline,
@@ -778,22 +784,36 @@ int main(int argc, char **argv) {
                 field(signal_result, "signal") == Value{Number{SIGTERM}},
             "SIGTERM cannot collapse into normal exit143");
 
+    // The child writes 8 MiB and nothing consumes the queue, so the worker must
+    // stop receiving at exactly the 1 MiB queue limit. The bound is the byte
+    // count: wait until the worker has received at least 1 MiB, then require
+    // exactly 1 MiB. The lifetime (30 s) only ends a hung fixture; the stop
+    // below ends this one.
     const auto flooded = fixture({executable, temporary.root / "fullqueue"});
     const auto x = job_id(11);
-    e.start(x, flooded, {"flood"});
-    const auto full_deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds{3};
-    while (field(e.jobs.read(Value::object(
-                     {{"job_id", Value{x}}, {"count", Value{Number{0}}}})),
-                 "received_bytes") != Value{Number{1024 * 1024}}) {
-      require(std::chrono::steady_clock::now() < full_deadline,
-              "independently observed one MiB queue saturation is bounded");
+    e.start(x, flooded, {"flood", false, 30});
+    const auto full_deadline = std::chrono::steady_clock::now() + liveness_guard;
+    for (;;) {
+      const auto state = e.jobs.read(
+          Value::object({{"job_id", Value{x}}, {"count", Value{Number{0}}}}));
+      const auto received = std::stoull(field(state, "received_bytes").number().text());
+      if (received >= 1024 * 1024) {
+        require(
+            received == 1024 * 1024,
+            "independently observed one MiB queue saturation is bounded: received " +
+                std::to_string(received));
+        break;
+      }
+      const auto &phase = string_field(state, "state");
+      require((phase == "starting" || phase == "running") &&
+                  std::chrono::steady_clock::now() < full_deadline,
+              "flood fills the one MiB queue: state " + phase + ", received " +
+                  std::to_string(received));
       std::this_thread::sleep_for(std::chrono::milliseconds{2});
     }
     require(e.originals[x].empty(), "full queue case has no owner consumption");
     (void)e.control(x, {"stop", "fullqueue-stop", {}});
-    const auto stop_deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds{3};
+    const auto stop_deadline = std::chrono::steady_clock::now() + liveness_guard;
     while (string_field(e.jobs.read(Value::object(
                             {{"job_id", Value{x}}, {"count", Value{Number{0}}}})),
                         "state") != "settling") {

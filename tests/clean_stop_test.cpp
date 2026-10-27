@@ -57,6 +57,46 @@ void check(bool condition, const std::string &message) {
   if (!condition)
     throw std::runtime_error(message);
 }
+// Liveness guard for waits on a child's output, files and exit: each happens
+// eventually, and the guard only names the step that hung, inside CTest's
+// 600-second watchdog for the whole suite. Host load must not reach it. Claims
+// about time itself (the SIGTERM grace window, the late-SIGTERM exit) keep
+// their own bounds.
+constexpr auto liveness_guard = std::chrono::seconds{60};
+// The child's process tree as ps reports it, for a guard failure: the state and
+// CPU time against elapsed time tell a spinning livelock (R, CPU near elapsed)
+// from a starved or a blocked process.
+std::string process_tree(pid_t root) {
+  std::string rows = "process tree (pid ppid state cpu elapsed command):\n";
+  FILE *ps = ::popen("ps -A -o pid=,ppid=,stat=,time=,etime=,command=", "r");
+  if (ps == nullptr)
+    return rows + "  ps unavailable\n";
+  std::vector<std::pair<pid_t, std::string>> all; // ppid, row
+  std::vector<pid_t> pids;
+  std::array<char, 4096> line{};
+  while (std::fgets(line.data(), static_cast<int>(line.size()), ps) != nullptr) {
+    std::istringstream fields{line.data()};
+    long pid = 0, ppid = 0;
+    if (fields >> pid >> ppid) {
+      pids.push_back(static_cast<pid_t>(pid));
+      std::string row{line.data()};
+      if (!row.empty() && row.back() == '\n')
+        row.pop_back();
+      all.emplace_back(static_cast<pid_t>(ppid), row.substr(0, 200));
+    }
+  }
+  (void)::pclose(ps);
+  std::vector<pid_t> tree{root};
+  for (std::size_t next = 0; next < tree.size(); ++next)
+    for (std::size_t i = 0; i < pids.size(); ++i)
+      if (all[i].first == tree[next] && pids[i] != root)
+        tree.push_back(pids[i]);
+  for (const auto member : tree)
+    for (std::size_t i = 0; i < pids.size(); ++i)
+      if (pids[i] == member)
+        rows += "  " + all[i].second + "\n";
+  return rows;
+}
 std::string contents(const fs::path &path) {
   std::ifstream input{path, std::ios::binary};
   return {std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
@@ -252,7 +292,7 @@ public:
   // occurrence of needle at or after from.
   std::size_t await_text(std::string_view needle, std::size_t from = 0) {
     const auto label = "waiting for " + std::string{needle};
-    const auto deadline = Clock::now() + std::chrono::seconds{20};
+    const auto deadline = Clock::now() + liveness_guard;
     while (Clock::now() < deadline) {
       if (const auto found = text().find(needle, from); found != std::string::npos)
         return found + needle.size();
@@ -264,7 +304,8 @@ public:
       }
       pump(std::chrono::milliseconds{20});
     }
-    throw std::runtime_error(label + ": output deadline\n" + text());
+    throw std::runtime_error(label + ": output deadline\n" + process_tree(pid_) +
+                             text());
   }
   bool running() {
     if (pid_ <= 0)
@@ -280,9 +321,11 @@ public:
   }
   // Returns the exit status; a signal death is reported as 128 + signal.
   int wait(std::string_view label) {
-    const auto deadline = Clock::now() + std::chrono::seconds{60};
+    const auto deadline = Clock::now() + liveness_guard;
     while (running()) {
-      check(Clock::now() < deadline, std::string{label} + ": exit deadline\n" + text());
+      if (Clock::now() >= deadline)
+        throw std::runtime_error(std::string{label} + ": exit deadline\n" +
+                                 process_tree(pid_) + text());
       pump(std::chrono::milliseconds{20});
     }
     return WIFEXITED(status_) ? WEXITSTATUS(status_) : 128 + WTERMSIG(status_);
@@ -300,7 +343,7 @@ public:
   // unread bytes are nonzero and unchanged for half a second.
   void await_stalled_stdout(std::string_view label) {
     check(stalled_ >= 0, std::string{label} + ": stdout is not a stalled pipe");
-    const auto deadline = Clock::now() + std::chrono::seconds{20};
+    const auto deadline = Clock::now() + liveness_guard;
     int previous = -1;
     auto since = Clock::now();
     for (;;) {
@@ -698,7 +741,7 @@ void station_stop_case() {
                   Stdio::pipe,
                   "station-stop"};
   process.close_input();
-  const auto deadline = Clock::now() + std::chrono::seconds{20};
+  const auto deadline = Clock::now() + liveness_guard;
   while (!fs::exists(marker)) {
     check(process.running() && Clock::now() < deadline,
           "station stop: event workflow never finished\n" + process.text());
@@ -895,7 +938,7 @@ void unsettled_attempt_case() {
     Process process{fixture, arguments, Stdio::pipe, "unsettled-attempt"};
     process.close_input();
     // The transport has started, so the provider attempt is admitted and open.
-    const auto deadline = Clock::now() + std::chrono::seconds{20};
+    const auto deadline = Clock::now() + liveness_guard;
     while (!fs::exists(in_flight)) {
       check(process.running() && Clock::now() < deadline,
             "unsettled attempt: the provider request never started\n" + process.text());
@@ -1433,7 +1476,7 @@ void format_level_case() {
     arguments.insert(arguments.begin(), {"--session", session.string()});
     Process process{fixture, arguments, Stdio::pipe, "format-level-kill"};
     process.close_input();
-    const auto deadline = Clock::now() + std::chrono::seconds{20};
+    const auto deadline = Clock::now() + liveness_guard;
     while (!fs::exists(in_flight)) {
       check(process.running() && Clock::now() < deadline,
             std::string{label} + ": the provider request never started\n" +
@@ -1541,7 +1584,7 @@ std::string running_exec_lua(const fs::path &marker) {
          marker.string() + "'; exec sleep 30]]})\nprint('EXEC_RETURNED')\n";
 }
 void await_file(Process &process, const fs::path &path, std::string_view label) {
-  const auto deadline = Clock::now() + std::chrono::seconds{20};
+  const auto deadline = Clock::now() + liveness_guard;
   while (!fs::exists(path)) {
     check(process.running() && Clock::now() < deadline,
           std::string{label} + ": " + path.filename().string() + " never appeared\n" +
@@ -1738,7 +1781,7 @@ void term_station_case() {
   // The marker is written inside the event's turn; the station publishes "idle"
   // to its status file only after it has finished the event.
   const auto status = session / "station-status.bbm";
-  const auto deadline = Clock::now() + std::chrono::seconds{20};
+  const auto deadline = Clock::now() + liveness_guard;
   while (contents(status).find("idle") == std::string::npos) {
     check(process.running() && Clock::now() < deadline,
           std::string{label} + ": the station never returned to idle\n" +
@@ -1764,7 +1807,7 @@ void term_station_case() {
                    Stdio::pipe,
                    "term-station-reopen"};
   reopened.close_input();
-  const auto reopen_deadline = Clock::now() + std::chrono::seconds{20};
+  const auto reopen_deadline = Clock::now() + liveness_guard;
   for (;;) {
     check(reopened.running() && Clock::now() < reopen_deadline,
           std::string{label} + ": the reopened station never published\n" +
@@ -1965,7 +2008,7 @@ std::chrono::nanoseconds cpu_time(pid_t pid) {
 // Waits until the child spins: at least 70 ms of CPU in each of three
 // consecutive 100 ms windows.
 void await_spin(Process &process, std::string_view label) {
-  const auto deadline = Clock::now() + std::chrono::seconds{20};
+  const auto deadline = Clock::now() + liveness_guard;
   auto last = cpu_time(process.pid());
   for (int spinning = 0; spinning < 3;) {
     check(process.running() && Clock::now() < deadline,
@@ -2141,7 +2184,7 @@ void wrapper_sigint_open_case() {
       "wrapper-sigint-open",
       true,
       wrapper};
-  const auto deadline = Clock::now() + std::chrono::seconds{20};
+  const auto deadline = Clock::now() + liveness_guard;
   while (!fs::exists(session / "audit")) {
     check(process.running() && Clock::now() < deadline,
           std::string{label} + ": the open never started\n" + process.text());

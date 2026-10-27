@@ -80,6 +80,25 @@ if '#define _LIBCPP_VERSION 230104\\n' not in macros:
     raise RuntimeError('Linux profile requires installed libc++ 23.1.4')
 print('Linux standard library: libc++ 23.1.4', flush=True)
 print('CTest selection:', test_regex if test_regex is not None else 'all', flush=True)
+# Suites that starve under the parallel batch's own ASan load on this shared host
+# (arconaut-8zr): they start a raw supervisor and recorder, fsync every journal
+# write, or start the TUI on a PTY, and wait on liveness guards or CTest's
+# watchdog. Run alone they pass. They run after the parallel batch, one at a time.
+# Other users share this host. A saturated disk (an rsync or a database
+# vacuum) parks the raw supervisor and recorder in D state for tens of seconds,
+# so each batch records the load and the kernel's I/O pressure beside its result.
+def host_pressure(when):
+    load = Path('/proc/loadavg').read_text().split()[:3]
+    pressure = Path('/proc/pressure/io')
+    io = pressure.read_text().split('\\n')[1] if pressure.exists() else 'unavailable'
+    print('Host ' + when + ' batch: load ' + ' '.join(load) + '; io ' + io, flush=True)
+load_sensitive = {
+    'raw_context', 'raw_admission', 'raw_runtime', 'raw_metadata', 'raw_reader', 'raw_authored',
+    'raw_recorder_cuts', 'raw_sampler', 'raw_command_wake', 'raw_retained_native',
+    'raw_retained_caller', 'storage_raw', 'clean_stop', 'coding_capacity', 'command_jobs',
+    'command_jobs_engine', 'command_jobs_pty', 'backstop', 'application', 'journal_crash',
+    'retained_state_crash', 'terminal_pty', 'terminal_pty_state', 'tui_retained_result', 'tasks_raw',
+}
 with tarfile.open(root / 'tooling/dependencies/lua-5.4.8.tar.gz', 'r:gz') as archive:
     archive.extractall(root / 'tooling/dependencies', filter='data')
 lua = root / 'tooling/dependencies/lua-5.4.8/src'
@@ -190,10 +209,25 @@ for name, mode, instrumentation in [('debug', 'Debug', 'none'), ('release', 'Rel
     if build_targets:
         build_command += ['--target', *build_targets]
     subprocess.run(build_command, check=True)
-    tests = ['/usr/bin/ctest', '--test-dir', str(build), '--output-on-failure', '--no-tests=error', '--parallel', '6']
-    if test_regex is not None:
-        tests += ['-R', test_regex]
-    subprocess.run(tests, check=True)
+    tests = ['/usr/bin/ctest', '--test-dir', str(build), '--output-on-failure', '--no-tests=error']
+    listing = subprocess.run(tests + ['-N'] + (['-R', test_regex] if test_regex is not None else []),
+                             check=True, capture_output=True, text=True).stdout
+    selected = re.findall(r'^\\s*Test\\s+#\\d+: (\\S+)$', listing, re.M)
+    if not selected:
+        raise RuntimeError('CTest selection matched no tests')
+    # The parallel batch first, then the declared load-sensitive set one test at a
+    # time; both batches run, and either failing fails the profile.
+    serial = [test for test in selected if test in load_sensitive]
+    batches = [(test, jobs) for test, jobs in (([t for t in selected if t not in serial], '6'), (serial, '1')) if test]
+    failed = []
+    for batch, jobs in batches:
+        print('CTest batch (parallel ' + jobs + '): ' + ' '.join(batch), flush=True)
+        host_pressure('before')
+        if subprocess.run(tests + ['--parallel', jobs, '-R', '^(' + '|'.join(map(re.escape, batch)) + ')$']).returncode:
+            failed.append('parallel ' + jobs)
+        host_pressure('after')
+    if failed:
+        raise RuntimeError(name + ' CTest batches failed: ' + ', '.join(failed))
     # The digests this build computes for the shipped set, for the three-location
     # check (scripts/check-installed-profiles), only when this run built blackbird;
     # a scratch home holds no overrides.

@@ -1417,11 +1417,17 @@ void workflow_process_capacity_test(const std::string &path) {
   ContextStore context{log};
   UsageProvider provider;
   CodingEngine engine{log, context, provider, "test"};
+  // The 2 MB stream exhausts the journal's capacity while the command still has
+  // 30 s to run. The turn must stop the command at the capacity failure, not wait
+  // for it to finish: the command writes `finished` only if it runs to its own end,
+  // so its absence when the turn returns is the claim, whatever the host's speed.
   const auto marker = path + "/effect";
+  const auto finished = path + "/finished";
   const auto args = Value::object(
-      {{"command", Value{"printf X > '" + marker +
-                         "'; printf FIRST; head -c 2000000 /dev/zero; sleep 20"}}});
-  const auto began = std::chrono::steady_clock::now();
+      {{"command",
+        Value{"printf X > '" + marker +
+              "'; printf FIRST; head -c 2000000 /dev/zero; sleep 30; printf Y > '" +
+              finished + "'"}}});
   bool capacity = false;
   try {
     engine.turn({"", "arco.append({{type='function_call',call_id='capacity-exec',"
@@ -1458,8 +1464,7 @@ void workflow_process_capacity_test(const std::string &path) {
     }
   }
   if (!capacity || !linked || !partial || !unknown || read_file(marker) != "X" ||
-      root->state() != JournalWriterState::live ||
-      std::chrono::steady_clock::now() - began > std::chrono::seconds{5})
+      root->state() != JournalWriterState::live || std::filesystem::exists(finished))
     throw Error{ErrorCode::corrupt};
 }
 

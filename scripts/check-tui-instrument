@@ -14,6 +14,11 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
+# Liveness guard for screen waits (wait_state, expect, exit): the screen
+# eventually shows the awaited state; the guard only names the step that hung.
+# Each wait_state poll is a separate tui-test process (about 2 s each on a busy
+# host), so the guard must allow many polls. The whole fixture has its own alarm.
+LIVENESS_GUARD = 15
 
 
 def main():
@@ -27,7 +32,9 @@ def main():
     artifacts = args.artifacts.resolve() / (args.backend + '-' + uuid.uuid4().hex[:10])
     artifacts.mkdir(parents=True)
     tool = ROOT / 'scripts/tui-test'
-    subprocess.run([str(tool), '--check'], check=True, timeout=10)
+    # A precondition, not a claim: on Neuroses the first check after install
+    # outlasted 10 s (arconaut-8zr). The fixture's own alarm starts after it.
+    subprocess.run([str(tool), '--check'], check=True, timeout=60)
     session = 'blackbird-instrument-' + uuid.uuid4().hex
     history = []
 
@@ -46,10 +53,10 @@ def main():
         return call('state')['data']
 
     def expect(text):
-        call('expect', 'text', text, '--timeout', '4000')
+        call('expect', 'text', text, '--timeout', str(LIVENESS_GUARD * 1000))
 
     def wait_state(predicate, label):
-        deadline = time.monotonic() + 4
+        deadline = time.monotonic() + LIVENESS_GUARD
         latest = None
         while time.monotonic() < deadline:
             latest = state()
@@ -76,7 +83,9 @@ def main():
              for number in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)}
     failure = cleanup_error = None
     opened = False
-    signal.alarm(45)
+    # Whole-fixture hang guard, inside CTest's 120 s: about 13 s alone, 40 s
+    # under the full suite's load (arconaut-8zr).
+    signal.alarm(100)
     with tempfile.TemporaryDirectory(prefix='blackbird-instrument-') as temporary:
         work = Path(temporary)
         effects = work / 'effects'
@@ -227,6 +236,18 @@ while True:
                             if row.startswith('Command runs · page ')), 25)
                 return '\n'.join(row[34:101].rstrip() for row in lines[2:end])
 
+            def same_reading(first, second):
+                # End keeps the bottom of the detail pane on the last content
+                # line. The pane's height follows the receipt above the composer,
+                # which wraps to a third line while a try-locked delivery query is
+                # busy (" · query unavailable"), so one End reading can show one
+                # row more or less at the top. The position is the same when the
+                # windows differ by at most that row and the shorter one is the
+                # tail of the longer one. The first row is the pane's title.
+                first, second = first.split('\n')[1:], second.split('\n')[1:]
+                rows = min(len(first), len(second))
+                return abs(len(first) - len(second)) <= 1 and first[-rows:] == second[-rows:]
+
             def compact(value):
                 return re.sub(r'\s+', '', value)
 
@@ -276,7 +297,7 @@ while True:
             # The pin reaches the Lua instrument asynchronously, while End is
             # native. One End must keep following rows that arrive after it.
             call('key', 'press', 'End')
-            deadline = time.monotonic() + 4
+            deadline = time.monotonic() + LIVENESS_GUARD
             while True:
                 pinned = state()
                 if (compact(b_label) in compact(comparison(pinned)) and
@@ -306,8 +327,15 @@ while True:
             (artifacts / 'receipt-key.txt').write_text(receipt_key + '\n')
             call('key', 'press', 'Right')
             call('key', 'press', 'End')
-            pinned = wait_state(lambda s: 'B_PINNED_ORIGINAL' in comparison(s),
-                                'pinned comparison after real live output')
+            # The reading this oracle retains is the one End lands on: the pinned B
+            # original and the empty line after its final newline at the bottom of
+            # the detail pane. A screen drawn after Right but before End also shows
+            # B_PINNED_ORIGINAL, one row higher (the two-line receipt shortened the
+            # pane), so the original predicate could retain that pre-End reading
+            # and later compare it with the settled one (arconaut-r5n).
+            pinned = wait_state(lambda s: comparison(s).split('\n')[-2:] ==
+                                ['B_PINNED_ORIGINAL', ''],
+                                'pinned comparison at End after real live output')
             assert 'B_LATER_UNPINNED' not in comparison(pinned)
             assert 'LIVE_HANDLED_1' not in comparison(pinned)
             retained_reading = comparison(pinned)
@@ -326,7 +354,8 @@ while True:
             selected(job_b)
             restored = wait_state(lambda s: 'B_PINNED_ORIGINAL' in comparison(s),
                                   'instrument route returns its pinned reading anchor')
-            assert comparison(restored) == retained_reading, 'instrument reading position changed'
+            assert same_reading(comparison(restored), retained_reading), \
+                'instrument reading position changed'
             call('write', '\x1c')
             expect('Views')
             call('write', 'conversation\r')
@@ -335,7 +364,8 @@ while True:
             call('write', 'result comparison\r')
             restored = wait_state(lambda s: 'RETAINED RESULT LAB' in s['text'] and
                                   'B_PINNED_ORIGINAL' in comparison(s), 'picker resumes comparison')
-            assert comparison(restored) == retained_reading, 'view picker reset comparison anchor'
+            assert same_reading(comparison(restored), retained_reading), \
+                'view picker reset comparison anchor'
             call('resize', '32', '12')
             expect('RETAINED RESULT LAB')
             call('key', 'press', 'Right')
@@ -469,7 +499,9 @@ while True:
             call('screenshot', '-o', str(artifacts / 'final.svg'))
             call('write', '\x1d')
             call('write', '\x11')
-            call('wait', 'exit', '--timeout', '4000')
+            # Exit is liveness too: about 0.1 s alone, 4-6.4 s under the full
+            # suite's load (arconaut-8zr exit probe).
+            call('wait', 'exit', '--timeout', str(LIVENESS_GUARD * 1000))
         except BaseException as error:
             failure = error
         finally:

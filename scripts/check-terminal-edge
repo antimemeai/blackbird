@@ -241,7 +241,9 @@ def main():
     parser.add_argument('--case', choices=('full', 'wide-corner'), default='full')
     parser.add_argument('--legacy', action='store_true', help='exercise the deliberate cropped negative control')
     args = parser.parse_args()
-    subprocess.run([str(TOOL), '--check'], check=True, timeout=10)
+    # A precondition, not a claim: on Neuroses the first check after install
+    # outlasted 10 s (arconaut-8zr).
+    subprocess.run([str(TOOL), '--check'], check=True, timeout=60)
     for strategy in args.strategy or POLICIES:
         episode(args.executable.resolve(), args.artifacts.resolve(), args.backend,
                 strategy, args.legacy, args.case)

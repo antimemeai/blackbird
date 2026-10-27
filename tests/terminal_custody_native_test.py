@@ -11,6 +11,12 @@ import subprocess
 import sys
 import tempfile
 import termios
+import time
+
+# Liveness guard for the PTY handshakes and the exit: each happens eventually,
+# and the guard only names the step that hung before CTest's 120-second
+# watchdog. Host load must not reach it.
+LIVENESS_GUARD = 60
 
 
 def require(value, message):
@@ -99,12 +105,33 @@ def main():
                                        stdin=slave, stdout=slave, stderr=slave, env=environment)
             output = bytearray()
 
+            def drain(timeout):
+                ready, _, _ = select.select([master], [], [], timeout)
+                if ready:
+                    try:
+                        output.extend(os.read(master, 65536))
+                    except OSError:
+                        pass  # EIO: the slave side has no more writers
+
             def until(literal):
+                # A redrawing TUI keeps writing, so the guard is on the whole wait,
+                # not on silence between reads.
+                deadline = time.monotonic() + LIVENESS_GUARD
                 while literal not in output:
-                    ready, _, _ = select.select([master], [], [], 10)
-                    require(ready, ("actual native PTY handshake absent", literal, process.poll(),
-                                    bytes(output[-2000:])))
-                    output.extend(os.read(master, 65536))
+                    require(time.monotonic() < deadline and process.poll() is None,
+                            ("actual native PTY handshake absent", literal, process.poll(),
+                             bytes(output[-2000:])))
+                    drain(.1)
+
+            def exit_status():
+                # Keep reading the PTY while the TUI restores the terminal, so its
+                # last writes cannot block on a full PTY buffer.
+                deadline = time.monotonic() + LIVENESS_GUARD
+                while process.poll() is None:
+                    require(time.monotonic() < deadline,
+                            ("actual selected CLI H exit absent", bytes(output[-2000:])))
+                    drain(.1)
+                return process.returncode
 
             until(b"Ctrl-G editor")
             process.send_signal(signal.SIGWINCH)
@@ -112,7 +139,7 @@ def main():
             until(b"Editor returned")
             until(b"native-editor-result")
             os.write(master, b"\x11")
-            require(process.wait(timeout=10) == 0, "actual selected CLI H exits normally")
+            require(exit_status() == 0, "actual selected CLI H exits normally")
             after = termios.tcgetattr(slave)
             require(flags(after) == flags(before), "actual CLI final owned termios flags/controls restored")
             rows = preserved(reader, session)

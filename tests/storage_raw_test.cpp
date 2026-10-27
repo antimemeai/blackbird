@@ -104,6 +104,12 @@ struct ColdCloseGate {
   bool entered = false, released = false;
 };
 ColdCloseGate *cold_close_gate = nullptr;
+// Liveness guard for the forked cut fixtures: a child reports, a stopped or
+// killed process reaches its state, a dead holder's lock drops, a Terminal
+// child exits. Each happens eventually; the time it takes is not under test.
+// The guard only names the step that hung, before CTest's 120-second watchdog,
+// so a busy host (fsync behind other suites' journals) must not reach it.
+constexpr auto liveness_guard = std::chrono::seconds{60};
 void require(bool value, const char *message) {
   if (!value)
     throw std::runtime_error{message};
@@ -1893,7 +1899,7 @@ char native_process_state(pid_t process) {
 #endif
 }
 void observe_process(pid_t process, char state) {
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+  const auto deadline = std::chrono::steady_clock::now() + liveness_guard;
   while (native_process_state(process) != state) {
     require(std::chrono::steady_clock::now() < deadline,
             "native process reaches actual requested cut state");
@@ -1934,7 +1940,10 @@ void pipe_write(int descriptor, ByteView bytes) {
 void pipe_read(int descriptor, MutableByteView bytes) {
   while (!bytes.empty()) {
     pollfd ready{descriptor, POLLIN, 0};
-    require(::poll(&ready, 1, 5000) == 1, "native test cut ready");
+    require(::poll(&ready, 1,
+                   static_cast<int>(
+                       std::chrono::milliseconds{liveness_guard}.count())) == 1,
+            "native test cut ready");
     const auto count = ::read(descriptor, bytes.data(), bytes.size());
     if (count < 0 && errno == EINTR)
       continue;
@@ -1965,7 +1974,7 @@ void reclaim_after_death(std::string_view path, const std::filesystem::path &run
     observe_process(process, 'Z');
   const int fd = ::open((run / "lanes").c_str(), O_RDWR | O_CLOEXEC);
   require(fd >= 0, "actual preserved catalogue lease");
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+  const auto deadline = std::chrono::steady_clock::now() + liveness_guard;
   while (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
     require(errno == EWOULDBLOCK && std::chrono::steady_clock::now() < deadline,
             "actual orphan exclusive catalogue fence");
@@ -2848,8 +2857,7 @@ void terminal_product_owner(TerminalCut cut) {
           if (cut == TerminalCut::cancellation) {
             const char reached = 'R';
             pipe_write(ready[1], std::as_bytes(std::span{&reached, 1}));
-            const auto deadline =
-                std::chrono::steady_clock::now() + std::chrono::seconds{5};
+            const auto deadline = std::chrono::steady_clock::now() + liveness_guard;
             while (!cancelled.load()) {
               require(std::chrono::steady_clock::now() < deadline,
                       "actual Terminal Ctrl-C reaches existing worker cancellation");
@@ -2940,7 +2948,7 @@ void terminal_product_owner(TerminalCut cut) {
   processes.holders = report.holders;
   bool signalled_cancel = false;
   std::string transcript;
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+  const auto deadline = std::chrono::steady_clock::now() + liveness_guard;
   for (;;) {
     int status{};
     const auto finished = ::waitpid(processes.owner, &status, WNOHANG);
