@@ -949,6 +949,11 @@ Value tool_definitions() {
                 "cancellation stops the turn. Optional output_max_bytes bounds raw "
                 "prefix bytes shown to model; full original chunks remain audited. "
                 "output_ref can retrieve omitted output using read_process_output. "
+                "output_limit_bytes (default 1048576, max 16777216) bounds what the "
+                "command may write: past it reading stops, the command is stopped "
+                "and the result has output_limit_exceeded=true and "
+                "effect_outcome=unknown with the bytes read. Prefer redirecting "
+                "large output to a file; a larger limit uses more audit capacity. "
                 "A command-registry limit returns capacity with resource, count, "
                 "limit, attempt and effect_outcome=not_started; no command launched "
                 "and there is no output_ref. Inspect jobs before choosing further "
@@ -978,7 +983,11 @@ Value tool_definitions() {
                        {"pty", Value::object({{"type", Value{"boolean"}}})},
                        {"output_max_bytes",
                         Value::object({{"type", Value{"integer"}},
-                                       {"minimum", Value{Number{0}}}})}})}})}}),
+                                       {"minimum", Value{Number{0}}}})},
+                       {"output_limit_bytes",
+                        Value::object({{"type", Value{"integer"}},
+                                       {"minimum", Value{Number{1}}},
+                                       {"maximum", Value{Number{16777216}}}})}})}})}}),
       Value::object(
           {{"type", Value{"function"}},
            {"name", Value{"process"}},

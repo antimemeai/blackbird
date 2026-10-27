@@ -76,7 +76,8 @@ admission pressure. Capacity never kills a live job to evict it.
 
 First defaults are eight live jobs and32 resident job records, configured explicitly
 through the job configuration interface while no jobs are live. Each job permits
-16MiB captured output, 1MiB pending capture and 1MiB live-view tail (shared immutable
+a 1MiB default output budget (`exec` `output_limit_bytes`, at most a 16MiB hard
+limit), 1MiB pending capture and 1MiB live-view tail (shared immutable
 chunks), 64KiB pending input, 16MiB total retained input identity payload, and4096 retained control identities. Input request payloads share their immutable native bytes; the worker does not keep another string copy. Public reads are
 at most64KiB. Full queues apply bounded backpressure; lifetime/output exhaustion
 requests stop with an explicit incomplete/unknown result. Stop/background remain
@@ -171,6 +172,7 @@ and stops the harness. A stopped job is never implicitly continued by foreground
 | Ctrl-C during PTY text input | Admit/write byte03 to private terminal; no harness cancellation flag |
 | Explicit job stop | Sticky exact-job request; report accepted separately from observed termination |
 | Command lifetime/output bound | Stop job; report timeout/incomplete capture and external uncertainty |
+| Output budget passed | Stop reading at once and stop the group; `error=output_limit`, `output_limit_exceeded`, bytes read retained, turn continues |
 | Quit/error shutdown | Stop/join/reap all owned jobs before UI/engine destruction |
 
 ## Platform mechanics

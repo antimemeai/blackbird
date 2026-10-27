@@ -37,6 +37,10 @@ using detail::raw_string_field;
 using Clock = std::chrono::steady_clock;
 constexpr std::size_t pending_limit = 1024 * 1024;
 constexpr std::size_t output_limit = 16 * 1024 * 1024;
+// Default per-command output budget. At most one 8KiB read past it is retained:
+// about 129 chunks (two audit records each), a quarter of a continued session's
+// 1024-record resident tail, which cannot retire while the command is unresolved.
+constexpr std::size_t default_output_budget = 1024 * 1024;
 constexpr std::size_t input_limit = 65536;
 std::uint64_t delivery_incarnation() {
   static std::atomic<std::uint64_t> next{1};
@@ -222,6 +226,7 @@ struct Launch {
   std::vector<std::string> argv;
   bool pty = false;
   std::chrono::seconds lifetime{120};
+  std::size_t output_budget = default_output_budget;
 };
 Launch parse_launch(const Value &arguments) {
   if (!std::holds_alternative<Value::Object>(arguments.value()))
@@ -232,6 +237,10 @@ Launch parse_launch(const Value &arguments) {
   if (seconds < 1 || seconds > 3600)
     throw Error{ErrorCode::invalid_range};
   out.lifetime = std::chrono::seconds{seconds};
+  const auto budget = integer(arguments, "output_limit_bytes", default_output_budget);
+  if (budget < 1 || budget > output_limit)
+    throw Error{ErrorCode::invalid_range};
+  out.output_budget = static_cast<std::size_t>(budget);
   if (const auto *argv = arguments.find("argv")) {
     for (const auto &arg : argv->array()) {
       if (arg.string().find('\0') != std::string::npos)
@@ -947,7 +956,8 @@ void CommandJobs::Impl::run(const std::shared_ptr<Job> &job) noexcept {
           auto chunk =
               std::make_shared<const std::string>(bytes, static_cast<std::size_t>(n));
           const std::lock_guard lock{mutex};
-          if (chunk->size() > output_limit - std::min(output_limit, job->received)) {
+          const auto budget = job->launch.output_budget;
+          if (chunk->size() > budget - std::min(budget, job->received)) {
             job->capture_complete = false;
             job->failure = EFBIG;
             worker_stop(3);
@@ -2260,6 +2270,17 @@ std::vector<JobEvent> CommandJobs::drain() {
         put(result, "error", Value{"io"});
         put(result, "error_detail",
             Value{Number{job->timed_out ? ETIMEDOUT : job->failure}});
+      }
+      if (job->failure == EFBIG) {
+        // Reading stopped at the budget; the process group was stopped with it.
+        put(result, "error", Value{"output_limit"});
+        put(result, "output_limit_exceeded", Value{true});
+        put(result, "output_limit_bytes", Value{Number{job->launch.output_budget}});
+        put(result, "message",
+            Value{"Output exceeded output_limit_bytes; the command was stopped and "
+                  "its effects are unknown. All bytes read are retained "
+                  "(output_ref). Redirect large output to a file and inspect it, "
+                  "or rerun with a larger output_limit_bytes."});
       }
       if (!job->terminal_sent) {
         job->terminal = std::move(result);

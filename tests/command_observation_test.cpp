@@ -121,7 +121,9 @@ struct Fixture {
                                      Value{directory.path.string()},
                                      Value{std::to_string(count)},
                                      Value{std::to_string(width)}}}},
-         {"timeout_seconds", Value{Number{10}}}});
+         {"timeout_seconds", Value{Number{10}}},
+         // Range cases write past the 1MiB live tail; allow the hard 16MiB limit.
+         {"output_limit_bytes", Value{Number{16 * 1024 * 1024}}}});
   }
   ~Fixture() {
     jobs.shutdown();

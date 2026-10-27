@@ -652,14 +652,16 @@ void raw_oracles(std::string_view fixture, const std::filesystem::path &root) {
     }
     require(malformed_refused, "malformed launch refused before native effect");
     auto launch = [&](const std::string &job, const char *mode,
-                      const std::filesystem::path &directory, bool pty = false) {
+                      const std::filesystem::path &directory, bool pty = false,
+                      std::size_t output_limit = 1024 * 1024) {
       std::filesystem::create_directory(directory);
       jobs.start(job, Value::object(
                           {{"argv",
                             Value{Value::Array{Value{std::string{fixture}}, Value{mode},
                                                Value{directory.string()}}}},
                            {"pty", Value{pty}},
-                           {"timeout_seconds", Value{Number{10}}}}));
+                           {"timeout_seconds", Value{Number{10}}},
+                           {"output_limit_bytes", Value{Number{output_limit}}}}));
     };
     stage = "binary launch";
     launch(id, "binary", root / "binary");
@@ -777,7 +779,8 @@ void raw_oracles(std::string_view fixture, const std::filesystem::path &root) {
     after_stolen.store(false);
     watched_pid.store(-1);
     stage = "limit crossing";
-    launch(limit_id, "limit-cross", root / "limit");
+    // The largest budget a call may select: the per-job 16MiB hard limit.
+    launch(limit_id, "limit-cross", root / "limit", false, 16 * 1024 * 1024);
     std::string crossing;
     bool completed = false;
     while (!completed) {

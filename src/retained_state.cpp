@@ -1671,7 +1671,22 @@ Result<JournalCursor> RetainedState::append_impl(
   // Checkpoint runs before admission; already admitted settlement remains writable.
   if (compact_ && saved_ && !settlement && !diagnostic && !checkpoint_running_) {
     auto tail_bytes = cursor().end_offset - saved_->boundary.end_offset;
-    if (maintenance_checkpoint_ && cursor().sequence >= maintenance_retry_sequence_ &&
+    if (!maintenance_awaiting_.empty()) {
+      const auto resident = committed_.facts.size();
+      if (maintenance_scanned_ > resident)
+        maintenance_scanned_ = 0;
+      for (; maintenance_scanned_ < resident && !maintenance_awaiting_.empty();
+           ++maintenance_scanned_) {
+        const auto *observed = std::get_if<AttemptObservationEvent>(
+            &committed_.facts[maintenance_scanned_].event.body);
+        if (observed && observed->phase == AttemptPhase::terminal &&
+            std::find(maintenance_awaiting_.begin(), maintenance_awaiting_.end(),
+                      observed->attempt.bytes()) != maintenance_awaiting_.end())
+          maintenance_awaiting_.clear();
+      }
+    }
+    if (maintenance_checkpoint_ && maintenance_awaiting_.empty() &&
+        cursor().sequence >= maintenance_retry_sequence_ &&
         (committed_.facts.size() + committed_.sources.size() >= 128 ||
          tail_bytes >= 8 * 1024 * 1024)) {
       checkpoint_running_ = true;
@@ -3187,6 +3202,19 @@ Result<void> RetainedState::save_current_state(const Value &context) {
       saved_ = std::move(selected_saved);
       maintenance_error_.reset();
       maintenance_retry_sequence_ = 0;
+      maintenance_awaiting_.clear();
+      if (compact_ && !saved_->unresolved.empty()) {
+        // Without a gate, every later append re-runs this whole checkpoint.
+        try {
+          for (const auto &fact : saved_->unresolved)
+            if (const auto *admitted =
+                    std::get_if<AttemptAdmissionEvent>(&fact.event.body))
+              maintenance_awaiting_.push_back(admitted->attempt.bytes());
+          maintenance_scanned_ = committed_.facts.size();
+        } catch (const std::bad_alloc &) {
+          maintenance_awaiting_.clear(); // Ungated maintenance stays correct.
+        }
+      }
       if (compact_ && saved_->unresolved.empty()) {
         const auto before_facts = committed_.facts.size(),
                    before_sources = committed_.sources.size();

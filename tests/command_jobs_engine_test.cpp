@@ -1,4 +1,5 @@
 #include "blackbird/coding.hpp"
+#include "blackbird/json.hpp"
 #include "blackbird/packet.hpp"
 #include <algorithm>
 #include <cerrno>
@@ -74,6 +75,12 @@ int fixture(const std::filesystem::path &directory, std::string_view mode) {
       std::this_thread::sleep_for(std::chrono::milliseconds{2});
     append_file(directory / "effects", "forbidden\n");
     return 0;
+  }
+  if (mode == "unbounded") {
+    // Never ends on its own: only the harness's output budget can stop it.
+    const std::string bytes(8192, 'U');
+    for (;;)
+      write_all(STDOUT_FILENO, bytes);
   }
   if (mode == "flood") {
     while (!std::filesystem::exists(directory / "release"))
@@ -553,6 +560,145 @@ void control_capture_refusal(Harness &h, const std::filesystem::path &directory,
             retained_bytes(h, job) == std::string(65536, 'R') && h.provider.calls == 0,
         "control result refusal lost originals, replayed, or allowed forbidden effect");
 }
+// Incident arconaut-3o2: a continued (compact-restored) session whose turn runs a
+// command that never stops writing. The command must end at its output budget
+// with a bounded tool result, and the same turn must go on to its next call.
+class FloodTurnProvider final : public CodingProvider {
+public:
+  Value flood_arguments;
+  std::filesystem::path marker;
+  unsigned calls = 0;
+  std::string second_input;
+  Value respond(const Value &request,
+                const std::function<void(std::string_view)> &) override {
+    ++calls;
+    Value::Array output;
+    if (calls == 1)
+      output.push_back(
+          Value::object({{"type", Value{"function_call"}},
+                         {"call_id", Value{"flood"}},
+                         {"name", Value{"exec"}},
+                         {"arguments", Value{unwrap(dump_json(flood_arguments))}}}));
+    if (calls == 2) {
+      second_input = unwrap(dump_json(field(request, "input")));
+      output.push_back(Value::object(
+          {{"type", Value{"function_call"}},
+           {"call_id", Value{"after"}},
+           {"name", Value{"write_file"}},
+           {"arguments",
+            Value{unwrap(dump_json(Value::object(
+                {{"path", Value{marker.string()}}, {"content", Value{"next"}}})))}}}));
+    }
+    return Value::object({{"output", Value{std::move(output)}}});
+  }
+};
+struct NoCustody final : CustodyVerifier {
+  Result<void> verify(std::span<const AttemptState> attempts) override {
+    return attempts.empty() ? Result<void>::success()
+                            : Result<void>::failure({ErrorCode::external_unknown});
+  }
+};
+void output_budget(const std::filesystem::path &directory,
+                   const std::string &executable) {
+  const auto session = directory / "session";
+  std::filesystem::create_directories(session);
+  std::filesystem::permissions(session, std::filesystem::perms::owner_all);
+  auto storage = [&] {
+    return std::make_unique<NativeJournalDirectory>(
+        unwrap(NativeJournalDirectory::open(session.string())));
+  };
+  const JournalHeader header{identity<EnvironmentId>(1),
+                             identity<AuditStreamId>(2),
+                             3,
+                             {32 * 1024 * 1024, 96 * 1024 * 1024},
+                             std::nullopt};
+  // The product's own audit limits and capacity (main.cpp), not test-sized ones.
+  const JournalCapacity capacity{512ULL * 1024 * 1024, 200000};
+  {
+    auto root = unwrap(RetainedState::create(storage(), "audit", header, capacity));
+    AuditLog log{*root};
+    ContextStore context{log};
+    Provider provider;
+    CodingEngine engine{log, context, provider, "fixture"};
+    context.append(
+        {Value::object({{"role", Value{"user"}}, {"content", Value{"first turn"}}})},
+        "first");
+    unwrap(context.checkpoint());
+  }
+  auto root =
+      unwrap(RetainedState::open(storage(), "audit", header, capacity, false, false));
+  check(root->compact_recovery(), "settled session did not reopen compact");
+  unwrap(root->confirm_recovery());
+  NoCustody custody;
+  unwrap(root->reconcile(custody));
+  AuditLog log{*root};
+  ContextStore context{log};
+  unsigned checkpoints = 0;
+  root->set_maintenance_checkpoint([&](const RawEventRef &parent) {
+    ++checkpoints;
+    return context.checkpoint({parent});
+  });
+  FloodTurnProvider provider;
+  const auto flood = directory / "flood";
+  std::filesystem::create_directories(flood);
+  provider.flood_arguments = Value::object(
+      {{"argv", Value{Value::Array{Value{executable}, Value{"--fixture"},
+                                   Value{flood.string()}, Value{"unbounded"}}}},
+       {"timeout_seconds", Value{Number{60}}},
+       // As the default turn program (programs/turn.lua) presents exec output.
+       {"output_max_bytes", Value{Number{16384}}}});
+  provider.marker = directory / "after";
+  CodingEngine engine{log, context, provider, "fixture"};
+  const auto audit_before = std::filesystem::file_size(session / "audit");
+  const auto started = Clock::now();
+  engine.turn(
+      {"continue",
+       "for step = 1, 8 do local response = blackbird.request() local calls = 0 "
+       "for _, item in ipairs(response.output) do if item.type == 'function_call' "
+       "then calls = calls + 1 local result = blackbird.call(item.name, "
+       "item.arguments) blackbird.append({{type = 'function_call_output', call_id = "
+       "item.call_id, output = result}}) end end if calls == 0 then return end end"});
+  const auto elapsed = Clock::now() - started;
+  check(provider.calls == 3 && read_file(provider.marker) == "next",
+        "turn did not continue to the call after the flooding command");
+  Value shown;
+  for (const auto &item : unwrap(parse_json(provider.second_input)).array())
+    if (item.find("call_id") && field(item, "call_id") == Value{"flood"} &&
+        field(item, "type") == Value{"function_call_output"})
+      shown = field(item, "output");
+  check(std::holds_alternative<Value::Object>(shown.value()),
+        "flooding command returned no tool result to the model");
+  check(field(shown, "output_limit_exceeded") == Value{true} &&
+            field(shown, "output_limit_bytes") == Value{Number{1048576}} &&
+            field(shown, "error") == Value{"output_limit"} &&
+            field(shown, "effect_outcome") == Value{"unknown"} &&
+            field(shown, "stop_requested") == Value{true} &&
+            field(shown, "returned_bytes") == Value{Number{16384}},
+        "flooding command did not return an explicit bounded output-limit result");
+  const auto pid = static_cast<pid_t>(std::stol(read_file(flood / "pid")));
+  check(::kill(pid, 0) < 0 && errno == ESRCH, "flooding command outlived its budget");
+  // Reading stopped within one read past the budget, and every byte read is
+  // retained: the audited original agrees with the reported extents.
+  const auto received = std::stoull(field(shown, "received_bytes").number().text());
+  check(received > 1048576 && received <= 1048576 + 8192 &&
+            field(shown, "output_bytes") == field(shown, "received_bytes") &&
+            field(shown, "retained_bytes") == field(shown, "received_bytes"),
+        "command read past its budget or lost bytes it read");
+  // The whole turn's audit growth is the bounded output plus ordinary turn records.
+  const auto audit_growth =
+      std::filesystem::file_size(session / "audit") - audit_before;
+  check(audit_growth < 1048576 + 512 * 1024,
+        "audit growth is not bounded by the budget");
+  const auto original = engine.operator_call(
+      "read_process_output", Value::object({{"output_ref", field(shown, "output_ref")},
+                                            {"output_max_bytes", Value{Number{0}}}}));
+  check(field(original, "output_bytes") == field(shown, "received_bytes"),
+        "audited original differs from the bytes read");
+  // A continued session cannot retire its tail while the command is unresolved;
+  // that must not turn every retained chunk into another full checkpoint.
+  check(checkpoints <= 4, "unretirable tail re-ran a checkpoint on every append");
+  check(elapsed < std::chrono::seconds{30}, "bounded flood took unbounded time");
+}
 } // namespace
 int main(int argc, char **argv) {
   std::string scenario_name = "setup";
@@ -573,6 +719,11 @@ int main(int argc, char **argv) {
       }
     } cleanup{directory};
     const auto executable = std::filesystem::absolute(argv[0]).string();
+    if (argc == 2 && std::string_view{argv[1]} == "--output-budget") {
+      scenario_name = "output-budget";
+      output_budget(directory, executable);
+      return 0;
+    }
     if (argc == 2 && std::string_view{argv[1]} == "--retention") {
       scenario_name = "retention";
       Harness h{directory};

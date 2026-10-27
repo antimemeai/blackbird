@@ -664,6 +664,9 @@ add_test(NAME command_job_retention_engine COMMAND command_jobs_engine_test --re
 # These new episodes include forty cold instrumented child starts. Keep the
 # existing command suites at their original deadlines and give this work its own.
 set_tests_properties(command_job_retention command_job_retention_engine PROPERTIES TIMEOUT 60)
+# arconaut-3o2: an endless writer in a continued session ends at its output budget.
+add_test(NAME command_output_budget_engine COMMAND command_jobs_engine_test --output-budget)
+set_tests_properties(command_output_budget_engine PROPERTIES TIMEOUT 60)
 
 add_test(NAME command_jobs_pty COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check-command-jobs-pty $<TARGET_FILE:blackbird>
   --log-dir ${CMAKE_BINARY_DIR}/command-jobs-pty)

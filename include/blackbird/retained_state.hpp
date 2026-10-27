@@ -269,6 +269,10 @@ private:
   std::function<Result<void>(const RawEventRef &)> maintenance_checkpoint_;
   std::optional<Error> maintenance_error_;
   std::uint64_t maintenance_retry_sequence_ = 0;
+  // A compact checkpoint that must keep an unresolved closure resident cannot
+  // shrink the tail. Repeat it only after one of those attempts is terminal.
+  std::vector<IdentityBytes> maintenance_awaiting_;
+  std::size_t maintenance_scanned_ = 0;
   bool checkpoint_running_ = false;
   bool maintenance_ = false;
   bool compact_ = false;

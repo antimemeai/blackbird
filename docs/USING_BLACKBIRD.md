@@ -181,6 +181,12 @@ persistent state. The model has a `lua` tool and the same APIs:
   explicit file range bypasses that workflow default. This bounds returned raw
   bytes, not tokens, capture, memory or external encoding. Custom Lua callers keep
   full-read defaults; zero or larger explicit limits are accepted.
+  Separately, `exec` `output_limit_bytes` (default 1048576, at most 16777216)
+  bounds what a command may write. Once it is passed, Blackbird stops reading,
+  stops the command's process group and returns `error="output_limit"`,
+  `output_limit_exceeded=true` and `effect_outcome="unknown"`. Every byte read
+  (at most one 8KiB read past the limit) is retained and readable through
+  `output_ref`; the turn continues with the next call.
   `read_file` accepts one optional `range` object: `{mode="lines", start=1,
   ["end"]=20}` (one-based inclusive) or `{mode="bytes", start=0, ["end"]=256}`
   (zero-based half-open). Omit `range` for the whole file. Only one mode is possible;
@@ -588,8 +594,12 @@ that journal by raw transport volume.
 `/checkpoint` explicitly saves current session state and retries failed maintenance.
 `/stats` exposes the maintenance error and resident tail records. Compact sessions
 attempt maintenance at128 resident records or8MiB of suffix; failed automatic
-retries wait64 sequence steps. New admissions stop before the1024-record/32MiB
-resident-tail budget, including reserved settlement room. Already-admitted work can
+retries wait64 sequence steps. While an operation is unresolved (for example a
+running command) the checkpoint keeps the tail resident; automatic maintenance
+then waits until one of those operations settles instead of repeating on every
+append. New admissions stop before the1024-record/32MiB
+resident-tail budget, including reserved settlement room. Each retained command
+output read (up to 8KiB) uses two of those records. Already-admitted work can
 settle. Fix storage and retry `/checkpoint`; a failed derived publication does not
 undo accepted context. The full journal's existing512MiB/200000-record capacity
 remains independent. See [session reopen](SESSION_REOPEN.md) for fallback behavior.
