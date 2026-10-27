@@ -92,6 +92,25 @@ in unit notes/journals rather than introduce another tracker. Preserve the main
 checkout's backup, artwork, research and handoff changes. Only the orchestrator
 edits this checkout's campaign notes; each worker owns its worktree journal.
 
+## First source delivery — journal/SIGTERM continuity
+
+On October 27, continuity delivered commit
+`38a82ea64c95b83496c020ef755f05e206df8f39` on
+`work/autodev-continuity-2026-10-26`. Parent inspected the production delta,
+retained direct and Linux results, mandatory full-hook log (297/297 Debug plus
+owned C++/Lua lint), clean worktree and exact remote branch ref. The existing
+review/recheck and source qualification are complete for this unit. Native
+append prepayment and true-EINTR handling preserve sticky cancellation and
+uncertain failed tails; limitations remain in its handoff. This accepts a
+qualified source delivery, not mainline integration, installation or activation.
+No live Beads closure is claimed while project storage is blocked.
+
+Keep the completed slot idle while composition's focused gate diagnosis remains
+active. Its unchanged composer oracle passed once during diagnosis; this does
+not itself explain the earlier retained timeout or qualify the full source gate.
+Do not automatically merge continuity as a speculative prerequisite. Chat usability
+remains the next program after current safe settlement.
+
 ## Next program — operator priority, 2026-10-26
 
 After the currently in-flight continuity and S3a composition units conclude and
