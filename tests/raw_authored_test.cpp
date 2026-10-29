@@ -840,7 +840,7 @@ extern "C" lua_State *luaL_newstate() {
   lua_State *state = nullptr;
   if (fail_allocation.load()) {
     // The real native VM allocator returns null; no fabricated Lua status.
-    state = lua_newstate(deny_allocator, nullptr);
+    state = lua_newstate(deny_allocator, nullptr, luaL_makeseed(nullptr));
   } else
     state = function();
   if (state && warning_mode.load() == 2)

@@ -354,7 +354,12 @@ void validate(const std::vector<Row> &rows) {
         if (value) {
           const int type = native<int>(body);
           const void *pointer = native<const void *>(body);
-          require(type >= LUA_TNIL && type <= LUA_TTHREAD);
+          // __gc can supply only the userdata. Preserve lua_type's actual
+          // absent-argument result instead of requiring an invented nil value.
+          if (type == LUA_TNONE)
+            require(reason == 3 && pointer == nullptr);
+          else
+            require(type >= LUA_TNIL && type <= LUA_TTHREAD);
           if (type == LUA_TTABLE || type == LUA_TSTRING || type == LUA_TFUNCTION)
             require(pointer != nullptr);
         }

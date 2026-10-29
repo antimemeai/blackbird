@@ -635,7 +635,7 @@ struct Invocation {
       outcome.status = Completion::stopped;
       return std::move(outcome);
     }
-    state = lua_newstate(presentation_allocate, this);
+    state = lua_newstate(presentation_allocate, this, luaL_makeseed(nullptr));
     if (!state) {
       outcome.status = Completion::allocation;
       outcome.native_error = {ErrorCode::allocation};

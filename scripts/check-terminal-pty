@@ -546,12 +546,13 @@ if arguments.case in ('all', 'tools'):
             send(b'/lua arco.call("exec", {command="for i in 1 2 3; do echo BG_$i; sleep 0.15; done", yield_ms=0}); '
                  b'arco.call("exec", {command="for i in 1 2 3; do echo FG_$i; sleep 0.15; done"}); print("MIX_" .. "DONE")\r')
             wait_for(b"MIX_DONE")
-            time.sleep(0.6)
             send(b"\x15")
-            wait_for(b"BG_3")
-            # wait_for may find BG_3 in the previous screen before consuming the
-            # repaint queued by Ctrl-U. Drain to a completed, quiet frame before
-            # inspecting attribution; sleeping without reading can block the PTY.
+            # Ctrl-U on an empty composer need not repaint. BG_3 may already be
+            # visible even though send cleared the newly received byte buffer.
+            if b"BG_3" not in observed.visible():
+                wait_for(b"BG_3")
+            # Consume any queued repaint before checking attribution. Sleeping
+            # without reading can block the PTY.
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
                 ready, _, _ = select.select([master], [], [], 0.05)

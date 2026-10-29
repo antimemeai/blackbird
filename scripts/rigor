@@ -234,9 +234,9 @@ def qualify():
             raise RuntimeError(f"LuaLS did not report intended type error: {status}, {diagnostics}")
     result = {"scope": "tool capability only; no agent-runtime qualification",
               "versions": versions, "profiles": list(PROFILES),
-              "fleet": "not configured; no local mutants", "lua_dialect": "5.4 compatibility only"}
+              "fleet": "not configured; no local mutants", "lua_dialect": "5.5 runtime; 5.4-compatible analysis subset"}
     (parent / "latest-qualification.json").write_text(json.dumps(result, indent=2) + "\n")
-    print("Local tooling qualified; fleet and Lua 5.5 embedding are not qualified.")
+    print("Local tooling qualified; fleet setup and production behavior require their own direct checks.")
 
 
 def main():

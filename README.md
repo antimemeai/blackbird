@@ -27,7 +27,7 @@ management, expressive controls and multiple metrics instruments. These are desi
 the current implementation remains described below.
 
 
-This repository contains a **C++23 core, Lua 5.4.8 turn programs, a terminal interface, and an operating self-development loop**. It is an early system in active use and reconstruction. Its ambitions exceed its present implementation; the distinctions below are part of the description, rather than small print.
+This repository contains a **C++23 core, Lua 5.5.1 turn programs, a terminal interface, and an operating self-development loop**. It is an early system in active use and reconstruction. Its ambitions exceed its present implementation; the distinctions below are part of the description, rather than small print.
 
 For current accepted capabilities, unfinished work and the development
 cycle, see [the project stock](docs/CURRENT_STATE.md).
@@ -107,7 +107,7 @@ and return actual application results during a turn. See the
 
 ### Building this checkout
 
-The build is deliberately tied to qualified development profiles. The local macOS profile uses Clang 23.1.2 and Lua 5.4.8; the Linux profile uses Clang 23.1.4 and libc++ 23.1.4. CMake presets contain host-specific tool paths. A fresh machine needs its profile configured deliberately, rather than assuming these paths will exist.
+The build uses pinned development profiles. The local macOS profile uses Clang 23.1.2 and Lua 5.5.1; the Linux compiler profile uses Clang 23.1.4 and libc++ 23.1.4 and also requires Lua 5.5.1. CMake presets contain host-specific tool paths. A fresh machine needs its profile configured deliberately, rather than assuming these paths will exist. The Lua upgrade is checked on macOS; the Linux runtime check remains separate.
 
 ```sh
 scripts/rigor doctor

@@ -63,9 +63,9 @@ No global shell or editor configuration is required.
 | LLVM Clang, clang-format, clang-tidy, clangd | 23.1.2 | Coherent C++23 compiler, formatting, focused analysis and editor diagnostics |
 | CMake / CTest | 4.3.0 | Owned target/test orchestration |
 | Ninja | 1.13.0.git.kitware.jobserver-pipe-1 | Existing pinned build driver |
-| Lua / luac | 5.4.8 | Compatibility execution and syntax checks |
+| Lua / luac | 5.5.1 | Runtime execution and syntax checks |
 | Lua Language Server | 3.19.1 | Annotation/type diagnostics with fresh JSON reports |
-| StyLua | 2.5.2 | Lua 5.4 formatting |
+| StyLua | 2.5.2 | Existing Lua 5.4-compatible syntax subset formatting |
 
 Debug and optimized profiles exercise C++23 `std::expected` and constexpr
 `std::byteswap`, byte/span access, and synchronized threads with exact results. The ASan+UBSan profile separately detects a
@@ -73,6 +73,12 @@ heap overrun and signed overflow. TSan detects the deliberately unsynchronized
 counter in its own profile. The libFuzzer profile executes 1,000 bounded inputs
 against a double-reversal byte property. These establish tool capability; none
 is an oracle for future admission, persistence, IPC, CLM or refit behavior.
+
+The embedded interpreter and syntax checker use Lua5.5.1. LuaLS and StyLua
+continue checking the existing5.4-compatible owned syntax subset; no support for
+new5.5 syntax is inferred from those tools. See
+[the migration](../papers/2026-10-29-lua55-migration.md) for native runtime checks
+and the installed library's actual compatibility configuration.
 
 Formatting, an unchecked optional and a null-dereference analyzer case produce
 their required diagnostic classes. Lua checks parse every owned script, validate

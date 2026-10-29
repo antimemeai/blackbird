@@ -152,9 +152,9 @@ add_executable(command_jobs_test tests/command_jobs_test.cpp)
 target_link_libraries(command_jobs_test PRIVATE blackbird_foundation)
 add_test(NAME command_jobs COMMAND command_jobs_test)
 set_tests_properties(command_jobs PROPERTIES TIMEOUT 30)
-find_package(Lua 5.4 EXACT REQUIRED)
-if(NOT LUA_VERSION_STRING STREQUAL "5.4.8")
-  message(FATAL_ERROR "Coding runtime requires qualified Lua 5.4.8")
+find_package(Lua 5.5 EXACT REQUIRED)
+if(NOT LUA_VERSION_STRING STREQUAL "5.5.1")
+  message(FATAL_ERROR "Coding runtime requires pinned Lua 5.5.1")
 endif()
 add_library(blackbird_coding src/coding.cpp src/workflows.cpp src/chat_view.cpp src/task_view.cpp src/sprite.cpp src/terminal.cpp src/terminal_custody.cpp src/session.cpp src/backstop.cpp src/station.cpp)
 target_sources(blackbird_coding PRIVATE src/openrouter.cpp src/responses_provider.cpp src/anthropic_provider.cpp src/application.cpp src/host_tools.cpp)
@@ -426,7 +426,7 @@ target_include_directories(useful_work_test SYSTEM PRIVATE ${LUA_INCLUDE_DIR})
 target_link_libraries(useful_work_test PRIVATE blackbird_build ${LUA_LIBRARIES})
 add_test(NAME useful_work COMMAND useful_work_test ${CMAKE_SOURCE_DIR}/tests/useful_work_test.lua ${CMAKE_SOURCE_DIR}/programs/useful_work.lua)
 
-# Optional packages are Lua-only; reuse the existing embedded 5.4.8 runner.
+# Optional packages are Lua-only; reuse the existing embedded Lua runner.
 add_test(NAME packages COMMAND useful_work_test ${CMAKE_SOURCE_DIR}/tests/packages_test.lua ${CMAKE_SOURCE_DIR}/programs/packages.lua)
 set_tests_properties(packages PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} TIMEOUT 30)
 

@@ -1,5 +1,49 @@
 # Arconaut journal
 
+## 2026-10-29 — Pinned Lua5.5.1 and Oxcart runtime repair
+
+The operator clarified that pinned dependencies permit deliberate upgrades,
+including Blackbird. The Oxcart live closeout found an old5.4.8 executable
+loading the mutable Homebrew opt path's new5.5.1 library and crashing during VM
+installation. The isolated branch starts from current master a94d094 and
+includes its two existing native-host-tool successors through0a7e297, preserving
+the active main checkout and its independent work. Research, source/API review,
+scope and acquisition pins are in papers/2026-10-29-lua55-migration.md and its
+adjacent acquisition manifest; original Lua source is retained in quarantine.
+
+Pin embedded Lua and development lua/luac to5.5.1. Supply the new documented
+luaL_makeseed(nullptr) argument at the presentation allocator and actual
+allocation-failure VM constructor. Keep existing custom allocator behavior,
+raw producer values, coroutines and tool/application ownership. Existing
+LuaLS/StyLua check the5.4-compatible owned syntax subset; their versions do not
+claim support for all new5.5 syntax. The installed library uses its default
+GLOBAL compatibility option. No application shim or old-runtime fallback is
+introduced.
+
+The original source rejects5.5.1 configuration, retained as the RED control.
+The first265-case native pass found one overly strict raw consumer assertion:
+GC close can report an absent argument as actual LUA_TNONE. The producer already
+preserved that native measurement correctly. The corrected oracle accepts it
+only for close reason3 with null pointer; ordinary value/pointer checks remain.
+Eight terminal cases initially lacked the existing pinned Microsoft driver in
+the isolated worktree; installed that exact development tool and all nine
+explicitly named failure cases pass. Full debug tests and owned source lint run
+through the unchanged pre-commit gate for this source unit.
+
+Oxcart separately exports a source-pinned runtime with its own matching private
+Lua dylib and actual VM/application checks before native live continuation.
+Earlier5.4 runtimes, Homebrew state, model sessions and the active checkout remain
+intact. No Linux runtime check is claimed by this macOS migration.
+
+The full pre-commit run passed265 of266 native cases, then exposed an unrelated
+PTY oracle fault: Ctrl-U on an empty composer emits no repaint, but the check
+required newly received bytes even while its retained screen visibly contained
+BG_3. Keep the actual screen condition, drain any queued repaint and retain the
+existing output-attribution checks. Remove the guessed sleep; do not extend a
+deadline or change terminal production behavior. The focused actual PTY case
+passes in0.97 seconds after this correction. Preserve the failed gate and screen
+in Oxcart's closeout logs; rerun the ordinary source gate for the final tree.
+
 ## 2026-10-16 — Oxcart live empty task and failed-turn interface repair
 
 Away worktree from master; active TUI checkout left untouched. Oxcart's real

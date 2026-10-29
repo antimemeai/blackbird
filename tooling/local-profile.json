@@ -6,7 +6,7 @@
   "llvm": {"directory": "/opt/homebrew/Cellar/llvm/23.1.2/bin", "version": "23.1.2"},
   "lua_ls": {"path": "/opt/homebrew/Cellar/lua-language-server/3.19.1/bin/lua-language-server", "version": "3.19.1"},
   "stylua": {"path": "/opt/homebrew/Cellar/stylua/2.5.2/bin/stylua", "version": "2.5.2"},
-  "lua": {"path": "/opt/homebrew/Cellar/lua/5.4.8/bin/lua", "version": "5.4.8"},
-  "luac": {"path": "/opt/homebrew/Cellar/lua/5.4.8/bin/luac", "version": "5.4.8"},
+  "lua": {"path": "/opt/homebrew/Cellar/lua/5.5.1/bin/lua", "version": "5.5.1"},
+  "luac": {"path": "/opt/homebrew/Cellar/lua/5.5.1/bin/luac", "version": "5.5.1"},
   "fleet": null
 }
