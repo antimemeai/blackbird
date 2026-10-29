@@ -44,6 +44,32 @@ deadline or change terminal production behavior. The focused actual PTY case
 passes in0.97 seconds after this correction. Preserve the failed gate and screen
 in Oxcart's closeout logs; rerun the ordinary source gate for the final tree.
 
+
+Final source gate passes all266 Debug cases in254.88 seconds plus full owned
+C++/Lua lint; source commit b14d5f13c72173994a8a65b826013f16b397beb3 is pushed
+on work/oxcart-lua-2026-10-29. No hook bypass or new source suppression. Its
+exported tree6992e5573005a7db7783e460c2d4a56f6dbfa9d3 builds actual coding and
+host-application VMs successfully with its private matching5.5.1 library.
+
+Oxcart selects that runtime for launcher and direct-app builds. All14 affected
+agent drivers pass, including actual host catalog negotiation. Live HN use
+calls oxcart_state and oxcart_capture, reads complete saved artifacts and returns
+actual story titles/link destinations. Live Python.org extraction saves both
+initial and tweak previews with actual documentation URL/source references and
+PDF/RTF exports. Both native runs close browser/CEF cleanly. The final actual
+sidebar/window suite passes after Oxcart’s separate Quit and page-focus repairs.
+Original runs remain in Oxcart context/runtime/live-checks/run-dq3w4a13 and
+run-ao_lcv4u (external Field Yield storage through its existing compatibility
+link); logs and full source gate are under Oxcart context/closeout/.
+
+The operator asks this colleague to handle Blackbird work Oxcart needs generally,
+not merely this dependency migration. Follow concrete integration faults to
+their owner, preserving active checkout3559918 and unrelated TUI work. Pins
+permit tested upgrades. The isolated source branch is published; master stays
+unchanged rather than integrating by implication. No Dolt/Beads operation, TUI
+product work, browser input executor or model adapter upgrade is introduced by
+this unit. Login and physical typing/IME/device checks remain the operator’s.
+
 ## 2026-10-16 — Oxcart live empty task and failed-turn interface repair
 
 Away worktree from master; active TUI checkout left untouched. Oxcart's real

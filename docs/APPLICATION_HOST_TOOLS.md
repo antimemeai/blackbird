@@ -109,3 +109,23 @@ mutation campaign. A real Oxcart turn follows when its adapter exists and its
 ordinary operator-selected browser is available. Runtime/source pins and live
 results are recorded separately. The operator says Dolt is unused; do not start,
 initialize or repair it as part of this delivery.
+
+## Oxcart integration — 2026-10-29
+
+The source successor b14d5f13c72173994a8a65b826013f16b397beb3 on
+work/oxcart-lua-2026-10-29 contains this protocol unit and pins Lua5.5.1.
+Oxcart packages a private matching library in its retained export at
+context/oxcart-lua55-runtime-2026-10-29. All266 native cases and owned source
+lint pass. Oxcart’s actual native state/capture calls, saved-file reads and model
+continuation pass on live HN; Python.org initial/tweak extraction previews pass
+with complete source files and exports. Oxcart’s shared native-runtime selector
+binds launcher and direct-app defaults to the same tested executable. Its own
+README documents rebuilding that exact source pin and enabling host tools.
+
+The operator authorizes Blackbird changes needed by Oxcart generally. Diagnose
+and fix each boundary in its owning repository, then exercise the actual Oxcart
+path. Keep source/runtime pins, original files and active checkout work intact;
+do not use a successful help/catalog check as a substitute for VM/model use.
+The protocol still grants no browser input executor. Login and human-input
+preflight belong to the operator. See the source journal and Oxcart’s
+journal/2026-10-28-current-workflow-closeout.md for precise runs and limits.
